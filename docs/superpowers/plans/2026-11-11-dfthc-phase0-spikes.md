@@ -10,7 +10,7 @@
 
 This file holds Tasks 0.6 to 0.9 of the master plan. Every script below was dry-run on 2026-11-11. K-7 and K-3 passed in full. K-10 passed at small size; its mid-size compile path ran at 64 and 128 addresses, and an earlier version compiled the mid sizes themselves. The K-1 driver passed at the small shape, and its projection and FeMoco gate ran on canned calibration data; no FeMoco-shaped compile ran in round 3.
 
-Two limits shape Tasks 0.8 and 0.9 (master plan section 12.9): no process tree may exceed 8 GB, and FeMoco-shaped compiles are kept to about six for the whole project. Indicative FeMoco-shape timings from the K-10 dry-run while writing this plan, taken on the development laptop with other compiles running, are quoted, not reproduced:
+Two limits shape Tasks 0.8 and 0.9 (master plan section 12.9): each process tree has a sampled 8 GB memory cap, enforced by killing it at the first sample above 7.5 GB, and FeMoco-shaped compiles are kept to about six for the whole project. Indicative FeMoco-shape timings from the K-10 dry-run while writing this plan, taken on the development laptop with other compiles running, are quoted, not reproduced:
 - one inner-erase-shaped fixup over 8,640 addresses, with parities packed inside the rule, compiled in 199 to 274 s;
 - the same fixup with its masks passed as compilable data took 1,517 s.
 
@@ -83,14 +83,14 @@ GATE_SET = {
 - Per commit: `scripts/test.sh -m "not slow and not release"` (15 min). Nightly: `scripts/test.sh -m "slow and not release"` (4 h), only at phase gates, started by the orchestrator. Release: `scripts/test.sh` (8 h), once, at the end of Phase 5, after the user's go-ahead.
 
 **Load limits (master plan section 12.9; spec 15)**
-- The development laptop has 10 cores and 16 GB, and the user works on it. No process tree may exceed 8 GB of memory.
+- The development laptop has 10 cores and 16 GB, and the user works on it. Each process tree has a sampled 8 GB memory cap: the watchdog kills it at the first sample above 7.5 GB (`EFFECTIVE_LIMIT_MB`), and projections and budgets must stay within 7.5 GB.
 - A heavy process is a run whose process tree exceeds 4 GB, keeps more than 2 cores busy or lasts longer than 30 minutes, or any FeMoco-shaped compile. Only the orchestrator starts heavy processes, one at a time, under the watchdog (`dfthc.testing.watchdog`), and logs each in the ledger.
 - During TDD, run only the targeted tests; run the per-commit tier once at commit time. Never start a heavy process yourself.
 - The per-commit and nightly tiers contain no FeMoco-shaped compile. FeMoco-54 values are asserted on the closed forms (`dfthc.costs`); the FeMoco-54 walk and controlled walk are compiled once, in Task 4.5.
 
 **Git (spec 15)**
 - Local branches and worktrees only. Merges go into local `main`. Never push, never modify remotes. The repo-local git identity (`dwierichs` / `david.wierichs@xanadu.ai`) is shared by all worktrees.
-- Each task runs in a git worktree on a branch named `phase<N>/<task-id>` from local `main`; only the orchestrator merges.
+- Each task runs in one of two worktree lanes (`.worktrees/lane-a`, `.worktrees/lane-b`) on a branch named `phase<N>/<task-id>` from local `main`; only the orchestrator merges. Never run `git worktree add/remove` or `git clone`.
 
 ---
 
@@ -1267,18 +1267,18 @@ git commit -m "Add K-10 spike: measurement arrays as dynamic arguments"
   - the `H2_631G_TEST` shape, which is `SHAPES["small"]` (`n_plus` only sets sign flags in the tables).
 
 **Pass criteria (spec 16, K-1; master plan section 12.9):**
-- the small shape (all four programs) and the mid shapes, `mid10` (N = 10, R = 8, B = 6, C = 5: walk and controlled walk) and `mid14` (N = 14, R = 6, B = 13, C = 8: walk, controlled walk and the diagnostic inner prepare and inner select), each compile as one program within `LIMITS`: 5 minutes at the small shape and 15 minutes at the mid shapes, and 4 GB, so none of them is a heavy process;
+- the small shape (all four programs) and the mid shapes, `mid10` (N = 10, R = 8, B = 6, C = 5: walk and controlled walk) and `mid14` (N = 14, R = 6, B = 13, C = 8: walk, controlled walk and the diagnostic inner prepare and inner select), each compile as one program within `LIMITS`: 5 minutes at the small shape and 15 minutes at the mid shapes, and a 4 GB cap that the watchdog enforces at 3.75 GB, so none of them is a heavy process;
 - counts are non-symbolic, and the controlled walk costs exactly 2 more Toffolis, 2 more measured uncomputes and the same number of explicit measurements as the walk, at every shape that compiles both. The driver checks this (`controlled_walk_check`) before it sets the verdict;
 - every compile runs in its own process under `run_watched`, which samples the physical footprint of its process tree every 50 ms, kills the tree at 15/16 of the limit and records the kill. The sampled peak (`peak_mb`) is the gate metric; `rusage_sum_mb`, the compile process's `ru_maxrss` plus that of its finished children, is recorded as an upper bound (`memory_method` in the JSON);
 - `code_hash()` covers everything a result depends on: the driver, the prototypes, `dfthc.compile`, the watchdog, and `environment()` (Python, platform, the installed PennyLane, Catalyst, Lightning, JAX, jaxlib and NumPy versions, and the lock file's SHA-256). Every result file records both;
-- `--project` fits the calibration shapes (`PROJECTION_METHOD`) and writes the projected FeMoco walk and controlled walk, with time, sampled peak, the upper bound and the method, to `k1_projection.json`. `femoco_allowed` is true only if both stay within 60 minutes and 8 GB, by the sampled peak and by the upper bound. The projection refuses calibration results of another `code_hash()`;
+- `--project` fits the calibration shapes (`PROJECTION_METHOD`) and writes the projected FeMoco walk and controlled walk, with time, sampled peak, the upper bound and the method, to `k1_projection.json`. `femoco_allowed` is true only if both stay within 60 minutes and 7.5 GB, the watchdog's effective limit (`EFFECTIVE_LIMIT_MB`, where a run would be killed), by the sampled peak and by the upper bound. `within_budget` uses the same effective limit. The projection refuses calibration results of another `code_hash()`;
 - the FeMoco driver (`--shape femoco --all`) refuses, with exit status 2 and without compiling, unless the projection belongs to the current `code_hash()` and allows the run. It holds `results/k1_femoco.lock` while it runs and checkpoints `k1_femoco.json` after each program. A program completed for the current hash is reused; one that failed (killed, over its limits or crashed) is retried only with `--allow-retry`, which needs the user's approval; when every program is complete it refuses. A `--shape femoco --program ...` run is refused unless it carries the token of the running driver, so each FeMoco program compiles only through the driver, under the watchdog.
 
 **Definition of done:** `k1_small.json`, `k1_mid10.json` and `k1_mid14.json` committed with `"verdict": "pass"`, and `k1_projection.json` committed; the report gives the projection with its method and says whether the FeMoco compile may run; `ruff check spikes` clean. Do not run the FeMoco driver yourself.
 
 **Gate rule** (spec 16, K-1; master plan section 12.6):
-1. If `femoco_allowed` is true, the orchestrator runs `--shape femoco --all` once, alone, at lowered priority under the watchdog (8 GB cap), as two of the six FeMoco-scale compiles, and commits `k1_femoco.json` on this task's branch.
-2. If the projection or that run exceeds 60 minutes or 8 GB, the orchestrator opens Task 0.9b (master plan), which applies remedy 1 in the stand-in and re-measures at the small and mid shapes. Remedy 1 passes the bulk tables of never-adjointed operators (reads, angle loads, erases) as dynamic arrays and iterates with `qp.for_loop` and `qp.cond`.
+1. If `femoco_allowed` is true, the orchestrator runs `--shape femoco --all` once, alone, at lowered priority under the watchdog (8 GB cap, killed at 7.5 GB), as two of the six FeMoco-scale compiles, and commits `k1_femoco.json` on this task's branch.
+2. If the projection exceeds 60 minutes or 7.5 GB, or that run is killed or exceeds 60 minutes, the orchestrator opens Task 0.9b (master plan), which applies remedy 1 in the stand-in and re-measures at the small and mid shapes. Remedy 1 passes the bulk tables of never-adjointed operators (reads, angle loads, erases) as dynamic arrays and iterates with `qp.for_loop` and `qp.cond`.
 3. Remedy 2 (packing the parity constants) is already the baseline of `mcm_parities`. Its other half, never passing masks as compilable data, is already met by `ProtoTableErase`.
 4. If the projection still exceeds the limits, the orchestrator escalates to the user at G0 with the measurements, the projection and the options: the FeMoco-size compiles on a larger machine, or in an approved idle-time window with a higher cap.
 
@@ -1300,7 +1300,8 @@ Usage:
     python spikes/k1_whole_program.py --shape mid14 --all            # driver: one process per
                                                                      # program, under the watchdog
     python spikes/k1_whole_program.py --project                      # FeMoco projection
-The driver compiles SHAPE_PROGRAMS[shape] within LIMITS[shape] (seconds, MB per program) and
+The driver compiles SHAPE_PROGRAMS[shape] within LIMITS[shape] (seconds, and the watchdog's memory
+cap per program, which kills at effective_limit_mb(cap): 15/16 of it) and
 writes spikes/results/k1_<shape>.json. Memory is MEMORY_METHOD. The controlled walk must cost
 exactly 2 more Toffolis, 2 more measured uncomputes and the same explicit measurements as the walk.
 Exit status 1 if a compile fails, is killed or over its limits, or the controlled-walk deltas
@@ -1310,7 +1311,8 @@ The FeMoco shape is a large-scale compile (master plan section 12.9). --project 
 mid results (PROJECTION_METHOD) and writes k1_projection.json. The FeMoco driver refuses, with exit
 status 2 and without compiling, unless that projection belongs to the current code_hash() (the
 driver, the prototypes, dfthc.compile, the watchdog, the toolchain versions and the lock file) and
-keeps the walk and the controlled walk within LIMITS["femoco"], by sampled peak and upper bound.
+keeps the walk and the controlled walk within 60 minutes and the effective limit of the 8 GB cap
+(7,680 MB), by sampled peak and upper bound.
 Each FeMoco program compiles at most once per code_hash(): k1_femoco.json is checkpointed after
 every program, a completed program is reused, and a failed one is retried only with
 --allow-retry, which needs the user's approval. A FeMoco --program run without the token of a
@@ -1362,7 +1364,13 @@ from dfthc.compile import (  # noqa: E402
     register_rule,
     resource_key,
 )
-from dfthc.testing.watchdog import HEAVY_MEMORY_MB, MEMORY_CAP_MB, run_watched  # noqa: E402
+from dfthc.testing.watchdog import (  # noqa: E402
+    HEAVY_MEMORY_MB,
+    MEMORY_CAP_MB,
+    effective_limit_mb,
+    run_watched,
+    within_effective_limit,
+)
 
 
 def lg(value: int) -> int:
@@ -2165,7 +2173,8 @@ PROJECTION_METHOD = (
     "calibration shapes, exponent at least 1. Memory: least-squares line through all calibration "
     "shapes, slope at least 0, for peak_mb (the gate metric) and rusage_sum_mb (the upper bound). "
     "The FeMoco compile may run only if, for the walk and the controlled walk, the projected time, "
-    "peak_mb and rusage_sum_mb are all within LIMITS['femoco']"
+    "peak_mb and rusage_sum_mb are all within the time limit of LIMITS['femoco'] and the "
+    "watchdog's effective limit of its cap (7,680 MB of 8 GB), where execution would be killed"
 )
 RESULTS = Path(__file__).resolve().parent / "results"
 FEMOCO_LOCK = RESULTS / "k1_femoco.lock"
@@ -2290,7 +2299,8 @@ def project(calibration: dict[str, dict]) -> dict:
             raise ValueError(f"no passing k1_{shape}.json: run --shape {shape} --all first")
         if record.get("code_hash") != current:
             raise ValueError(f"k1_{shape}.json belongs to other code: rerun --shape {shape} --all")
-    seconds_limit, memory_limit = LIMITS["femoco"]
+    seconds_limit, cap_mb = LIMITS["femoco"]
+    memory_limit = effective_limit_mb(cap_mb)
     programs, reasons = {}, []
     for program in SHAPE_PROGRAMS["femoco"]:
         shapes = [s for s in CALIBRATION_SHAPES if program in calibration[s]]
@@ -2308,10 +2318,11 @@ def project(calibration: dict[str, dict]) -> dict:
         if seconds > seconds_limit:
             reasons.append(f"{program}: {seconds / 60:.0f} min > {seconds_limit / 60:.0f} min")
         for label, value in (("sampled peak", peak), ("upper bound", upper)):
-            if value > memory_limit:
+            if not within_effective_limit(value, cap_mb):
                 reasons.append(f"{program}: {label} {value / 1024:.1f} GB > "
-                               f"{memory_limit / 1024:.0f} GB")
-    return {"method": PROJECTION_METHOD, "limits": {"seconds": seconds_limit, "mb": memory_limit},
+                               f"{memory_limit / 1024:.1f} GB")
+    return {"method": PROJECTION_METHOD,
+            "limits": {"seconds": seconds_limit, "mb": memory_limit, "cap_mb": cap_mb},
             "programs": programs, "femoco_allowed": not reasons,
             "reason": "; ".join(reasons) or "within the limits", "code_hash": current,
             "environment": environment()}
@@ -2352,8 +2363,9 @@ def write_results(shape_name: str, results: dict) -> dict:
     if complete and "controlled_walk" in record:
         record["controlled_walk_check"] = controlled_walk_check(record)
         failed |= not record["controlled_walk_check"]["ok"]
-    seconds_limit, memory_limit = LIMITS[shape_name]
-    record.update(limits={"seconds": seconds_limit, "mb": memory_limit},
+    seconds_limit, cap_mb = LIMITS[shape_name]
+    record.update(limits={"seconds": seconds_limit, "mb": effective_limit_mb(cap_mb),
+                          "cap_mb": cap_mb},
                   memory_method=MEMORY_METHOD, code_hash=code_hash(), environment=environment(),
                   verdict="fail" if failed else "pass" if complete else "incomplete")
     RESULTS.mkdir(exist_ok=True)
@@ -2362,7 +2374,7 @@ def write_results(shape_name: str, results: dict) -> dict:
 
 
 def drive(shape_name: str, allow_retry: bool = False) -> int:
-    seconds_limit, memory_limit = LIMITS[shape_name]
+    seconds_limit, cap_mb = LIMITS[shape_name]
     results, programs, env = {}, list(SHAPE_PROGRAMS[shape_name]), dict(os.environ)
     if shape_name == "femoco":
         refusal = femoco_refusal()
@@ -2392,7 +2404,7 @@ def drive(shape_name: str, allow_retry: bool = False) -> int:
     try:
         for program in programs:
             command = [sys.executable, __file__, "--shape", shape_name, "--program", program]
-            run = run_watched(command, cap_mb=memory_limit, timeout_s=seconds_limit + 60, env=env)
+            run = run_watched(command, cap_mb=cap_mb, timeout_s=seconds_limit + 60, env=env)
             lines = [line for line in run.stdout.splitlines() if line.startswith("{")]
             if run.killed or run.survivors or run.returncode != 0 or not lines:
                 reason = f"killed: {run.killed}" if run.killed else run.stderr[-3000:]
@@ -2401,7 +2413,7 @@ def drive(shape_name: str, allow_retry: bool = False) -> int:
                 record = json.loads(lines[-1])
                 record["peak_mb"] = round(run.peak_mb, 1)
                 record["within_budget"] = (record["seconds"] <= seconds_limit
-                                           and run.peak_mb <= memory_limit)
+                                           and within_effective_limit(run.peak_mb, cap_mb))
                 results[program] = record
             print(program, json.dumps(results[program])[:600], flush=True)
             if shape_name == "femoco":
@@ -2472,14 +2484,14 @@ The Toffoli and measurement counts are exact and must match; times and memory va
 
 - [ ] **Step 3: Run the driver at the mid shapes**
 
-Run, one after the other (about 15 minutes together; each compile stays below 4 GB):
+Run, one after the other (about 15 minutes together; each compile stays below 3.75 GB):
 
 ```bash
 CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python" spikes/k1_whole_program.py --shape mid10 --all
 CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python" spikes/k1_whole_program.py --shape mid14 --all
 ```
 
-Expected: one JSON line per program, the `controlled_walk_check` line with `"ok": true`, and `verdict: pass` for each shape. The round-3 calibration measured, with the stand-in and the sampled resident size of the process tree: the `mid10` walk 60 s and 1.6 GB, controlled walk 124 s and 2.3 GB; the `mid14` walk 128 to 146 s and 1.7 to 2.3 GB, inner prepare 105 s and 1.2 GB, inner select 50 s and 1.0 GB. The `mid14` controlled walk was not measured; expect about 5 minutes and 2.5 to 3.5 GB. If a compile is killed at 4 GB, stop and report: the orchestrator decides whether that shape runs as a heavy process.
+Expected: one JSON line per program, the `controlled_walk_check` line with `"ok": true`, and `verdict: pass` for each shape. The round-3 calibration measured, with the stand-in and the sampled resident size of the process tree: the `mid10` walk 60 s and 1.6 GB, controlled walk 124 s and 2.3 GB; the `mid14` walk 128 to 146 s and 1.7 to 2.3 GB, inner prepare 105 s and 1.2 GB, inner select 50 s and 1.0 GB. The `mid14` controlled walk was not measured; expect about 5 minutes and 2.5 to 3.5 GB. If a compile is killed at 3.75 GB, stop and report: the orchestrator decides whether that shape runs as a heavy process.
 
 - [ ] **Step 4: Project to FeMoco-54**
 
@@ -2502,6 +2514,8 @@ Each of the following scenarios separated it from the first round-3 version of t
 | controlled walk killed, then a retry | refused everything; deleting the result file recompiled the walk | refused without `--allow-retry`; with it, compiled only the controlled walk, verdict `pass` |
 | driver crashed during the controlled walk, then a rerun | nothing checkpointed; recompiled both | walk checkpointed, lock removed; compiled only the controlled walk |
 | projected peak 5.0 GB, upper bound 33 GB | `femoco_allowed: True` | `femoco_allowed: False` |
+| walk projected at 7.8 GB, upper bound 7.9 GB (round 3c; against the round-3b driver, which gated at 8 GB) | `femoco_allowed: True`, compiled both | `femoco_allowed: False`, nothing compiled |
+| a run that peaked at 7,700 MB without a kill (round 3c; against the round-3b driver) | `within_budget: true` | `within_budget: false`, verdict `fail` |
 
 The round-2 driver, given over-limit data, launched all four FeMoco compiles.
 

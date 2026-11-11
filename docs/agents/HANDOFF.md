@@ -97,14 +97,17 @@ Found while dry-running the Phase 0 plan (canaries L-24 and L-25 pin the first t
 - **Never pass bulk masks or parity data as compilable arguments.** Derive them inside the rule
   from the compilable table. In the plan's dry-run (quoted, not reproduced), one 8,640-address
   fixup compiled in about 4 min that way and in 25 min with masks as compilable data.
-- **The Cursor sandbox may block writes** to `.git` (worktrees, commits) or `.venv` (pip). Request
-  the elevated permission for that single command. Never use it to push.
+- **Git works in the Cursor sandbox:** branches, commits, the index, rebases and switches. Only
+  git's control files (`.git/config`, hooks, new worktrees) are blocked, and you never need them.
+  Do not request elevated permission for git; report a git sandbox failure to the orchestrator.
+  For pip, set `PIP_NO_CACHE_DIR=1`, and request elevation only if pip still fails. Never use
+  elevation to push.
 - **The sandbox also forbids `ps` and setpriority()** (`nice`, `os.nice`; `nice` only warns and
   runs the command unchanged). `scripts/test.sh` and `dfthc.testing.watchdog` handle this: they
   lower the priority with `taskpolicy -c utility` and read memory through macOS `libproc`. Read a
   niceness with `os.getpriority`, never `os.nice(0)`.
 
-### 3.3 Running Python and tests from a worktree
+### 3.3 Running Python and tests from a worktree lane
 
 ```bash
 VENV="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.venv"
@@ -144,10 +147,12 @@ not run heavy processes throughout." The full policy is master plan section 12.9
   angle operator at FeMoco-54 shape, or a spike stand-in at that shape).
 - **You never start a heavy process.** If your brief needs one, it names the command; stop there
   and report it, and the orchestrator runs it alone, under the watchdog.
-- **Memory cap:** no process tree may exceed 8 GB. Compiles that could grow large run through
-  `dfthc.testing.watchdog.run_watched`, which samples the tree every 50 ms, kills it at 7.5 GB
-  (15/16 of the cap) and records the kill. It fails closed: it starts nothing off macOS, and a
-  libproc error ends the run as `"watchdog error: ..."` with the tree killed.
+- **Memory cap:** 8 GB per process tree, a sampled limit (macOS enforces no memory limit).
+  Compiles that could grow large run through `dfthc.testing.watchdog.run_watched`, which samples
+  the tree every 50 ms, kills it at the first sample above 7.5 GB (`EFFECTIVE_LIMIT_MB`, 15/16 of
+  the cap) and records the kill; the overshoot is bounded by one 50 ms interval of growth.
+  Projections and budgets use 7.5 GB, not 8 GB. The watchdog fails closed: it starts nothing off
+  macOS, and a libproc error ends the run as `"watchdog error: ..."` with the tree killed.
 - **Test runs:** run only the targeted tests while you develop (`scripts/test.sh tests/x.py -q`),
   then the per-commit tier once at commit time. Never run the nightly or release tier: the
   orchestrator runs the nightly tier at phase gates, and the release tier once in Phase 5.
@@ -296,8 +301,12 @@ differs from the spec's original claim (observed 2026-11-11).
 
 ## 8. Git rules
 
-- Work only in your task's worktree (`../dfthc-be-worktrees/<task-id>`) on branch
-  `phase<N>/<task-id>`. Do not touch the main checkout or other worktrees.
+- Work only in the worktree lane named in your dispatch (`.worktrees/lane-a` or
+  `.worktrees/lane-b` in the main checkout), on branch `phase<N>/<task-id>`. Do not touch the
+  main checkout or the other lane.
+- Never run `git worktree add/remove`, `git clone`, or anything that writes `.git/config` or
+  hooks, and never switch the lane to another branch: the orchestrator frees the lane after the
+  merge.
 - Commit on your branch with the messages your brief gives. **Never push, never merge, never add,
   change or remove remotes.** Only the orchestrator merges, into local `main`.
 - Identity: the repo-local `dwierichs` / `david.wierichs@xanadu.ai` (already configured).

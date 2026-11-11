@@ -77,14 +77,14 @@ GATE_SET = {
 - Per commit: `scripts/test.sh -m "not slow and not release"` (15 min). Nightly: `scripts/test.sh -m "slow and not release"` (4 h), only at phase gates, started by the orchestrator. Release: `scripts/test.sh` (8 h), once, at the end of Phase 5, after the user's go-ahead.
 
 **Load limits (master plan section 12.9; spec 15)**
-- The development laptop has 10 cores and 16 GB, and the user works on it. No process tree may exceed 8 GB of memory.
+- The development laptop has 10 cores and 16 GB, and the user works on it. Each process tree has a sampled 8 GB memory cap: the watchdog kills it at the first sample above 7.5 GB (`EFFECTIVE_LIMIT_MB`), and projections and budgets must stay within 7.5 GB.
 - A heavy process is a run whose process tree exceeds 4 GB, keeps more than 2 cores busy or lasts longer than 30 minutes, or any FeMoco-shaped compile. Only the orchestrator starts heavy processes, one at a time, under the watchdog (`dfthc.testing.watchdog`), and logs each in the ledger.
 - During TDD, run only the targeted tests; run the per-commit tier once at commit time. Never start a heavy process yourself.
 - The per-commit and nightly tiers contain no FeMoco-shaped compile. FeMoco-54 values are asserted on the closed forms (`dfthc.costs`); the FeMoco-54 walk and controlled walk are compiled once, in Task 4.5.
 
 **Git (spec 15)**
 - Local branches and worktrees only. Merges go into local `main`. Never push, never modify remotes. The repo-local git identity (`dwierichs` / `david.wierichs@xanadu.ai`) is shared by all worktrees.
-- Each task runs in a git worktree on a branch named `phase<N>/<task-id>` from local `main`; only the orchestrator merges.
+- Each task runs in one of two worktree lanes (`.worktrees/lane-a`, `.worktrees/lane-b`) on a branch named `phase<N>/<task-id>` from local `main`; only the orchestrator merges. Never run `git worktree add/remove` or `git clone`.
 
 ---
 
@@ -128,7 +128,7 @@ VENV="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.ven
 - Create: `pyproject.toml`, `requirements-nightly.lock`, `scripts/setup_env.sh`, `scripts/test.sh`, `src/dfthc/__init__.py`, `tests/conftest.py`, `tests/test_infrastructure.py`, `docs/environment.md`
 
 **Interfaces:**
-- Consumes: the existing `.gitignore` (already ignores `.venv/`, `.venv-ref/`, `.scratch/` and caches); the canonical `.venv` in the main checkout.
+- Consumes: the existing `.gitignore` (already ignores `.venv/`, `.venv-ref/`, `.scratch/`, `.worktrees/` (the two worktree lanes), `.superpowers/` (workflow artifacts) and caches); the canonical `.venv` in the main checkout.
 - Produces:
   - `scripts/test.sh [pytest args...]`: exports `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0`, uses `$DFTHC_VENV` or `<main checkout>/.venv`, runs `python -m pytest -n ${DFTHC_TEST_WORKERS:-2} "$@"` from the worktree root at lowered priority: under `nice -n 10`, or, where setpriority() is forbidden (the agent sandbox, in which `nice` only warns), under `taskpolicy -c utility` (master plan section 12.9).
   - pytest markers `compiled`, `slow`, `release`, `canary`, `femoco`, `subprocess`, with `--strict-markers`; the `release` marker adds `slow` before `-m` deselection.
@@ -472,7 +472,8 @@ The development laptop has 10 cores and 16 GB, and the user works on it while ag
 - `scripts/test.sh` runs 2 xdist workers (`DFTHC_TEST_WORKERS` overrides; `0` runs serially) at
   lowered priority: `nice -n 10`, or, in the agent sandbox, where setpriority() is forbidden, the
   utility QoS clamp of `taskpolicy`.
-- No process tree may exceed 8 GB of memory. A heavy run (above 4 GB, more than 2 busy cores,
+- Each process tree has a sampled 8 GB memory cap: the watchdog kills it at the first sample above
+  7.5 GB, so the overshoot past 7.5 GB is bounded by 50 ms of growth. A heavy run (above 4 GB, more than 2 busy cores,
   longer than 30 minutes, or any FeMoco-shaped compile) is started only by the orchestrator, alone,
   under `PYTHONPATH=src .venv/bin/python -m dfthc.testing.watchdog -- <command>`, and logged in the
   ledger with its peak memory and wall time.
@@ -531,17 +532,19 @@ git commit -m "Add package scaffold, environment lock and test runner"
   - `dfthc.compile.mcm_parities(outcomes, masks: Sequence[int]) -> list`: one entry per mask, `False` for a zero mask, else a predicate for `qp.cond`; also `pack_masks(masks, num_outcomes) -> np.ndarray` and `packed_parities(outcome_bits, packed_masks)`.
   - `dfthc.testing.resources`: `NOISE_PATTERNS`, `UNRESOLVED_BRANCH_MESSAGE`, `dfthc_operator_names` (imported from `dfthc.compile`), `classify_rule_warning(message, names=None) -> "dfthc" | "noise" | "other"`, `install_warning_filters()`, `verbose_program(qfunc, num_wires)`, `chosen_rules(listing) -> list[str]`, `assert_resources(resources, *, toffoli, measurements, measured_and_uncomputes=None)`.
   - `dfthc.testing.canary`: `PRELUDE`, `run_snippet(body, *, export_warning_variable=True, timeout=900.0) -> subprocess.CompletedProcess[str]`, `outcome(result, label) -> str`.
-  - `dfthc.testing.watchdog` (master plan section 12.9): `MEMORY_CAP_MB = 8192`, `SAFETY_FRACTION = 15/16` (it kills at 7,680 MB), `POLL_SECONDS = 0.05`, `HEAVY_MEMORY_MB = 4096`, `HEAVY_SECONDS = 1800`, `KILLED_EXIT_STATUS = 3`; `WatchdogError`; `check_backend()` (refuses off macOS, and unless libproc reads this process); `memory_mb(pid) -> float` (physical footprint through macOS `libproc`; 0.0 once the process has exited; `WatchdogError` on any libproc error other than ESRCH), `child_pids(pid)`, `tree_pids(root) -> list[int]`, `tree_memory_mb(root) -> float`; `lowered_priority_prefix() -> list[str]`; `WatchedRun(command, pid, returncode, seconds, peak_mb, samples, killed, survivors, cap_mb, timeout_s, priority, stdout, stderr)` with `.heavy` and `.summary()`; `run_watched(command, *, cap_mb=MEMORY_CAP_MB, timeout_s, capture=True, poll_s=POLL_SECONDS, cwd=None, env=None) -> WatchedRun`; and the command line `python -m dfthc.testing.watchdog [--cap-mb N] [--timeout-min M] -- CMD ...`, which prints one `WATCHDOG {json}` line and exits with the command's status, or 3 after a kill or a failed cleanup.
-  - The watchdog fails closed. It checks the backend before starting anything. It samples at once and then every 50 ms, and it kills at 15/16 of the cap, so growth within one interval stays below the cap. Any libproc error other than ESRCH ends the run as `"watchdog error: ..."` and kills the process group and every tracked process. It tracks processes by pid and start time, so a descendant that leaves the tree or the process group is still measured and killed, and a reused pid is never touched. It kills by stopping the tree and re-scanning until no new process appears, then killing them all and re-checking. It kills whatever is left of the tree however the run ends.
+  - `dfthc.testing.watchdog` (master plan section 12.9): `MEMORY_CAP_MB = 8192` (a sampled limit), `SAFETY_FRACTION = 15/16`, `EFFECTIVE_LIMIT_MB = 7680` (where it kills; projections and budgets use it), `POLL_SECONDS = 0.05`, `HEAVY_MEMORY_MB = 4096`, `HEAVY_SECONDS = 1800`, `KILLED_EXIT_STATUS = 3`; `WatchdogError`; `check_backend()` (refuses off macOS, and unless libproc reads this process); `memory_mb(pid) -> float` (physical footprint through macOS `libproc`; 0.0 once the process has exited; `WatchdogError` on any libproc error other than ESRCH), `child_pids(pid)` (empty on ESRCH, `WatchdogError` on any other error), `effective_limit_mb(cap_mb=MEMORY_CAP_MB)`, `within_effective_limit(memory, cap_mb=MEMORY_CAP_MB) -> bool`, `tree_pids(root) -> list[int]`, `tree_memory_mb(root) -> float`; `lowered_priority_prefix() -> list[str]`; `WatchedRun(command, pid, returncode, seconds, peak_mb, samples, killed, survivors, cap_mb, timeout_s, priority, stdout, stderr)` with `.heavy` and `.summary()`; `run_watched(command, *, cap_mb=MEMORY_CAP_MB, timeout_s, capture=True, poll_s=POLL_SECONDS, cwd=None, env=None) -> WatchedRun`; and the command line `python -m dfthc.testing.watchdog [--cap-mb N] [--timeout-min M] -- CMD ...`, which prints one `WATCHDOG {json}` line and exits with the command's status, or 3 after a kill or a failed cleanup.
+  - The watchdog fails closed. It checks the backend before starting anything. It samples at once and then every 50 ms, and kills at the first sample above `effective_limit_mb(cap_mb)`, 15/16 of the cap. The cap is therefore a sampled limit: the overshoot past 7.5 GB is bounded by one interval of growth, and stays below 8 GB for growth under 10 GB/s (compiles measured at most about 0.5 GB/s). macOS has no usable kernel limit (`setrlimit` rejects lowering `RLIMIT_AS`, `RLIMIT_RSS` and `RLIMIT_DATA`). Any libproc error other than ESRCH ends the run as `"watchdog error: ..."` and kills the process group and every tracked process. It tracks processes by pid and start time, so a descendant that leaves the tree or the process group is still measured and killed, and a reused pid is never touched. It kills by stopping the tree and re-scanning until no new process appears, then killing them all and re-checking. It kills whatever is left of the tree however the run ends.
 
 **Acceptance tests:**
 - `tests/test_compile.py` (21 tests): the gate set equals spec 7.3; `register_rule` pins once and rejects duplicates; `qp.list_decomps(key) == [rule]` for every pinned key (PennyLane registers none of our names); **T6 pattern**: a pinned measured `Adjoint(...)` rule is chosen, with counts exactly `{"CNOT": 1, "Hadamard": 2, "MidCircuitMeasure": 1, "PauliX": 1, "PauliZ": 1}`; the verbose rule listing names both pinned rules (Phase 0 check of spec 12.1 T6: capturable only with `qp.qjit(verbose=True)`); `SemiAdder` on 3 bits gives T = 2 and A = 2; symbolic counts and operations outside the gate set are rejected; at `level="device"` a dfthc operator is rejected bare and under `C(...)` and `Adjoint(...)` (`surviving_dfthc_operators`, unit-tested on all spellings and on the device branch with `qp.analyze` stubbed), while a decomposed program passes (the old base-name check missed the wrapped spellings in the dry-run); `resource_key` pauses capture; `pack_masks` layout; out-of-range masks are rejected; `mcm_parities` equals the GF(2) reference on all 2^5 outcome vectors in tape mode, is linear on 100 random pairs of 70-bit vectors in the capture core, and drives conditional gates correctly in a compiled `lightning.qubit` circuit; `classify_rule_warning` separates dfthc, noise and other messages; `assert_resources` reports mismatches.
 - `tests/test_primitive_costs.py` (53 tests), pinning spec 9.24's primitive table: `SemiAdder` and its adjoint T = A = n − 1 with no `Toffoli` (n = 1, 2, 3, 4, 6, 8, 15); `LeftQuantumComparator` T = n, A = 0 and its adjoint T = 0, A = n (n = 2, 3, 4, 6, 8; `"<="` and `"<"`); `LeftClassicalComparator` T = n − 1 and its adjoint A = n − 1 (n, value = (3, 1), (3, 6), (5, 7), (5, 27), (7, 81), (7, 3)); `MultiControlledX` with k controls and k − 2 zeroed work wires T = k − 1 with exactly one `Toffoli` and A = k − 2 (k = 2, 3, 4, 5, 8, 12); `CSWAP` T = 1.
 - `tests/test_canary_helper.py` (3 tests): report lines for success and failure, the warning variable exported or unset, a clear error for a missing report line.
-- `tests/test_watchdog.py` (12 tests, marked `subprocess`; at most 500 MB each):
+- `tests/test_watchdog.py` (15 tests, marked `subprocess`; at most 500 MB each):
   - the tree memory includes a grandchild's 300 MB;
   - a tree that grows past 15/16 of a 200 MB cap is killed with SIGKILL, grandchild included, reported as `"memory"`, with no survivor;
   - with the safety fraction set to 0.5, a 500 MB cap kills at 250 MB, and the real constants give 7,680 MB;
+  - projections use the effective limit: 7.5 GB fits, 7.8 GB is refused, and 3,900 MB exceeds the effective limit of a 4 GB cap;
+  - a child listing that fails with ESRCH (the process exited in between) counts as no children, and the run ends normally; one that fails with EPERM ends the run as a watchdog failure (two cases);
   - a sleeping command is killed at its time limit;
   - a 50 MB command within its limits passes with its output;
   - a 20 ms command is sampled at least once;
@@ -552,9 +555,9 @@ git commit -m "Add package scaffold, environment lock and test runner"
   - the command runs at niceness 10 or more (`nice`) or in the utility QoS class (`taskpolicy`);
   - the command line exits with status 3 and a `WATCHDOG` line reporting the kill.
 
-  Dry-run evidence against the first version of the watchdog (round 3): it started the command off macOS, never killed when libproc failed (the command ran its full 5 s), had no safety threshold (asked to kill at half of a 500 MB cap, it let a 413 MB tree run), and crashed with `PermissionError` while a descendant that had left the tree kept running. macOS answers `killpg` on a group of zombies with EPERM, which that version did not handle. It missed a 20 ms command in 3 of 10 runs (the new one in none). The spawn-during-kill race did not show in its runs (0 survivors of 314), so that test guards the new stop-and-re-scan kill rather than reproducing an old failure. Earlier: a watchdog that samples only the root process lets the 400 MB tree run past the cap until the time limit; one that reads the resident size instead of the footprint let it stay under 200 MB while two workers allocated at once.
+  Dry-run evidence against the first version of the watchdog (round 3): it started the command off macOS, never killed when libproc failed (the command ran its full 5 s), had no safety threshold (asked to kill at half of a 500 MB cap, it let a 413 MB tree run), and crashed with `PermissionError` while a descendant that had left the tree kept running. macOS answers `killpg` on a group of zombies with EPERM, which that version did not handle. It missed a 20 ms command in 3 of 10 runs (the new one in none). The spawn-during-kill race did not show in its runs (0 survivors of 314), so that test guards the new stop-and-re-scan kill rather than reproducing an old failure. Against the round-3b watchdog: the ESRCH case was reported as `"watchdog error: proc_listchildpids(...) failed: No such process"`, and the effective-limit test failed (no such limit); the EPERM case passed on both. On this macOS `proc_listchildpids` of a vanished pid returns 0 rather than ESRCH, so the misclassification was not observed outside the mock. Earlier: a watchdog that samples only the root process lets the 400 MB tree run past the cap until the time limit; one that reads the resident size instead of the footprint let it stay under 200 MB while two workers allocated at once.
 
-**Definition of done:** `scripts/test.sh tests/test_compile.py tests/test_primitive_costs.py tests/test_canary_helper.py tests/test_watchdog.py -q` gives `89 passed`; the per-commit tier gives `100 passed` (one test deselected); `ruff check .` clean; output free of warnings.
+**Definition of done:** `scripts/test.sh tests/test_compile.py tests/test_primitive_costs.py tests/test_canary_helper.py tests/test_watchdog.py -q` gives `92 passed`; the per-commit tier gives `103 passed` (one test deselected); `ruff check .` clean; output free of warnings.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1155,6 +1158,40 @@ def test_libproc_failure_kills_the_tree(monkeypatch):
     assert wait_until_gone(int(run.stdout.split()[0])), "the grandchild survived the kill"
 
 
+class _ChildListingFails:
+    """libproc whose child listings fail with ``code`` for every process but this one."""
+
+    def __init__(self, real, code):
+        self.real, self.code = real, code
+
+    def proc_pid_rusage(self, pid, flavor, buffer):
+        return self.real.proc_pid_rusage(pid, flavor, buffer)
+
+    def proc_listchildpids(self, pid, buffer, size):
+        if pid == os.getpid():
+            return self.real.proc_listchildpids(pid, buffer, size)
+        ctypes.set_errno(self.code)
+        return -1
+
+
+@pytest.mark.parametrize("code, killed", [(errno.ESRCH, None), (errno.EPERM, "watchdog error")])
+def test_child_listing_treats_only_esrch_as_gone(monkeypatch, code, killed):
+    watchdog.check_backend()
+    monkeypatch.setattr(watchdog, "_libproc", _ChildListingFails(watchdog._libproc, code))
+    run = run_watched(["sleep", "0.3"], timeout_s=10)
+    if killed is None:
+        assert (run.killed, run.returncode) == (None, 0)
+    else:
+        assert run.killed.startswith("watchdog error: proc_listchildpids")
+
+
+def test_projections_use_the_effective_limit():
+    assert watchdog.EFFECTIVE_LIMIT_MB == watchdog.effective_limit_mb() == 7680
+    assert watchdog.within_effective_limit(7.5 * 1024)
+    assert not watchdog.within_effective_limit(7.8 * 1024)
+    assert not watchdog.within_effective_limit(3900, cap_mb=4096)
+
+
 def test_refuses_to_start_off_macos(monkeypatch, tmp_path):
     marker = tmp_path / "started"
     monkeypatch.setattr(watchdog, "_libproc", None)
@@ -1597,11 +1634,16 @@ Create `src/dfthc/testing/watchdog.py`:
 ```python
 """Run a command under a memory and wall-time watchdog (master plan section 12.9).
 
-The development laptop has 10 cores and 16 GB, and the user works on it. No process tree may
-exceed :data:`MEMORY_CAP_MB`. :func:`run_watched` starts a command at lowered priority, samples
-the memory of its whole process tree every :data:`POLL_SECONDS`, kills the tree when the sum
-passes :data:`SAFETY_FRACTION` of the cap or the time limit passes, and returns the sampled peak,
-which is the gate metric.
+The development laptop has 10 cores and 16 GB, and the user works on it. :data:`MEMORY_CAP_MB`
+(8 GB) is a sampled limit, not a hard one: macOS enforces no per-process or per-tree memory limit
+(``setrlimit`` rejects lowering ``RLIMIT_AS``, ``RLIMIT_RSS`` and ``RLIMIT_DATA``, and a child then
+allocates past them). :func:`run_watched` starts a command at lowered priority, samples the memory
+of its whole process tree every :data:`POLL_SECONDS`, kills the tree at the first sample above
+:data:`EFFECTIVE_LIMIT_MB` (7.5 GB) or when the time limit passes, and returns the sampled peak,
+which is the gate metric. The memory reached past 7.5 GB is bounded by one polling interval of
+growth: staying below 8 GB needs growth under 10 GB/s, and compiles grow far slower (the K-1
+stand-in averaged 11 to 89 MB/s, at most about 0.5 GB/s within one 50 ms interval). Projections
+and budgets use :data:`EFFECTIVE_LIMIT_MB`, the limit at which execution actually stops.
 
 Memory is the macOS physical footprint of each process, read through ``libproc``: the agent
 sandbox forbids ``ps``, and ``psutil`` is not installed. The footprint equals the resident size
@@ -1637,13 +1679,17 @@ import time
 from dataclasses import asdict, dataclass, field
 
 MEMORY_CAP_MB = 8 * 1024
-"""No process tree may exceed this memory on the development laptop."""
+"""The sampled memory limit of a process tree on the development laptop."""
 
 SAFETY_FRACTION = 15 / 16
-"""The watchdog kills at this fraction of the cap (7.5 GB of 8 GB), so that growth within one
-polling interval stays below the cap."""
+"""The watchdog kills at this fraction of the cap; the remaining 512 MB of an 8 GB cap absorb
+growth within one polling interval below 10 GB/s."""
 
 POLL_SECONDS = 0.05
+
+EFFECTIVE_LIMIT_MB = SAFETY_FRACTION * MEMORY_CAP_MB
+"""7,680 MB: where execution stops under the default cap, and the limit for projections and
+budgets."""
 
 HEAVY_MEMORY_MB = 4 * 1024
 """A process tree whose peak exceeds this is a heavy process."""
@@ -1719,8 +1765,10 @@ def child_pids(pid: int) -> list[int]:
         ctypes.set_errno(0)
         count = _load().proc_listchildpids(pid, buffer, ctypes.sizeof(buffer))
         if count < 0:
-            raise WatchdogError(f"proc_listchildpids({pid}) failed: "
-                                f"{os.strerror(ctypes.get_errno())}")
+            code = ctypes.get_errno()
+            if code == errno.ESRCH:
+                return []
+            raise WatchdogError(f"proc_listchildpids({pid}) failed: {os.strerror(code)}")
         if count < capacity:
             return [child for child in buffer[:count] if child > 0]
         capacity *= 4
@@ -1792,6 +1840,16 @@ def _signal_group(pgid: int, sig: int) -> None:
         pass
 
 
+def effective_limit_mb(cap_mb: float = MEMORY_CAP_MB) -> float:
+    """The memory at which :func:`run_watched` kills a tree whose cap is ``cap_mb``."""
+    return SAFETY_FRACTION * cap_mb
+
+
+def within_effective_limit(memory: float, cap_mb: float = MEMORY_CAP_MB) -> bool:
+    """Whether a measured or projected memory in MB stays below the kill point of ``cap_mb``."""
+    return memory <= effective_limit_mb(cap_mb)
+
+
 def tree_pids(root: int) -> list[int]:
     """``root`` and all its running descendants."""
     return sorted(_Tree(root).scan())
@@ -1858,8 +1916,8 @@ def run_watched(command: list[str], *, cap_mb: float = MEMORY_CAP_MB, timeout_s:
     """Run ``command`` at lowered priority in a new session, under the watchdog.
 
     Raises :class:`WatchdogError` before starting anything if libproc is unusable. The tree is
-    sampled at once and then every ``poll_s`` seconds; it is killed when its memory passes
-    ``SAFETY_FRACTION * cap_mb``, when the run passes ``timeout_s``, or when libproc fails. Any
+    sampled at once and then every ``poll_s`` seconds; it is killed at the first sample above
+    ``effective_limit_mb(cap_mb)``, when the run passes ``timeout_s``, or when libproc fails. Any
     process of the tree still running when the command ends is killed too, however the run ends.
     With ``capture=False`` the output goes to this process's streams.
     """
@@ -1878,7 +1936,7 @@ def run_watched(command: list[str], *, cap_mb: float = MEMORY_CAP_MB, timeout_s:
             except WatchdogError as exc:
                 killed = f"watchdog error: {exc}"
                 break
-            if peak > SAFETY_FRACTION * cap_mb:
+            if not within_effective_limit(peak, cap_mb):
                 killed = "memory"
                 break
             if time.monotonic() - start > timeout_s:
@@ -1979,10 +2037,10 @@ def _rule_lowering_warning_policy():
 - [ ] **Step 6: Run the tests**
 
 Run: `scripts/test.sh tests/test_compile.py tests/test_primitive_costs.py tests/test_canary_helper.py tests/test_watchdog.py -q`
-Expected: `89 passed` (about 60 s with the default 2 workers), no warnings summary.
+Expected: `92 passed` (about 60 s with the default 2 workers), no warnings summary.
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `100 passed`. The `release`-only marker test is deselected; with xdist workers, pytest-xdist leaves the deselected count out of the summary (`DFTHC_TEST_WORKERS=0` shows `100 passed, 1 deselected`).
+Expected: `103 passed`. The `release`-only marker test is deselected; with xdist workers, pytest-xdist leaves the deselected count out of the summary (`DFTHC_TEST_WORKERS=0` shows `103 passed, 1 deselected`).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`

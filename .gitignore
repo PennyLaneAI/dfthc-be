@@ -5,6 +5,10 @@
 # Scratch experiments (not part of the project)
 .scratch/
 
+# Worktree lanes and workflow artifacts (master plan section 12.2)
+.worktrees/
+.superpowers/
+
 # Python build and cache artifacts
 __pycache__/
 *.py[cod]

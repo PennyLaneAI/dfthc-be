@@ -82,14 +82,14 @@ GATE_SET = {
 - Per commit: `scripts/test.sh -m "not slow and not release"` (15 min). Nightly: `scripts/test.sh -m "slow and not release"` (4 h), only at phase gates, started by the orchestrator. Release: `scripts/test.sh` (8 h), once, at the end of Phase 5, after the user's go-ahead.
 
 **Load limits (master plan section 12.9; spec 15)**
-- The development laptop has 10 cores and 16 GB, and the user works on it. No process tree may exceed 8 GB of memory.
+- The development laptop has 10 cores and 16 GB, and the user works on it. Each process tree has a sampled 8 GB memory cap: the watchdog kills it at the first sample above 7.5 GB (`EFFECTIVE_LIMIT_MB`), and projections and budgets must stay within 7.5 GB.
 - A heavy process is a run whose process tree exceeds 4 GB, keeps more than 2 cores busy or lasts longer than 30 minutes, or any FeMoco-shaped compile. Only the orchestrator starts heavy processes, one at a time, under the watchdog (`dfthc.testing.watchdog`), and logs each in the ledger.
 - During TDD, run only the targeted tests; run the per-commit tier once at commit time. Never start a heavy process yourself.
 - The per-commit and nightly tiers contain no FeMoco-shaped compile. FeMoco-54 values are asserted on the closed forms (`dfthc.costs`); the FeMoco-54 walk and controlled walk are compiled once, in Task 4.5.
 
 **Git (spec 15)**
 - Local branches and worktrees only. Merges go into local `main`. Never push, never modify remotes. The repo-local git identity (`dwierichs` / `david.wierichs@xanadu.ai`) is shared by all worktrees.
-- Each task runs in a git worktree on a branch named `phase<N>/<task-id>` from local `main`; only the orchestrator merges.
+- Each task runs in one of two worktree lanes (`.worktrees/lane-a`, `.worktrees/lane-b`) on a branch named `phase<N>/<task-id>` from local `main`; only the orchestrator merges. Never run `git worktree add/remove` or `git clone`.
 
 ---
 
@@ -107,7 +107,7 @@ This is a **rolling-wave** plan. It lists every task of Phases 0 to 5 with its i
 | `docs/agents/HANDOFF.md` | the shared context every agent reads first |
 | `docs/agents/LEDGER.md` | durable task, spike, decision and gate record |
 
-**Task ids** are `<phase>.<n>` or `<phase><workstream>.<n>` (`0.3`, `1A.4`, `2E.2`). Each code-level task heading reads `### Task <id>: <title>`, so the superpowers `task-brief` script extracts it: `task-brief <plan file> <id>`. The branch is `phase<N>/<id>` and the worktree `../dfthc-be-worktrees/<id>`.
+**Task ids** are `<phase>.<n>` or `<phase><workstream>.<n>` (`0.3`, `1A.4`, `2E.2`). Each code-level task heading reads `### Task <id>: <title>`, so the superpowers `task-brief` script extracts it: `task-brief <plan file> <id>`. The branch is `phase<N>/<id>`; each task runs in one of two fixed worktree lanes, `.worktrees/lane-a` and `.worktrees/lane-b` (section 12.2).
 
 **Code provenance:** every code block in the Phase 0 files was executed on 2026-11-11 in a scratch replica of this repository and passed as stated. Section 3 lists what those dry-runs taught.
 
@@ -122,9 +122,9 @@ This is a **rolling-wave** plan. It lists every task of Phases 0 to 5 with its i
 | Q-3 QPE driver | **Yes:** `iterative_phase_estimation` is a plain quantum function, exempt from R-4; `QPERound` and `ControlledWalkPower` stay `Operator2` | Task 4.1 |
 | Q-4 unary iteration | **Exact** now; truncated iteration and pruning are later optimizations | Tasks 1C.1, 1C.3, 1C.4 |
 | Q-5 Givens rotations | **dfthcbe's exact construction** at 2(b_rot − 1) Toffolis per rung | Task 2E.4 |
-| Load limits (user, 2026-11-11: "Keep large-scale compilations to a minimum"; "Try to not run heavy processes throughout") | **No process tree above 8 GB; heavy processes only by the orchestrator, one at a time, under the watchdog; 2 test workers at lowered priority; about six FeMoco-scale compiles for the whole project** | section 12.9; HANDOFF 3.5; spec 12.6, 15 |
+| Load limits (user, 2026-11-11: "Keep large-scale compilations to a minimum"; "Try to not run heavy processes throughout") | **A sampled 8 GB memory cap per process tree (killed at the first sample above 7.5 GB); heavy processes only by the orchestrator, one at a time, under the watchdog; 2 test workers at lowered priority; about six FeMoco-scale compiles for the whole project** | section 12.9; HANDOFF 3.5; spec 12.6, 15 |
 | Agent models (user, 2026-11-11) | **Tier A implementers and the Opus reviewer use `inherit`,** the orchestrator's own model | section 12.1 |
-| Where compiles above the cap run | **Open.** If the K-1 projection exceeds 8 GB or 60 minutes after any remedy (Tasks 0.9, 0.9b), the user decides at G0: a larger machine, or an approved idle-time window with a higher cap. The one decision covers every FeMoco-size compile, including Task 4.5's, and every other compile projected above the cap (for example Task 4.3's `fe4s4` walks). | G0; Tasks 0.9, 0.9b, 4.3, 4.5 |
+| Where compiles above the cap run | **Open.** If the K-1 projection exceeds 7.5 GB (the watchdog's effective limit) or 60 minutes after any remedy (Tasks 0.9, 0.9b), the user decides at G0: a larger machine, or an approved idle-time window with a higher cap. The one decision covers every FeMoco-size compile, including Task 4.5's, and every other compile projected above the cap (for example Task 4.3's `fe4s4` walks). | G0; Tasks 0.9, 0.9b, 4.3, 4.5 |
 
 Baseline (spec 9.24, FeMoco-54):
 - Toffolis: walk 9,793; controlled walk 9,795; block encoding 9,749.
@@ -277,14 +277,14 @@ flowchart LR
   end
 ```
 
-**Parallel waves** (tasks in one wave touch disjoint files and run in separate worktrees; merges are serialized). At most two implementers run at once (section 12.9), so a wave with more tasks runs in turns, critical-path tasks first. Tasks that edit the same module are serialized rather than split: 1C.3 → 1C.4 → 1C.5 all edit `src/dfthc/ops/qroam.py`, and 2D.1 → 2D.2 both edit `src/dfthc/ops/prepare.py` and `tests/ops/test_certificates_prepare.py`. Spec 5.2 fixes those module layouts and 9.4 names `dfthc.ops.qroam.emit_phase_fixup`; the pairs also share code (the erase builds on the read and the fixup; the two prepares share the alias-sampling rule skeleton). 1C.6 waits for 1C.1, which creates `src/dfthc/ops/__init__.py`.
+**Parallel waves** (tasks in one wave touch disjoint files and run in separate worktree lanes; merges are serialized). At most two implementers run at once (section 12.9), so a wave with more tasks runs in turns, critical-path tasks first. Tasks that edit the same module are serialized rather than split: 1C.3 → 1C.4 → 1C.5 all edit `src/dfthc/ops/qroam.py`, and 2D.1 → 2D.2 both edit `src/dfthc/ops/prepare.py` and `tests/ops/test_certificates_prepare.py`. Spec 5.2 fixes those module layouts and 9.4 names `dfthc.ops.qroam.emit_phase_fixup`; the pairs also share code (the erase builds on the read and the fixup; the two prepares share the alias-sampling rule skeleton). 1C.6 waits for 1C.1, which creates `src/dfthc/ops/__init__.py`.
 
 | Wave | Tasks | Notes |
 | --- | --- | --- |
 | 0-a | 0.1 | |
 | 0-b | 0.2, 0.5 | |
 | 0-c | 0.3, 0.6, 0.7 | Phase 1 A and B plans drafted now (section 12.7) |
-| 0-d | 0.4, 0.8, 0.9 | 0.9's small and mid compiles take about 15 minutes and stay below 4 GB, so they are not heavy; its FeMoco compile runs only if the projection allows it, started by the orchestrator, alone (section 12.9) |
+| 0-d | 0.4, 0.8, 0.9 | 0.9's small and mid compiles take about 15 minutes and stay below 3.75 GB (the kill point of their 4 GB cap), so they are not heavy; its FeMoco compile runs only if the projection allows it, started by the orchestrator, alone (section 12.9) |
 | 1-a | 1A.1, 1A.2, 1B.1 | Phase 1 C plan written once K-3 and K-7 are recorded |
 | 1-b | 1A.3, 1A.4, 1A.7, 1B.2 | |
 | 1-c | 1A.5, 1B.3, 1C.1 | |
@@ -322,8 +322,8 @@ Code-level steps: the three `phase0-*` files. The entries below are the master r
   - from `dfthc.compile`: `GATE_SET`, `ANALYZE_NAMES`, `FIXED_DECOMPS`, `register_rule(op, rule)`, `resource_key(build)`, `CompiledResources(toffoli, measurements, measured_and_uncomputes, counts, num_wires)` with `.physical_measurements`, `compiled_resources(qfunc, num_wires, *, device, level, fixed_decomps)`, `dfthc_operator_names(keys=None)`, `surviving_dfthc_operators(names, keys=None)`, `mcm_parities(outcomes, masks)`, `pack_masks`, `packed_parities`;
   - from `dfthc.testing.resources`: `classify_rule_warning`, `install_warning_filters`, `verbose_program`, `chosen_rules`, `assert_resources`;
   - from `dfthc.testing.canary`: `run_snippet`, `outcome`;
-  - from `dfthc.testing.watchdog` (section 12.9): `MEMORY_CAP_MB`, `SAFETY_FRACTION`, `POLL_SECONDS`, `HEAVY_MEMORY_MB`, `HEAVY_SECONDS`, `WatchdogError`, `check_backend()`, `memory_mb(pid)`, `tree_memory_mb(root)`, `lowered_priority_prefix()`, `WatchedRun`, `run_watched(command, *, cap_mb, timeout_s, capture)` and the command line `python -m dfthc.testing.watchdog [--cap-mb] [--timeout-min] -- CMD`, which prints one `WATCHDOG {json}` line for the ledger.
-- **Acceptance tests:** 89 tests.
+  - from `dfthc.testing.watchdog` (section 12.9): `MEMORY_CAP_MB`, `SAFETY_FRACTION`, `EFFECTIVE_LIMIT_MB`, `effective_limit_mb()`, `within_effective_limit()`, `POLL_SECONDS`, `HEAVY_MEMORY_MB`, `HEAVY_SECONDS`, `WatchdogError`, `check_backend()`, `memory_mb(pid)`, `tree_memory_mb(root)`, `lowered_priority_prefix()`, `WatchedRun`, `run_watched(command, *, cap_mb, timeout_s, capture)` and the command line `python -m dfthc.testing.watchdog [--cap-mb] [--timeout-min] -- CMD`, which prints one `WATCHDOG {json}` line for the ledger.
+- **Acceptance tests:** 92 tests.
   - The gate set matches spec 7.3.
   - Pins: one rule per key, and `qp.list_decomps(key) == [rule]`.
   - T6 pattern counts `{"CNOT": 1, "Hadamard": 2, "MidCircuitMeasure": 1, "PauliX": 1, "PauliZ": 1}`; the verbose listing names the pinned rules.
@@ -335,11 +335,13 @@ Code-level steps: the three `phase0-*` files. The entries below are the master r
   - The watchdog fails closed:
     - it refuses to start anything off macOS;
     - it sums the memory of a process tree, including grandchildren and descendants that left the tree or the process group;
-    - it samples a 20 ms command, and kills the whole tree at 15/16 of its memory cap (7.5 GB of 8 GB) and at its time limit, leaving no survivor even while children are being spawned;
+    - it samples a 20 ms command, and kills the whole tree at the first sample above 15/16 of its memory cap (7.5 GB of 8 GB; the cap is a sampled limit) and at its time limit, leaving no survivor even while children are being spawned;
+    - projections use the effective limit: a 7.8 GB projection is refused;
+    - a child listing that fails with ESRCH counts as no children, while any other libproc error ends the run as a watchdog failure;
     - a libproc error ends the run as a watchdog failure and kills the tree;
     - a command within its limits passes;
     - the command runs at lowered priority, and the command line exits with status 3 and a `WATCHDOG` line after a kill.
-- **Definition of done:** 89 passed; per-commit tier 100 passed (1 deselected); ruff clean; the T6 finding recorded.
+- **Definition of done:** 92 passed; per-commit tier 103 passed (1 deselected); ruff clean; the T6 finding recorded.
 
 ### Task 0.3: Canary suite A
 - **Tier:** B. **Reviewers:** GPT-5.6. **Scout:** Grok 4.7 for the L-10 reproducer. **Depends on:** 0.2. **Branch:** `phase0/0.3`.
@@ -393,13 +395,13 @@ Code-level steps: the three `phase0-*` files. The entries below are the master r
 - **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 0.7. **Branch:** `phase0/0.9`.
 - **Files:** `spikes/k1_whole_program.py`, `spikes/results/k1_small.json`, `spikes/results/k1_mid10.json`, `spikes/results/k1_mid14.json`, `spikes/results/k1_projection.json`; `spikes/results/k1_femoco.json` only if the FeMoco compile runs.
 - **Acceptance tests:**
-  - At the small shape: walk T = 236, controlled walk T = 238, M = 68, A = 175 and 177, inner prepare T = 35, inner select T = 66, all within 5 min and 4 GB.
-  - At the mid shapes `mid10` (walk and controlled walk) and `mid14` (walk, controlled walk, inner prepare and inner select): every compile within 15 min and 4 GB, so none is heavy, and controlled minus walk equals +2 T, +2 A and +0 M.
-  - `--project` fits the small and mid results (gates from the resource functions; time as a power law through the mid shapes, exponent at least 1; memory as a least-squares line) and writes the projected FeMoco walk and controlled walk to `k1_projection.json`. `femoco_allowed` is true only if both stay within 60 min and 8 GB by the projected sampled peak and by the projected getrusage upper bound.
+  - At the small shape: walk T = 236, controlled walk T = 238, M = 68, A = 175 and 177, inner prepare T = 35, inner select T = 66, all within 5 min and below 3.75 GB, the effective limit of their 4 GB cap.
+  - At the mid shapes `mid10` (walk and controlled walk) and `mid14` (walk, controlled walk, inner prepare and inner select): every compile within 15 min and below 3.75 GB, so none is heavy, and controlled minus walk equals +2 T, +2 A and +0 M.
+  - `--project` fits the small and mid results (gates from the resource functions; time as a power law through the mid shapes, exponent at least 1; memory as a least-squares line) and writes the projected FeMoco walk and controlled walk to `k1_projection.json`. `femoco_allowed` is true only if both stay within 60 min and 7.5 GB, the watchdog's effective limit (`EFFECTIVE_LIMIT_MB`), by the projected sampled peak and by the projected getrusage upper bound: a 7.8 GB projection is refused.
   - Every compile runs under `run_watched`, which kills it at 15/16 of its memory limit and records the kill. Memory is the sampled peak of the process tree; the getrusage sum is recorded as an upper bound.
   - `code_hash()` covers the driver, the prototypes, `dfthc.compile`, the watchdog, the installed toolchain versions and the lock file. Calibrations, projections and FeMoco results of another hash are not reused.
   - The FeMoco driver refuses (exit 2, no compile) without a projection of the current hash within the limits. It checkpoints each FeMoco program as soon as it ends, reuses a completed one, and refuses to retry a failed one without `--allow-retry` (the user's approval). A FeMoco `--program` run without a running driver's token is refused.
-- **Definition of done:** the four result files committed, with the projection and its method in the report. If `femoco_allowed` is true, the orchestrator runs `--shape femoco --all` once, alone (two of the six FeMoco-scale compiles, section 12.9), and commits `k1_femoco.json`; if that run exceeds 60 min or 8 GB, or the projection is over the limits, the gate rule of section 12.6 applies.
+- **Definition of done:** the four result files committed, with the projection and its method in the report. If `femoco_allowed` is true, the orchestrator runs `--shape femoco --all` once, alone (two of the six FeMoco-scale compiles, section 12.9), and commits `k1_femoco.json`; if that run is killed or exceeds 60 min, or the projection is over the limits, the gate rule of section 12.6 applies.
 
 ### Task 0.9b (conditional): K-1 remedy 1 in the stand-in
 - **Opened** by the orchestrator at G0 only if Task 0.9's projection or FeMoco run exceeds the limits. **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 0.9 (projection over the limits). **Branch:** `phase0/0.9b`.
@@ -612,9 +614,9 @@ All Phase 1 tasks consume the Phase 0 interfaces (`dfthc.compile`, `dfthc.testin
   - Consumes `spikes/k1_whole_program.py`'s `Shape`, `Layout`, `random_tables` and the stand-in walk.
   - Builds the stand-in at the `H2_STO3G_TEST` shape (`Shape(N=2, R=2, B=2, C=1, n_plus=1, b_rot=4, b_k1=2, b_k2=2, k1=1, k2=1)`) and at the `H2_631G_TEST` shape, decomposes it with `decompose_for_simulation`, and simulates it with `ForcedPolicy` (all zeros).
 - **Acceptance tests (spec 12.6 benchmark gate):**
-  - One full E-1-like schedule (16 basis inputs) at the H2_STO3G_TEST shape finishes within 20 minutes and 4 GB, so it is not a heavy process.
-  - One H2_631G_TEST input finishes within 10 minutes and 4 GB.
-  - Each run goes through `run_watched` with a 4 GB cap, which records its peak memory.
+  - One full E-1-like schedule (16 basis inputs) at the H2_STO3G_TEST shape finishes within 20 minutes and below 3.75 GB, so it is not a heavy process.
+  - One H2_631G_TEST input finishes within 10 minutes and below 3.75 GB.
+  - Each run goes through `run_watched` with a 4 GB cap, which kills at 3.75 GB and records its peak memory.
 
   The stand-in has the walk's structure and sizes, so it is the Phase 1 proxy. Task 3.5 re-measures on the real walk.
 - **Definition of done:** the measurements are in the report and the ledger. If over budget, apply the spec 12.6 mitigations in order (batch inputs, vectorize hot handlers, a k1 = k2 = 0 preset for the per-commit and nightly tiers). If still over budget, escalate (section 12.6).
@@ -823,7 +825,7 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
   - At FeMoco-54 the closed forms give T = 9,793 and 9,795, M = 2,524, A = 8,675 and 8,677, asserted without compiling. The FeMoco compile is Task 4.5's (D-3).
   - T5 at `level="device"` for the H2 walk: no dfthc name survives.
   - Compile time and memory at `MID_NAPHTHALENE` (through `run_watched`) are recorded and compared with the Task 0.9 stand-in at `mid10`, the same shape.
-- **Definition of done:** tests green, the slow `MID_NAPHTHALENE` cases included (run targeted; each a few minutes and below 4 GB); the numbers in the ledger.
+- **Definition of done:** tests green, the slow `MID_NAPHTHALENE` cases included (run targeted; each a few minutes and below 3.75 GB); the numbers in the ledger.
 
 #### Task 3.5: End-to-end checks E-1 to E-4 and tier budgets
 - **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 3.4. **Branch:** `phase3/3.5`.
@@ -873,8 +875,8 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
 - **Files:** `src/dfthc/costs_reference.py`, `src/dfthc/testing/provenance.py`, `scripts/resource_report.py`, `docs/resources.md`, `docs/resources.json`, `tests/report/test_report.py`.
 - **Interfaces produced:**
   - `costs_reference.paper_table3(p) -> dict[str, int]` and `costs_reference.dfthcbe_blocks(p) -> dict[str, int]`;
-  - `dfthc.testing.provenance.code_hash() -> str`: SHA-256 over the syntax trees of `src/dfthc/**/*.py` without docstrings and comments (`testing/` excluded) and the lock file, so documentation edits keep the hash; `environment() -> dict` (Python, platform, package versions, lock digest); `project_compile(points, gates) -> dict`, the K-1 projection method of Task 0.9 (power law in time, least-squares line in memory, over measured `(gates, seconds, peak_mb)` points), with gates from `DecompositionGraph.resource_estimate`;
-  - `resource_report.main(argv) -> int`, which writes the spec 13.3 rows: block, steps, calls, measured T or a closed-form mark, closed form (must equal every measured value), dfthcbe, paper, deltas, reason code, measurements, A, Cliffords (upper bound or expected), qubits from `WalkLayout`, compile time and peak memory. Its option `--large SYSTEM` first projects each of that system's heavy programs from the report's smaller compiles and compiles only those projected within 8 GB and 60 min, one subprocess each through `run_watched` (8 GB cap). It stores the counts in the `"compiled"` section of `docs/resources.json` with `code_hash()`, `environment()`, wall time and peak memory, and records a refused program with its projection. Without `--large`, the report reuses an entry whose code hash matches and marks the others pending. An entry of another hash stays in the json as history and is never shown as a current measurement.
+  - `dfthc.testing.provenance.code_hash() -> str`: SHA-256 over the syntax trees of `src/dfthc/**/*.py` without docstrings and comments (`testing/` excluded) and the lock file, so documentation edits keep the hash; `environment() -> dict` (Python, platform, package versions, lock digest); `project_compile(points, gates) -> dict`, the K-1 projection method of Task 0.9 (power law in time, least-squares line in memory, over measured `(gates, seconds, peak_mb)` points), with gates from `DecompositionGraph.resource_estimate` and the verdict from `within_effective_limit` (7.5 GB under the 8 GB cap);
+  - `resource_report.main(argv) -> int`, which writes the spec 13.3 rows: block, steps, calls, measured T or a closed-form mark, closed form (must equal every measured value), dfthcbe, paper, deltas, reason code, measurements, A, Cliffords (upper bound or expected), qubits from `WalkLayout`, compile time and peak memory. Its option `--large SYSTEM` first projects each of that system's heavy programs from the report's smaller compiles and compiles only those projected within 7.5 GB (`EFFECTIVE_LIMIT_MB`) and 60 min, one subprocess each through `run_watched` (8 GB cap, killed at 7.5 GB). It stores the counts in the `"compiled"` section of `docs/resources.json` with `code_hash()`, `environment()`, wall time and peak memory, and records a refused program with its projection. Without `--large`, the report reuses an entry whose code hash matches and marks the others pending. An entry of another hash stays in the json as history and is never shown as a current measurement.
 - **Acceptance tests** (the outputs of spec 13.3, enumerated):
   - **Systems:** FeMoco-54 (`random_factors`, fixed seed); every vendored system with default precisions: `h2_sto3g_R2_B2_C1`, `h2_631g_R2_B2_C2`, `h2_631g_R2_B3_C3`, `naphthalene`, `fe2s2` and `fe4s4`.
   - **Programs** (the report rows), each compiled separately with `compiled_resources` on `null.qubit`:
@@ -884,7 +886,7 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
     - L4: `ControlledWalkPower` with p = 1 and 2, and the QPE program with t = 1, 2, 3.
   - **What is compiled where** (spec 13.3 step 2; section 12.9):
     - the H2 systems and `naphthalene`: every program (the QPE programs at the H2 systems only); not heavy;
-    - `fe2s2` and `fe4s4`: every operator, the walk and the controlled walk through `--large`, run by the orchestrator, alone. These are heavy: the K-1 stand-in projects 4 to 6 GB for the `fe2s2` walks and 6 to 9 GB for the `fe4s4` walks (section 3, item 9). A program projected above 8 GB is not compiled on this machine; it goes where the G0 decision sends FeMoco-size compiles, or its row stays the closed form, marked pending;
+    - `fe2s2` and `fe4s4`: every operator, the walk and the controlled walk through `--large`, run by the orchestrator, alone. These are heavy: the K-1 stand-in projects 4 to 6 GB for the `fe2s2` walks and 6 to 9 GB for the `fe4s4` walks (section 3, item 9). A program projected above 7.5 GB is not compiled on this machine; it goes where the G0 decision sends FeMoco-size compiles, or its row stays the closed form, marked pending;
     - FeMoco-54: no per-operator compile. Each operator's row is its closed form, validated exactly by the compiles above; the walk and controlled walk totals are Task 4.5's, pending until then.
   - **Columns per row:** block and paper steps; calls per walk; measured T, M and A where compiled, else the closed-form mark; our closed form (the script exits non-zero if it differs from a measured value); gate-set closure (asserted by `compiled_resources`); the dfthcbe and paper values; the deltas; a reason code from spec 13.3 for every nonzero delta; Clifford counts marked "upper bound" or "expected (hinted)"; qubits from `WalkLayout`; compile time and peak memory.
   - **Tests:**
@@ -924,7 +926,7 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
 #### Task 4.5: The single FeMoco walk and controlled-walk compile, and report finalization
 - **Tier:** B: it runs the report's large-compile mode once and checks exact equalities; a mismatch goes to a Tier A fix dispatch. **Reviewers:** GPT-5.6. **Depends on:** 4.4, the Q-1 decision, and Q1b if chosen, so that the code is final and the FeMoco compile happens once. **Branch:** `phase4/4.5`.
 - **Files:** `docs/resources.md` and `docs/resources.json` (regenerated, with the cached compile), `tests/report/test_femoco_cache.py` (marked `release`, `femoco`).
-- **Procedure (section 12.9):** the implementer prepares the branch and stops; the orchestrator runs the compile. First `scripts/resource_report.py --large femoco54` projects the walk and controlled walk from the report's `naphthalene`, `fe2s2` and `fe4s4` compiles (Task 4.3) with gates from the resource functions. It compiles each once, under `run_watched`, only where the G0 decision allows: on this machine if the projection is within 8 GB and 60 min, or else on the machine or in the window the user approved at G0, with that cap. These are two of the six FeMoco-scale compiles, each with a ledger entry.
+- **Procedure (section 12.9):** the implementer prepares the branch and stops; the orchestrator runs the compile. First `scripts/resource_report.py --large femoco54` projects the walk and controlled walk from the report's `naphthalene`, `fe2s2` and `fe4s4` compiles (Task 4.3) with gates from the resource functions. It compiles each once, under `run_watched`, only where the G0 decision allows: on this machine if the projection is within 7.5 GB (`EFFECTIVE_LIMIT_MB`) and 60 min, or else on the machine or in the window the user approved at G0, with that cap. These are two of the six FeMoco-scale compiles, each with a ledger entry.
 - **Acceptance tests:**
   - FeMoco-54 compiled counts: walk T = 9,793, M = 2,524, A = 8,675; controlled walk T = 9,795, M = 2,524, A = 8,677; `is_symbolic == False`; gate-set closure.
   - The exact cross-check: the sum over the report rows of calls per walk times the closed form equals the compiled totals of T, M and A, for the walk and the controlled walk. The QPE rows at FeMoco-54 use the compiled T_C(W) and M_W.
@@ -958,7 +960,7 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
 
 | Role | Model id | Used for |
 | --- | --- | --- |
-| Orchestrator | main session | plan, ledger, worktrees, merges, gates, rolling-wave plans |
+| Orchestrator | main session | plan, ledger, worktree lanes, merges, gates, rolling-wave plans |
 | Tier A implementer | `inherit` (the orchestrator's own model) | subtle circuits, the simulator, assembly, end-to-end debugging, spikes |
 | Tier B implementer | `claude-sonnet-5-5-high` | well-specified tasks: data, layout, reflections, report plumbing, documentation |
 | Review gate (every task) | `gpt-5.6-sol-high-fast` | spec compliance and correctness against the spec |
@@ -972,34 +974,36 @@ Always pass the model explicitly when dispatching a subagent: `inherit` for Tier
 For task `<id>` of phase `<N>` (consistent with superpowers subagent-driven-development and spec 15). `<main checkout>` is the repository root holding `.venv`; `<skills>` is the superpowers skills directory, on the development machine `/Users/david.wierichs/.cursor/plugins/cache/cursor-public/superpowers/d884ae04edebef577e82ff7c4e143debd0bbec99/skills`.
 
 1. **Check the ledger** (`docs/agents/LEDGER.md` and `.superpowers/sdd/progress.md`): a task marked complete is never re-dispatched.
-2. **Create the worktree and record the base:**
+2. **Pick a free lane and create the branch:** a lane is free when it is detached and clean (`git -C <main checkout>/.worktrees/<lane> status --short --branch` shows `## HEAD (no branch)` and nothing else).
    ```bash
-   git -C <main checkout> worktree add ../dfthc-be-worktrees/<id> -b phase<N>/<id> main
+   git -C <main checkout>/.worktrees/<lane> switch -c phase<N>/<id> main
    BASE=$(git -C <main checkout> rev-parse main)
    ```
 3. **Extract the brief:** `<skills>/subagent-driven-development/scripts/task-brief <plan file> <id>` prints the brief path; the report path is the brief path with `-brief` replaced by `-report`.
 4. **Dispatch the implementer** (template 12.5.1, model per tier). Answer questions before work starts. Handle DONE, DONE_WITH_CONCERNS, NEEDS_CONTEXT and BLOCKED per the skill: change something (more context, a stronger model, a smaller task, or escalate) before any retry.
-5. **The implementer works TDD in the worktree:** failing test, implementation, the targeted tests while iterating, then the per-commit tier `scripts/test.sh -m "not slow and not release"` once at commit time, `ruff check .`, the self-review checklist (HANDOFF), commits on `phase<N>/<id>`, report file. It never starts a heavy process; a task that needs one names the command, and the orchestrator runs it (section 12.9).
-6. **Generate the review package:** `<skills>/subagent-driven-development/scripts/review-package $BASE <head>`, run in the worktree, prints the diff file path.
+5. **The implementer works TDD in its lane:** failing test, implementation, the targeted tests while iterating, then the per-commit tier `scripts/test.sh -m "not slow and not release"` once at commit time, `ruff check .`, the self-review checklist (HANDOFF), commits on `phase<N>/<id>`, report file. It never starts a heavy process; a task that needs one names the command, and the orchestrator runs it (section 12.9).
+6. **Generate the review package:** `<skills>/subagent-driven-development/scripts/review-package $BASE phase<N>/<id>`, run from the main checkout so that the artifacts land in `<main checkout>/.superpowers/sdd/`; it prints the diff file path.
 7. **Review:** dispatch the GPT-5.6 reviewer (12.5.2); for Tier A tasks dispatch the Opus reviewer (12.5.3) in parallel. Resolve every "⚠️ cannot verify from diff" item yourself.
 8. **Fix loop:** Critical and Important findings go to a fix dispatch (12.5.5) with the covering tests named; then re-review with a fresh package (new BASE..HEAD range). Minor findings go to the ledger for Task 5.1. A finding that conflicts with the plan text goes to the user (plan contradiction).
 9. **Merge** after the tests pass and both reviews approve:
    ```bash
-   git -C ../dfthc-be-worktrees/<id> rebase main
-   (cd ../dfthc-be-worktrees/<id> && scripts/test.sh -m "not slow and not release" -q)
+   git -C <main checkout>/.worktrees/<lane> rebase main
+   (cd <main checkout>/.worktrees/<lane> && scripts/test.sh -m "not slow and not release" -q)
    git -C <main checkout> merge --no-ff phase<N>/<id> -m "Merge phase<N>/<id>: <title>"
-   git -C <main checkout> worktree remove ../dfthc-be-worktrees/<id>
+   git -C <main checkout>/.worktrees/<lane> switch --detach main
    ```
-   The branch is kept for traceability. Never push.
+   The last command frees the lane. The branch is kept for traceability. Never push.
+**Why lanes.** The Cursor sandbox forbids writing git's control files (`.git/config`, `hooks/`, and a new worktree's `commondir` and `gitdir`), so `git worktree add` and `git clone` need elevated permission: a user approval each time. Branches, commits, the index, rebases and switches all work in the sandbox. The orchestrator therefore created two lanes once, `.worktrees/lane-a` and `.worktrees/lane-b` (git-ignored, detached at `main` when free), and every task reuses one. Deleting a branch prints a harmless warning that `.git/config` cannot be written. Re-creating a broken lane needs elevated permission once; it is an orchestrator action with a ledger entry.
+
 10. **Ledger:** the orchestrator updates the task row in `docs/agents/LEDGER.md` on `main` (status, branch, merge commit, test evidence, review verdicts, open issues) and appends `Task <id>: complete (commits <base7>..<head7>, review clean)` to `.superpowers/sdd/progress.md`.
 
 ### 12.3 Parallel execution rules
 
-- Only tasks in the same wave of section 5, each in its own worktree, may run in parallel. At most two local implementers run at once, because each runs tests and compiles (section 12.9). Reviewers and scouts are read-only and do not count.
+- Only tasks in the same wave of section 5, each in its own lane, may run in parallel. At most two local implementers run at once: one per worktree lane, and each runs tests and compiles (section 12.9). Reviewers and scouts are read-only and do not count.
 - Merges are serialized in dependency order. Before each merge the branch is rebased onto the current `main`, and the fast suite runs on the rebased branch.
 - Tasks that edit the same file are ordered by dependency rather than resolved by merge: 0.3 → 0.4 (`docs/limitations.md`), 1C.3 → 1C.4 → 1C.5 (`qroam.py`), 2D.1 → 2D.2 (`prepare.py`), 2E.1 → 2E.2 (`angle_data.py`).
 - Package `__init__.py` files hold only a docstring and never re-export, so only the task that creates one ever edits it (0.1 `dfthc`, 0.2 `dfthc.testing`, 1A.2 `dfthc.data`, 1C.1 `dfthc.ops`). Code-level phase plans keep each task's file list disjoint from every other task in its wave.
-- This relaxes the superpowers rule "never dispatch implementers in parallel". The rule exists to prevent working-tree conflicts, which separate worktrees, disjoint file sets and serialized merges rule out.
+- This relaxes the superpowers rule "never dispatch implementers in parallel". The rule exists to prevent working-tree conflicts, which separate worktree lanes, disjoint file sets and serialized merges rule out.
 
 ### 12.4 Git rules
 
@@ -1028,7 +1032,9 @@ prompt: |
   2. {brief_path}: your requirements, with the exact values, code and commands to use verbatim.
      It comes from {plan_path}; that file's "Global Constraints" section binds you as well.
 
-  Work only in {worktree} (branch phase{phase}/{task_id}, created from local main at {base_sha}).
+  Work only in the lane {lane} (branch phase{phase}/{task_id}, created there from local main at
+  {base_sha}). Never switch the lane to another branch, and never run git worktree add/remove,
+  git clone, or anything that writes .git/config or hooks.
 
   Context the brief cannot know: {context_from_earlier_tasks}
   Resolved ambiguities: {resolutions_or_none}
@@ -1130,7 +1136,7 @@ description: "Fix review findings for Task {task_id}"
 model: {model of the task's tier}
 prompt: |
   Fix the Critical and Important findings listed in {review_file} for Task {task_id}, working in
-  {worktree}. Do not change anything else. Re-run the covering tests {test_files} and the fast
+  the lane {lane} on branch phase{phase}/{task_id}. Do not change anything else. Re-run the covering tests {test_files} and the fast
   suite, append the commands, outputs and a fix summary to {report_path}, commit, and reply in at
   most 10 lines.
 ```
@@ -1146,7 +1152,7 @@ prompt: |
   its interfaces unchanged (or each change justified); names and signatures match the merged code;
   no placeholders ("TBD", "similar to Task", steps without code); exact expected counts from spec
   9.24 where applicable; every load-bearing snippet marked as dry-run with its evidence; TDD step
-  order; commands that run from a worktree. Report Critical / Important / Minor with line numbers.
+  order; commands that run from a worktree lane. Report Critical / Important / Minor with line numbers.
 ```
 
 ### 12.6 Phase gates and escalation
@@ -1155,8 +1161,8 @@ Each gate is a checklist the orchestrator completes and records in the ledger's 
 
 | Gate | Exit criteria | Escalation rules |
 | --- | --- | --- |
-| **G0** (Phase 0) | All Phase 0 tasks merged. Fast suite green on `main`. Nightly tier run once. Spike verdicts recorded: K-7, K-3, K-10, K-1 with its measurements and FeMoco projection (and the FeMoco result if the projection allowed the run). Spec section 14 updated (Task 0.4). Phase 1 plans reviewed and approved. | **K-1 limits:** if Task 0.9's projection, or its FeMoco run, exceeds 60 min or 8 GB, run Task 0.9b (remedy 1, evaluated at the mid shapes). If its projection is within the limits, the orchestrator runs the FeMoco driver once. Otherwise escalate to the user with the measurements, the projections and their method, and the options: run the FeMoco-size compiles (and any other compile projected above 8 GB) on a larger machine, or in an approved idle-time window with a higher cap; a redesigned table representation; an upstream Catalyst fix. Until the answer, Phase 1 runs except Tasks 1C.3 to 1C.5, whose table representation remedy 1 would change. Per-block compiles never replace the deliverable (D-3). A K-3 failure adds the mode-specific fallback to Task 1C.5. A K-7 failure adds an own-comparator task to Phase 1C. A K-10 failure applies the spec fallbacks (corrections in the driver; Q-1 variant (a) only). |
-| **G1** (Phase 1) | Each workstream's tests green and reviewed. `dfthc.costs` equals the spec 9.24 table. The 1B.3 benchmark gate passes (20 min and 4 GB per E-1 schedule). Fixtures generated (or the skip reason recorded). Phase 2 plan approved. | **Simulator benchmark:** apply the spec 12.6 mitigations in order. If still over budget, escalate with measurements and options; checks are never dropped silently. |
+| **G0** (Phase 0) | All Phase 0 tasks merged. Fast suite green on `main`. Nightly tier run once. Spike verdicts recorded: K-7, K-3, K-10, K-1 with its measurements and FeMoco projection (and the FeMoco result if the projection allowed the run). Spec section 14 updated (Task 0.4). Phase 1 plans reviewed and approved. | **K-1 limits:** if Task 0.9's projection exceeds 60 min or 7.5 GB (the watchdog's effective limit), or its FeMoco run is killed or exceeds 60 min, run Task 0.9b (remedy 1, evaluated at the mid shapes). If its projection is within the limits, the orchestrator runs the FeMoco driver once. Otherwise escalate to the user with the measurements, the projections and their method, and the options: run the FeMoco-size compiles (and any other compile projected above 7.5 GB) on a larger machine, or in an approved idle-time window with a higher cap; a redesigned table representation; an upstream Catalyst fix. Until the answer, Phase 1 runs except Tasks 1C.3 to 1C.5, whose table representation remedy 1 would change. Per-block compiles never replace the deliverable (D-3). A K-3 failure adds the mode-specific fallback to Task 1C.5. A K-7 failure adds an own-comparator task to Phase 1C. A K-10 failure applies the spec fallbacks (corrections in the driver; Q-1 variant (a) only). |
+| **G1** (Phase 1) | Each workstream's tests green and reviewed. `dfthc.costs` equals the spec 9.24 table. The 1B.3 benchmark gate passes (20 min and below 3.75 GB per E-1 schedule). Fixtures generated (or the skip reason recorded). Phase 2 plan approved. | **Simulator benchmark:** apply the spec 12.6 mitigations in order. If still over budget, escalate with measurements and options; checks are never dropped silently. |
 | **G2** (Phase 2) | Every paper block merged with T2 to T6 green. Erase certificates green in the nightly tier. Phase 3 plan approved. | Any block whose measured count differs from its closed form: the task fixes the construction or, if the construction is right, the orchestrator records a spec 9.24 correction with its delta (R-7: never tune a construction toward the paper). |
 | **G3** (Phase 3) | D-2 met under the nightly schedules: certificates and E-1 to E-4 (the release schedules run once, in Task 5.2). Walk and controlled-walk counts equal the closed forms at the test presets and `MID_NAPHTHALENE`; the closed forms give 9,793 and 9,795 at FeMoco-54, with M and A as in spec 9.24. The release run projected within 8 h (Task 3.5). Phase 4 plan approved. | Release projection over 8 h: escalate with measurements and options. An order-dependent compile (L-10) anywhere: compiler blocker; stop the task, preserve a reproducer, escalate. |
 | **G4** (Phase 4) | Tasks 4.1 to 4.5 merged; resource report committed with the FeMoco totals of Task 4.5. **Q-1 decision** (between 4.4 and 4.5): present the report and the K-10 result; the user chooses variant (b) or the baseline. If variant (b): Task Q1b, including the regenerated report and updated documentation, is merged before Task 4.5. Then D-3, D-4 and D-6 are checked on the final artifacts, and the Phase 5 plan is approved. | The Q-1 decision is the one planned user question of this gate. If the G0 decision left the FeMoco compile to another machine or a later window, G4 waits for it. |
@@ -1191,8 +1197,13 @@ The user's directives of 2026-11-11: "Keep large-scale compilations to a minimum
 - *Memory* is the summed physical footprint of the process tree, as sampled by `dfthc.testing.watchdog` (section 3, items 10 and 11). The getrusage sum is recorded beside it as an upper bound.
 
 **Rules.**
-1. **Memory cap.** No process tree exceeds 8 GB. Runs that could approach it go through `run_watched` or the watchdog command line, which sample the tree every 50 ms, kill it at 7.5 GB (15/16 of the cap) and record the kill. The watchdog fails closed: it starts nothing off macOS, and any measurement error kills the tree. Runs that go through it: the K-1 driver, Task 1B.3's benchmark, the report's `--large` mode, and every nightly and release run. A check whose budget would exceed 8 GB first measures at smaller sizes, projects, and escalates before it runs.
-2. **Test runs.** `scripts/test.sh` runs 2 workers at lowered priority (`DFTHC_TEST_WORKERS` overrides). During TDD agents run only the targeted tests, then the per-commit tier once at commit time; a per-commit run with 2 workers is not heavy, and its 15-minute budget stays (the Phase 0 replica's 164 tests: 117 s wall, about 1.5 busy cores). The nightly tier runs only at phase gates, started by the orchestrator, one at a time. The release tier runs once, at the end of Phase 5, after the user's go-ahead. It is reduced (spec 12.6): an 8-hour budget with 2 workers, fewer duplicate smoke schedules, and FeMoco counts from the cache.
+1. **Memory cap.** 8 GB per process tree is a sampled limit, not a hard one. macOS enforces no memory limit on a process or a tree: `setrlimit` rejects lowering `RLIMIT_AS`, `RLIMIT_RSS` and `RLIMIT_DATA`, and a child then allocates past them.
+   - Runs that could approach the cap go through `run_watched` or the watchdog command line. They sample the tree every 50 ms, kill it at the first sample above 7.5 GB (`EFFECTIVE_LIMIT_MB`, 15/16 of the cap) and record the kill.
+   - The overshoot past 7.5 GB is bounded by one interval of growth; staying below 8 GB needs growth below 10 GB/s. The calibration compiles grew at 11 to 89 MB/s on average (peak over wall time) and by at most 29 MB in one 50 ms interval (about 0.5 GB/s, small shape), so the margin is ample in practice. A preflight check of the machine's free memory is a possible later improvement, not done now.
+   - Projections and budgets use the effective limit, where execution stops, not the cap.
+   - The watchdog fails closed: it starts nothing off macOS, and any measurement error kills the tree.
+   - Runs that go through it: the K-1 driver, Task 1B.3's benchmark, the report's `--large` mode, and every nightly and release run. A check whose budget would exceed the effective limit first measures at smaller sizes, projects, and escalates before it runs.
+2. **Test runs.** `scripts/test.sh` runs 2 workers at lowered priority (`DFTHC_TEST_WORKERS` overrides). During TDD agents run only the targeted tests, then the per-commit tier once at commit time; a per-commit run with 2 workers is not heavy, and its 15-minute budget stays (the Phase 0 replica's 167 tests: 117 s wall, about 1.5 busy cores). The nightly tier runs only at phase gates, started by the orchestrator, one at a time. The release tier runs once, at the end of Phase 5, after the user's go-ahead. It is reduced (spec 12.6): an 8-hour budget with 2 workers, fewer duplicate smoke schedules, and FeMoco counts from the cache.
 3. **Concurrency.** At most two local implementers run at once. A heavy process never runs at the same time as another heavy process or another agent's test suite: the orchestrator starts every heavy process itself, only while no implementer is active, and implementers never start one. A task that needs a heavy run names the command in its report, and the orchestrator runs it.
 4. **Ledger.** Every heavy run gets a row in the ledger's "Heavy runs" table, with the command, wall time, peak memory, whether the watchdog killed it, and whether it counts toward the large-compile budget. The watchdog command line prints the row's values as one `WATCHDOG {json}` line:
    ```bash
@@ -1200,7 +1211,7 @@ The user's directives of 2026-11-11: "Keep large-scale compilations to a minimum
        scripts/test.sh -m "slow and not release"
    ```
 5. **Large-scale compiles.** About six FeMoco-scale compiles for the whole project, each with a ledger row; going over needs the user's approval. Planned:
-   - the K-1 walk and controlled walk (Task 0.9 or 0.9b), only if the projection is within 8 GB and 60 min, or where the G0 decision says;
+   - the K-1 walk and controlled walk (Task 0.9 or 0.9b), only if the projection is within 7.5 GB and 60 min, or where the G0 decision says;
    - the report's walk and controlled walk (Task 4.5), once;
    - one contingency pair, for a Phase 5 recompile after a code change.
 
@@ -1217,8 +1228,8 @@ The watchdog works inside the agent sandbox (it reads memory through `libproc` a
 | Item | Resolved by | Feeds |
 | --- | --- | --- |
 | Q-1 early junk measurement | K-10 verdict (Task 0.8) at G0, then the user's decision after Task 4.4, from the resource report (Task 4.3) | Task Q1b (with the report and documentation regenerated) before G4 completes, or the baseline unchanged |
-| K-1 compile budget | Task 0.9 (and 0.9b) at G0: small and mid measurements and the FeMoco projection; the FeMoco compile only if projected within 8 GB and 60 min | whether bulk tables become dynamic arrays (then spec 7.4 rule 3's exception applies to Tasks 1C.3 to 1C.5, 2E.1, 2E.2); Tasks 1C.3 to 1C.5 wait for it |
-| Where compiles above the cap run | the user, at G0, if K-1 escalates: a larger machine, or an approved idle-time window with a higher cap | the K-1 FeMoco compile, Task 4.3's `fe4s4` walks if projected above 8 GB, Task 4.5, a Phase 5 recompile |
+| K-1 compile budget | Task 0.9 (and 0.9b) at G0: small and mid measurements and the FeMoco projection; the FeMoco compile only if projected within 7.5 GB and 60 min | whether bulk tables become dynamic arrays (then spec 7.4 rule 3's exception applies to Tasks 1C.3 to 1C.5, 2E.1, 2E.2); Tasks 1C.3 to 1C.5 wait for it |
+| Where compiles above the cap run | the user, at G0, if K-1 escalates: a larger machine, or an approved idle-time window with a higher cap | the K-1 FeMoco compile, Task 4.3's `fe4s4` walks if projected above 7.5 GB, Task 4.5, a Phase 5 recompile |
 | K-3 mode-agnostic erase | Task 0.7 | Task 1C.5: `mcm_parities` stays mode-agnostic or gains mode-specific branches |
 | K-7 comparator adjoints | Task 0.6 | Tasks 1C.2, 2D.1, 2D.2: PennyLane comparators or an own comparator |
 | K-10 measurement arrays | Task 0.8 | Task 4.1 (`QPERound` as `Operator2` with `earlier_bits` (t,), or the corrections in the driver); Q-1 variant (b) feasibility |
