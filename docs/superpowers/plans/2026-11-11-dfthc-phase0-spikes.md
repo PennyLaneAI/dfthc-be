@@ -1260,7 +1260,7 @@ git commit -m "Add K-10 spike: measurement arrays as dynamic arguments"
 - Produces: the K-1 measurements (wall time, CPU time, peak memory, T, M and A per program and shape) and the FeMoco projection, which gate Phase 1 (G0). Also:
   - the stand-in operator family `Proto*` (structure of spec 9.21 and 9.22, with pinned `Adjoint(...)` and `C(...)` rules);
   - `Layout(shape)`, `random_tables(shape, seed)` and `build(shape_name, program) -> (qfunc, num_wires)` for the named shapes `small`, `mid10`, `mid14` and `femoco`;
-  - `stand_in_gates(shape_name, program) -> int`, the emitted gates from the resource functions (no compile), `project(calibration) -> dict` and `femoco_refusal() -> str | None`.
+  - `stand_in_gates(shape_name, program) -> int`, the emitted gates from the resource functions (no compile), `environment() -> dict`, `code_hash() -> str`, `project(calibration) -> dict`, `femoco_refusal() -> str | None`, `femoco_checkpoint() -> dict` and `write_results(shape_name, results) -> dict`.
 
   Task 1B.3 (master plan) builds its benchmark workload the way `build` does, from `Shape`, `Layout`, `random_tables` and `ProtoWalk`, at two shapes:
   - the `H2_STO3G_TEST` shape, `Shape(N=2, R=2, B=2, C=1, n_plus=1, b_rot=4, b_k1=2, b_k2=2, k1=1, k2=1)`. A dry-run compiled the stand-in walk there: 67 wires with the control, T 138 and 140 (controlled), M 50, A 88 and 90;
@@ -1269,9 +1269,10 @@ git commit -m "Add K-10 spike: measurement arrays as dynamic arguments"
 **Pass criteria (spec 16, K-1; master plan section 12.9):**
 - the small shape (all four programs) and the mid shapes, `mid10` (N = 10, R = 8, B = 6, C = 5: walk and controlled walk) and `mid14` (N = 14, R = 6, B = 13, C = 8: walk, controlled walk and the diagnostic inner prepare and inner select), each compile as one program within `LIMITS`: 5 minutes at the small shape and 15 minutes at the mid shapes, and 4 GB, so none of them is a heavy process;
 - counts are non-symbolic, and the controlled walk costs exactly 2 more Toffolis, 2 more measured uncomputes and the same number of explicit measurements as the walk, at every shape that compiles both. The driver checks this (`controlled_walk_check`) before it sets the verdict;
-- every compile runs in its own process under `run_watched`, which samples the physical footprint of its process tree, kills the tree above the limit and records the kill. The sampled peak (`peak_mb`) is the gate metric; `rusage_sum_mb`, the compile process's `ru_maxrss` plus that of its finished children, is recorded as an upper bound (`memory_method` in the JSON);
-- `--project` fits the calibration shapes (`PROJECTION_METHOD`) and writes the projected FeMoco walk and controlled walk, with time, sampled peak, the upper bound and the method, to `k1_projection.json`. `femoco_allowed` is true only if both stay within 60 minutes and 8 GB. The projection refuses calibration results of other code (`code_hash()` over the driver, the prototypes and `dfthc.compile`);
-- the FeMoco driver (`--shape femoco --all`) refuses, with exit status 2 and without compiling, unless the projection belongs to the current code and allows the run, and unless no FeMoco result exists for the current code.
+- every compile runs in its own process under `run_watched`, which samples the physical footprint of its process tree every 50 ms, kills the tree at 15/16 of the limit and records the kill. The sampled peak (`peak_mb`) is the gate metric; `rusage_sum_mb`, the compile process's `ru_maxrss` plus that of its finished children, is recorded as an upper bound (`memory_method` in the JSON);
+- `code_hash()` covers everything a result depends on: the driver, the prototypes, `dfthc.compile`, the watchdog, and `environment()` (Python, platform, the installed PennyLane, Catalyst, Lightning, JAX, jaxlib and NumPy versions, and the lock file's SHA-256). Every result file records both;
+- `--project` fits the calibration shapes (`PROJECTION_METHOD`) and writes the projected FeMoco walk and controlled walk, with time, sampled peak, the upper bound and the method, to `k1_projection.json`. `femoco_allowed` is true only if both stay within 60 minutes and 8 GB, by the sampled peak and by the upper bound. The projection refuses calibration results of another `code_hash()`;
+- the FeMoco driver (`--shape femoco --all`) refuses, with exit status 2 and without compiling, unless the projection belongs to the current `code_hash()` and allows the run. It holds `results/k1_femoco.lock` while it runs and checkpoints `k1_femoco.json` after each program. A program completed for the current hash is reused; one that failed (killed, over its limits or crashed) is retried only with `--allow-retry`, which needs the user's approval; when every program is complete it refuses. A `--shape femoco --program ...` run is refused unless it carries the token of the running driver, so each FeMoco program compiles only through the driver, under the watchdog.
 
 **Definition of done:** `k1_small.json`, `k1_mid10.json` and `k1_mid14.json` committed with `"verdict": "pass"`, and `k1_projection.json` committed; the report gives the projection with its method and says whether the FeMoco compile may run; `ruff check spikes` clean. Do not run the FeMoco driver yourself.
 
@@ -1307,18 +1308,26 @@ differ.
 
 The FeMoco shape is a large-scale compile (master plan section 12.9). --project fits the small and
 mid results (PROJECTION_METHOD) and writes k1_projection.json. The FeMoco driver refuses, with exit
-status 2 and without compiling, unless that projection belongs to the current code and keeps the
-walk and the controlled walk within LIMITS["femoco"], and unless no FeMoco result exists yet for the
-current code: it compiles at most once per code version.
+status 2 and without compiling, unless that projection belongs to the current code_hash() (the
+driver, the prototypes, dfthc.compile, the watchdog, the toolchain versions and the lock file) and
+keeps the walk and the controlled walk within LIMITS["femoco"], by sampled peak and upper bound.
+Each FeMoco program compiles at most once per code_hash(): k1_femoco.json is checkpointed after
+every program, a completed program is reused, and a failed one is retried only with
+--allow-retry, which needs the user's approval. A FeMoco --program run without the token of a
+running driver is refused.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.metadata
 import json
 import math
+import os
+import platform
 import resource
+import secrets
 import sys
 import time
 from dataclasses import dataclass
@@ -1344,6 +1353,7 @@ from prototypes import (  # noqa: E402
 )
 
 import dfthc.compile  # noqa: E402
+import dfthc.testing.watchdog  # noqa: E402
 from dfthc.compile import (  # noqa: E402
     FIXED_DECOMPS,
     GATE_SET,
@@ -2153,20 +2163,41 @@ PROJECTION_METHOD = (
     "size measure: the stand-in program's emitted gates, from its resource functions "
     "(DecompositionGraph.resource_estimate, no compile). Time: power law through the two largest "
     "calibration shapes, exponent at least 1. Memory: least-squares line through all calibration "
-    "shapes, slope at least 0, for peak_mb (gate) and rusage_sum_mb (upper bound). The FeMoco "
-    "compile may run if, for the walk and the controlled walk, the projected time and peak_mb "
-    "are within LIMITS['femoco']"
+    "shapes, slope at least 0, for peak_mb (the gate metric) and rusage_sum_mb (the upper bound). "
+    "The FeMoco compile may run only if, for the walk and the controlled walk, the projected time, "
+    "peak_mb and rusage_sum_mb are all within LIMITS['femoco']"
 )
 RESULTS = Path(__file__).resolve().parent / "results"
+FEMOCO_LOCK = RESULTS / "k1_femoco.lock"
+TOKEN_VARIABLE = "DFTHC_K1_FEMOCO_TOKEN"
+LOCK_FILE = Path(__file__).resolve().parents[1] / "requirements-nightly.lock"
 _HASHED_FILES = (Path(__file__).resolve(), Path(__file__).resolve().parent / "prototypes.py",
-                 Path(dfthc.compile.__file__).resolve())
+                 Path(dfthc.compile.__file__).resolve(),
+                 Path(dfthc.testing.watchdog.__file__).resolve())
+_DISTRIBUTIONS = ("pennylane", "pennylane_catalyst", "pennylane_lightning", "jax", "jaxlib",
+                  "numpy")
+
+
+def environment() -> dict[str, str]:
+    """Python, platform, the installed toolchain versions and the lock file's SHA-256."""
+    record = {"python": platform.python_version(), "platform": platform.platform()}
+    for name in _DISTRIBUTIONS:
+        try:
+            record[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            record[name] = "not installed"
+    record["lock_sha256"] = (hashlib.sha256(LOCK_FILE.read_bytes()).hexdigest()
+                             if LOCK_FILE.exists() else "missing")
+    return record
 
 
 def code_hash() -> str:
-    """SHA-256 over this driver, the prototypes and dfthc.compile: what a compile depends on."""
+    """SHA-256 over what a compile result depends on: this driver, the prototypes,
+    dfthc.compile, the watchdog and environment()."""
     digest = hashlib.sha256()
     for path in _HASHED_FILES:
         digest.update(path.read_bytes())
+    digest.update(json.dumps(environment(), sort_keys=True).encode())
     return digest.hexdigest()
 
 
@@ -2250,7 +2281,7 @@ def project(calibration: dict[str, dict]) -> dict:
     """Project the FeMoco walk and controlled walk from the calibration results (PROJECTION_METHOD).
 
     ``calibration`` maps each of CALIBRATION_SHAPES to its k1_<shape>.json content. Raises
-    ValueError if a result is missing, failed, or belongs to other code than the current.
+    ValueError if a result is missing, failed, or belongs to another code_hash().
     """
     current = code_hash()
     for shape in CALIBRATION_SHAPES:
@@ -2276,15 +2307,18 @@ def project(calibration: dict[str, dict]) -> dict:
             "rusage_sum_mb_upper_bound": round(upper)}
         if seconds > seconds_limit:
             reasons.append(f"{program}: {seconds / 60:.0f} min > {seconds_limit / 60:.0f} min")
-        if peak > memory_limit:
-            reasons.append(f"{program}: {peak / 1024:.1f} GB > {memory_limit / 1024:.0f} GB")
+        for label, value in (("sampled peak", peak), ("upper bound", upper)):
+            if value > memory_limit:
+                reasons.append(f"{program}: {label} {value / 1024:.1f} GB > "
+                               f"{memory_limit / 1024:.0f} GB")
     return {"method": PROJECTION_METHOD, "limits": {"seconds": seconds_limit, "mb": memory_limit},
             "programs": programs, "femoco_allowed": not reasons,
-            "reason": "; ".join(reasons) or "within the limits", "code_hash": current}
+            "reason": "; ".join(reasons) or "within the limits", "code_hash": current,
+            "environment": environment()}
 
 
 def femoco_refusal() -> str | None:
-    """Why the FeMoco compile may not run now, or None if it may."""
+    """Why the projection does not allow the FeMoco compile now, or None if it does."""
     projection_file = RESULTS / "k1_projection.json"
     if not projection_file.exists():
         return "no projection: run the small and mid shapes, then --project"
@@ -2293,48 +2327,93 @@ def femoco_refusal() -> str | None:
         return "the projection belongs to other code: rerun the mid shapes and --project"
     if not projection.get("femoco_allowed"):
         return f"the projection exceeds the limits ({projection.get('reason')}); escalate at G0"
-    femoco_file = RESULTS / "k1_femoco.json"
-    if femoco_file.exists() and json.loads(femoco_file.read_text()).get("code_hash") == code_hash():
-        return "the FeMoco compile already ran for this code; it runs at most once"
     return None
 
 
-def drive(shape_name: str) -> int:
+def femoco_checkpoint() -> dict:
+    """The FeMoco programs already compiled (or attempted) for the current code_hash()."""
+    path = RESULTS / "k1_femoco.json"
+    saved = json.loads(path.read_text()) if path.exists() else {}
+    if saved.get("code_hash") != code_hash():
+        return {}
+    return {program: saved[program] for program in SHAPE_PROGRAMS["femoco"] if program in saved}
+
+
+def _driver_token_valid() -> bool:
+    token = os.environ.get(TOKEN_VARIABLE)
+    return bool(token) and FEMOCO_LOCK.exists() and FEMOCO_LOCK.read_text() == token
+
+
+def write_results(shape_name: str, results: dict) -> dict:
+    """Write k1_<shape>.json from the program records so far; the verdict covers all of them."""
+    record = {p: results[p] for p in SHAPE_PROGRAMS[shape_name] if p in results}
+    complete = len(record) == len(SHAPE_PROGRAMS[shape_name])
+    failed = any(not program.get("within_budget") for program in record.values())
+    if complete and "controlled_walk" in record:
+        record["controlled_walk_check"] = controlled_walk_check(record)
+        failed |= not record["controlled_walk_check"]["ok"]
+    seconds_limit, memory_limit = LIMITS[shape_name]
+    record.update(limits={"seconds": seconds_limit, "mb": memory_limit},
+                  memory_method=MEMORY_METHOD, code_hash=code_hash(), environment=environment(),
+                  verdict="fail" if failed else "pass" if complete else "incomplete")
+    RESULTS.mkdir(exist_ok=True)
+    (RESULTS / f"k1_{shape_name}.json").write_text(json.dumps(record, indent=2) + "\n")
+    return record
+
+
+def drive(shape_name: str, allow_retry: bool = False) -> int:
+    seconds_limit, memory_limit = LIMITS[shape_name]
+    results, programs, env = {}, list(SHAPE_PROGRAMS[shape_name]), dict(os.environ)
     if shape_name == "femoco":
         refusal = femoco_refusal()
+        if refusal is None:
+            results = femoco_checkpoint()
+            done = [p for p in programs if results.get(p, {}).get("within_budget")]
+            failed_before = [p for p in programs if p in results and p not in done]
+            programs = [p for p in programs if p not in done]
+            if failed_before and not allow_retry:
+                refusal = (f"{', '.join(failed_before)} already failed for this code; a retry "
+                           "needs the user's approval (--allow-retry)")
+            elif not programs:
+                refusal = "the FeMoco compile already completed for this code; it runs once"
         if refusal:
             print("refused:", refusal, flush=True)
             return 2
-    seconds_limit, memory_limit = LIMITS[shape_name]
-    results, failed = {}, False
-    for program in SHAPE_PROGRAMS[shape_name]:
-        command = [sys.executable, __file__, "--shape", shape_name, "--program", program]
-        run = run_watched(command, cap_mb=memory_limit, timeout_s=seconds_limit + 60)
-        lines = [line for line in run.stdout.splitlines() if line.startswith("{")]
-        if run.killed or run.returncode != 0 or not lines:
-            reason = f"killed: {run.killed}" if run.killed else run.stderr[-3000:]
-            results[program] = {"error": reason, **run.summary()}
-            failed = True
-        else:
-            record = json.loads(lines[-1])
-            record["peak_mb"] = round(run.peak_mb, 1)
-            record["within_budget"] = (record["seconds"] <= seconds_limit
-                                       and run.peak_mb <= memory_limit)
-            failed |= not record["within_budget"]
-            results[program] = record
-        print(program, json.dumps(results[program])[:600], flush=True)
-    if "controlled_walk" in SHAPE_PROGRAMS[shape_name]:
-        results["controlled_walk_check"] = controlled_walk_check(results)
-        failed |= not results["controlled_walk_check"]["ok"]
-        print("controlled_walk_check", json.dumps(results["controlled_walk_check"]), flush=True)
-    results["limits"] = {"seconds": seconds_limit, "mb": memory_limit}
-    results["memory_method"] = MEMORY_METHOD
-    results["code_hash"] = code_hash()
-    results["verdict"] = "fail" if failed else "pass"
-    RESULTS.mkdir(exist_ok=True)
-    (RESULTS / f"k1_{shape_name}.json").write_text(json.dumps(results, indent=2) + "\n")
-    print("verdict:", results["verdict"])
-    return 1 if failed else 0
+        for program in done:
+            print(program, "reused from k1_femoco.json", flush=True)
+        RESULTS.mkdir(exist_ok=True)
+        try:
+            with open(FEMOCO_LOCK, "x") as lock:
+                lock.write(env.setdefault(TOKEN_VARIABLE, secrets.token_hex(16)))
+        except FileExistsError:
+            print(f"refused: {FEMOCO_LOCK} exists: another FeMoco driver runs, or one crashed "
+                  "(check, then delete the lock)", flush=True)
+            return 2
+    try:
+        for program in programs:
+            command = [sys.executable, __file__, "--shape", shape_name, "--program", program]
+            run = run_watched(command, cap_mb=memory_limit, timeout_s=seconds_limit + 60, env=env)
+            lines = [line for line in run.stdout.splitlines() if line.startswith("{")]
+            if run.killed or run.survivors or run.returncode != 0 or not lines:
+                reason = f"killed: {run.killed}" if run.killed else run.stderr[-3000:]
+                results[program] = {"error": reason, **run.summary()}
+            else:
+                record = json.loads(lines[-1])
+                record["peak_mb"] = round(run.peak_mb, 1)
+                record["within_budget"] = (record["seconds"] <= seconds_limit
+                                           and run.peak_mb <= memory_limit)
+                results[program] = record
+            print(program, json.dumps(results[program])[:600], flush=True)
+            if shape_name == "femoco":
+                write_results(shape_name, results)
+    finally:
+        if shape_name == "femoco":
+            FEMOCO_LOCK.unlink(missing_ok=True)
+    record = write_results(shape_name, results)
+    if "controlled_walk_check" in record:
+        print("controlled_walk_check", json.dumps(record["controlled_walk_check"]), flush=True)
+    print("verdict:", record["verdict"])
+    return 0 if record["verdict"] == "pass" else 1
 
 
 def write_projection() -> int:
@@ -2357,15 +2436,17 @@ def main():
     parser.add_argument("--program", choices=PROGRAMS)
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--project", action="store_true")
+    parser.add_argument("--allow-retry", action="store_true")
     args = parser.parse_args()
     if args.project:
         sys.exit(write_projection())
     if args.shape is None:
         parser.error("--shape is required unless --project is given")
     if args.all:
-        sys.exit(drive(args.shape))
-    if args.shape == "femoco" and (refusal := femoco_refusal()):
-        sys.exit(f"refused: {refusal}")
+        sys.exit(drive(args.shape, allow_retry=args.allow_retry))
+    if args.shape == "femoco" and not _driver_token_valid():
+        sys.exit("refused: the FeMoco shape compiles only through --shape femoco --all, which runs "
+                 "each program once under the watchdog")
     print(json.dumps(compile_one(args.shape, args.program)), flush=True)
 
 
@@ -2379,7 +2460,7 @@ Run: `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python
 Expected (about 45 s), as in the dry-run:
 
 ```text
-walk {"program": "walk", "shape": "small", "num_wires": 83, "seconds": 9.2, ..., "rusage_sum_mb": 635.1, "compiled_gates": 2201, "toffoli": 236, "measurements": 68, "measured_and_uncomputes": 175, "peak_mb": 498.7, "within_budget": true}
+walk {"program": "walk", "shape": "small", "num_wires": 83, "seconds": 9.0, ..., "rusage_sum_mb": 635.9, "compiled_gates": 2201, "toffoli": 236, "measurements": 68, "measured_and_uncomputes": 175, "peak_mb": 489.4, "within_budget": true}
 controlled_walk {"program": "controlled_walk", ..., "toffoli": 238, "measurements": 68, "measured_and_uncomputes": 177, ..., "within_budget": true}
 inner_prepare {"program": "inner_prepare", ..., "toffoli": 35, "measurements": 14, "measured_and_uncomputes": 24, ..., "within_budget": true}
 inner_select {"program": "inner_select", ..., "toffoli": 66, "measurements": 15, "measured_and_uncomputes": 53, ..., "within_budget": true}
@@ -2405,11 +2486,28 @@ Expected: one JSON line per program, the `controlled_walk_check` line with `"ok"
 Run: `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python" spikes/k1_whole_program.py --project`
 Expected (a few seconds; nothing is compiled): one line per program with the gate counts per shape (FeMoco walk 627,557 and controlled walk 627,563 from the resource functions), the projected seconds, time exponent, `peak_mb`, MB per 1,000 gates and `rusage_sum_mb_upper_bound`, then `femoco_allowed: True` or `femoco_allowed: False - <reasons>`.
 
-The dry-run fed the projection the round-3 calibration (with the real small run above and an estimated `mid14` controlled walk) through a stub driver: walk 57 minutes and 12.5 GB (17.6 GB with the other `mid14` run), controlled walk 118 minutes and 17.3 GB, so `femoco_allowed: False`, and the FeMoco driver refused with exit status 2 without compiling. Fed an artificial calibration within the limits, it compiled the walk and the controlled walk once, each with the 8 GB cap, and refused a second run for the same code, a projection of other code, and stale mid results. A stubbed watchdog kill was recorded as `"error": "killed: memory"` with `verdict: fail`. The round-2 driver, given the same over-limit data, launched all four FeMoco compiles.
+The dry-run fed the projection the round-3 calibration (with the real small run above and an estimated `mid14` controlled walk): walk 57 minutes, 12.6 GB sampled peak and 20.7 GB upper bound; controlled walk 118 minutes, 17.3 GB and 27.8 GB. So `femoco_allowed: False`, and the FeMoco driver refused with exit status 2 without compiling.
+
+With every compile stubbed, the driver also showed:
+- on an artificial calibration within the limits, it compiled the walk and the controlled walk once, each with the 8 GB cap;
+- it refused a second run for the same code, a projection of other code, and stale mid results;
+- a stubbed watchdog kill was recorded as `"error": "killed: memory"` with `verdict: fail`.
+
+Each of the following scenarios separated it from the first round-3 version of the driver:
+
+| Scenario | First round-3 driver | This driver |
+| --- | --- | --- |
+| Catalyst version or lock file changed after the projection | compiled both programs | refused, nothing compiled |
+| `--shape femoco --program walk` with an allowing projection | compiled | refused, nothing compiled |
+| controlled walk killed, then a retry | refused everything; deleting the result file recompiled the walk | refused without `--allow-retry`; with it, compiled only the controlled walk, verdict `pass` |
+| driver crashed during the controlled walk, then a rerun | nothing checkpointed; recompiled both | walk checkpointed, lock removed; compiled only the controlled walk |
+| projected peak 5.0 GB, upper bound 33 GB | `femoco_allowed: True` | `femoco_allowed: False` |
+
+The round-2 driver, given over-limit data, launched all four FeMoco compiles.
 
 - [ ] **Step 5: Hand over the FeMoco decision**
 
-Do not run `--shape femoco --all`. Report the projection lines and `femoco_allowed`. If it is true, the orchestrator runs the FeMoco driver once, alone, and adds `k1_femoco.json` to this branch (gate rule 1); otherwise gate rules 2 to 4 apply.
+Do not run `--shape femoco --all`. Report the projection lines and `femoco_allowed`. If it is true, the orchestrator runs the FeMoco driver once, alone, and adds `k1_femoco.json` to this branch (gate rule 1); otherwise gate rules 2 to 4 apply. A retry of a failed FeMoco program (`--allow-retry`) is a further large-scale compile and needs the user's approval and a ledger row.
 
 - [ ] **Step 6: Lint and commit the results**
 

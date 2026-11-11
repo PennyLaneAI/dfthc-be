@@ -531,15 +531,30 @@ git commit -m "Add package scaffold, environment lock and test runner"
   - `dfthc.compile.mcm_parities(outcomes, masks: Sequence[int]) -> list`: one entry per mask, `False` for a zero mask, else a predicate for `qp.cond`; also `pack_masks(masks, num_outcomes) -> np.ndarray` and `packed_parities(outcome_bits, packed_masks)`.
   - `dfthc.testing.resources`: `NOISE_PATTERNS`, `UNRESOLVED_BRANCH_MESSAGE`, `dfthc_operator_names` (imported from `dfthc.compile`), `classify_rule_warning(message, names=None) -> "dfthc" | "noise" | "other"`, `install_warning_filters()`, `verbose_program(qfunc, num_wires)`, `chosen_rules(listing) -> list[str]`, `assert_resources(resources, *, toffoli, measurements, measured_and_uncomputes=None)`.
   - `dfthc.testing.canary`: `PRELUDE`, `run_snippet(body, *, export_warning_variable=True, timeout=900.0) -> subprocess.CompletedProcess[str]`, `outcome(result, label) -> str`.
-  - `dfthc.testing.watchdog` (master plan section 12.9): `MEMORY_CAP_MB = 8192`, `HEAVY_MEMORY_MB = 4096`, `HEAVY_SECONDS = 1800`, `KILLED_EXIT_STATUS = 3`; `memory_mb(pid) -> float` (physical footprint through macOS `libproc`), `tree_pids(root) -> list[int]`, `tree_memory_mb(root) -> float`; `lowered_priority_prefix() -> list[str]`; `WatchedRun(command, returncode, seconds, peak_mb, killed, cap_mb, timeout_s, priority, stdout, stderr)` with `.heavy` and `.summary()`; `run_watched(command, *, cap_mb=MEMORY_CAP_MB, timeout_s, capture=True, poll_s=0.1, cwd=None, env=None) -> WatchedRun`; and the command line `python -m dfthc.testing.watchdog [--cap-mb N] [--timeout-min M] -- CMD ...`, which prints one `WATCHDOG {json}` line and exits with the command's status, or 3 after a kill.
+  - `dfthc.testing.watchdog` (master plan section 12.9): `MEMORY_CAP_MB = 8192`, `SAFETY_FRACTION = 15/16` (it kills at 7,680 MB), `POLL_SECONDS = 0.05`, `HEAVY_MEMORY_MB = 4096`, `HEAVY_SECONDS = 1800`, `KILLED_EXIT_STATUS = 3`; `WatchdogError`; `check_backend()` (refuses off macOS, and unless libproc reads this process); `memory_mb(pid) -> float` (physical footprint through macOS `libproc`; 0.0 once the process has exited; `WatchdogError` on any libproc error other than ESRCH), `child_pids(pid)`, `tree_pids(root) -> list[int]`, `tree_memory_mb(root) -> float`; `lowered_priority_prefix() -> list[str]`; `WatchedRun(command, pid, returncode, seconds, peak_mb, samples, killed, survivors, cap_mb, timeout_s, priority, stdout, stderr)` with `.heavy` and `.summary()`; `run_watched(command, *, cap_mb=MEMORY_CAP_MB, timeout_s, capture=True, poll_s=POLL_SECONDS, cwd=None, env=None) -> WatchedRun`; and the command line `python -m dfthc.testing.watchdog [--cap-mb N] [--timeout-min M] -- CMD ...`, which prints one `WATCHDOG {json}` line and exits with the command's status, or 3 after a kill or a failed cleanup.
+  - The watchdog fails closed. It checks the backend before starting anything. It samples at once and then every 50 ms, and it kills at 15/16 of the cap, so growth within one interval stays below the cap. Any libproc error other than ESRCH ends the run as `"watchdog error: ..."` and kills the process group and every tracked process. It tracks processes by pid and start time, so a descendant that leaves the tree or the process group is still measured and killed, and a reused pid is never touched. It kills by stopping the tree and re-scanning until no new process appears, then killing them all and re-checking. It kills whatever is left of the tree however the run ends.
 
 **Acceptance tests:**
 - `tests/test_compile.py` (21 tests): the gate set equals spec 7.3; `register_rule` pins once and rejects duplicates; `qp.list_decomps(key) == [rule]` for every pinned key (PennyLane registers none of our names); **T6 pattern**: a pinned measured `Adjoint(...)` rule is chosen, with counts exactly `{"CNOT": 1, "Hadamard": 2, "MidCircuitMeasure": 1, "PauliX": 1, "PauliZ": 1}`; the verbose rule listing names both pinned rules (Phase 0 check of spec 12.1 T6: capturable only with `qp.qjit(verbose=True)`); `SemiAdder` on 3 bits gives T = 2 and A = 2; symbolic counts and operations outside the gate set are rejected; at `level="device"` a dfthc operator is rejected bare and under `C(...)` and `Adjoint(...)` (`surviving_dfthc_operators`, unit-tested on all spellings and on the device branch with `qp.analyze` stubbed), while a decomposed program passes (the old base-name check missed the wrapped spellings in the dry-run); `resource_key` pauses capture; `pack_masks` layout; out-of-range masks are rejected; `mcm_parities` equals the GF(2) reference on all 2^5 outcome vectors in tape mode, is linear on 100 random pairs of 70-bit vectors in the capture core, and drives conditional gates correctly in a compiled `lightning.qubit` circuit; `classify_rule_warning` separates dfthc, noise and other messages; `assert_resources` reports mismatches.
 - `tests/test_primitive_costs.py` (53 tests), pinning spec 9.24's primitive table: `SemiAdder` and its adjoint T = A = n − 1 with no `Toffoli` (n = 1, 2, 3, 4, 6, 8, 15); `LeftQuantumComparator` T = n, A = 0 and its adjoint T = 0, A = n (n = 2, 3, 4, 6, 8; `"<="` and `"<"`); `LeftClassicalComparator` T = n − 1 and its adjoint A = n − 1 (n, value = (3, 1), (3, 6), (5, 7), (5, 27), (7, 81), (7, 3)); `MultiControlledX` with k controls and k − 2 zeroed work wires T = k − 1 with exactly one `Toffoli` and A = k − 2 (k = 2, 3, 4, 5, 8, 12); `CSWAP` T = 1.
 - `tests/test_canary_helper.py` (3 tests): report lines for success and failure, the warning variable exported or unset, a clear error for a missing report line.
-- `tests/test_watchdog.py` (6 tests, marked `subprocess`; at most 400 MB each): the tree memory includes a grandchild's 300 MB; a tree that grows past a 200 MB cap is killed with SIGKILL, grandchild included, and reported as `"memory"`; a sleeping command is killed at its time limit and reported as `"time"`; a 50 MB command within its limits passes with its output; the command runs at niceness 10 or more (`nice`) or in the utility QoS class (`taskpolicy`); the command line exits with status 3 and a `WATCHDOG` line reporting the kill. Dry-run evidence: a watchdog that samples only the root process lets the 400 MB tree run past the 200 MB cap until the time limit, so the kill test fails; a watchdog that reads the resident size instead of the footprint let the same tree stay under 200 MB while two workers allocated at once.
+- `tests/test_watchdog.py` (12 tests, marked `subprocess`; at most 500 MB each):
+  - the tree memory includes a grandchild's 300 MB;
+  - a tree that grows past 15/16 of a 200 MB cap is killed with SIGKILL, grandchild included, reported as `"memory"`, with no survivor;
+  - with the safety fraction set to 0.5, a 500 MB cap kills at 250 MB, and the real constants give 7,680 MB;
+  - a sleeping command is killed at its time limit;
+  - a 50 MB command within its limits passes with its output;
+  - a 20 ms command is sampled at least once;
+  - a descendant that leaves the tree and the process group (`setsid`, then its parent exits) and then allocates 300 MB is measured, killed at the cap, and gone;
+  - children spawned in their own sessions while the time limit kills their parent all end;
+  - a libproc that fails with EPERM after 1 s ends the run within a second as `"watchdog error: ..."`, grandchild included;
+  - off macOS, `run_watched` raises `WatchdogError` before starting the command;
+  - the command runs at niceness 10 or more (`nice`) or in the utility QoS class (`taskpolicy`);
+  - the command line exits with status 3 and a `WATCHDOG` line reporting the kill.
 
-**Definition of done:** `scripts/test.sh tests/test_compile.py tests/test_primitive_costs.py tests/test_canary_helper.py tests/test_watchdog.py -q` gives `83 passed`; the per-commit tier gives `94 passed` (one test deselected); `ruff check .` clean; output free of warnings.
+  Dry-run evidence against the first version of the watchdog (round 3): it started the command off macOS, never killed when libproc failed (the command ran its full 5 s), had no safety threshold (asked to kill at half of a 500 MB cap, it let a 413 MB tree run), and crashed with `PermissionError` while a descendant that had left the tree kept running. macOS answers `killpg` on a group of zombies with EPERM, which that version did not handle. It missed a 20 ms command in 3 of 10 runs (the new one in none). The spawn-during-kill race did not show in its runs (0 survivors of 314), so that test guards the new stop-and-re-scan kill rather than reproducing an old failure. Earlier: a watchdog that samples only the root process lets the 400 MB tree run past the cap until the time limit; one that reads the resident size instead of the footprint let it stay under 200 MB while two workers allocated at once.
+
+**Definition of done:** `scripts/test.sh tests/test_compile.py tests/test_primitive_costs.py tests/test_canary_helper.py tests/test_watchdog.py -q` gives `89 passed`; the per-commit tier gives `100 passed` (one test deselected); `ruff check .` clean; output free of warnings.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -955,6 +970,8 @@ Create `tests/test_watchdog.py`:
 ```python
 """Tests for dfthc.testing.watchdog, the memory and time guard of heavy runs (plan Task 0.2)."""
 
+import ctypes
+import errno
 import json
 import os
 import signal
@@ -966,7 +983,14 @@ from pathlib import Path
 
 import pytest
 
-from dfthc.testing.watchdog import KILLED_EXIT_STATUS, memory_mb, run_watched, tree_memory_mb
+import dfthc.testing.watchdog as watchdog
+from dfthc.testing.watchdog import (
+    KILLED_EXIT_STATUS,
+    WatchdogError,
+    memory_mb,
+    run_watched,
+    tree_memory_mb,
+)
 
 pytestmark = pytest.mark.subprocess
 
@@ -996,6 +1020,20 @@ def tree_command(steps, sleep=60):
     return [sys.executable, "-c", TREE.format(steps=steps, sleep=sleep)]
 
 
+def wait_until_gone(pid, seconds=3.0):
+    """True once ``pid`` is no longer a process (zombies are reaped by their new parent)."""
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        try:
+            os.kill(pid, 0)
+            if memory_mb(pid) == 0.0:
+                return True
+        except (ProcessLookupError, PermissionError, WatchdogError):
+            return True
+        time.sleep(0.05)
+    return False
+
+
 def test_tree_memory_includes_grandchildren():
     proc = subprocess.Popen(tree_command(steps=6), stdout=subprocess.PIPE, text=True,
                             start_new_session=True)
@@ -1012,18 +1050,19 @@ def test_tree_memory_includes_grandchildren():
 def test_kills_the_whole_tree_at_the_memory_cap():
     run = run_watched(tree_command(steps=8), cap_mb=200, timeout_s=60)
     assert run.killed == "memory"
-    assert run.peak_mb > 200
+    assert run.peak_mb > watchdog.SAFETY_FRACTION * 200
     assert run.seconds < 30
     assert run.returncode == -9
-    grandchild = int(run.stdout.split()[0])
-    for _ in range(20):
-        try:
-            os.kill(grandchild, 0)
-        except ProcessLookupError:
-            break
-        time.sleep(0.1)
-    else:
-        pytest.fail(f"grandchild {grandchild} survived the kill")
+    assert run.survivors == []
+    assert wait_until_gone(int(run.stdout.split()[0])), "the grandchild survived the kill"
+
+
+def test_kills_at_the_safety_fraction_of_the_cap(monkeypatch):
+    assert watchdog.SAFETY_FRACTION * watchdog.MEMORY_CAP_MB == 7680
+    monkeypatch.setattr(watchdog, "SAFETY_FRACTION", 0.5)
+    run = run_watched(tree_command(steps=8), cap_mb=500, timeout_s=60)
+    assert run.killed == "memory"
+    assert 250 < run.peak_mb < 500
 
 
 def test_kills_at_the_time_limit():
@@ -1035,10 +1074,96 @@ def test_kills_at_the_time_limit():
 
 def test_passes_a_command_within_its_limits():
     run = run_watched(tree_command(steps=1, sleep=0.5), cap_mb=400, timeout_s=60)
-    assert (run.killed, run.returncode) == (None, 0)
+    assert (run.killed, run.returncode, run.survivors) == (None, 0, [])
     assert "ready" in run.stdout
     assert 40 < run.peak_mb < 400
     assert not run.heavy
+
+
+def test_samples_a_short_command_at_once():
+    run = run_watched(["sleep", "0.02"], timeout_s=10)
+    assert (run.killed, run.returncode) == (None, 0)
+    assert run.samples >= 1
+    assert run.peak_mb > 0
+
+
+def test_follows_a_descendant_that_leaves_the_tree_and_the_group():
+    escaper = textwrap.dedent(
+        """
+        import os, time
+        time.sleep(1.0)
+        chunks = [os.urandom(50 * 2**20) for _ in range(6)]
+        time.sleep(60)
+        """
+    )
+    root = textwrap.dedent(
+        f"""
+        import subprocess, sys, time
+        child = subprocess.Popen([sys.executable, "-c", {escaper!r}], start_new_session=True,
+                                 stdout=subprocess.DEVNULL)
+        print(child.pid, flush=True)
+        time.sleep(0.5)
+        """
+    )
+    run = run_watched([sys.executable, "-c", root], cap_mb=200, timeout_s=20)
+    assert run.killed == "memory"
+    assert run.survivors == []
+    assert wait_until_gone(int(run.stdout.split()[0])), "the escaped descendant survived"
+
+
+def test_kills_processes_spawned_during_the_kill():
+    spawner = textwrap.dedent(
+        """
+        import subprocess
+        for _ in range(400):
+            child = subprocess.Popen(["sleep", "60"], start_new_session=True)
+            print(child.pid, flush=True)
+        """
+    )
+    run = run_watched([sys.executable, "-c", spawner], timeout_s=0.5)
+    assert run.killed == "time"
+    assert run.survivors == []
+    pids = [int(line) for line in run.stdout.split()]
+    assert pids, "nothing was spawned before the time limit"
+    assert [pid for pid in pids if not wait_until_gone(pid)] == []
+
+
+class _FailingLibproc:
+    """libproc that answers for this process only, then fails with EPERM for the others."""
+
+    def __init__(self, real, after_s):
+        self.real, self.fail_from = real, time.monotonic() + after_s
+
+    def proc_pid_rusage(self, pid, flavor, buffer):
+        if pid == os.getpid() or time.monotonic() < self.fail_from:
+            return self.real.proc_pid_rusage(pid, flavor, buffer)
+        ctypes.set_errno(errno.EPERM)
+        return -1
+
+    def proc_listchildpids(self, pid, buffer, size):
+        return self.real.proc_listchildpids(pid, buffer, size)
+
+
+def test_libproc_failure_kills_the_tree(monkeypatch):
+    watchdog.check_backend()
+    monkeypatch.setattr(watchdog, "_libproc", _FailingLibproc(watchdog._libproc, after_s=1.0))
+    run = run_watched(tree_command(steps=1, sleep=30), cap_mb=400, timeout_s=60)
+    assert run.killed.startswith("watchdog error: proc_pid_rusage")
+    assert run.seconds < 10
+    assert run.returncode == -9
+    monkeypatch.undo()
+    assert wait_until_gone(int(run.stdout.split()[0])), "the grandchild survived the kill"
+
+
+def test_refuses_to_start_off_macos(monkeypatch, tmp_path):
+    marker = tmp_path / "started"
+    monkeypatch.setattr(watchdog, "_libproc", None)
+    monkeypatch.setattr(watchdog.sys, "platform", "linux")
+    with pytest.raises(WatchdogError, match="not supported, so nothing was started"):
+        run_watched([sys.executable, "-c", f"open({str(marker)!r}, 'w').close()"], timeout_s=10)
+    monkeypatch.undo()
+    time.sleep(0.5)
+    assert not marker.exists()
 
 
 def test_command_runs_at_lowered_priority():
@@ -1061,7 +1186,7 @@ def test_command_line_reports_a_kill():
     assert result.returncode == KILLED_EXIT_STATUS, result.stderr
     summary = json.loads(result.stdout.splitlines()[-1].removeprefix("WATCHDOG "))
     assert summary["killed"] == "memory"
-    assert summary["peak_mb"] > 200
+    assert summary["peak_mb"] > watchdog.SAFETY_FRACTION * 200
     assert summary["cap_mb"] == 200
 ```
 
@@ -1474,26 +1599,35 @@ Create `src/dfthc/testing/watchdog.py`:
 
 The development laptop has 10 cores and 16 GB, and the user works on it. No process tree may
 exceed :data:`MEMORY_CAP_MB`. :func:`run_watched` starts a command at lowered priority, samples
-the memory of its whole process tree, kills the tree when the sum passes the cap or the time
-limit passes, and returns the sampled peak, which is the gate metric.
+the memory of its whole process tree every :data:`POLL_SECONDS`, kills the tree when the sum
+passes :data:`SAFETY_FRACTION` of the cap or the time limit passes, and returns the sampled peak,
+which is the gate metric.
 
 Memory is the macOS physical footprint of each process, read through ``libproc``: the agent
 sandbox forbids ``ps``, and ``psutil`` is not installed. The footprint equals the resident size
 while memory is free; under memory pressure it keeps counting compressed and swapped-out pages,
 which the resident size drops.
 
+The watchdog fails closed. It refuses to start anything unless libproc can read this process.
+Every libproc error other than ESRCH (the process is gone) ends the run as a watchdog failure,
+and the tree is killed. Processes are tracked by pid and start time, so a descendant that leaves
+the tree (its parent exited) or the process group (``setsid``) is still measured and killed,
+and a reused pid is never touched. The one gap: a descendant that leaves both the tree and the
+process group within one polling interval of being created cannot be traced.
+
 Command line, for heavy runs whose peak and wall time go into the ledger::
 
     PYTHONPATH=src python -m dfthc.testing.watchdog [--cap-mb 8192] [--timeout-min 60] -- CMD ...
 
 It passes the command's output through, then prints one line ``WATCHDOG {json}``, and exits with
-the command's status, or with 3 if the watchdog killed it.
+the command's status, or with 3 if the watchdog killed it or could not clean up after it.
 """
 
 from __future__ import annotations
 
 import argparse
 import ctypes
+import errno
 import json
 import os
 import signal
@@ -1503,7 +1637,13 @@ import time
 from dataclasses import asdict, dataclass, field
 
 MEMORY_CAP_MB = 8 * 1024
-"""No process tree may exceed this resident memory on the development laptop."""
+"""No process tree may exceed this memory on the development laptop."""
+
+SAFETY_FRACTION = 15 / 16
+"""The watchdog kills at this fraction of the cap (7.5 GB of 8 GB), so that growth within one
+polling interval stays below the cap."""
+
+POLL_SECONDS = 0.05
 
 HEAVY_MEMORY_MB = 4 * 1024
 """A process tree whose peak exceeds this is a heavy process."""
@@ -1514,7 +1654,11 @@ HEAVY_SECONDS = 30 * 60
 KILLED_EXIT_STATUS = 3
 
 _RUSAGE_INFO_V2 = 2
-_MAX_CHILDREN = 4096
+_KILL_SECONDS = 5.0
+
+
+class WatchdogError(RuntimeError):
+    """The watchdog cannot measure or control a process tree."""
 
 
 class _RusageInfoV2(ctypes.Structure):
@@ -1531,41 +1675,131 @@ class _RusageInfoV2(ctypes.Structure):
 _libproc = None
 
 
-def _library():
+def _load():
     global _libproc
+    if sys.platform != "darwin":
+        raise WatchdogError(f"the watchdog reads memory through macOS libproc; {sys.platform} is "
+                            "not supported, so nothing was started")
     if _libproc is None:
-        if sys.platform != "darwin":
-            raise RuntimeError("the watchdog reads process memory through macOS libproc")
-        _libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+        try:
+            _libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+        except OSError as exc:
+            raise WatchdogError(f"cannot load libproc: {exc}") from exc
     return _libproc
 
 
-def memory_mb(pid: int) -> float:
-    """Physical footprint of one process in MB, or 0.0 if it no longer exists."""
+def check_backend() -> None:
+    """Load macOS libproc and read this process through it, or raise :class:`WatchdogError`."""
+    if memory_mb(os.getpid()) <= 0:
+        raise WatchdogError("libproc reports no memory for this process")
+
+
+def _rusage(pid: int) -> _RusageInfoV2 | None:
+    """The rusage record of ``pid``, or None if no such process exists (ESRCH)."""
     info = _RusageInfoV2()
-    status = _library().proc_pid_rusage(pid, _RUSAGE_INFO_V2, ctypes.byref(info))
-    return info.phys_footprint / 2**20 if status == 0 else 0.0
+    ctypes.set_errno(0)
+    if _load().proc_pid_rusage(pid, _RUSAGE_INFO_V2, ctypes.byref(info)) == 0:
+        return info
+    code = ctypes.get_errno()
+    if code == errno.ESRCH:
+        return None
+    raise WatchdogError(f"proc_pid_rusage({pid}) failed: {os.strerror(code)}")
+
+
+def memory_mb(pid: int) -> float:
+    """Physical footprint of a running process in MB; 0.0 once it has exited."""
+    info = _rusage(pid)
+    return 0.0 if info is None or info.proc_exit_abstime else info.phys_footprint / 2**20
 
 
 def child_pids(pid: int) -> list[int]:
-    buffer = (ctypes.c_int * _MAX_CHILDREN)()
-    count = _library().proc_listchildpids(pid, buffer, ctypes.sizeof(buffer))
-    return [child for child in buffer[: max(count, 0)] if child > 0]
+    capacity = 256
+    while True:
+        buffer = (ctypes.c_int * capacity)()
+        ctypes.set_errno(0)
+        count = _load().proc_listchildpids(pid, buffer, ctypes.sizeof(buffer))
+        if count < 0:
+            raise WatchdogError(f"proc_listchildpids({pid}) failed: "
+                                f"{os.strerror(ctypes.get_errno())}")
+        if count < capacity:
+            return [child for child in buffer[:count] if child > 0]
+        capacity *= 4
+
+
+class _Tree:
+    """The processes of one watched command, tracked by pid and start time."""
+
+    def __init__(self, root: int):
+        self.root = root
+        self.known: dict[int, int] = {}
+
+    def scan(self) -> dict[int, float]:
+        """Running processes of the tree and their footprints in MB; tracks new descendants."""
+        running, stack, seen = {}, [self.root, *self.known], set()
+        while stack:
+            pid = stack.pop()
+            if pid in seen:
+                continue
+            seen.add(pid)
+            info = _rusage(pid)
+            if info is None or self.known.setdefault(pid, info.proc_start_abstime) != (
+                    info.proc_start_abstime):
+                self.known.pop(pid, None)  # gone, or the pid now belongs to another process
+                continue
+            if info.proc_exit_abstime:
+                continue
+            running[pid] = info.phys_footprint / 2**20
+            stack.extend(child_pids(pid))
+        return running
+
+    def kill(self) -> list[int]:
+        """Stop the tree until no new process appears, kill it, and return any survivors."""
+        _signal_group(self.root, signal.SIGSTOP)
+        stopped: set[int] = set()
+        while new := set(self.scan()) - stopped:
+            for pid in new:
+                _signal(pid, signal.SIGSTOP)
+            stopped |= new
+        deadline = time.monotonic() + _KILL_SECONDS
+        while True:
+            _signal_group(self.root, signal.SIGKILL)
+            running = self.scan()
+            if not running or time.monotonic() > deadline:
+                return sorted(running)
+            for pid in running:
+                _signal(pid, signal.SIGKILL)
+            time.sleep(0.01)
+
+    def kill_without_libproc(self) -> None:
+        """Fallback when libproc fails: kill the process group and every tracked pid."""
+        _signal_group(self.root, signal.SIGKILL)
+        for pid in self.known:
+            _signal(pid, signal.SIGKILL)
+
+
+def _signal(pid: int, sig: int) -> None:
+    try:
+        os.kill(pid, sig)
+    except ProcessLookupError:
+        pass
+
+
+def _signal_group(pgid: int, sig: int) -> None:
+    """Signal a process group. Only a first pass: the per-pid signals and the scans decide."""
+    try:
+        os.killpg(pgid, sig)
+    except (ProcessLookupError, PermissionError):  # macOS: EPERM for a group of zombies only
+        pass
 
 
 def tree_pids(root: int) -> list[int]:
-    """``root`` and all its descendants that exist now."""
-    pids, stack = [], [root]
-    while stack:
-        pid = stack.pop()
-        pids.append(pid)
-        stack.extend(child_pids(pid))
-    return pids
+    """``root`` and all its running descendants."""
+    return sorted(_Tree(root).scan())
 
 
 def tree_memory_mb(root: int) -> float:
-    """Sum of the physical footprints of ``root`` and its descendants, in MB."""
-    return sum(memory_mb(pid) for pid in tree_pids(root))
+    """Sum of the physical footprints of ``root`` and its running descendants, in MB."""
+    return sum(_Tree(root).scan().values())
 
 
 def lowered_priority_prefix() -> list[str]:
@@ -1586,13 +1820,20 @@ def lowered_priority_prefix() -> list[str]:
 
 @dataclass
 class WatchedRun:
-    """Outcome of :func:`run_watched`. ``killed`` is ``"memory"``, ``"time"`` or ``None``."""
+    """Outcome of :func:`run_watched`.
+
+    ``killed`` is ``"memory"``, ``"time"``, ``"watchdog error: ..."`` or ``None``. ``survivors``
+    lists processes of the tree still running after the kill; it is empty unless cleanup failed.
+    """
 
     command: list[str]
+    pid: int
     returncode: int | None
     seconds: float
     peak_mb: float
+    samples: int
     killed: str | None
+    survivors: list[int]
     cap_mb: float
     timeout_s: float
     priority: str
@@ -1611,49 +1852,59 @@ class WatchedRun:
         return record
 
 
-def _kill_tree(root: int) -> None:
-    pids = tree_pids(root)
-    try:
-        os.killpg(root, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
-    for pid in pids:
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-
-
 def run_watched(command: list[str], *, cap_mb: float = MEMORY_CAP_MB, timeout_s: float,
-                capture: bool = True, poll_s: float = 0.1, cwd=None, env=None) -> WatchedRun:
-    """Run ``command`` at lowered priority in its own process group, under the watchdog.
+                capture: bool = True, poll_s: float = POLL_SECONDS, cwd=None,
+                env=None) -> WatchedRun:
+    """Run ``command`` at lowered priority in a new session, under the watchdog.
 
-    The process tree's memory is sampled every ``poll_s`` seconds. When the sum passes
-    ``cap_mb`` or the run passes ``timeout_s``, the whole tree is killed with SIGKILL and
-    ``killed`` says why. With ``capture=False`` the output goes to this process's streams.
+    Raises :class:`WatchdogError` before starting anything if libproc is unusable. The tree is
+    sampled at once and then every ``poll_s`` seconds; it is killed when its memory passes
+    ``SAFETY_FRACTION * cap_mb``, when the run passes ``timeout_s``, or when libproc fails. Any
+    process of the tree still running when the command ends is killed too, however the run ends.
+    With ``capture=False`` the output goes to this process's streams.
     """
+    check_backend()
     prefix = lowered_priority_prefix()
     pipe = subprocess.PIPE if capture else None
     proc = subprocess.Popen([*prefix, *command], stdout=pipe, stderr=pipe, text=True, cwd=cwd,
                             env=env, start_new_session=True)
-    start, peak, killed = time.monotonic(), 0.0, None
-    while True:
-        try:
-            out, err = proc.communicate(timeout=poll_s)
-            break
-        except subprocess.TimeoutExpired:
-            peak = max(peak, tree_memory_mb(proc.pid))
-            if peak > cap_mb:
-                killed = "memory"
-            elif time.monotonic() - start > timeout_s:
-                killed = "time"
-            if killed:
-                _kill_tree(proc.pid)
-                out, err = proc.communicate()
+    tree = _Tree(proc.pid)
+    start, peak, samples, killed, out, err = time.monotonic(), 0.0, 0, None, None, None
+    try:
+        while True:
+            try:
+                peak = max(peak, sum(tree.scan().values()))
+                samples += 1
+            except WatchdogError as exc:
+                killed = f"watchdog error: {exc}"
                 break
-    return WatchedRun(command=list(command), returncode=proc.returncode,
-                      seconds=time.monotonic() - start, peak_mb=peak, killed=killed,
-                      cap_mb=cap_mb, timeout_s=timeout_s,
+            if peak > SAFETY_FRACTION * cap_mb:
+                killed = "memory"
+                break
+            if time.monotonic() - start > timeout_s:
+                killed = "time"
+                break
+            try:
+                out, err = proc.communicate(timeout=poll_s)
+                break
+            except subprocess.TimeoutExpired:
+                pass
+    finally:
+        try:
+            survivors = tree.kill()
+        except WatchdogError as exc:
+            tree.kill_without_libproc()
+            survivors = []
+            killed = killed or f"watchdog error: {exc}"
+        if out is None:
+            try:
+                out, err = proc.communicate(timeout=_KILL_SECONDS)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                out, err = proc.communicate()
+    return WatchedRun(command=list(command), pid=proc.pid, returncode=proc.returncode,
+                      seconds=time.monotonic() - start, peak_mb=peak, samples=samples,
+                      killed=killed, survivors=survivors, cap_mb=cap_mb, timeout_s=timeout_s,
                       priority=" ".join(prefix) or "unchanged", stdout=out or "",
                       stderr=err or "")
 
@@ -1670,7 +1921,7 @@ def main(argv: list[str] | None = None) -> int:
     run = run_watched(command, cap_mb=args.cap_mb, timeout_s=args.timeout_min * 60,
                       capture=False)
     print("WATCHDOG", json.dumps(run.summary()), flush=True)
-    if run.killed:
+    if run.killed or run.survivors:
         return KILLED_EXIT_STATUS
     return run.returncode if run.returncode >= 0 else 128 - run.returncode
 
@@ -1728,10 +1979,10 @@ def _rule_lowering_warning_policy():
 - [ ] **Step 6: Run the tests**
 
 Run: `scripts/test.sh tests/test_compile.py tests/test_primitive_costs.py tests/test_canary_helper.py tests/test_watchdog.py -q`
-Expected: `83 passed` (about 60 s with the default 2 workers), no warnings summary.
+Expected: `89 passed` (about 60 s with the default 2 workers), no warnings summary.
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `94 passed`. The `release`-only marker test is deselected; with xdist workers, pytest-xdist leaves the deselected count out of the summary (`DFTHC_TEST_WORKERS=0` shows `94 passed, 1 deselected`).
+Expected: `100 passed`. The `release`-only marker test is deselected; with xdist workers, pytest-xdist leaves the deselected count out of the summary (`DFTHC_TEST_WORKERS=0` shows `100 passed, 1 deselected`).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`

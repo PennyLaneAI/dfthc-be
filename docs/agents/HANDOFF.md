@@ -145,7 +145,9 @@ not run heavy processes throughout." The full policy is master plan section 12.9
 - **You never start a heavy process.** If your brief needs one, it names the command; stop there
   and report it, and the orchestrator runs it alone, under the watchdog.
 - **Memory cap:** no process tree may exceed 8 GB. Compiles that could grow large run through
-  `dfthc.testing.watchdog.run_watched`, which kills the tree at its cap and records the kill.
+  `dfthc.testing.watchdog.run_watched`, which samples the tree every 50 ms, kills it at 7.5 GB
+  (15/16 of the cap) and records the kill. It fails closed: it starts nothing off macOS, and a
+  libproc error ends the run as `"watchdog error: ..."` with the tree killed.
 - **Test runs:** run only the targeted tests while you develop (`scripts/test.sh tests/x.py -q`),
   then the per-commit tier once at commit time. Never run the nightly or release tier: the
   orchestrator runs the nightly tier at phase gates, and the release tier once in Phase 5.
