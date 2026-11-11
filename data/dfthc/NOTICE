@@ -1,0 +1,7 @@
+The files in this directory, except this NOTICE, are an unmodified copy of the directory
+data/dfthc/ of the repository https://github.com/Covestro-HPQC/dfthcbe at commit
+930255020cec30172e0a7d17c0071d9476a687d1, together with that repository's LICENSE file.
+
+They are distributed under the Apache License, Version 2.0; see LICENSE in this directory.
+Copyright notices, if any, are those of the original authors. No file has been modified.
+tests/data/test_vendored.py checks every file against its SHA-256 digest at that commit.
