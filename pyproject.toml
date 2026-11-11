@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dfthc"
+version = "0.1.0"
+description = "DFTHC block encoding, qubitized walk and phase estimation in PennyLane (Low et al., PRX 15, 041016 (2025))"
+requires-python = ">=3.12"
+# The nightly toolchain is installed by scripts/setup_env.sh and pinned in requirements-nightly.lock.
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "compiled: compiles a program with qp.qjit(capture=True)",
+    "slow: not in the per-commit tier; runs nightly and in the release tier",
+    "release: release tier only; the conftest hook also marks it slow",
+    "canary: pins today's behaviour of a known limitation (spec section 14)",
+    "femoco: FeMoco-54 programs or their cached counts; release tier only",
+    "subprocess: runs its check in a separate Python process",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/data/test_vendored.py" = ["E501"]  # one SHA-256 digest per line
