@@ -108,7 +108,7 @@ GATE_SET = {
 
 **Interfaces:**
 - Consumes: `dfthc.compile.GATE_SET`; `dfthc.testing.canary.run_snippet(body, *, export_warning_variable=True, timeout=900.0)` and `outcome(result, label)`; the snippet prelude's `counts(circuit, level="user") -> dict[str, str]` and `report(label, fn)`.
-- Produces: 20 canary tests with the names of spec section 14 (plus the new L-24 and L-25 canaries); `docs/limitations.md` with its first two sections; the reproducer interface for L-10: a module defining `ORDERS: tuple[str, ...]` and `build(order: str)` returning a qjit-compiled QNode, and a JSON file `{"issue": "<url>", "outcomes": {"<order>": "OK" | "ERROR"}}`.
+- Produces: 20 canary tests with the names of spec section 14 (plus the new L-24 and L-25 canaries); `docs/limitations.md` with its first two sections; the reproducer interface for L-10: a module defining `ORDERS: tuple[str, ...]` and `build(order: str)` returning a qjit-compiled QNode, and a JSON file `{"issue": "<url>", "outcomes": {"<order>": "OK" | "ERROR <ExceptionType>"}}` with at least one `OK`.
 
 **Acceptance tests:** all 20 tests pass, with the observations of 2026-11-11:
 - L-1 `test_allocating_rule_is_excluded`: unpinned counts `{"PauliX": "1", "PauliZ": "1"}` (the plain rule); pinned to the `work_wires=` rule: `CompileError` naming `L01Op`.
@@ -120,7 +120,7 @@ GATE_SET = {
 - L-7 `test_controlled_change_op_basis_controls_everything`: two Toffolis and one CZ.
 - L-8 `test_generic_ctrl_adds_paulix_per_control`: `{"PauliX": 4, "Toffoli": 1}`.
 - L-9 `test_function_call_in_ctrl_region_raises`: `{"C(PauliX)": "1"}` at `level="user"`; execution fails to compile.
-- L-10 `test_order_dependent_compile`: each order's outcome matches `catalyst_3431.json`.
+- L-10 `test_order_dependent_compile`: each order's outcome matches `catalyst_3431.json`, and at least one order compiles; a record in which every order fails is a broken reproducer, not evidence of L-10 (dry-run: the old canary passed on such a record, the new one fails).
 - L-11 `test_resource_function_runs_with_capture_enabled`: every recorded call saw capture enabled.
 - L-12 `test_select_swap_qrom_twice_is_not_identity` (overlap 0.8125) and `test_select_swap_qrom_counts_are_symbolic`.
 - L-13 `test_select_with_shared_target_crashes`: "qubit operands must refer to distinct qubits".
@@ -516,14 +516,20 @@ def test_order_dependent_compile():
     reproducers/catalyst_3431.py is the issue's reproducer, adapted to define ``ORDERS`` (the
     labels of the gate orders it compares) and ``build(order)``, which returns a qjit-compiled
     QNode. reproducers/catalyst_3431.json maps each order to the outcome recorded when the
-    canary was written, "OK" or "ERROR"; the issue reports that they differ.
+    canary was written: "OK" or "ERROR <ExceptionType>". Only an order that compiles next to one
+    that fails demonstrates L-10; if every order fails, the reproducer or the setup is broken.
     """
     source = (REPRODUCERS / "catalyst_3431.py").read_text()
     recorded = json.loads((REPRODUCERS / "catalyst_3431.json").read_text())["outcomes"]
     loop = "\nfor order in ORDERS:\n    report(f'ORDER_{order}', lambda: counts(build(order)))\n"
     result = run_snippet(source + loop)
+    observed = {order: outcome(result, f"ORDER_{order}") for order in recorded}
+    assert len(observed) >= 2, observed
+    assert any(text.startswith("OK") for text in observed.values()), (
+        f"every order fails, so the reproducer does not demonstrate L-10: {observed}"
+    )
     for order, expected in recorded.items():
-        assert outcome(result, f"ORDER_{order}").startswith(expected), order
+        assert observed[order].startswith(expected), (order, observed[order])
 
 
 class L11Probe(Operator2):
@@ -598,8 +604,14 @@ from dfthc.testing.canary import run_snippet
 source = open("tests/canary/reproducers/catalyst_3431.py").read()
 loop = "\nfor order in ORDERS:\n    report(f'ORDER_{order}', lambda: counts(build(order)))\n"
 result = run_snippet(source + loop)
-outcomes = {line.split()[0].removeprefix("ORDER_"): line.split()[1]
-            for line in result.stdout.splitlines() if line.startswith("ORDER_")}
+outcomes = {}
+for line in result.stdout.splitlines():
+    if line.startswith("ORDER_"):
+        label, status, *rest = line.split()
+        outcomes[label.removeprefix("ORDER_")] = status if status == "OK" else f"ERROR {rest[0]}"
+if len(outcomes) < 2 or "OK" not in outcomes.values():
+    sys.exit(f"not recorded: L-10 needs an order that compiles next to one that fails; got "
+             f"{outcomes}\n{result.stdout}{result.stderr[-2000:]}")
 record = {"issue": "https://github.com/PennyLaneAI/catalyst/issues/3431", "outcomes": outcomes}
 with open("tests/canary/reproducers/catalyst_3431.json", "w") as handle:
     handle.write(json.dumps(record, indent=2) + "\n")
@@ -607,7 +619,11 @@ print(record)
 EOF
 ```
 
-Expected: a dictionary with one order `OK` and the other `ERROR`, for example `{'issue': '...', 'outcomes': {'<order a>': 'OK', '<order b>': 'ERROR'}}` (this recorder was dry-run with a stand-in reproducer). Then `scripts/test.sh tests/canary/test_l06_to_l11_control.py -k order_dependent -q` gives `1 passed`. If both are `OK`, the bug no longer reproduces: keep the JSON as recorded, mark L-10 **changed** in `docs/limitations.md` ("the issue's reproducer compiles in both orders on <date>"), and report DONE_WITH_CONCERNS so the orchestrator updates spec section 14.
+Expected: a dictionary with one order `OK` and the other `ERROR <ExceptionType>`, for example `{'issue': '...', 'outcomes': {'<order a>': 'OK', '<order b>': 'ERROR CompileError'}}` (this recorder and the canary were dry-run with stand-in reproducers). Check that the exception type is the one the issue reports. Then `scripts/test.sh tests/canary/test_l06_to_l11_control.py -k order_dependent -q` gives `1 passed`.
+
+Only an order that compiles next to one that fails demonstrates L-10:
+- **Every order fails:** the recorder exits with status 1 and writes nothing, and the canary would fail on such a JSON. The adaptation or the environment is broken. Compare the adaptation with the issue text and fix it. If the issue's own code fails in every order on today's nightly, report BLOCKED with the error lines.
+- **Every order compiles:** the bug no longer reproduces. Keep the JSON as recorded, mark L-10 **changed** in `docs/limitations.md` ("the issue's reproducer compiles in both orders on <date>"), and report DONE_WITH_CONCERNS so the orchestrator updates spec section 14.
 
 - [ ] **Step 4: Write canaries L-12, L-13, L-14 and L-19**
 
@@ -963,17 +979,19 @@ git commit -m "Add canaries L-1 to L-14, L-19 and L-23 to L-25"
 
 **Interfaces:**
 - Consumes: as Task 0.3.
-- Produces: 19 canary tests; `tests/canary/compile_baseline.json` mapping each L-21 case to `{"seconds", "cpu_seconds", "max_rss_mb"}`; the update switch `DFTHC_UPDATE_COMPILE_BASELINE=1`; spec section 14 matching the canaries.
+- Produces: 16 canary tests; `tests/canary/compile_baseline.json` mapping each L-21 case to `{"seconds", "cpu_seconds", "max_rss_mb"}`; the update switch `DFTHC_UPDATE_COMPILE_BASELINE=1`; spec section 14 matching the canaries.
 
-**Acceptance tests:** 14 per-commit canaries and 5 slow benchmark cases pass:
+**Acceptance tests:** 15 per-commit canaries and the slow benchmark pass:
 - L-15: `test_hw_like_postselection_wrong_under_capture` ("hw-like is not supported"); `test_mcm_inside_cond_missed` (mean within 0.125 of 0.5); `test_pauli_measure_postselect_ignored` (mean below 0.75).
 - L-16: `test_device_pass_runs` (`{"TemporaryAND": 1}` at user level; a Toffoli and no `TemporaryAND` at device level); `test_device_level_has_no_operator_op`.
 - L-17: `test_analyze_requires_qjit`; `test_unhinted_cond_counts_max_branch_with_warning` (`{"PauliX": 2, "PauliY": 1}` and a warning); `test_branch_prob_hint_gives_expected_counts` (`{"PauliX": 1, "PauliY": 1}` and `{"PauliX": 2}`); `test_dynamic_loop_counts_are_symbolic`; `test_num_iters_hint_makes_loop_concrete` (`{"PauliZ": 7}`).
 - L-18: `test_warnings_silenced_without_env` (`OK 0`); `test_warnings_visible_with_env` (more than 0); `test_unreachable_op_reports_missing_rule`.
 - L-20: `test_undecomposed_operator_op_reaches_runtime` (user level `{"L20WithRule": "1"}`, device level `{"PauliX": "1"}`, result `[0.0, 1.0]`, no rule: `CompileError`).
-- L-21: `test_compile_time_scaling[tables_1_size_64 | tables_2_size_64 | tables_4_size_64 | tables_1_size_1024 | tables_1_size_8640]` within twice the baseline.
+- L-21: `test_each_distinct_table_is_a_separate_rule_compile` (per commit; two distinct tables trace the rule twice as often as one, and two identical tables as often as one); `test_compile_time_scaling` (slow): the five cases `tables_1_size_64`, `tables_2_size_64`, `tables_4_size_64`, `tables_1_size_1024` and `tables_1_size_8640` within twice the baseline, and the 8,640-entry case at least 5 times the CPU time of the 64-entry case.
 
-**Definition of done:** `scripts/test.sh -m "not slow and not release" tests/canary -q` gives `34 passed, 5 deselected` (with Task 0.3 merged); `scripts/test.sh -m "slow and not release" tests/canary -q` gives `5 passed`; the baseline JSON is committed; `docs/limitations.md` and spec section 14 updated; one commit.
+  Dry-run evidence that these catch a removed limitation: with every case given the same cost, the old per-case budget tests passed and the new benchmark fails ("1.0x"). Emulating distinct tables that share one compile, or identical tables that are recompiled, makes the canary fail.
+
+**Definition of done:** `scripts/test.sh -m "not slow and not release" tests/canary -q` gives `35 passed` (with Task 0.3 merged); `scripts/test.sh -m "slow and not release" tests/canary -q` gives `1 passed`; the baseline JSON is committed; `docs/limitations.md` and spec section 14 updated; one commit.
 
 - [ ] **Step 1: Write canaries L-15 to L-17**
 
@@ -1330,11 +1348,14 @@ def test_undecomposed_operator_op_reaches_runtime():
 Create `tests/canary/test_l21_compile_time.py`:
 
 ```python
-"""Canary and benchmark L-21: compile cost grows with distinct tables and table size.
+"""Canary L-21 and its benchmark: each distinct compilable table is a separate rule compile.
 
-Each case compiles in a fresh process and records wall time, CPU time (Python plus the Catalyst
-compiler subprocess) and peak resident memory. The test fails if CPU time or memory exceeds
-twice the stored baseline. Refresh the baseline at every nightly bump, serially:
+The per-commit canary counts rule traces: on 2026-11-11 every distinct table traces its rule
+twice, and identical tables in one program share those traces. The nightly benchmark compiles
+each case in a fresh process and records wall time, CPU time (Python plus the Catalyst compiler
+subprocess) and peak memory (the process plus its finished children, an upper bound on the peak
+total). It fails if CPU time or memory exceeds twice the stored baseline, or if the compile cost
+no longer grows with table size. Refresh the baseline at every nightly bump, serially:
 
     DFTHC_UPDATE_COMPILE_BASELINE=1 DFTHC_TEST_WORKERS=0 \
         scripts/test.sh tests/canary/test_l21_compile_time.py
@@ -1344,11 +1365,14 @@ import json
 import os
 from pathlib import Path
 
+import pennylane as qp
 import pytest
+from pennylane.core import Operator2
 
+from dfthc.compile import GATE_SET
 from dfthc.testing.canary import outcome, run_snippet
 
-pytestmark = [pytest.mark.canary, pytest.mark.compiled, pytest.mark.subprocess, pytest.mark.slow]
+pytestmark = [pytest.mark.canary, pytest.mark.compiled]
 
 BASELINE = Path(__file__).parent / "compile_baseline.json"
 CASES = {
@@ -1358,6 +1382,60 @@ CASES = {
     "tables_1_size_1024": (1, 1024),
     "tables_1_size_8640": (1, 8640),
 }
+SIZE_GROWTH_MIN = 5
+"""Least CPU-time ratio of the 8,640-entry case to the 64-entry case (about 28 on 2026-11-11)."""
+
+_RULE_TRACES: list[tuple[int, ...]] = []
+
+
+class L21Probe(Operator2):
+    compilable_argnames = ("table",)
+    wire_argnames = ("wires",)
+
+    def __init__(self, table, wires):
+        super().__init__(table, wires)
+
+
+def _l21_probe_resources(table, wires):
+    return {qp.CNOT: sum(bin(value).count("1") for value in table)}
+
+
+@qp.register_resources(_l21_probe_resources)
+def _l21_probe_rule(table, wires):
+    _RULE_TRACES.append(table)
+    for value in table:
+        for bit in range(2):
+            if (value >> bit) & 1:
+                qp.CNOT([wires[0], wires[1 + bit]])
+
+
+qp.add_decomps(L21Probe, _l21_probe_rule)
+
+
+def _rule_traces(tables) -> int:
+    """Number of times the probe's rule is traced while compiling one program over ``tables``."""
+    _RULE_TRACES.clear()
+
+    @qp.qjit(capture=True)
+    @qp.decompose(gate_set=GATE_SET)
+    @qp.qnode(qp.device("null.qubit", wires=3))
+    def circuit():
+        for table in tables:
+            L21Probe(table, [0, 1, 2])
+        return qp.probs(wires=[0])
+
+    qp.analyze(circuit, level="user")()
+    return len(_RULE_TRACES)
+
+
+def test_each_distinct_table_is_a_separate_rule_compile():
+    """L-21 (catalyst#3173): rule compiles grow with the number of distinct tables."""
+    first, second = (1, 2, 3), (3, 1, 2)
+    single = _rule_traces([first])
+    assert single >= 1
+    assert _rule_traces([first, second]) == 2 * single
+    assert _rule_traces([first, first]) == single
+
 
 _SNIPPET = """
 import resource
@@ -1410,7 +1488,7 @@ def measure():
     return {
         "seconds": round(wall, 2),
         "cpu_seconds": round(cpu, 2),
-        "max_rss_mb": round(max(own.ru_maxrss, children.ru_maxrss) * scale / 2**20, 1),
+        "max_rss_mb": round((own.ru_maxrss + children.ru_maxrss) * scale / 2**20, 1),
     }
 
 
@@ -1418,62 +1496,70 @@ report("MEASURE", measure)
 """
 
 
-@pytest.mark.parametrize("case", sorted(CASES))
-def test_compile_time_scaling(case):
-    count, size = CASES[case]
+def _measure(count: int, size: int) -> dict:
     result = run_snippet(f"COUNT = {count}\nSIZE = {size}\n" + _SNIPPET, timeout=3600)
-    measured = json.loads(outcome(result, "MEASURE").removeprefix("OK "))
+    return json.loads(outcome(result, "MEASURE").removeprefix("OK "))
+
+
+@pytest.mark.subprocess
+@pytest.mark.slow
+def test_compile_time_scaling():
+    """Benchmark: every case within twice the baseline, and cost that grows with table size."""
+    measured = {case: _measure(*CASES[case]) for case in sorted(CASES)}
     if os.environ.get("DFTHC_UPDATE_COMPILE_BASELINE") == "1":
-        baseline = json.loads(BASELINE.read_text()) if BASELINE.exists() else {}
-        baseline[case] = measured
-        BASELINE.write_text(json.dumps(baseline, indent=2, sort_keys=True) + "\n")
+        BASELINE.write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n")
         return
-    reference = json.loads(BASELINE.read_text())[case]
-    assert measured["cpu_seconds"] <= 2 * reference["cpu_seconds"], (case, measured, reference)
-    assert measured["max_rss_mb"] <= 2 * reference["max_rss_mb"], (case, measured, reference)
+    baseline = json.loads(BASELINE.read_text())
+    for case, values in measured.items():
+        reference = baseline[case]
+        assert values["cpu_seconds"] <= 2 * reference["cpu_seconds"], (case, values, reference)
+        assert values["max_rss_mb"] <= 2 * reference["max_rss_mb"], (case, values, reference)
+    small, large = measured["tables_1_size_64"], measured["tables_1_size_8640"]
+    growth = large["cpu_seconds"] / small["cpu_seconds"]
+    assert growth >= SIZE_GROWTH_MIN, f"compile cost no longer grows with table size: {growth:.1f}x"
 ```
 
 - [ ] **Step 4: Run the per-commit canaries**
 
 Run: `scripts/test.sh -m "not slow and not release" tests/canary -q`
-Expected: `34 passed, 5 deselected` (20 from Task 0.3, including L-10, plus 14 here; the 5 deselected are the L-21 cases).
+Expected: `35 passed` (20 from Task 0.3, including L-10, plus 15 here). The L-21 benchmark is deselected; with `-n auto`, pytest-xdist leaves the deselected count out of the summary.
 
 - [ ] **Step 5: Record the compile-time baseline, serially**
 
 Run: `DFTHC_UPDATE_COMPILE_BASELINE=1 DFTHC_TEST_WORKERS=0 scripts/test.sh tests/canary/test_l21_compile_time.py -q`
-Expected: `5 passed` in about 80 s, and `tests/canary/compile_baseline.json` written. For reference, the dry-run on the development laptop recorded:
+Expected: `2 passed` (the L-21 canary and the benchmark) in about 90 s, and `tests/canary/compile_baseline.json` written. For reference, the dry-run on the development laptop recorded:
 
 ```json
 {
   "tables_1_size_1024": {
-    "cpu_seconds": 5.67,
-    "max_rss_mb": 408.7,
-    "seconds": 1.87
+    "cpu_seconds": 5.9,
+    "max_rss_mb": 493.2,
+    "seconds": 2.28
   },
   "tables_1_size_64": {
-    "cpu_seconds": 2.11,
-    "max_rss_mb": 289.7,
-    "seconds": 0.42
+    "cpu_seconds": 2.21,
+    "max_rss_mb": 371.1,
+    "seconds": 0.43
   },
   "tables_1_size_8640": {
-    "cpu_seconds": 59.02,
-    "max_rss_mb": 1367.2,
-    "seconds": 20.73
+    "cpu_seconds": 60.05,
+    "max_rss_mb": 1583.2,
+    "seconds": 21.61
   },
   "tables_2_size_64": {
-    "cpu_seconds": 2.33,
-    "max_rss_mb": 297.0,
-    "seconds": 0.49
+    "cpu_seconds": 2.42,
+    "max_rss_mb": 379.6,
+    "seconds": 0.62
   },
   "tables_4_size_64": {
-    "cpu_seconds": 2.74,
-    "max_rss_mb": 312.3,
-    "seconds": 0.65
+    "cpu_seconds": 2.76,
+    "max_rss_mb": 398.1,
+    "seconds": 0.66
   }
 }
 ```
 
-Then check it: `scripts/test.sh -m "slow and not release" tests/canary -q` · Expected: `5 passed`.
+Then check it: `scripts/test.sh -m "slow and not release" tests/canary -q` · Expected: `1 passed`.
 
 - [ ] **Step 6: Append the remaining limitations**
 
@@ -1518,11 +1604,15 @@ Append exactly this to `docs/limitations.md`:
   longer reaches runtime as a bare named gate. Canary:
   `test_undecomposed_operator_op_reaches_runtime`. Mitigation kept: the `level="device"` closure
   test of every composite operator (T5).
-- **L-21, compile cost grows with distinct tables and table size** (catalyst#3173). Benchmark:
-  `test_compile_time_scaling` (nightly) compiles 1, 2 and 4 distinct 64-entry tables and single
-  tables of 64, 1,024 and 8,640 entries, and fails above twice `tests/canary/compile_baseline.json`
-  in CPU time or peak memory. On the development laptop one 8,640-entry table took 21 s wall,
-  59 s CPU and 1.4 GB. Mitigation: few distinct table operators per walk; the K-1 budget.
+- **L-21, compile cost grows with distinct tables and table size** (catalyst#3173). Canary:
+  `test_each_distinct_table_is_a_separate_rule_compile` (per commit). On 2026-11-11 each distinct
+  table traces its rule twice, and identical tables in one program share those traces.
+  Benchmark: `test_compile_time_scaling` (nightly) compiles 1, 2 and 4 distinct 64-entry tables
+  and single tables of 64, 1,024 and 8,640 entries. It fails above twice
+  `tests/canary/compile_baseline.json` in CPU time or peak memory (the process plus its finished
+  children), or if the 8,640-entry case costs less than 5 times the CPU time of the 64-entry
+  case. On the development laptop the ratio was 27, and one 8,640-entry table took 22 s wall,
+  60 s CPU and 1.6 GB. Mitigation: few distinct table operators per walk; the K-1 budget.
 - **L-22, unresolved loops give symbolic counts.** Shared with L-12 and L-17
   (`test_select_swap_qrom_counts_are_symbolic`, `test_dynamic_loop_counts_are_symbolic`).
   Mitigation: loops unrolled in Python or with static bounds; T4 asserts `is_symbolic == False`.
@@ -1538,15 +1628,17 @@ Edit `docs/superpowers/specs/2026-11-11-dfthc-pennylane-design.md`. Make only th
 4. Section 14, L-15: change the first bullet to "Hardware-like one-shot postselection is rejected under capture with a `CompileError` (observed 2026-11-11; [pennylane#8379](https://github.com/PennyLaneAI/pennylane/issues/8379))." and append " The canary's reproducer was not affected on 2026-11-11." to the second bullet.
 5. Section 14, L-19: replace "Neither has a path to the Toffoli-level gate set." with "For a non-power-of-two size neither has a path to the Toffoli-level gate set; for a power-of-two size `AliasSampling` compiles (observed 2026-11-11)."
 6. Section 14, L-20: replace the sentence starting "At runtime it ignores static data" with "On 2026-11-11 such an `Operator2` is decomposed by the device pass if it has a rule, and fails to compile for execution if it has none; it no longer reaches runtime as a bare named gate ([catalyst#3430](https://github.com/PennyLaneAI/catalyst/pull/3430))."
-7. Section 14: after L-23 add
+7. Section 14, L-21: replace "Identical variants are recompiled ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173)), and compile time grows with table size and count." with "On 2026-11-11 each distinct table traces its rule twice, identical tables in one program share those traces, and compile time grows with table size and count ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173))." Replace its *Canary and benchmark* bullet with "*Canary:* `test_each_distinct_table_is_a_separate_rule_compile`. *Benchmark:* `test_compile_time_scaling` records compile time and peak memory for 1, 2 and 4 distinct tables, and for one table at sizes 64, 1,024 and 8,640 entries. It fails if a measurement exceeds twice the baseline stored in `tests/canary/compile_baseline.json`, or if the 8,640-entry compile costs less than five times the 64-entry one; refresh the baseline at each nightly bump."
+8. Section 14, L-5: replace "The recompilation and large-table compile-time claims are pinned by L-21's benchmark." with "The recompilation and large-table compile-time claims are pinned by L-21's canary and benchmark."
+9. Section 14: after L-23 add
    "24. **L-24: Compilable integers must fit in signed 64 bits.** Larger values fail to compile (MLIR: large integer attributes are not supported).
        - *Mitigation:* wide table entries are tuples of 32-bit words (§8.4).
        - *Canary:* `test_compilable_int_must_fit_int64` (subprocess).
    25. **L-25: `qp.adjoint(OpClass)(*args)` traces positional arguments under capture,** so a compilable argument passed positionally is rejected.
        - *Mitigation:* apply adjoints as `qp.adjoint(Op(...))` (§7.4, rule 13).
        - *Canary:* `test_adjoint_of_class_traces_positional_arguments`."
-8. Section 7.4: append rule "13. **Adjoints use the instance form** `qp.adjoint(Op(...))`, never `qp.adjoint(Op)(*positional_args)` (L-25)."
-9. Section 8.4, `WalkTables` bullet: append "Integers wider than 32 bits are stored as tuples of 32-bit words, least significant word first (L-24)."
+10. Section 7.4: append rule "13. **Adjoints use the instance form** `qp.adjoint(Op(...))`, never `qp.adjoint(Op)(*positional_args)` (L-25)."
+11. Section 8.4, `WalkTables` bullet: append "Integers wider than 32 bits are stored as tuples of 32-bit words, least significant word first (L-24)."
 
 - [ ] **Step 8: Lint and commit**
 

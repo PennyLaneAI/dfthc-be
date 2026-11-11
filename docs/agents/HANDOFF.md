@@ -254,7 +254,7 @@ differs from the spec's original claim (observed 2026-11-11).
 | L-18 | Warnings silenced by default; misleading "could not be parsed" | export the variable; read the full message |
 | L-19 | `UniformPrep`/`AliasSampling` need rotations (**changed**: power-of-two `AliasSampling` compiles) | `FlaggedUniformPrep` |
 | L-20 | Undecomposed operator at runtime; **changed**: decomposed or rejected by the device pass | device-level closure test |
-| L-21 | Compile cost grows with tables (one 8,640-entry table: 21 s, 1.4 GB) | few tables; K-1 budget |
+| L-21 | Each distinct table is a separate rule compile; cost grows with table size (one 8,640-entry table: 22 s, 1.6 GB with children) | few tables; K-1 budget |
 | L-22 | Unresolved loops give symbolic counts | static loops; assert non-symbolic |
 | L-23 | List dynamic arguments not canonicalized | convert in `__init__` |
 | L-24 | Compilable ints limited to int64 | 32-bit word tuples |

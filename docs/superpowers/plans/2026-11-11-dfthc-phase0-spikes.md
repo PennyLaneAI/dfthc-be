@@ -120,7 +120,7 @@ Run spike scripts as `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "
 Create `tests/test_primitive_capabilities.py`:
 
 ```python
-"""K-7: adjoints of PennyLane's comparators and of SemiAdder compile and are exact (Task 0.9).
+"""K-7: adjoints of PennyLane's comparators and of SemiAdder compile and are exact (Task 0.6).
 
 Each test prepares a uniform superposition over every input, applies the primitive, checks the
 result on every branch, then applies the adjoint and checks that the state, including the work
@@ -824,7 +824,7 @@ at the FeMoco-54 inner-erase shape (416 outcomes, 8640 parities, 390 junk outcom
 non-symbolic counts. Writes spikes/results/k10.json; exit status 1 on failure.
 
 Run: CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 .venv/bin/python spikes/k10_measurement_arrays.py
-(add --small-only to skip the two FeMoco-shape compiles, about 3.5 minutes each)
+(add --small-only to skip the two FeMoco-shape compiles, about 4 and 25 minutes)
 """
 
 import json
@@ -1196,14 +1196,17 @@ git commit -m "Add K-10 spike: measurement arrays as dynamic arguments"
 - Consumes: `spikes/prototypes.py`; `dfthc.compile.compiled_resources`, `register_rule`, `resource_key`, `mcm_parities`.
 - Produces: the K-1 verdict and measurements (wall time, CPU time, peak memory, T, M and A per program), which gate Phase 1 (G0). Also:
   - the stand-in operator family `Proto*` (structure of spec 9.21 and 9.22, with pinned `Adjoint(...)` and `C(...)` rules);
-  - `Layout(shape)`, `random_tables(shape, seed)` and `build(shape_name, program) -> (qfunc, num_wires)`.
+  - `Layout(shape)`, `random_tables(shape, seed)` and `build(shape_name, program) -> (qfunc, num_wires)`; `build` knows only the named shapes `small` and `femoco`.
 
-  Task 1B.3 reuses `build("small", ...)` as its benchmark workload.
+  Task 1B.3 (master plan) builds its benchmark workload the way `build` does, from `Shape`, `Layout`, `random_tables` and `ProtoWalk`, at two shapes:
+  - the `H2_STO3G_TEST` shape, `Shape(N=2, R=2, B=2, C=1, n_plus=1, b_rot=4, b_k1=2, b_k2=2, k1=1, k2=1)`. A dry-run compiled the stand-in walk there: 67 wires with the control, T 138 and 140 (controlled), M 50, A 88 and 90;
+  - the `H2_631G_TEST` shape, which is `SHAPES["small"]` (`n_plus` only sets sign flags in the tables).
 
 **Pass criteria (spec 16, K-1):**
 - walk and controlled walk each compile as one program within 60 minutes and 16 GB;
 - the diagnostic `InnerPrepare` and `InnerSelect` stand-in compiles take at most 10 minutes and 16 GB each;
-- counts are non-symbolic and the controlled walk costs exactly 2 more Toffolis and 2 more measured uncomputes than the walk.
+- counts are non-symbolic, and the controlled walk costs exactly 2 more Toffolis, 2 more measured uncomputes and the same number of explicit measurements as the walk. The driver checks this (`controlled_walk_check`) before it sets the verdict;
+- peak memory is the compile process's `ru_maxrss` plus that of its finished children, an upper bound on the peak total. Catalyst runs its compiler and linker as blocking subprocesses while Python holds the traced program, so the two peaks can coexist and the larger one alone would undercount. The method is recorded in the JSON as `memory_method`.
 
 **Definition of done:** `k1_small.json` and `k1_femoco.json` committed with `"verdict": "pass"`, or `k1_femoco.json` with `"verdict": "fail"` and the report escalating per the gate rule below; `ruff check spikes` clean.
 
@@ -1230,8 +1233,10 @@ Usage:
     python spikes/k1_whole_program.py --shape femoco --all              # driver: each program in
                                                                         # its own process
 Budgets (spec 16, K-1): walk and controlled walk 60 minutes and 16 GB each; the diagnostic
-InnerPrepare and InnerSelect compiles 10 minutes and 16 GB each. The driver writes
-spikes/results/k1_<shape>.json and exits with status 1 if a budget is exceeded or a compile fails.
+InnerPrepare and InnerSelect compiles 10 minutes and 16 GB each. The controlled walk must cost
+exactly 2 more Toffolis, 2 more measured uncomputes and the same explicit measurements as the walk.
+The driver writes spikes/results/k1_<shape>.json and exits with status 1 if a compile fails, a
+budget is exceeded or the controlled-walk deltas differ. Peak memory is MEMORY_METHOD.
 """
 
 from __future__ import annotations
@@ -2040,6 +2045,12 @@ register_rule("C(ProtoWalk)", qp.register_resources(_c_walk_resources)(_c_walk))
 PROGRAMS = ("walk", "controlled_walk", "inner_prepare", "inner_select")
 BUDGET_SECONDS = {"walk": 3600, "controlled_walk": 3600, "inner_prepare": 600, "inner_select": 600}
 BUDGET_MB = 16 * 1024
+CONTROL_DELTAS = {"toffoli": 2, "measured_and_uncomputes": 2, "measurements": 0}
+MEMORY_METHOD = (
+    "ru_maxrss of the compile process plus ru_maxrss of its finished child processes "
+    "(getrusage): an upper bound on the peak total RSS, because Catalyst runs its compiler "
+    "and linker as blocking subprocesses, one at a time, while Python holds the traced program"
+)
 
 
 def build(shape_name: str, program: str):
@@ -2077,9 +2088,18 @@ def compile_one(shape_name: str, program: str) -> dict:
             "seconds": round(wall, 1),
             "cpu_seconds": round(own.ru_utime + own.ru_stime + children.ru_utime
                                  + children.ru_stime, 1),
-            "max_rss_mb": round(max(own.ru_maxrss, children.ru_maxrss) * scale / 2**20, 1),
+            "max_rss_mb": round((own.ru_maxrss + children.ru_maxrss) * scale / 2**20, 1),
             "toffoli": resources.toffoli, "measurements": resources.measurements,
             "measured_and_uncomputes": resources.measured_and_uncomputes}
+
+
+def controlled_walk_check(results: dict) -> dict:
+    """Compare the controlled walk's counts with the walk's against CONTROL_DELTAS."""
+    walk, controlled = results.get("walk", {}), results.get("controlled_walk", {})
+    if not all(key in walk and key in controlled for key in CONTROL_DELTAS):
+        return {"ok": False, "reason": "the walk or the controlled walk has no counts"}
+    deltas = {key: controlled[key] - walk[key] for key in CONTROL_DELTAS}
+    return {"ok": deltas == CONTROL_DELTAS, "deltas": deltas, "expected": CONTROL_DELTAS}
 
 
 def drive(shape_name: str) -> int:
@@ -2103,6 +2123,10 @@ def drive(shape_name: str) -> int:
             results[program] = {"error": f"exceeded {BUDGET_SECONDS[program]} s"}
             failed = True
         print(program, json.dumps(results[program])[:600], flush=True)
+    results["controlled_walk_check"] = controlled_walk_check(results)
+    failed |= not results["controlled_walk_check"]["ok"]
+    print("controlled_walk_check", json.dumps(results["controlled_walk_check"]), flush=True)
+    results["memory_method"] = MEMORY_METHOD
     results["verdict"] = "fail" if failed else "pass"
     out = Path(__file__).parent / "results" / f"k1_{shape_name}.json"
     out.parent.mkdir(exist_ok=True)
@@ -2132,19 +2156,20 @@ Run: `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python
 Expected (about 45 s), as in the dry-run:
 
 ```text
-walk {"program": "walk", "shape": "small", "num_wires": 83, "seconds": 10.3, ..., "toffoli": 236, "measurements": 68, "measured_and_uncomputes": 175, "within_budget": true}
+walk {"program": "walk", "shape": "small", "num_wires": 83, "seconds": 8.0, ..., "max_rss_mb": 632.2, "toffoli": 236, "measurements": 68, "measured_and_uncomputes": 175, "within_budget": true}
 controlled_walk {"program": "controlled_walk", ..., "toffoli": 238, "measurements": 68, "measured_and_uncomputes": 177, "within_budget": true}
 inner_prepare {"program": "inner_prepare", ..., "toffoli": 35, "measurements": 14, "measured_and_uncomputes": 24, "within_budget": true}
 inner_select {"program": "inner_select", ..., "toffoli": 66, "measurements": 15, "measured_and_uncomputes": 53, "within_budget": true}
+controlled_walk_check {"ok": true, "deltas": {"toffoli": 2, "measured_and_uncomputes": 2, "measurements": 0}, ...}
 verdict: pass
 ```
 
-The Toffoli and measurement counts are exact and must match; times and memory vary.
+The Toffoli and measurement counts are exact and must match; times and memory vary. A wrong controlled rule shows up as `"ok": false` and `verdict: fail` (dry-run with canned driver input: T + 3 or M + 1 fails, as does 9 GB in Python plus 9 GB in the compiler against the 16 GB budget).
 
 - [ ] **Step 3: Run the driver at the FeMoco-54 shape**
 
 Run: `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python" spikes/k1_whole_program.py --shape femoco --all`
-Expected: one JSON line per program, then `verdict: pass` or `verdict: fail`. Each program runs in its own process with a timeout of its budget plus 60 s. The full run takes up to about 2.5 hours, so run it in the background and poll; do not run other compiles in parallel, because they distort the timings. Copy the four lines and the verdict into the report.
+Expected: one JSON line per program, then `verdict: pass` or `verdict: fail`. Each program runs in its own process with a timeout of its budget plus 60 s. The full run takes up to about 2.5 hours, so run it in the background and poll; do not run other compiles in parallel, because they distort the timings. Copy the four program lines, the `controlled_walk_check` line and the verdict into the report.
 
 - [ ] **Step 4: Lint and commit the results**
 

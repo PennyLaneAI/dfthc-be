@@ -295,32 +295,33 @@ Code-level steps: the three `phase0-*` files. The entries below are the master r
 - **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 0.1. **Branch:** `phase0/0.2`.
 - **Files:** `src/dfthc/compile.py`, `src/dfthc/testing/{__init__,resources,canary}.py`, `tests/conftest.py` (replaced), `tests/test_compile.py`, `tests/test_primitive_costs.py`, `tests/test_canary_helper.py`.
 - **Interfaces produced** (signatures in the Phase 0 infrastructure file):
-  - from `dfthc.compile`: `GATE_SET`, `ANALYZE_NAMES`, `FIXED_DECOMPS`, `register_rule(op, rule)`, `resource_key(build)`, `CompiledResources(toffoli, measurements, measured_and_uncomputes, counts, num_wires)` with `.physical_measurements`, `compiled_resources(qfunc, num_wires, *, device, level, fixed_decomps)`, `mcm_parities(outcomes, masks)`, `pack_masks`, `packed_parities`;
+  - from `dfthc.compile`: `GATE_SET`, `ANALYZE_NAMES`, `FIXED_DECOMPS`, `register_rule(op, rule)`, `resource_key(build)`, `CompiledResources(toffoli, measurements, measured_and_uncomputes, counts, num_wires)` with `.physical_measurements`, `compiled_resources(qfunc, num_wires, *, device, level, fixed_decomps)`, `dfthc_operator_names(keys=None)`, `surviving_dfthc_operators(names, keys=None)`, `mcm_parities(outcomes, masks)`, `pack_masks`, `packed_parities`;
   - from `dfthc.testing.resources`: `classify_rule_warning`, `install_warning_filters`, `verbose_program`, `chosen_rules`, `assert_resources`;
   - from `dfthc.testing.canary`: `run_snippet`, `outcome`.
-- **Acceptance tests:** 72 tests.
+- **Acceptance tests:** 77 tests.
   - The gate set matches spec 7.3.
   - Pins: one rule per key, and `qp.list_decomps(key) == [rule]`.
   - T6 pattern counts `{"CNOT": 1, "Hadamard": 2, "MidCircuitMeasure": 1, "PauliX": 1, "PauliZ": 1}`; the verbose listing names the pinned rules.
   - Symbolic counts and operations outside the gate set are rejected.
+  - At `level="device"`, a dfthc operator is rejected bare and under `C(...)` and `Adjoint(...)`, and a decomposed program passes.
   - `mcm_parities` is exact on all 2^5 vectors in tape mode, linear on 100 random 70-bit pairs in the capture core, and correct in a compiled circuit.
   - The 53 primitive-cost pins of spec 9.24 hold.
   - The canary runner reports OK and ERROR lines.
-- **Definition of done:** 72 passed; per-commit tier 81 passed, 1 deselected; ruff clean; the T6 finding recorded.
+- **Definition of done:** 77 passed; per-commit tier 86 passed (1 deselected); ruff clean; the T6 finding recorded.
 
 ### Task 0.3: Canary suite A
 - **Tier:** B. **Reviewers:** GPT-5.6. **Scout:** Grok 4.7 for the L-10 reproducer. **Depends on:** 0.2. **Branch:** `phase0/0.3`.
 - **Files:** `tests/canary/test_l01_to_l05_rules.py`, `test_l06_to_l11_control.py`, `test_l12_l13_l14_l19_templates.py`, `test_l23_l24_l25_arguments.py`, `tests/canary/reproducers/catalyst_3431.{py,json}`, `docs/limitations.md`.
-- **Interfaces:** Consumes `run_snippet` and `outcome`. Produces 20 canaries with the spec 14 names, the L-10 reproducer interface (`ORDERS`, `build(order)`, JSON `{"issue", "outcomes"}`), and `docs/limitations.md` sections 1 and 2.
+- **Interfaces:** Consumes `run_snippet` and `outcome`. Produces 20 canaries with the spec 14 names, the L-10 reproducer interface (`ORDERS`, `build(order)`, JSON `{"issue", "outcomes"}` with at least one order that compiles), and `docs/limitations.md` sections 1 and 2.
 - **Acceptance tests:** 20 passed, with the observations listed in the canaries file (for example L-12 overlap 0.8125, L-8 `{"PauliX": 4, "Toffoli": 1}`).
 - **Definition of done:** 20 passed; limitations documented; committed.
 
 ### Task 0.4: Canary suite B and spec section 14 update
 - **Tier:** B. **Reviewers:** GPT-5.6 (the orchestrator approves the spec edit at merge). **Depends on:** 0.3. **Branch:** `phase0/0.4`.
 - **Files:** `tests/canary/test_l15_to_l17_measure_analyze.py`, `test_l18_l20_warnings_runtime.py`, `test_l21_compile_time.py`, `compile_baseline.json`; `docs/limitations.md` (append); spec sections 7.4, 8.4 and 14.
-- **Interfaces:** Produces 19 canaries (5 of them the slow L-21 benchmark cases), the baseline JSON with the update switch `DFTHC_UPDATE_COMPILE_BASELINE=1`, and spec 14 entries matching the canaries (L-24, L-25 added; L-2, L-6, L-9, L-15, L-19, L-20 updated).
-- **Acceptance tests:** per-commit tier 34 passed, 5 deselected over `tests/canary`; the nightly tier gives 5 passed.
-- **Definition of done:** as acceptance; the spec edit limited to the nine listed changes; committed.
+- **Interfaces:** Produces 16 canaries, among them the per-commit L-21 rule-compile canary and the slow L-21 benchmark. Also the baseline JSON with the update switch `DFTHC_UPDATE_COMPILE_BASELINE=1`, and spec 14 entries matching the canaries (L-24, L-25 added; L-2, L-5, L-6, L-9, L-15, L-19, L-20, L-21 updated).
+- **Acceptance tests:** per-commit tier 35 passed over `tests/canary` (the L-21 benchmark deselected); the nightly tier gives 1 passed.
+- **Definition of done:** as acceptance; the spec edit limited to the eleven listed changes; committed.
 
 ### Task 0.5: Vendored data and license
 - **Tier:** B. **Reviewers:** GPT-5.6. **Depends on:** 0.1. **Branch:** `phase0/0.5`.
@@ -361,7 +362,8 @@ Code-level steps: the three `phase0-*` files. The entries below are the master r
 - **Files:** `spikes/k1_whole_program.py`, `spikes/results/k1_small.json`, `spikes/results/k1_femoco.json`.
 - **Acceptance tests:**
   - At the small shape: walk T = 236, controlled walk T = 238, M = 68, A = 175 and 177, inner prepare T = 35, inner select T = 66, all within budget.
-  - At FeMoco-54: walk and controlled walk each within 60 min and 16 GB; inner prepare and inner select within 10 min and 16 GB; controlled minus walk equals +2 T and +2 A.
+  - At FeMoco-54: walk and controlled walk each within 60 min and 16 GB; inner prepare and inner select within 10 min and 16 GB; controlled minus walk equals +2 T, +2 A and +0 M.
+  - The driver enforces all of these before it sets the verdict. It checks the count deltas itself (`controlled_walk_check`), and it gates memory on the process's peak RSS plus its children's, an upper bound on the peak total.
 - **Definition of done:** both result files committed. If the FeMoco verdict is `fail`, the gate rule of section 12.6 applies.
 
 ### Task 0.9b (conditional): K-1 remedy 1 in the stand-in

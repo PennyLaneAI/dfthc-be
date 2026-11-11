@@ -133,7 +133,7 @@ VENV="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.ven
 - `test_scripts_are_executable[...]`: both scripts are executable.
 - `test_release_marker_implies_slow`: `-m "not slow"` deselects a `release`-only test.
 
-**Definition of done:** 10 passed with `scripts/test.sh tests/test_infrastructure.py`; 9 passed and 1 deselected with the per-commit filter; `ruff check .` clean; `docs/environment.md` present; one commit on `phase0/0.1`.
+**Definition of done:** 10 passed with `scripts/test.sh tests/test_infrastructure.py`; 9 passed with the per-commit filter (one test deselected); `ruff check .` clean; `docs/environment.md` present; one commit on `phase0/0.1`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -435,7 +435,7 @@ Run: `scripts/test.sh tests/test_infrastructure.py -q`
 Expected: `10 passed`.
 
 Run: `scripts/test.sh -m "not slow and not release" tests/test_infrastructure.py -q`
-Expected: `9 passed, 1 deselected`.
+Expected: `9 passed`. The `release`-only marker test is deselected; with `-n auto`, pytest-xdist leaves the deselected count out of the summary (`DFTHC_TEST_WORKERS=0` shows `9 passed, 1 deselected`).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -465,17 +465,18 @@ git commit -m "Add package scaffold, environment lock and test runner"
   - `dfthc.compile.FIXED_DECOMPS: dict[str, Callable]` and `register_rule(op: type | str, rule) -> None`: adds the only rule for a dfthc class or a symbolic key (`"Adjoint(X)"`, `"C(X)"`) and pins it; raises `ValueError` on a second registration.
   - `dfthc.compile.resource_key(build: Callable[[], Operator]) -> Operator`: builds a resource key with capture paused.
   - `dfthc.compile.CompiledResources(toffoli: int, measurements: int, measured_and_uncomputes: int, counts: dict[str, int], num_wires: int)` with property `physical_measurements -> int`.
-  - `dfthc.compile.compiled_resources(qfunc, num_wires, *, device="null.qubit", level="user", fixed_decomps=None) -> CompiledResources`: raises `AssertionError` on symbolic counts, on operations outside the gate set (`level="user"`), or on surviving dfthc names (other levels).
+  - `dfthc.compile.compiled_resources(qfunc, num_wires, *, device="null.qubit", level="user", fixed_decomps=None) -> CompiledResources`: raises `AssertionError` on symbolic counts, on operations outside the gate set (`level="user"`), or on a surviving dfthc operator, bare or under `C(...)` or `Adjoint(...)` (other levels).
+  - `dfthc.compile.dfthc_operator_names(keys=None) -> frozenset[str]`: the operator names inside rule keys (default `FIXED_DECOMPS`); `surviving_dfthc_operators(names, keys=None) -> list[str]`: the gate names that contain one of them, bare or wrapped.
   - `dfthc.compile.mcm_parities(outcomes, masks: Sequence[int]) -> list`: one entry per mask, `False` for a zero mask, else a predicate for `qp.cond`; also `pack_masks(masks, num_outcomes) -> np.ndarray` and `packed_parities(outcome_bits, packed_masks)`.
-  - `dfthc.testing.resources`: `NOISE_PATTERNS`, `UNRESOLVED_BRANCH_MESSAGE`, `dfthc_operator_names() -> set[str]`, `classify_rule_warning(message, names=None) -> "dfthc" | "noise" | "other"`, `install_warning_filters()`, `verbose_program(qfunc, num_wires)`, `chosen_rules(listing) -> list[str]`, `assert_resources(resources, *, toffoli, measurements, measured_and_uncomputes=None)`.
+  - `dfthc.testing.resources`: `NOISE_PATTERNS`, `UNRESOLVED_BRANCH_MESSAGE`, `dfthc_operator_names` (imported from `dfthc.compile`), `classify_rule_warning(message, names=None) -> "dfthc" | "noise" | "other"`, `install_warning_filters()`, `verbose_program(qfunc, num_wires)`, `chosen_rules(listing) -> list[str]`, `assert_resources(resources, *, toffoli, measurements, measured_and_uncomputes=None)`.
   - `dfthc.testing.canary`: `PRELUDE`, `run_snippet(body, *, export_warning_variable=True, timeout=900.0) -> subprocess.CompletedProcess[str]`, `outcome(result, label) -> str`.
 
 **Acceptance tests:**
-- `tests/test_compile.py` (16 tests): the gate set equals spec 7.3; `register_rule` pins once and rejects duplicates; `qp.list_decomps(key) == [rule]` for every pinned key (PennyLane registers none of our names); **T6 pattern**: a pinned measured `Adjoint(...)` rule is chosen, with counts exactly `{"CNOT": 1, "Hadamard": 2, "MidCircuitMeasure": 1, "PauliX": 1, "PauliZ": 1}`; the verbose rule listing names both pinned rules (Phase 0 check of spec 12.1 T6: capturable only with `qp.qjit(verbose=True)`); `SemiAdder` on 3 bits gives T = 2 and A = 2; symbolic counts and operations outside the gate set are rejected; `resource_key` pauses capture; `pack_masks` layout; out-of-range masks are rejected; `mcm_parities` equals the GF(2) reference on all 2^5 outcome vectors in tape mode, is linear on 100 random pairs of 70-bit vectors in the capture core, and drives conditional gates correctly in a compiled `lightning.qubit` circuit; `classify_rule_warning` separates dfthc, noise and other messages; `assert_resources` reports mismatches.
+- `tests/test_compile.py` (21 tests): the gate set equals spec 7.3; `register_rule` pins once and rejects duplicates; `qp.list_decomps(key) == [rule]` for every pinned key (PennyLane registers none of our names); **T6 pattern**: a pinned measured `Adjoint(...)` rule is chosen, with counts exactly `{"CNOT": 1, "Hadamard": 2, "MidCircuitMeasure": 1, "PauliX": 1, "PauliZ": 1}`; the verbose rule listing names both pinned rules (Phase 0 check of spec 12.1 T6: capturable only with `qp.qjit(verbose=True)`); `SemiAdder` on 3 bits gives T = 2 and A = 2; symbolic counts and operations outside the gate set are rejected; at `level="device"` a dfthc operator is rejected bare and under `C(...)` and `Adjoint(...)` (`surviving_dfthc_operators`, unit-tested on all spellings and on the device branch with `qp.analyze` stubbed), while a decomposed program passes (the old base-name check missed the wrapped spellings in the dry-run); `resource_key` pauses capture; `pack_masks` layout; out-of-range masks are rejected; `mcm_parities` equals the GF(2) reference on all 2^5 outcome vectors in tape mode, is linear on 100 random pairs of 70-bit vectors in the capture core, and drives conditional gates correctly in a compiled `lightning.qubit` circuit; `classify_rule_warning` separates dfthc, noise and other messages; `assert_resources` reports mismatches.
 - `tests/test_primitive_costs.py` (53 tests), pinning spec 9.24's primitive table: `SemiAdder` and its adjoint T = A = n − 1 with no `Toffoli` (n = 1, 2, 3, 4, 6, 8, 15); `LeftQuantumComparator` T = n, A = 0 and its adjoint T = 0, A = n (n = 2, 3, 4, 6, 8; `"<="` and `"<"`); `LeftClassicalComparator` T = n − 1 and its adjoint A = n − 1 (n, value = (3, 1), (3, 6), (5, 7), (5, 27), (7, 81), (7, 3)); `MultiControlledX` with k controls and k − 2 zeroed work wires T = k − 1 with exactly one `Toffoli` and A = k − 2 (k = 2, 3, 4, 5, 8, 12); `CSWAP` T = 1.
 - `tests/test_canary_helper.py` (3 tests): report lines for success and failure, the warning variable exported or unset, a clear error for a missing report line.
 
-**Definition of done:** `scripts/test.sh tests/test_compile.py tests/test_primitive_costs.py tests/test_canary_helper.py -q` gives `72 passed`; the per-commit tier gives `81 passed, 1 deselected`; `ruff check .` clean; output free of warnings.
+**Definition of done:** `scripts/test.sh tests/test_compile.py tests/test_primitive_costs.py tests/test_canary_helper.py -q` gives `77 passed`; the per-commit tier gives `86 passed` (one test deselected); `ruff check .` clean; output free of warnings.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -485,6 +486,7 @@ Create `tests/test_compile.py`:
 """Tests for dfthc.compile and dfthc.testing.resources (plan Task 0.2)."""
 
 import itertools
+from types import SimpleNamespace
 
 import jax.numpy as jnp
 import numpy as np
@@ -504,6 +506,7 @@ from dfthc.compile import (
     packed_parities,
     register_rule,
     resource_key,
+    surviving_dfthc_operators,
 )
 from dfthc.testing.resources import (
     assert_resources,
@@ -625,6 +628,41 @@ def test_compiled_resources_rejects_operations_outside_gate_set(monkeypatch):
     monkeypatch.setattr(dc, "GATE_SET", GATE_SET | {"RX": 1})
     with pytest.raises(AssertionError, match="outside the gate set"):
         compiled_resources(lambda: qp.RX(0.3, 0), num_wires=1)
+
+
+def test_surviving_dfthc_operators_sees_wrapped_names():
+    keys = ["OuterPrepare", "Adjoint(OuterPrepare)", "C(RefT2)"]
+    names = ["OuterPrepare", "C(OuterPrepare)", "Adjoint(OuterPrepare)", "Adjoint(C(RefT2))",
+             "OuterPrepareX", "CNOT", "C(PauliX)", "Adjoint(TemporaryAND)"]
+    assert surviving_dfthc_operators(names, keys) == [
+        "Adjoint(C(RefT2))", "Adjoint(OuterPrepare)", "C(OuterPrepare)", "OuterPrepare",
+    ]
+
+
+@pytest.mark.parametrize(
+    "name", ["CompileTestLoad", "C(CompileTestLoad)", "Adjoint(CompileTestLoad)"]
+)
+def test_device_level_rejects_surviving_dfthc_operator(monkeypatch, name):
+    """T5 at level="device" (L-20): a dfthc operator fails the check bare or wrapped."""
+    reported = SimpleNamespace(is_symbolic=False, counts={name: 1, "CNOT": 2}, num_wires=2)
+    monkeypatch.setattr(
+        qp, "analyze", lambda circuit, level: lambda: SimpleNamespace(resources=reported)
+    )
+    with pytest.raises(AssertionError, match="dfthc operators reached"):
+        compiled_resources(lambda: None, num_wires=2, level="device")
+
+
+@pytest.mark.compiled
+def test_device_level_closure_of_decomposed_program():
+    def qfunc():
+        qp.H(0)
+        CompileTestLoad([0], [1])
+        qp.adjoint(CompileTestLoad([0], [1]))
+
+    resources = compiled_resources(qfunc, num_wires=2, level="device")
+    assert resources.counts == {
+        "CNOT": 1, "Hadamard": 2, "MidCircuitMeasure": 1, "PauliX": 1, "PauliZ": 1,
+    }
 
 
 def test_resource_key_pauses_capture():
@@ -869,7 +907,8 @@ from __future__ import annotations
 
 import functools
 import operator
-from collections.abc import Callable, Sequence
+import re
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
 
 import jax
@@ -890,6 +929,9 @@ ANALYZE_NAMES: frozenset[str] = frozenset(GATE_SET) - {"MidMeasure"} | {"MidCirc
 
 FIXED_DECOMPS: dict[str, Callable] = {}
 """Pinned rule for every rule key registered through :func:`register_rule` (spec section 7.5)."""
+
+_IDENTIFIER = re.compile(r"[A-Za-z_]\w*")
+_WRAPPERS = frozenset({"Adjoint", "C"})
 
 
 def register_rule(op: type | str, rule: Callable) -> None:
@@ -949,7 +991,8 @@ def compiled_resources(
     ``qfunc`` takes no arguments and queues operations. ``fixed_decomps`` defaults to
     :data:`FIXED_DECOMPS`. Raises ``AssertionError`` if the counts are symbolic or, at
     ``level="user"``, if an operation outside the gate set remains (T5). At
-    ``level="device"`` it instead asserts that no dfthc operator name survives (L-20).
+    ``level="device"`` it instead asserts that no dfthc operator survives, bare or under
+    ``C(...)`` and ``Adjoint(...)`` (L-20; :func:`surviving_dfthc_operators`).
     """
     pins = FIXED_DECOMPS if fixed_decomps is None else fixed_decomps
     dev = qp.device(device, wires=num_wires)
@@ -970,7 +1013,7 @@ def compiled_resources(
         if outside:
             raise AssertionError(f"operations outside the gate set remain: {outside}")
     else:
-        surviving = sorted(set(counts) & {key for key in FIXED_DECOMPS if "(" not in key})
+        surviving = surviving_dfthc_operators(counts, set(FIXED_DECOMPS) | set(pins))
         if surviving:
             raise AssertionError(f"dfthc operators reached level={level!r}: {surviving}")
     return CompiledResources(
@@ -980,6 +1023,30 @@ def compiled_resources(
         counts=counts,
         num_wires=int(resources.num_wires),
     )
+
+
+def dfthc_operator_names(keys: Iterable[str] | None = None) -> frozenset[str]:
+    """Operator names inside rule keys, by default those of :data:`FIXED_DECOMPS`.
+
+    ``"C(Adjoint(OuterPrepare))"`` gives ``OuterPrepare``.
+    """
+    keys = FIXED_DECOMPS if keys is None else keys
+    return frozenset(
+        token for key in keys for token in _IDENTIFIER.findall(key) if token not in _WRAPPERS
+    )
+
+
+def surviving_dfthc_operators(
+    names: Iterable[str], keys: Iterable[str] | None = None
+) -> list[str]:
+    """The gate ``names`` that contain an operator name of the rule ``keys``, bare or wrapped.
+
+    A name matches if any identifier in it is a dfthc operator name, so ``OuterPrepare``,
+    ``C(OuterPrepare)``, ``Adjoint(OuterPrepare)`` and ``Adjoint(C(OuterPrepare))`` match, while
+    ``C(PauliX)``, ``Adjoint(TemporaryAND)`` and ``OuterPrepareX`` do not.
+    """
+    operators = dfthc_operator_names(keys)
+    return sorted(name for name in names if operators.intersection(_IDENTIFIER.findall(name)))
 
 
 def mcm_parities(outcomes: Sequence, masks: Sequence[int]) -> list:
@@ -1061,7 +1128,7 @@ import pennylane as qp
 from catalyst.decomposition.rule_lowering_warning import RuleLoweringWarning
 from catalyst.passes import graph_decomposition
 
-from dfthc.compile import FIXED_DECOMPS, GATE_SET, CompiledResources
+from dfthc.compile import FIXED_DECOMPS, GATE_SET, CompiledResources, dfthc_operator_names
 
 _EXCLUDED_RULE = (
     r"(?:_\w*_ppm|_toffoli_elbow|_cphase_to_single_phase|\w*_workers?\w*|use_allocation\(\w+\))"
@@ -1080,14 +1147,6 @@ UNRESOLVED_BRANCH_MESSAGE = (
 )
 """qp.analyze UserWarning for an unhinted conditional. PennyLane's SemiAdder rule triggers it on
 every compile, so it is filtered; exact T4 counts and the erase-hint tests guard our own code."""
-
-
-def dfthc_operator_names() -> set[str]:
-    """Base names of every operator with a pinned dfthc rule."""
-    names = set()
-    for key in FIXED_DECOMPS:
-        names.update(re.findall(r"\w+", key))
-    return names - {"Adjoint", "C"}
 
 
 def classify_rule_warning(message: str, names: Iterable[str] | None = None) -> str:
@@ -1279,10 +1338,10 @@ def _rule_lowering_warning_policy():
 - [ ] **Step 6: Run the tests**
 
 Run: `scripts/test.sh tests/test_compile.py tests/test_primitive_costs.py tests/test_canary_helper.py -q`
-Expected: `72 passed` (about 30 s with `-n auto`), no warnings summary.
+Expected: `77 passed` (about 30 s with `-n auto`), no warnings summary.
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `81 passed, 1 deselected`.
+Expected: `86 passed`. The `release`-only marker test is deselected; with `-n auto`, pytest-xdist leaves the deselected count out of the summary (`DFTHC_TEST_WORKERS=0` shows `86 passed, 1 deselected`).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
