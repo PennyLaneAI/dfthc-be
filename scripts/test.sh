@@ -26,8 +26,9 @@ if [[ -z "$(nice -n 10 true 2>&1)" ]]; then
 elif taskpolicy -c utility true 2>/dev/null; then
     lower_priority="taskpolicy -c utility"
 else
+    # Fail closed: the load limits (master plan section 12.9) forbid running at normal priority.
     echo "test.sh: cannot lower the priority (neither nice nor taskpolicy works)" >&2
-    lower_priority=""
+    exit 2
 fi
 
 cd "$worktree_root"

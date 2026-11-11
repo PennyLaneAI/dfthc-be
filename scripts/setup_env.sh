@@ -7,10 +7,15 @@
 #   * every compile later prints "ld: warning: object file ... was built for newer 'macOS' version".
 # Never use `uv pip`: it resolves pennylane-catalyst from PyPI and installs the stable release.
 set -euo pipefail
-cd "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
+
+# The environment always goes into the main checkout, also when this runs from a linked worktree:
+# the directory that holds the common .git is the main checkout (as in scripts/test.sh).
+common_git_dir="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --path-format=absolute --git-common-dir)"
+main_checkout="$(dirname "$common_git_dir")"
+cd "$main_checkout"
 
 if [[ -e .venv ]]; then
-    echo "setup_env.sh: .venv exists; remove it first (rm -rf .venv) to recreate it" >&2
+    echo "setup_env.sh: $main_checkout/.venv exists; remove it first (rm -rf .venv) to recreate it" >&2
     exit 2
 fi
 

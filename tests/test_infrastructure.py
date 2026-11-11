@@ -78,3 +78,56 @@ def test_release_marker_implies_slow():
     )
     assert "test_release_marked_probe" not in result.stdout
     assert "1 deselected" in result.stdout, result.stdout + result.stderr
+
+
+def _fake_executable(path, body):
+    path.write_text(f"#!/usr/bin/env bash\n{body}\n")
+    path.chmod(0o755)
+
+
+@pytest.mark.subprocess
+def test_setup_env_targets_main_checkout_from_a_worktree(tmp_path):
+    """From a linked worktree the script must look at the main checkout's .venv, not its own.
+
+    A fake python3.12 first on PATH records any call and fails, so no environment is ever built.
+    """
+    calls = tmp_path / "python3.12.calls"
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _fake_executable(bin_dir / "python3.12", f'echo "$@" >> "{calls}"\nexit 1')
+    common_git_dir = subprocess.run(
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        cwd=REPO, capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    main_venv = Path(common_git_dir).parent / ".venv"
+    assert main_venv.exists(), "the canonical environment must exist for this test"
+
+    result = subprocess.run(
+        [str(REPO / "scripts/setup_env.sh")], cwd=REPO, capture_output=True, text=True,
+        env={**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}, check=False,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert f"{main_venv} exists" in result.stderr, result.stderr
+    assert not calls.exists(), f"setup_env.sh tried to build an environment: {calls.read_text()}"
+
+
+@pytest.mark.subprocess
+def test_runner_fails_closed_without_lowered_priority(tmp_path):
+    """Without a working nice or taskpolicy, test.sh exits 2 before pytest starts (plan 12.9)."""
+    marker = tmp_path / "pytest.started"
+    bin_dir = tmp_path / "bin"
+    (tmp_path / "venv/bin").mkdir(parents=True)
+    bin_dir.mkdir()
+    _fake_executable(tmp_path / "venv/bin/python", f'touch "{marker}"')
+    _fake_executable(bin_dir / "nice", 'echo "nice: setpriority: Operation not permitted" >&2')
+    _fake_executable(bin_dir / "taskpolicy", "exit 1")
+
+    result = subprocess.run(
+        [str(REPO / "scripts/test.sh"), "-q"], cwd=REPO, capture_output=True, text=True,
+        env={**os.environ, "DFTHC_VENV": str(tmp_path / "venv"),
+             "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        check=False,
+    )
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "cannot lower the priority" in result.stderr, result.stderr
+    assert not marker.exists(), "pytest was started at normal priority"
