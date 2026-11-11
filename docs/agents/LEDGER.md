@@ -22,7 +22,7 @@ marked `merged` is never re-dispatched after a loss of context.
 
 | Id | Title | Tier | Status | Branch | Merge commit | Test evidence | Reviews (GPT-5.6 / Opus) | Open issues |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 0.1 | Scaffold, environment, lock, test runner | B | not started | `phase0/0.1` | | | / n/a | |
+| 0.1 | Scaffold, environment, lock, test runner | B | merged | `phase0/0.1` | `0c524a7` | `scripts/test.sh tests/test_infrastructure.py`: 14 passed; per-commit tier on the rebased branch: 13 passed | Approved after one fix round (`review-b06ecfc..b67312f`, `review-b67312f..d7d3691`) / n/a | two plan deviations, 2 more tests than planned (decision "Task 0.1 deviations"); 2 Minor findings |
 | 0.2 | `dfthc.compile`, resource assertions, canary runner | A | not started | `phase0/0.2` | | | / | |
 | 0.3 | Canary suite A (L-1 to L-14, L-19, L-23 to L-25) | B | not started | `phase0/0.3` | | | / n/a | needs the catalyst#3431 reproducer (scout) |
 | 0.4 | Canary suite B (L-15 to L-18, L-20 to L-22), spec section 14 | B | not started | `phase0/0.4` | | | / n/a | after 0.3 (shared `docs/limitations.md`); spec edit approved by the orchestrator at merge |
@@ -134,6 +134,8 @@ Dry-run values are indicative. The task runs are authoritative and replace them.
 | 2026-11-11 | Worktree lanes | tasks run in two fixed worktree lanes, `.worktrees/lane-a` and `.worktrees/lane-b` (git-ignored; detached at `main` when free), created once by the orchestrator with elevated permission, instead of a new worktree per task. The Cursor sandbox forbids writing git's control files (`.git/config`, hooks, a new worktree's `commondir` and `gitdir`), so `git worktree add` and `git clone` need a user approval each time, while branches, commits, the index, rebases and switches work. Tested in lane-a without elevation: `switch -c`, commit, `rebase --force-rebase main`, `switch --detach main`, branch deletion (with a harmless `.git/config` warning). Two lanes match the two concurrent implementers; re-creating a broken lane is an orchestrator action with a ledger entry | orchestrator |
 | 2026-11-11 | Reduced release tier | 8 h with 2 workers (was 12 h with every core): E-1 and E-3 under S1 on all 16 inputs, one seeded schedule on the 4 fixed inputs instead of two on all 16, `H2_631G_TEST` E-1 unchanged, FeMoco counts from the cache. The nightly tier gains E-1 under S1 on the 4 fixed inputs, so a release-only failure is unlikely to surface first in Phase 5. Phase 3 projects the release run; D-2's release schedules run once, in Task 5.2 | orchestrator |
 
+| 2026-11-11 | Task 0.1 deviations from the plan's code | Both from the GPT-5.6 review. (1) `scripts/setup_env.sh` finds the main checkout through `--git-common-dir`; the plan's `--show-toplevel` would create a lane-local `.venv` when run from a lane. (2) `scripts/test.sh` exits 2 before pytest when neither `nice` nor `taskpolicy` lowers the priority; the plan's code warned and continued. Two new subprocess tests come with them, so every later expected count that includes `tests/test_infrastructure.py` is 2 higher than the plan states (Task 0.2's per-commit tier: 105, not 103; the Phase 0 fast tier: 169, not 167) | orchestrator |
+
 ## Heavy runs
 
 Every heavy run (master plan section 12.9) gets one row, started by the orchestrator only. The
@@ -166,3 +168,5 @@ FeMoco-scale compiles against the budget of about six; more need the user's appr
 
 | Task | Finding (file:line) | Review | Status |
 | --- | --- | --- | --- |
+| 0.1 | `tests/test_infrastructure.py:30-35` (at `b67312f`): the worker test checks only the current invocation, not isolated unset, empty and `0` cases | `review-b06ecfc..b67312f` | open |
+| 0.1 | `tests/test_infrastructure.py:54-59` (at `b67312f`): the lock test checks three packages, not the complete lock against a normalized `pip freeze` | `review-b06ecfc..b67312f` | open |
