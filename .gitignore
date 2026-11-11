@@ -1,0 +1,23 @@
+# Python environments
+.venv/
+.venv-ref/
+
+# Scratch experiments (not part of the project)
+.scratch/
+
+# Python build and cache artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
