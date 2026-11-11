@@ -26,7 +26,7 @@ marked `merged` is never re-dispatched after a loss of context.
 | 0.2 | `dfthc.compile`, resource assertions, canary runner | A | not started | `phase0/0.2` | | | / | |
 | 0.3 | Canary suite A (L-1 to L-14, L-19, L-23 to L-25) | B | not started | `phase0/0.3` | | | / n/a | needs the catalyst#3431 reproducer (scout) |
 | 0.4 | Canary suite B (L-15 to L-18, L-20 to L-22), spec section 14 | B | not started | `phase0/0.4` | | | / n/a | after 0.3 (shared `docs/limitations.md`); spec edit approved by the orchestrator at merge |
-| 0.5 | Vendored dfthcbe data and license | B | not started | `phase0/0.5` | | | / n/a | |
+| 0.5 | Vendored dfthcbe data and license | B | merged | `phase0/0.5` | `47f9722` | `scripts/test.sh tests/data/test_vendored.py`: 23 passed; per-commit tier on the rebased branch: 36 passed | Approved (`review-2be906e..7ce2457`; data verified byte-identical to dfthcbe `9302550`) / n/a | |
 | 0.6 | Spike K-7: comparator and adder adjoints | B | not started | `phase0/0.6` | | | / n/a | |
 | 0.7 | Spike K-3: mode-agnostic measured erase; prototypes | A | not started | `phase0/0.7` | | | / | |
 | 0.8 | Spike K-10: measurement arrays as dynamic arguments | A | not started | `phase0/0.8` | | | / | |
