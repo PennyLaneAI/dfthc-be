@@ -73,7 +73,14 @@ GATE_SET = {
 
 **Tests (spec 12.6)**
 - Markers: `compiled`, `slow`, `release`, `canary`, `femoco`, `subprocess`. `release` implies `slow`.
-- Per commit: `scripts/test.sh -m "not slow and not release"` (15 min). Nightly: `scripts/test.sh -m "slow and not release"` (4 h). Release: `scripts/test.sh` (12 h).
+- `scripts/test.sh` runs 2 xdist workers at lowered priority (`DFTHC_TEST_WORKERS` overrides).
+- Per commit: `scripts/test.sh -m "not slow and not release"` (15 min). Nightly: `scripts/test.sh -m "slow and not release"` (4 h), only at phase gates, started by the orchestrator. Release: `scripts/test.sh` (8 h), once, at the end of Phase 5, after the user's go-ahead.
+
+**Load limits (master plan section 12.9; spec 15)**
+- The development laptop has 10 cores and 16 GB, and the user works on it. No process tree may exceed 8 GB of memory.
+- A heavy process is a run whose process tree exceeds 4 GB, keeps more than 2 cores busy or lasts longer than 30 minutes, or any FeMoco-shaped compile. Only the orchestrator starts heavy processes, one at a time, under the watchdog (`dfthc.testing.watchdog`), and logs each in the ledger.
+- During TDD, run only the targeted tests; run the per-commit tier once at commit time. Never start a heavy process yourself.
+- The per-commit and nightly tiers contain no FeMoco-shaped compile. FeMoco-54 values are asserted on the closed forms (`dfthc.costs`); the FeMoco-54 walk and controlled walk are compiled once, in Task 4.5.
 
 **Git (spec 15)**
 - Local branches and worktrees only. Merges go into local `main`. Never push, never modify remotes. The repo-local git identity (`dwierichs` / `david.wierichs@xanadu.ai`) is shared by all worktrees.
@@ -88,7 +95,7 @@ GATE_SET = {
 | `pyproject.toml` | 0.1 | package metadata, pytest configuration and markers, ruff configuration |
 | `requirements-nightly.lock` | 0.1 | `pip freeze` of the canonical environment |
 | `scripts/setup_env.sh` | 0.1 | the environment recipe of spec 7.1 |
-| `scripts/test.sh` | 0.1 | exports the warning variable, finds the shared `.venv`, runs pytest |
+| `scripts/test.sh` | 0.1 | exports the warning variable, finds the shared `.venv`, runs pytest with 2 workers at lowered priority |
 | `src/dfthc/__init__.py` | 0.1 | package root and version |
 | `tests/conftest.py` | 0.1, replaced in 0.2 | warning filters, `release` implies `slow`, the rule-warning policy |
 | `tests/test_infrastructure.py` | 0.1 | scaffold, environment and runner checks |
@@ -97,9 +104,11 @@ GATE_SET = {
 | `src/dfthc/testing/__init__.py` | 0.2 | test-support package |
 | `src/dfthc/testing/resources.py` | 0.2 | warning noise and policy, `assert_resources`, verbose rule listings |
 | `src/dfthc/testing/canary.py` | 0.2 | subprocess runner for canaries |
+| `src/dfthc/testing/watchdog.py` | 0.2 | memory and time watchdog for heavy runs (master plan section 12.9) |
 | `tests/test_compile.py` | 0.2 | compile helpers, pins, the T6 pattern, parity linearity |
 | `tests/test_primitive_costs.py` | 0.2 | the PennyLane primitive costs of spec 9.24 |
 | `tests/test_canary_helper.py` | 0.2 | the canary runner |
+| `tests/test_watchdog.py` | 0.2 | the watchdog |
 | `data/dfthc/` | 0.5 | vendored dfthcbe data, `LICENSE`, `NOTICE` |
 | `tests/data/test_vendored.py` | 0.5 | file set, SHA-256 digests, license and notice |
 
@@ -121,19 +130,21 @@ VENV="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.ven
 **Interfaces:**
 - Consumes: the existing `.gitignore` (already ignores `.venv/`, `.venv-ref/`, `.scratch/` and caches); the canonical `.venv` in the main checkout.
 - Produces:
-  - `scripts/test.sh [pytest args...]`: exports `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0`, uses `$DFTHC_VENV` or `<main checkout>/.venv`, runs `python -m pytest -n ${DFTHC_TEST_WORKERS:-auto} "$@"` from the worktree root.
+  - `scripts/test.sh [pytest args...]`: exports `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0`, uses `$DFTHC_VENV` or `<main checkout>/.venv`, runs `python -m pytest -n ${DFTHC_TEST_WORKERS:-2} "$@"` from the worktree root at lowered priority: under `nice -n 10`, or, where setpriority() is forbidden (the agent sandbox, in which `nice` only warns), under `taskpolicy -c utility` (master plan section 12.9).
   - pytest markers `compiled`, `slow`, `release`, `canary`, `femoco`, `subprocess`, with `--strict-markers`; the `release` marker adds `slow` before `-m` deselection.
   - `import dfthc` works in every worktree via `pythonpath = ["src"]`; `dfthc.__version__ == "0.1.0"`.
 
 **Acceptance tests** (`tests/test_infrastructure.py`):
 - `test_package_imports`: `dfthc.__version__ == "0.1.0"`.
 - `test_warning_variable_exported_before_python_started`: the variable is `"0"` inside the test process.
+- `test_runner_defaults_to_two_workers`: xdist runs `DFTHC_TEST_WORKERS` workers, 2 if it is unset or empty.
+- `test_runner_lowers_the_priority`: the test process has niceness 10 or more, or the utility QoS class.
 - `test_rule_lowering_warnings_are_recorded`: a `RuleLoweringWarning` is recorded under the session's filters.
 - `test_lock_file_pins_installed_versions[pennylane|pennylane_catalyst|pennylane_lightning]`: the lock pins the installed versions.
 - `test_scripts_are_executable[...]`: both scripts are executable.
 - `test_release_marker_implies_slow`: `-m "not slow"` deselects a `release`-only test.
 
-**Definition of done:** 10 passed with `scripts/test.sh tests/test_infrastructure.py`; 9 passed with the per-commit filter (one test deselected); `ruff check .` clean; `docs/environment.md` present; one commit on `phase0/0.1`.
+**Definition of done:** 12 passed with `scripts/test.sh tests/test_infrastructure.py`; 11 passed with the per-commit filter (one test deselected); `ruff check .` clean; `docs/environment.md` present; one commit on `phase0/0.1`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -142,6 +153,7 @@ Create `tests/test_infrastructure.py`:
 ```python
 """Repository scaffold, environment and test-runner checks (plan Task 0.1)."""
 
+import ctypes
 import os
 import re
 import subprocess
@@ -165,6 +177,24 @@ def test_package_imports():
 def test_warning_variable_exported_before_python_started():
     assert os.environ.get("CATALYST_SILENCE_RULE_LOWERING_WARNINGS") == "0", (
         "run the tests through scripts/test.sh, which exports the variable before Python starts"
+    )
+
+
+def test_runner_defaults_to_two_workers():
+    requested = os.environ.get("DFTHC_TEST_WORKERS") or "2"
+    if requested.isdigit():
+        assert os.environ.get("PYTEST_XDIST_WORKER_COUNT", "0") == requested, (
+            "scripts/test.sh runs 2 xdist workers unless DFTHC_TEST_WORKERS says otherwise"
+        )
+
+
+def test_runner_lowers_the_priority():
+    qos_utility = 0x11
+    niceness = os.getpriority(os.PRIO_PROCESS, 0)
+    qos_class = ctypes.CDLL("/usr/lib/libSystem.dylib").qos_class_self()
+    assert niceness >= 10 or 0 < qos_class <= qos_utility, (
+        f"niceness {niceness}, QoS class {qos_class:#x}: run the tests through scripts/test.sh, "
+        "which lowers the priority with nice or, in the agent sandbox, with taskpolicy"
     )
 
 
@@ -206,7 +236,7 @@ def test_release_marker_implies_slow():
 - [ ] **Step 2: Run it to confirm it fails**
 
 Run: `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 "$VENV/bin/python" -m pytest tests/test_infrastructure.py -q -p no:cacheprovider`
-Expected: FAIL. `test_package_imports` fails with `ModuleNotFoundError: No module named 'dfthc'`; the lock-file tests fail with `FileNotFoundError`; the script tests and `test_release_marker_implies_slow` fail with `AssertionError`.
+Expected: FAIL. `test_package_imports` fails with `ModuleNotFoundError: No module named 'dfthc'`; the lock-file tests fail with `FileNotFoundError`; the script tests, the two runner tests (plain pytest runs no workers at normal priority) and `test_release_marker_implies_slow` fail with `AssertionError`.
 
 - [ ] **Step 3: Write the package, configuration and scripts**
 
@@ -237,7 +267,7 @@ markers = [
     "slow: not in the per-commit tier; runs nightly and in the release tier",
     "release: release tier only; the conftest hook also marks it slow",
     "canary: pins today's behaviour of a known limitation (spec section 14)",
-    "femoco: builds FeMoco-54-sized programs",
+    "femoco: FeMoco-54 programs or their cached counts; release tier only",
     "subprocess: runs its check in a separate Python process",
 ]
 
@@ -297,6 +327,11 @@ Create `scripts/test.sh`:
 # Catalyst reads CATALYST_SILENCE_RULE_LOWERING_WARNINGS once, when it is first imported, so the
 # variable must be exported before Python starts. Works from the main checkout and from every
 # git worktree: the shared .venv lives next to the main checkout's .git directory.
+#
+# Load limits (master plan section 12.9): 2 xdist workers unless DFTHC_TEST_WORKERS says
+# otherwise (0 runs serially), at lowered priority. nice needs setpriority(), which the agent
+# sandbox forbids; there nice only warns and runs the command unchanged, so the run gets the
+# utility QoS clamp of taskpolicy instead, which children inherit.
 set -euo pipefail
 export CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0
 
@@ -309,8 +344,18 @@ if [[ ! -x "$venv/bin/python" ]]; then
     exit 2
 fi
 
+if [[ -z "$(nice -n 10 true 2>&1)" ]]; then
+    lower_priority="nice -n 10"
+elif taskpolicy -c utility true 2>/dev/null; then
+    lower_priority="taskpolicy -c utility"
+else
+    echo "test.sh: cannot lower the priority (neither nice nor taskpolicy works)" >&2
+    lower_priority=""
+fi
+
 cd "$worktree_root"
-exec "$venv/bin/python" -m pytest -n "${DFTHC_TEST_WORKERS:-auto}" "$@"
+# $lower_priority is unquoted on purpose: it is a command prefix of several words.
+exec $lower_priority "$venv/bin/python" -m pytest -n "${DFTHC_TEST_WORKERS:-2}" "$@"
 ```
 
 Create `scripts/setup_env.sh`:
@@ -419,10 +464,26 @@ pip freeze > requirements-nightly.lock
   rules file could not be parsed`; the real cause, `Decomposition rule not found for operator
   '<op>'`, is in the same error message.
 
+## Load limits
+
+The development laptop has 10 cores and 16 GB, and the user works on it while agents run
+(master plan section 12.9).
+
+- `scripts/test.sh` runs 2 xdist workers (`DFTHC_TEST_WORKERS` overrides; `0` runs serially) at
+  lowered priority: `nice -n 10`, or, in the agent sandbox, where setpriority() is forbidden, the
+  utility QoS clamp of `taskpolicy`.
+- No process tree may exceed 8 GB of memory. A heavy run (above 4 GB, more than 2 busy cores,
+  longer than 30 minutes, or any FeMoco-shaped compile) is started only by the orchestrator, alone,
+  under `PYTHONPATH=src .venv/bin/python -m dfthc.testing.watchdog -- <command>`, and logged in the
+  ledger with its peak memory and wall time.
+
 ## Bumping the nightlies
 
+Bumps are orchestrator work, done at a phase gate.
+
 1. Recreate `.venv` with the recipe (`rm -rf .venv && scripts/setup_env.sh`).
-2. Run the full suite, including the canaries: `scripts/test.sh`.
+2. Run the per-commit tier, which holds most canaries: `scripts/test.sh -m "not slow and not release"`.
+   The gate's nightly-tier run covers the slow canaries; the release tier is not run for a bump.
 3. Update spec section 14 and `docs/limitations.md` for every canary whose state changed.
 4. Refresh the lock file, this snapshot and `tests/canary/compile_baseline.json`
    (`DFTHC_UPDATE_COMPILE_BASELINE=1 DFTHC_TEST_WORKERS=0 scripts/test.sh tests/canary/test_l21_compile_time.py`).
@@ -432,10 +493,10 @@ pip freeze > requirements-nightly.lock
 - [ ] **Step 6: Run the tests and the linter**
 
 Run: `scripts/test.sh tests/test_infrastructure.py -q`
-Expected: `10 passed`.
+Expected: `12 passed`.
 
 Run: `scripts/test.sh -m "not slow and not release" tests/test_infrastructure.py -q`
-Expected: `9 passed`. The `release`-only marker test is deselected; with `-n auto`, pytest-xdist leaves the deselected count out of the summary (`DFTHC_TEST_WORKERS=0` shows `9 passed, 1 deselected`).
+Expected: `11 passed`. The `release`-only marker test is deselected; with xdist workers, pytest-xdist leaves the deselected count out of the summary (`DFTHC_TEST_WORKERS=0` shows `11 passed, 1 deselected`).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -452,10 +513,10 @@ git commit -m "Add package scaffold, environment lock and test runner"
 
 ### Task 0.2: `dfthc.compile`, resource assertions and the canary runner
 
-**Task id:** `0.2` · **Branch:** `phase0/0.2` · **Tier:** A (`claude-opus-5-5-high-fast`) · **Reviewers:** GPT-5.6 and Opus · **Depends on:** 0.1
+**Task id:** `0.2` · **Branch:** `phase0/0.2` · **Tier:** A (`inherit`) · **Reviewers:** GPT-5.6 and Opus · **Depends on:** 0.1
 
 **Files:**
-- Create: `src/dfthc/compile.py`, `src/dfthc/testing/__init__.py`, `src/dfthc/testing/resources.py`, `src/dfthc/testing/canary.py`, `tests/test_compile.py`, `tests/test_primitive_costs.py`, `tests/test_canary_helper.py`
+- Create: `src/dfthc/compile.py`, `src/dfthc/testing/__init__.py`, `src/dfthc/testing/resources.py`, `src/dfthc/testing/canary.py`, `src/dfthc/testing/watchdog.py`, `tests/test_compile.py`, `tests/test_primitive_costs.py`, `tests/test_canary_helper.py`, `tests/test_watchdog.py`
 - Modify: `tests/conftest.py` (replace with the version below)
 
 **Interfaces:**
@@ -470,13 +531,15 @@ git commit -m "Add package scaffold, environment lock and test runner"
   - `dfthc.compile.mcm_parities(outcomes, masks: Sequence[int]) -> list`: one entry per mask, `False` for a zero mask, else a predicate for `qp.cond`; also `pack_masks(masks, num_outcomes) -> np.ndarray` and `packed_parities(outcome_bits, packed_masks)`.
   - `dfthc.testing.resources`: `NOISE_PATTERNS`, `UNRESOLVED_BRANCH_MESSAGE`, `dfthc_operator_names` (imported from `dfthc.compile`), `classify_rule_warning(message, names=None) -> "dfthc" | "noise" | "other"`, `install_warning_filters()`, `verbose_program(qfunc, num_wires)`, `chosen_rules(listing) -> list[str]`, `assert_resources(resources, *, toffoli, measurements, measured_and_uncomputes=None)`.
   - `dfthc.testing.canary`: `PRELUDE`, `run_snippet(body, *, export_warning_variable=True, timeout=900.0) -> subprocess.CompletedProcess[str]`, `outcome(result, label) -> str`.
+  - `dfthc.testing.watchdog` (master plan section 12.9): `MEMORY_CAP_MB = 8192`, `HEAVY_MEMORY_MB = 4096`, `HEAVY_SECONDS = 1800`, `KILLED_EXIT_STATUS = 3`; `memory_mb(pid) -> float` (physical footprint through macOS `libproc`), `tree_pids(root) -> list[int]`, `tree_memory_mb(root) -> float`; `lowered_priority_prefix() -> list[str]`; `WatchedRun(command, returncode, seconds, peak_mb, killed, cap_mb, timeout_s, priority, stdout, stderr)` with `.heavy` and `.summary()`; `run_watched(command, *, cap_mb=MEMORY_CAP_MB, timeout_s, capture=True, poll_s=0.1, cwd=None, env=None) -> WatchedRun`; and the command line `python -m dfthc.testing.watchdog [--cap-mb N] [--timeout-min M] -- CMD ...`, which prints one `WATCHDOG {json}` line and exits with the command's status, or 3 after a kill.
 
 **Acceptance tests:**
 - `tests/test_compile.py` (21 tests): the gate set equals spec 7.3; `register_rule` pins once and rejects duplicates; `qp.list_decomps(key) == [rule]` for every pinned key (PennyLane registers none of our names); **T6 pattern**: a pinned measured `Adjoint(...)` rule is chosen, with counts exactly `{"CNOT": 1, "Hadamard": 2, "MidCircuitMeasure": 1, "PauliX": 1, "PauliZ": 1}`; the verbose rule listing names both pinned rules (Phase 0 check of spec 12.1 T6: capturable only with `qp.qjit(verbose=True)`); `SemiAdder` on 3 bits gives T = 2 and A = 2; symbolic counts and operations outside the gate set are rejected; at `level="device"` a dfthc operator is rejected bare and under `C(...)` and `Adjoint(...)` (`surviving_dfthc_operators`, unit-tested on all spellings and on the device branch with `qp.analyze` stubbed), while a decomposed program passes (the old base-name check missed the wrapped spellings in the dry-run); `resource_key` pauses capture; `pack_masks` layout; out-of-range masks are rejected; `mcm_parities` equals the GF(2) reference on all 2^5 outcome vectors in tape mode, is linear on 100 random pairs of 70-bit vectors in the capture core, and drives conditional gates correctly in a compiled `lightning.qubit` circuit; `classify_rule_warning` separates dfthc, noise and other messages; `assert_resources` reports mismatches.
 - `tests/test_primitive_costs.py` (53 tests), pinning spec 9.24's primitive table: `SemiAdder` and its adjoint T = A = n − 1 with no `Toffoli` (n = 1, 2, 3, 4, 6, 8, 15); `LeftQuantumComparator` T = n, A = 0 and its adjoint T = 0, A = n (n = 2, 3, 4, 6, 8; `"<="` and `"<"`); `LeftClassicalComparator` T = n − 1 and its adjoint A = n − 1 (n, value = (3, 1), (3, 6), (5, 7), (5, 27), (7, 81), (7, 3)); `MultiControlledX` with k controls and k − 2 zeroed work wires T = k − 1 with exactly one `Toffoli` and A = k − 2 (k = 2, 3, 4, 5, 8, 12); `CSWAP` T = 1.
 - `tests/test_canary_helper.py` (3 tests): report lines for success and failure, the warning variable exported or unset, a clear error for a missing report line.
+- `tests/test_watchdog.py` (6 tests, marked `subprocess`; at most 400 MB each): the tree memory includes a grandchild's 300 MB; a tree that grows past a 200 MB cap is killed with SIGKILL, grandchild included, and reported as `"memory"`; a sleeping command is killed at its time limit and reported as `"time"`; a 50 MB command within its limits passes with its output; the command runs at niceness 10 or more (`nice`) or in the utility QoS class (`taskpolicy`); the command line exits with status 3 and a `WATCHDOG` line reporting the kill. Dry-run evidence: a watchdog that samples only the root process lets the 400 MB tree run past the 200 MB cap until the time limit, so the kill test fails; a watchdog that reads the resident size instead of the footprint let the same tree stay under 200 MB while two workers allocated at once.
 
-**Definition of done:** `scripts/test.sh tests/test_compile.py tests/test_primitive_costs.py tests/test_canary_helper.py -q` gives `77 passed`; the per-commit tier gives `86 passed` (one test deselected); `ruff check .` clean; output free of warnings.
+**Definition of done:** `scripts/test.sh tests/test_compile.py tests/test_primitive_costs.py tests/test_canary_helper.py tests/test_watchdog.py -q` gives `83 passed`; the per-commit tier gives `94 passed` (one test deselected); `ruff check .` clean; output free of warnings.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -887,9 +950,124 @@ def test_outcome_explains_a_missing_report_line():
         outcome(result, "MISSING")
 ```
 
+Create `tests/test_watchdog.py`:
+
+```python
+"""Tests for dfthc.testing.watchdog, the memory and time guard of heavy runs (plan Task 0.2)."""
+
+import json
+import os
+import signal
+import subprocess
+import sys
+import textwrap
+import time
+from pathlib import Path
+
+import pytest
+
+from dfthc.testing.watchdog import KILLED_EXIT_STATUS, memory_mb, run_watched, tree_memory_mb
+
+pytestmark = pytest.mark.subprocess
+
+SRC = Path(__file__).resolve().parents[1] / "src"
+
+# A child that starts a grandchild; the grandchild prints its pid, then allocates random bytes in
+# 50 MB steps and sleeps.
+TREE = textwrap.dedent(
+    """
+    import os, subprocess, sys, time
+    grandchild = '''
+    import os, sys, time
+    print(os.getpid(), flush=True)
+    chunks = []
+    for _ in range({steps}):
+        chunks.append(os.urandom(50 * 2**20))
+        time.sleep(0.05)
+    print("ready", flush=True)
+    time.sleep({sleep})
+    '''
+    subprocess.run([sys.executable, "-c", grandchild], check=False)
+    """
+)
+
+
+def tree_command(steps, sleep=60):
+    return [sys.executable, "-c", TREE.format(steps=steps, sleep=sleep)]
+
+
+def test_tree_memory_includes_grandchildren():
+    proc = subprocess.Popen(tree_command(steps=6), stdout=subprocess.PIPE, text=True,
+                            start_new_session=True)
+    try:
+        int(proc.stdout.readline())
+        assert proc.stdout.readline().strip() == "ready"
+        assert memory_mb(proc.pid) < 100
+        assert tree_memory_mb(proc.pid) > 280
+    finally:
+        os.killpg(proc.pid, signal.SIGKILL)
+        proc.wait()
+
+
+def test_kills_the_whole_tree_at_the_memory_cap():
+    run = run_watched(tree_command(steps=8), cap_mb=200, timeout_s=60)
+    assert run.killed == "memory"
+    assert run.peak_mb > 200
+    assert run.seconds < 30
+    assert run.returncode == -9
+    grandchild = int(run.stdout.split()[0])
+    for _ in range(20):
+        try:
+            os.kill(grandchild, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.1)
+    else:
+        pytest.fail(f"grandchild {grandchild} survived the kill")
+
+
+def test_kills_at_the_time_limit():
+    run = run_watched([sys.executable, "-c", "import time; time.sleep(30)"], cap_mb=200,
+                      timeout_s=1)
+    assert run.killed == "time"
+    assert run.seconds < 10
+
+
+def test_passes_a_command_within_its_limits():
+    run = run_watched(tree_command(steps=1, sleep=0.5), cap_mb=400, timeout_s=60)
+    assert (run.killed, run.returncode) == (None, 0)
+    assert "ready" in run.stdout
+    assert 40 < run.peak_mb < 400
+    assert not run.heavy
+
+
+def test_command_runs_at_lowered_priority():
+    code = ("import ctypes, os; print(os.getpriority(os.PRIO_PROCESS, 0), "
+            "ctypes.CDLL('/usr/lib/libSystem.dylib').qos_class_self())")
+    run = run_watched([sys.executable, "-c", code], timeout_s=30)
+    niceness, qos_class = map(int, run.stdout.split())
+    qos_utility = 0x11
+    assert (run.priority == "nice -n 10" and niceness >= 10) or (
+        run.priority == "taskpolicy -c utility" and qos_class == qos_utility
+    ), (run.priority, niceness, qos_class)
+
+
+def test_command_line_reports_a_kill():
+    result = subprocess.run(
+        [sys.executable, "-m", "dfthc.testing.watchdog", "--cap-mb", "200", "--timeout-min", "1",
+         "--", *tree_command(steps=8)],
+        capture_output=True, text=True, env=dict(os.environ, PYTHONPATH=str(SRC)), check=False,
+    )
+    assert result.returncode == KILLED_EXIT_STATUS, result.stderr
+    summary = json.loads(result.stdout.splitlines()[-1].removeprefix("WATCHDOG "))
+    assert summary["killed"] == "memory"
+    assert summary["peak_mb"] > 200
+    assert summary["cap_mb"] == 200
+```
+
 - [ ] **Step 2: Run them to confirm they fail**
 
-Run: `scripts/test.sh tests/test_compile.py tests/test_primitive_costs.py tests/test_canary_helper.py -q`
+Run: `scripts/test.sh tests/test_compile.py tests/test_primitive_costs.py tests/test_canary_helper.py tests/test_watchdog.py -q`
 Expected: FAIL at collection with `ModuleNotFoundError: No module named 'dfthc.compile'` (and `dfthc.testing`).
 
 - [ ] **Step 3: Write `dfthc.compile`**
@@ -1289,6 +1467,218 @@ def outcome(result: subprocess.CompletedProcess[str], label: str) -> str:
     )
 ```
 
+Create `src/dfthc/testing/watchdog.py`:
+
+```python
+"""Run a command under a memory and wall-time watchdog (master plan section 12.9).
+
+The development laptop has 10 cores and 16 GB, and the user works on it. No process tree may
+exceed :data:`MEMORY_CAP_MB`. :func:`run_watched` starts a command at lowered priority, samples
+the memory of its whole process tree, kills the tree when the sum passes the cap or the time
+limit passes, and returns the sampled peak, which is the gate metric.
+
+Memory is the macOS physical footprint of each process, read through ``libproc``: the agent
+sandbox forbids ``ps``, and ``psutil`` is not installed. The footprint equals the resident size
+while memory is free; under memory pressure it keeps counting compressed and swapped-out pages,
+which the resident size drops.
+
+Command line, for heavy runs whose peak and wall time go into the ledger::
+
+    PYTHONPATH=src python -m dfthc.testing.watchdog [--cap-mb 8192] [--timeout-min 60] -- CMD ...
+
+It passes the command's output through, then prints one line ``WATCHDOG {json}``, and exits with
+the command's status, or with 3 if the watchdog killed it.
+"""
+
+from __future__ import annotations
+
+import argparse
+import ctypes
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+from dataclasses import asdict, dataclass, field
+
+MEMORY_CAP_MB = 8 * 1024
+"""No process tree may exceed this resident memory on the development laptop."""
+
+HEAVY_MEMORY_MB = 4 * 1024
+"""A process tree whose peak exceeds this is a heavy process."""
+
+HEAVY_SECONDS = 30 * 60
+"""A run longer than this is a heavy process."""
+
+KILLED_EXIT_STATUS = 3
+
+_RUSAGE_INFO_V2 = 2
+_MAX_CHILDREN = 4096
+
+
+class _RusageInfoV2(ctypes.Structure):
+    """``struct rusage_info_v2`` of ``<sys/resource.h>``."""
+
+    _fields_ = [("uuid", ctypes.c_uint8 * 16)] + [(name, ctypes.c_uint64) for name in (
+        "user_time", "system_time", "pkg_idle_wkups", "interrupt_wkups", "pageins", "wired_size",
+        "resident_size", "phys_footprint", "proc_start_abstime", "proc_exit_abstime",
+        "child_user_time", "child_system_time", "child_pkg_idle_wkups", "child_interrupt_wkups",
+        "child_pageins", "child_elapsed_abstime", "diskio_bytesread", "diskio_byteswritten",
+    )]
+
+
+_libproc = None
+
+
+def _library():
+    global _libproc
+    if _libproc is None:
+        if sys.platform != "darwin":
+            raise RuntimeError("the watchdog reads process memory through macOS libproc")
+        _libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
+    return _libproc
+
+
+def memory_mb(pid: int) -> float:
+    """Physical footprint of one process in MB, or 0.0 if it no longer exists."""
+    info = _RusageInfoV2()
+    status = _library().proc_pid_rusage(pid, _RUSAGE_INFO_V2, ctypes.byref(info))
+    return info.phys_footprint / 2**20 if status == 0 else 0.0
+
+
+def child_pids(pid: int) -> list[int]:
+    buffer = (ctypes.c_int * _MAX_CHILDREN)()
+    count = _library().proc_listchildpids(pid, buffer, ctypes.sizeof(buffer))
+    return [child for child in buffer[: max(count, 0)] if child > 0]
+
+
+def tree_pids(root: int) -> list[int]:
+    """``root`` and all its descendants that exist now."""
+    pids, stack = [], [root]
+    while stack:
+        pid = stack.pop()
+        pids.append(pid)
+        stack.extend(child_pids(pid))
+    return pids
+
+
+def tree_memory_mb(root: int) -> float:
+    """Sum of the physical footprints of ``root`` and its descendants, in MB."""
+    return sum(memory_mb(pid) for pid in tree_pids(root))
+
+
+def lowered_priority_prefix() -> list[str]:
+    """``nice -n 10`` where setpriority() is allowed, else the utility QoS clamp of taskpolicy.
+
+    The agent sandbox forbids setpriority(); ``nice`` then only warns and runs the command
+    unchanged. ``taskpolicy -c utility`` works there, and child processes inherit its clamp.
+    """
+    for prefix in (["nice", "-n", "10"], ["taskpolicy", "-c", "utility"]):
+        try:
+            probe = subprocess.run([*prefix, "true"], capture_output=True, check=False)
+        except OSError:
+            continue
+        if probe.returncode == 0 and not probe.stderr:
+            return prefix
+    return []
+
+
+@dataclass
+class WatchedRun:
+    """Outcome of :func:`run_watched`. ``killed`` is ``"memory"``, ``"time"`` or ``None``."""
+
+    command: list[str]
+    returncode: int | None
+    seconds: float
+    peak_mb: float
+    killed: str | None
+    cap_mb: float
+    timeout_s: float
+    priority: str
+    stdout: str = field(default="", repr=False)
+    stderr: str = field(default="", repr=False)
+
+    @property
+    def heavy(self) -> bool:
+        return self.peak_mb > HEAVY_MEMORY_MB or self.seconds > HEAVY_SECONDS
+
+    def summary(self) -> dict:
+        record = asdict(self)
+        del record["stdout"], record["stderr"]
+        record.update(seconds=round(self.seconds, 1), peak_mb=round(self.peak_mb, 1),
+                      heavy=self.heavy)
+        return record
+
+
+def _kill_tree(root: int) -> None:
+    pids = tree_pids(root)
+    try:
+        os.killpg(root, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+
+def run_watched(command: list[str], *, cap_mb: float = MEMORY_CAP_MB, timeout_s: float,
+                capture: bool = True, poll_s: float = 0.1, cwd=None, env=None) -> WatchedRun:
+    """Run ``command`` at lowered priority in its own process group, under the watchdog.
+
+    The process tree's memory is sampled every ``poll_s`` seconds. When the sum passes
+    ``cap_mb`` or the run passes ``timeout_s``, the whole tree is killed with SIGKILL and
+    ``killed`` says why. With ``capture=False`` the output goes to this process's streams.
+    """
+    prefix = lowered_priority_prefix()
+    pipe = subprocess.PIPE if capture else None
+    proc = subprocess.Popen([*prefix, *command], stdout=pipe, stderr=pipe, text=True, cwd=cwd,
+                            env=env, start_new_session=True)
+    start, peak, killed = time.monotonic(), 0.0, None
+    while True:
+        try:
+            out, err = proc.communicate(timeout=poll_s)
+            break
+        except subprocess.TimeoutExpired:
+            peak = max(peak, tree_memory_mb(proc.pid))
+            if peak > cap_mb:
+                killed = "memory"
+            elif time.monotonic() - start > timeout_s:
+                killed = "time"
+            if killed:
+                _kill_tree(proc.pid)
+                out, err = proc.communicate()
+                break
+    return WatchedRun(command=list(command), returncode=proc.returncode,
+                      seconds=time.monotonic() - start, peak_mb=peak, killed=killed,
+                      cap_mb=cap_mb, timeout_s=timeout_s,
+                      priority=" ".join(prefix) or "unchanged", stdout=out or "",
+                      stderr=err or "")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--cap-mb", type=float, default=MEMORY_CAP_MB)
+    parser.add_argument("--timeout-min", type=float, default=60.0)
+    parser.add_argument("command", nargs=argparse.REMAINDER)
+    args = parser.parse_args(argv)
+    command = args.command[1:] if args.command[:1] == ["--"] else args.command
+    if not command:
+        parser.error("no command given")
+    run = run_watched(command, cap_mb=args.cap_mb, timeout_s=args.timeout_min * 60,
+                      capture=False)
+    print("WATCHDOG", json.dumps(run.summary()), flush=True)
+    if run.killed:
+        return KILLED_EXIT_STATUS
+    return run.returncode if run.returncode >= 0 else 128 - run.returncode
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
 - [ ] **Step 5: Replace `tests/conftest.py` with the full version**
 
 ```python
@@ -1337,11 +1727,11 @@ def _rule_lowering_warning_policy():
 
 - [ ] **Step 6: Run the tests**
 
-Run: `scripts/test.sh tests/test_compile.py tests/test_primitive_costs.py tests/test_canary_helper.py -q`
-Expected: `77 passed` (about 30 s with `-n auto`), no warnings summary.
+Run: `scripts/test.sh tests/test_compile.py tests/test_primitive_costs.py tests/test_canary_helper.py tests/test_watchdog.py -q`
+Expected: `83 passed` (about 60 s with the default 2 workers), no warnings summary.
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `86 passed`. The `release`-only marker test is deselected; with `-n auto`, pytest-xdist leaves the deselected count out of the summary (`DFTHC_TEST_WORKERS=0` shows `86 passed, 1 deselected`).
+Expected: `94 passed`. The `release`-only marker test is deselected; with xdist workers, pytest-xdist leaves the deselected count out of the summary (`DFTHC_TEST_WORKERS=0` shows `94 passed, 1 deselected`).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -1354,7 +1744,7 @@ Append to this task's report: "Verbose rule listing (spec 12.1 T6) is capturable
 
 ```bash
 git add src/dfthc/compile.py src/dfthc/testing tests/conftest.py tests/test_compile.py \
-        tests/test_primitive_costs.py tests/test_canary_helper.py
+        tests/test_primitive_costs.py tests/test_canary_helper.py tests/test_watchdog.py
 git commit -m "Add compile helpers, resource assertions and canary runner"
 ```
 

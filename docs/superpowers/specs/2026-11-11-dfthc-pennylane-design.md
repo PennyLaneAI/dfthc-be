@@ -95,8 +95,8 @@ Not in scope for this phase:
 | ID | Criterion |
 | --- | --- |
 | D-1 | Every operator in §9 exists with documentation per §9.0 and passes its rule-validity, semantics, exact-resource, gate-set-closure and rule-selection tests. |
-| D-2 | The outcome certificates of §12.5 pass for every erase block. End-to-end checks E-1 to E-4 (§12.4) pass on `h2_sto3g_R2_B2_C1` with tolerance $10^{-10}$, under the release-tier schedules (§12.6). |
-| D-3 | The complete FeMoco-54-shaped walk and controlled walk each compile as a single program, and `qp.analyze` gives non-symbolic Toffoli and measurement counts that equal the closed forms of §9.24. Those counts appear in `docs/resources.md` next to the paper's and dfthcbe's numbers, with every delta explained. No substitute (for example a sum of separately compiled blocks) satisfies this criterion. |
+| D-2 | The outcome certificates of §12.5 pass for every erase block. End-to-end checks E-1 to E-4 (§12.4) pass on `h2_sto3g_R2_B2_C1` with tolerance $10^{-10}$, under the release-tier schedules (§12.6), which run once, in Phase 5. |
+| D-3 | The complete FeMoco-54-shaped walk and controlled walk each compile as a single program, and `qp.analyze` gives non-symbolic Toffoli and measurement counts that equal the closed forms of §9.24. Those counts appear in `docs/resources.md` next to the paper's and dfthcbe's numbers, with every delta explained. No substitute (for example a sum of separately compiled blocks) satisfies this criterion. Each program is compiled once, where the load policy allows (§15), and its counts are cached in `docs/resources.json` with a hash of the code; the cache satisfies this criterion while the hash is unchanged. |
 | D-4 | The QPE wrapper recovers the exact phases of the toy walk (§11.4). It compiles and is resource-counted for a DFTHC instance. |
 | D-5 | The canary suite (§14) runs and records the current state of every known limitation. |
 | D-6 | The documentation set of §5.2 exists and is consistent with the code. |
@@ -365,11 +365,14 @@ dfthc-be/
       toy_walk.py             ToyWalk and ToyControlledWalkPower for QPE tests (§11.4)
       fixtures.py             small parameter sets, loaders for reference fixtures
       resources.py            assertions on compiled resources, warning filters
+      watchdog.py             memory and time watchdog for heavy runs (§15)
+      provenance.py           code hash and environment record of cached compiles (§13.3)
   tests/
     conftest.py  data/  ops/  integration/  sim/  canary/  report/  fixtures/
   docs/
     architecture.md  conventions.md  environment.md  limitations.md  verification.md
-    resources.md (generated)  agents/HANDOFF.md  agents/LEDGER.md
+    resources.md, resources.json (generated; the json also caches large compiles, §13.3)
+    agents/HANDOFF.md  agents/LEDGER.md
     superpowers/specs/ (this file)  superpowers/plans/ (the implementation plan)
 ```
 
@@ -399,11 +402,11 @@ The implementation plan expands each phase into tasks.
 
 | Phase | Content | Exit criterion |
 | --- | --- | --- |
-| 0. Foundation and feasibility | Repository scaffold, environment script and lock, `dfthc.compile`, test infrastructure, canary suite, vendored data. Four spikes:<br>• the whole-program compile check: a complete FeMoco-shaped stand-in walk and controlled walk (K-1);<br>• the mode-agnostic erase rule (K-3);<br>• the measurement-array argument probe that decides Q-1's variant and `QPERound` (K-10);<br>• the comparator-adjoint check (K-7). | Fast suite green, and spike results recorded in the ledger. If K-1 exceeds its budget after its remedies, work stops and the orchestrator escalates to the user with options. |
+| 0. Foundation and feasibility | Repository scaffold, environment script and lock, `dfthc.compile`, test infrastructure, canary suite, vendored data. Four spikes:<br>• the whole-program compile check: a complete stand-in walk and controlled walk, compiled at small and mid shapes and projected to FeMoco-54 shape, which is compiled once only if the projection fits the machine (K-1);<br>• the mode-agnostic erase rule (K-3);<br>• the measurement-array argument probe that decides Q-1's variant and `QPERound` (K-10);<br>• the comparator-adjoint check (K-7). | Fast suite green, and spike results recorded in the ledger. If K-1's projection or compile exceeds its limits after its remedies, the orchestrator escalates to the user with the measurements and options (§16, K-1). |
 | 1. Parallel workstreams | (A) L0 classical data and the encoded model, with reference fixtures; (B) the sparse simulator, including the benchmark gate of §12.6; (C) L1 primitives | Each workstream's tests green and reviewed. If the simulator benchmark misses its budget after the mitigations of §12.6, escalate. |
 | 2. Paper blocks | (D) `OuterPrepare`, `InnerPrepare`, `InnerSigns`; (E) the select components: angle loads, `AngleErase`, `SpinMux`, `SpinSwap`, Givens, `MajoranaGate` | Same |
-| 3. Assembly | `InnerSelect`, reflections, `DFTHCBlockEncoding`, `DFTHCWalk`, controlled versions, end-to-end checks E-1 to E-4 | D-2 met |
-| 4. Application and report | QPE wrapper and toy tests; resource report; documentation | D-3, D-4 and D-6 met |
+| 3. Assembly | `InnerSelect`, reflections, `DFTHCBlockEncoding`, `DFTHCWalk`, controlled versions, end-to-end checks E-1 to E-4 | D-2 met under the nightly schedules; the release schedules run once, in Phase 5 (§12.6) |
+| 4. Application and report | QPE wrapper and toy tests; resource report, ending with the single FeMoco-54 compile of the walk and controlled walk; documentation | D-3, D-4 and D-6 met |
 | 5. Final review | Cross-review, fixes, final merge into local `main` | D-1 to D-7 met |
 
 ## 6. Conventions
@@ -502,9 +505,11 @@ pip freeze > requirements-nightly.lock
 - **The "could not be parsed" error means there is no decomposition path.** The text is `failed to load built-in decomposition rules from '...mlirbc': the rules file could not be parsed`. Catalyst tries the bytecode file only as a fallback after its solver failed. Look in stderr for `Decomposition rule not found for operator '<op>'`. The file itself is intentionally not shipped (R-3).
 - **Activating the venv is recommended but not required.** Calling `.venv/bin/python` directly also works with in-call rule lowering.
 
-**Bumping the nightlies.**
+**Machine limits.** The development laptop has 10 cores and 16 GB, and the user works on it while agents run. `scripts/test.sh` runs 2 xdist workers by default (`DFTHC_TEST_WORKERS` overrides) at lowered priority: `nice -n 10`, or, in the agent sandbox, which forbids setpriority(), the utility QoS clamp of `taskpolicy`. No process tree may exceed 8 GB; the heavy-process and large-compile policy is in §15.
+
+**Bumping the nightlies** (orchestrator work, at a phase gate).
 1. Recreate `.venv` with the recipe.
-2. Run the full test suite, including the canaries.
+2. Run the per-commit tier, which holds most canaries; the gate's nightly-tier run covers the slow canaries. The release tier is not run for a bump (§12.6).
 3. Update §14 and `docs/limitations.md` for every canary whose state changed.
 4. Refresh the lock file and the snapshot in `docs/environment.md`.
 5. Commit on a branch.
@@ -684,6 +689,7 @@ Presets:
 | `FEMOCO54` | $N=54$, $R=10$, $B=27$, $C=27$, $b_{\mathrm{rot}}=15$, $b_{k1}=b_{k2}=15$, $s_u=7$, $k_1=2$, $k_2=4$, $k_{e1}=4$, $k_{e2}=2$; $N_+$ from the random factors |
 | `H2_STO3G_TEST` | the `h2_sto3g_R2_B2_C1` factors, $b_{\mathrm{rot}}=4$, $b_{k1}=b_{k2}=2$, $s_u=3$, $k_1=k_2=1$, $k_{e1}=k_{e2}=1$ |
 | `H2_631G_TEST` | the `h2_631g_R2_B2_C2` factors with the same precisions |
+| `MID_NAPHTHALENE` | the `naphthalene` factors ($N=10$, $R=8$, $B=6$, $C=5$, $N_+=5$), $b_{\mathrm{rot}}=15$, $b_{k1}=b_{k2}=15$, $s_u=7$, $k_1=2$, $k_2=1$, $k_{e1}=2$, $k_{e2}=1$: the mid size at which compiled counts are checked without a FeMoco-54 compile (§12.1 T4) |
 
 ### 8.4 Tables
 
@@ -1195,7 +1201,7 @@ All gates are in the gate set:
 
 ### 11.3 Resources
 
-The QPE program compiles at FeMoco-54 shape for $t \in \{1, 2, 3\}$. Its worst-case cost is $T = (2^t - 1)\,T_{C(W)} + (t^3 - t)/6$ and $M = (2^t - 1)\,M_W + t$ (§9.24), with every correction conditional counted at its maximum branch. The report states this closed form, validated against the compiled counts at $t \le 3$, and evaluates it for larger $t$.
+The QPE program compiles at the `H2_STO3G_TEST` and `H2_631G_TEST` presets for $t \in \{1, 2, 3\}$; it is not compiled at FeMoco-54 shape (§15). Its worst-case cost is $T = (2^t - 1)\,T_{C(W)} + (t^3 - t)/6$ and $M = (2^t - 1)\,M_W + t$ (§9.24), with every correction conditional counted at its maximum branch. The compiled counts at the test presets must equal this closed form exactly. At FeMoco-54 the report evaluates it with $T_{C(W)}$ and $M_W$ from the single compile of the walk and controlled walk (§13.3), for $t \le 3$ and for larger $t$.
 
 ### 11.4 Toy-size validation
 
@@ -1218,7 +1224,7 @@ With $t = 3$ and input $\lvert 0\rangle$, QPE returns $\varphi \in \{1/8, 7/8\}$
 | T1 | Classical data | Tables, $\Lambda$, both offset frames ($E_{\mathrm{SoS}}^{\mathrm{walk}}$, $E_{\mathrm{SoS}}^{\mathrm{phys}}$, $\Delta_\eta$), $\lambda_{\mathrm{eff}}$, the encoded model, and agreement with dfthcbe (§8.6) |
 | T2 | Rule validity | `qp.testing.assert_valid_decomp_rule(op, rule, check_matrix=...)` for every registered rule of every operator at two or more small sizes: declared resources equal emitted operators. `check_matrix=True` for measurement-free operators on 10 wires or fewer. |
 | T3 | Semantics | The action against NumPy references: compiled on `lightning.qubit` up to 25 wires, or with the sparse simulator beyond that. Classical (permutation) operators are checked on every basis input of small instances. Phase operators are checked on uniform superpositions; this is the `PhaseFixup` validation, run for random, all-ones and single-bit parity tables. Erase blocks get the outcome certificate of §12.5. **Exhaustive failed-address tests** run for $(B+1, k_2) \in \{(3,1), (5,1), (6,2), (7,0), (28,4)\}$, the last one only for the read itself.<br>1. For every computational address of the outer and inner reads, including failed $x_o \ge X_o$, failed $b \ge B+1$, one-body rows and dead block positions, the loaded `target ‖ junk` equals `loaded_bits` (§9.3).<br>2. For every basis input $(x_o, b, m_b)$ with $\mathrm{succ}_b = [b \le B]$, the read, keep test, alias swap and `InnerSigns` give the sign of the selected weight for a valid $b$, and $+1$ for a failed $b$ (§8.5).<br>3. Our failure signs equal the ported `dfthcbe_failure_signs` whenever $2^{w_b} \le \lceil (B+1)/2^{k_2}\rceil 2^{k_2}$. Otherwise, as at $(5, 1)$ and $(7, 0)$, the test asserts the documented difference instead. |
-| T4 | Exact resources | `compiled_resources` Toffoli counts $T$ and measurement counts $M$ and $A$ equal the §9.24 formulas, as implemented in `dfthc.costs`, at three or more sizes per operator. This includes FeMoco-54 for the composite operators and for the complete walk and controlled walk (nightly tier). `is_symbolic` is false. Separate tests pin the PennyLane primitive costs that §9.24 assumes. |
+| T4 | Exact resources | `compiled_resources` Toffoli counts $T$ and measurement counts $M$ and $A$ equal the §9.24 formulas, as implemented in `dfthc.costs`, at three or more sizes per operator: `H2_STO3G_TEST` and `H2_631G_TEST` (per commit) and `MID_NAPHTHALENE` (nightly). FeMoco-54 values are asserted on the closed forms without compiling; the complete FeMoco-54 walk and controlled walk are compiled once, by the resource report (§13.3, §15). `is_symbolic` is false. Separate tests pin the PennyLane primitive costs that §9.24 assumes. |
 | T5 | Gate-set closure | The operators in `qp.analyze` output are a subset of `GATE_SET` ∪ {`MidCircuitMeasure`}. At `level="device"`, no undecomposed operator remains. |
 | T6 | Rule selection | Count signatures prove that the pinned measured rules were chosen. For example, in the compiled `Adjoint(OuterPrepare)`, `MidCircuitMeasure` equals the number of erased qubits ($d_1 + (K_1 - 1)d_1$), `Adjoint(TemporaryAND)` equals the expected measured AND uncomputes, and the Toffoli count equals the erase closed form rather than a second read. A test also compiles with `catalyst.passes.graph_decomposition(gate_set=..., fixed_decomps=..., verbose=True)` and asserts the listed rule names, if that output is capturable (checked in Phase 0). |
 | T7 | Canaries | One focused test per claim of every limitation in §14, asserting today's behaviour. A flipped canary is a signal to revisit the mitigation, not a failure to hide. Canaries that can abort the process run in a subprocess: compiler crashes and every "no decomposition path" case. |
@@ -1310,16 +1316,19 @@ Correctness for every outcome of an erase block is proved with GF(2) linearity, 
 
 - **Layout.** `tests/data`, `tests/ops` (one module per operator, holding T2–T6), `tests/integration` (T8 and QPE), `tests/sim`, `tests/canary`, `tests/report`.
 - **Markers.** `compiled`, `slow`, `release`, `canary`, `femoco`, `subprocess`. `release` implies `slow`: a `conftest.py` hook adds `slow` to every test marked `release`, and the tier commands also exclude `release` explicitly.
-- **Budgets** are wall-clock times on the development laptop with `-n auto`.
+- **Budgets** are wall-clock times on the development laptop with the default 2 workers at lowered priority (§7.1). No tier contains a FeMoco-shaped compile; the release tier checks the cached FeMoco-54 counts without compiling (§15).
+- **Who runs what.** Agents run their targeted tests while developing and the per-commit tier at commit time; a per-commit run is not a heavy process. The nightly tier runs only at phase gates, started by the orchestrator under the watchdog, one run at a time. The release tier runs once, at the end of Phase 5, after the user's go-ahead.
 
 | Tier | Command | Content | Budget |
 | --- | --- | --- | --- |
 | Per commit | `scripts/test.sh -m "not slow and not release"` | T1; T2; T3, T4 and T6 at small sizes; T5; non-subprocess canaries; simulator differential tests | 15 min |
-| Nightly | `scripts/test.sh -m "slow and not release"` | the §12.5 certificates; E-1 under S0 on all 16 inputs; E-2 ($k = 1, 2$) and E-3 (three control states) under S0 on 4 fixed inputs ($\lvert 00\rangle\lvert 00\rangle$, $\lvert 10\rangle\lvert 00\rangle$, $\lvert 10\rangle\lvert 10\rangle$, $\lvert 11\rangle\lvert 11\rangle$ in $\psi_\uparrow \otimes \psi_\downarrow$); E-4 on all 16 inputs; T4 at FeMoco-54 for the composite operators, walk and controlled walk; subprocess canaries; the compile-time benchmark | 4 h |
-| Release (Phase 3 exit, Phase 5) | `scripts/test.sh` | everything, plus E-1 and E-3 on all 16 inputs under S1 and two seeded random schedules, and `H2_631G_TEST` E-1 on its 28 two-electron inputs under S0 | 12 h |
+| Nightly (phase gates) | `scripts/test.sh -m "slow and not release"` | the §12.5 certificates; E-1 under S0 on all 16 inputs and under S1 on 4 fixed inputs ($\lvert 00\rangle\lvert 00\rangle$, $\lvert 10\rangle\lvert 00\rangle$, $\lvert 10\rangle\lvert 10\rangle$, $\lvert 11\rangle\lvert 11\rangle$ in $\psi_\uparrow \otimes \psi_\downarrow$); E-2 ($k = 1, 2$) and E-3 (three control states) under S0 on the 4 fixed inputs; E-4 on all 16 inputs; T4 at `MID_NAPHTHALENE` for the composite operators, walk and controlled walk; subprocess canaries; the compile-time benchmark | 4 h |
+| Release (once, Phase 5) | `scripts/test.sh` | everything, plus E-1 and E-3 on all 16 inputs under S1, E-1 and E-3 under one seeded random schedule on the 4 fixed inputs, `H2_631G_TEST` E-1 on its 28 two-electron inputs under S0, and the FeMoco-54 counts from the cache while the code hash matches (§13.3) | 8 h |
+
+The release tier is reduced from the original plan (12 h with every core; E-1 and E-3 under two seeded schedules on all 16 inputs; FeMoco compiles). The §12.5 certificates already prove every erase outcome, so end-to-end schedules are smoke tests, and the nightly runs at the gates already cover the rest. Phase 3 projects the release run from per-input timings; if the projection exceeds 8 h, the orchestrator escalates with options before Phase 5.
 
 **Benchmark gate (Phase 1, workstream B).**
-- *Budgets.* One complete E-1 schedule of `H2_STO3G_TEST` (16 inputs) must finish within 20 minutes and 16 GB. One `H2_631G_TEST` input must finish within 10 minutes.
+- *Budgets.* One complete E-1 schedule of `H2_STO3G_TEST` (16 inputs) must finish within 20 minutes and 4 GB, so it is not a heavy process. One `H2_631G_TEST` input must finish within 10 minutes and 4 GB.
 - *Mitigations, applied in order if over budget:*
   1. batch all inputs through a reference register;
   2. vectorize the hot handlers;
@@ -1331,7 +1340,7 @@ Correctness for every outcome of an erase block is proved with GF(2) linearity, 
 ### 13.1 Baseline per block
 
 Toffolis per walk at FeMoco-54.
-- The "Ours" column is the §9.24 formulas evaluated at `FEMOCO54`. The report replaces it with measured counts, which must equal the formulas.
+- The "Ours" column is the §9.24 formulas evaluated at `FEMOCO54`. The report checks them against compiled counts: per block at the smaller compiled systems, and in total against the single FeMoco-54 compile of the walk and controlled walk (§13.3). Every check is exact.
 - The dfthcbe column evaluates its README formulas at FeMoco-54 with $k_{e1}=4$, $k_{e2}=2$ and $s_u=7$.
 
 | Block (calls per walk) | Paper (Table III) | dfthcbe | Ours (§9.24) | Main reason for Ours − dfthcbe |
@@ -1372,20 +1381,24 @@ See §10.3: about 1,570 against the paper's 1,131.
 `scripts/resource_report.py` does the following:
 
 1. Builds the walk at FeMoco-54 shape (`random_factors`, fixed seed) and at every vendored system with default precisions.
-2. Compiles every operator of §9 separately, plus the walk, the controlled walk and the QPE program ($t \le 3$), with `compiled_resources` on `null.qubit`.
+2. Compiles with `compiled_resources` on `null.qubit`, within the load policy of §15:
+   - at the H2 systems and `naphthalene`: every operator of §9 separately, plus the walk and the controlled walk, and the QPE program ($t \le 3$) at the H2 systems;
+   - at `fe2s2` and `fe4s4`: the same programs as heavy runs, started by the orchestrator under the watchdog. Each program is first projected from the smaller compiles and compiled on the development laptop only if the projection stays within 8 GB and 60 minutes; the others follow the G0 decision of §16, K-1, or keep their closed form, marked pending;
+   - at FeMoco-54: only the walk and the controlled walk, once each, as the last step of Phase 4. Every per-operator FeMoco-54 row is the closed form, validated exactly by the compiles above.
 3. Evaluates `dfthc.costs` (ours), the paper's Table III formulas and dfthcbe's formulas from `dfthc.costs_reference`, at the same parameters.
-4. Writes `docs/resources.md` and `docs/resources.json`.
+4. Checks exactly, and exits non-zero on any difference: every compiled count equals its closed form, and at FeMoco-54 the sum over the blocks of calls per walk times the closed form equals the compiled walk and controlled-walk totals of $T$, $M$ and $A$.
+5. Writes `docs/resources.md` and `docs/resources.json`. The json caches every heavy compile with its counts, a hash of the code that ignores docstrings and comments, the environment, the wall time and the peak memory. Later runs reuse an entry while its hash matches, so a FeMoco-54 recompile happens only after a code change.
 
 Each report row contains:
 - block and paper steps;
 - calls per walk;
-- measured $T$;
-- our closed form, which must equal the measured value or the script fails;
+- measured $T$ where the block was compiled at that size, otherwise a mark that the value is the closed form;
+- our closed form, which must equal every measured value or the script fails;
 - the dfthcbe and paper values;
 - the deltas;
 - a reason code.
 
-Further columns give measurements, `Adjoint(TemporaryAND)` uncomputes, Clifford counts (marked "upper bound" or "expected (hinted)"), qubits from `WalkLayout`, and compile time.
+Further columns give measurements, `Adjoint(TemporaryAND)` uncomputes, Clifford counts (marked "upper bound" or "expected (hinted)"), qubits from `WalkLayout`, compile time and peak memory.
 
 Reason codes:
 
@@ -1495,16 +1508,16 @@ The report never adjusts measured numbers.
 
 The implementation plan specifies tasks, prompts and acceptance checks. This section fixes the policy.
 
-**Roles.** Exact model identifiers are pinned in the plan from the list available at execution time; on 2026-11-11 they are `claude-opus-5-5-high-fast`, `claude-sonnet-5-5-high`, `gpt-5.6-sol-high-fast` and `grok-4.7-high-fast`.
+**Roles.** Exact model identifiers are pinned in the plan from the list available at execution time. On 2026-11-11 the user chose `inherit`, the orchestrator's own model, for Tier A and the Opus reviewer, after `claude-opus-5-5-high-fast` stopped being offered; the others are `claude-sonnet-5-5-high`, `gpt-5.6-sol-high-fast` and `grok-4.7-high-fast`.
 - **Orchestrator.** The main session. It owns the plan, the ledger, merges and phase gates.
-- **Tier A (Opus 5.5).** Circuit constructions with subtle phases or registers, the sparse simulator, assembly and end-to-end debugging, and phase and final reviews.
+- **Tier A (the orchestrator's model, `inherit`).** Circuit constructions with subtle phases or registers, the sparse simulator, assembly and end-to-end debugging, and phase and final reviews.
 - **Tier B (Sonnet 5.5).** Well-specified tasks: classical data, layout, reflections, report plumbing, documentation.
 - **Reviewer (GPT-5.6).** An independent review gate on every task: spec compliance and correctness against this document.
 - **Scout (Grok 4.7).** Quick source lookups in PennyLane, Catalyst and dfthcbe.
 
 **Workflow for each task.**
 1. The orchestrator creates a git worktree on a branch named `phase<N>/<task-id>` from local `main`.
-2. The implementer writes tests first, then implements. It runs the task's tests and the fast suite, and fills in the self-review checklist (§9.0 docstring sections present, T2–T6 present, no forbidden constructs from §7.4).
+2. The implementer writes tests first, then implements. It runs the task's targeted tests while developing and the fast suite once at commit time, and fills in the self-review checklist (§9.0 docstring sections present, T2–T6 present, no forbidden constructs from §7.4).
 3. The reviewer reviews the diff against this specification.
 4. Tier A tasks also get an Opus review.
 5. The orchestrator merges into local `main` only after the tests pass and the reviews approve.
@@ -1519,22 +1532,29 @@ The implementation plan specifies tasks, prompts and acceptance checks. This sec
 
 **Git.** Local branches and worktrees only. Merges go into local `main`. Never push, never modify remotes. The repo-local git identity (`dwierichs` / `david.wierichs@xanadu.ai`) is shared by all worktrees.
 
+**Load policy** (decided by the user on 2026-11-11: "Keep large-scale compilations to a minimum"; "Try to not run heavy processes throughout"). The development laptop has 10 cores and 16 GB, and the user works on it. The plan (section 12.9) gives the details.
+- *Heavy process:* a run whose process tree exceeds 4 GB of memory, keeps more than 2 cores busy or lasts longer than 30 minutes, and any FeMoco-shaped compile (a program holding a FeMoco-54 table).
+- *Memory cap:* no process tree exceeds 8 GB. The watchdog `dfthc.testing.watchdog` samples the tree's memory, kills it at its cap and records the kill; every run that could approach the cap goes through it. A check whose budget would exceed 8 GB first measures at smaller sizes, projects, and escalates before it runs.
+- *Concurrency:* at most two implementers run at once. The orchestrator starts every heavy process itself, one at a time and never next to another agent's test suite, and logs its peak memory and wall time in the ledger.
+- *Large-scale compiles:* about six FeMoco-scale compiles for the whole project, each logged; more need the user's approval. None runs in the per-commit or nightly tier. K-1 compiles at FeMoco-54 shape only if its projection fits (§16); the resource report compiles the FeMoco-54 walk and controlled walk once each and caches the counts with the code hash (§13.3).
+- *Questions to the user* are asked at gates only: the K-1 escalation (where compiles above the cap run), the Q-1 decision, the go-ahead for the release run, and any compile beyond the six.
+
 ## 16. Risks and open questions
 
 **Risks**, each with how and when it is resolved:
 
 1. **K-1: Compile time and IR size at FeMoco-54.** Contributing factors are the compilable tables, Python-unrolled rules, packed parity constants and rule recompiles ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173)).
-   - *Resolution, Phase 0 spike:* assemble and compile a complete FeMoco-54-shaped stand-in walk and controlled walk, each as one program, without extrapolating. Placeholder semantics are allowed, but the structure must be the walk's:
+   - *Resolution, Phase 0 spike:* assemble a complete stand-in walk and controlled walk, each compiled as one program. Placeholder semantics are allowed, but the structure must be the walk's:
      - the `WalkLayout` registers;
      - the operator instances and nesting of §9.21–9.22, with their pins;
-     - prototype `QROAMRead`, `QROAMErase`, angle loads and `AngleErase` with FeMoco-shaped random tables;
-     - 53-rung ladders.
+     - prototype `QROAMRead`, `QROAMErase`, angle loads and `AngleErase` with random tables of the walk's shapes;
+     - full-length Givens ladders ($N - 1$ rungs).
 
-     This exposes rule recompiles and whole-module IR growth, which per-block compiles cannot predict. Budget: 60 minutes and 16 GB each. Separate `InnerPrepare` and `InnerSelect` stand-in compiles (10 minutes and 16 GB per block) are kept as diagnostics that locate the cost.
-   - *Remedies, applied in order. All keep the walk one compiled program:*
+     The whole programs expose rule compiles and whole-module IR growth, which per-block compiles cannot predict. Under the load policy (§15) the spike compiles them at a small shape and at two mid shapes ($N = 10$ and $N = 14$), each within 15 minutes and 4 GB, and projects the FeMoco-54 walk and controlled walk from these measurements, with the emitted gate count (from the resource functions, without compiling) as the size measure. Budget at FeMoco-54: 60 minutes and 8 GB each. The FeMoco-54 programs are compiled once, under the watchdog, only if the projection is within the budget. Separate `InnerPrepare` and `InnerSelect` stand-in compiles at the larger mid shape are kept as diagnostics that locate the cost. The plan-time calibration projects the FeMoco-54 walk to 12 to 18 GB, above the budget.
+   - *Remedies, applied in order. All keep the walk one compiled program, and each is evaluated at the mid shapes first:*
      1. pass the bulk tables of never-adjointed operators (`QROAMRead`, the angle loads, the erases) as dynamic arrays, with `qp.for_loop` and `qp.cond` (Toffoli counts stay exact; Clifford counts become hinted);
      2. pack the parity constants.
-   - *If the budget is still exceeded,* work stops before Phase 1. The orchestrator escalates to the user with the measurements and options (for example a redesigned table representation, an upstream Catalyst fix, or a revised budget). Per-block compiles may be used as diagnostics, but never as the deliverable; D-3 requires the complete programs.
+   - *If the projection or the compile still exceeds the budget,* the orchestrator escalates to the user at G0 with the measurements, the projection and its method, and options: compile the FeMoco-size programs (and any other compile projected above 8 GB) on a larger machine or in an approved idle-time window with a higher cap, a redesigned table representation, or an upstream Catalyst fix. Until the answer, work continues except on the operators whose table representation remedy 1 would change. Per-block compiles may be used as diagnostics, but never as the deliverable; D-3 requires the complete programs.
 2. **K-2: Correctness of the √L phase fixup.**
    - *Resolution, Phase 1 (workstream C):* T3 tests of `PhaseFixup` and of the round trips.
    - *Fallback:* `onehot_bits = 0` (§9.4), with the delta reported.
@@ -1547,7 +1567,7 @@ The implementation plan specifies tasks, prompts and acceptance checks. This sec
    - *Resolution:* Phase 1 compares against dfthcbe fixtures; Phase 3 checks E-1.
    - *If the model and the circuit disagree,* the dfthcbe fixture decides which side is wrong.
 6. **K-6: Sparse-simulator performance.**
-   - *Resolution:* the Phase 1 benchmark gate of §12.6, then measurement of the tier budgets in Phase 3.
+   - *Resolution:* the Phase 1 benchmark gate of §12.6, then measurement of the per-commit and nightly tier budgets and a projection of the release run in Phase 3.
    - *Mitigations and escalation:* §12.6.
 7. **K-7: Compiling the adjoints of PennyLane comparators** (L-6 risk).
    - *Resolution, Phase 0:* a capability test of `qp.adjoint(LeftQuantumComparator)` and `qp.adjoint(LeftClassicalComparator)`. `qp.adjoint(SemiAdder)` already compiled in the 2026-11-11 probe; the test pins it too.
@@ -1562,7 +1582,8 @@ The implementation plan specifies tasks, prompts and acceptance checks. This sec
       - the junk-outcome array of Q-1 variant (b) ($(K_2 - 1)d_2 = 390$ entries at FeMoco-54), passed to a base operator shaped like `InnerUnprepareFromOutcomes`;
       - `QPERound`'s `earlier_bits` with shape $(t,)$ (§11.1), for both round $j = t-1$ (no entry set) and a round with set entries.
 
-      Check that both modes decompose and compile, that `qp.analyze` counts are exact (not symbolic), and that the simulated state is exact.
+      Check that both modes decompose and compile, that `qp.analyze` counts are exact (not symbolic), and that the simulated state is exact. The probe compiles the arrays at small size and at two mid sizes with the FeMoco-54 widths (544 and 1,088 addresses, 416 outcomes, 390 of them junk).
+    - *FeMoco-54 shape: quoted, not repeated (§15).* While the plan was written, the inner-erase shape (8,640 addresses, 416 outcomes) compiled in 199 to 274 s with the masks derived inside the calling function and in 1,517 s with the masks passed as compilable data, on the development laptop with other compiles running. These timings are recorded as a quote of the plan text, not as a measurement of the probe.
     - *The outcome decides* Q-1's variant (b) and the `QPERound` form (§11.1).
     - *Fallback:* corrections stay in the QPE driver, and Q-1 keeps only variant (a).
 

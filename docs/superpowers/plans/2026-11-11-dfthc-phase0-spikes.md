@@ -2,17 +2,19 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Resolve the four Phase 0 risks of spec section 16 before any production operator is written: K-7 (adjoints of PennyLane comparators), K-3 (a measured-erase rule in both tape and capture mode), K-10 (measurement-valued arrays as dynamic `Operator2` arguments) and K-1 (compile time and memory of the complete FeMoco-54-shaped walk and controlled walk), and record each result.
+**Goal:** Resolve the four Phase 0 risks of spec section 16 before any production operator is written: K-7 (adjoints of PennyLane comparators), K-3 (a measured-erase rule in both tape and capture mode), K-10 (measurement-valued arrays as dynamic `Operator2` arguments) and K-1 (compile time and memory of the complete walk and controlled walk: measured at small and mid shapes and projected to FeMoco-54, which is compiled only if the projection fits this machine), and record each result.
 
 **Architecture:** K-7 becomes a permanent capability test. K-3, K-10 and K-1 are scripts under `spikes/` that print and write a JSON verdict to `spikes/results/<id>.json`; they share `spikes/prototypes.py` (exact unary iteration, a QROAM read and its measured erase). Prototypes are not production code: Phase 1 rewrites them from the spec with full tests. Spike scripts are not collected by pytest (`testpaths = ["tests"]`).
 
 **Tech Stack:** as Part 1, plus `lightning.qubit` and `default.qubit` for exact state checks.
 
-This file holds Tasks 0.6 to 0.9 of the master plan. Every script below was dry-run on 2026-11-11. K-7, K-3 and K-10 passed in full. The K-1 driver passed at the small shape; its FeMoco-54 run is the spike itself and was not run while writing this plan. Indicative FeMoco-shape timings from the K-10 dry-run, taken on the development laptop with other compiles running:
+This file holds Tasks 0.6 to 0.9 of the master plan. Every script below was dry-run on 2026-11-11. K-7 and K-3 passed in full. K-10 passed at small size; its mid-size compile path ran at 64 and 128 addresses, and an earlier version compiled the mid sizes themselves. The K-1 driver passed at the small shape, and its projection and FeMoco gate ran on canned calibration data; no FeMoco-shaped compile ran in round 3.
+
+Two limits shape Tasks 0.8 and 0.9 (master plan section 12.9): no process tree may exceed 8 GB, and FeMoco-shaped compiles are kept to about six for the whole project. Indicative FeMoco-shape timings from the K-10 dry-run while writing this plan, taken on the development laptop with other compiles running, are quoted, not reproduced:
 - one inner-erase-shaped fixup over 8,640 addresses, with parities packed inside the rule, compiled in 199 to 274 s;
 - the same fixup with its masks passed as compilable data took 1,517 s.
 
-Expect K-1 to be close to its budget.
+The K-1 calibration of master plan section 3, item 9, projects the FeMoco stand-in walk to 12 to 18 GB, above the cap. Expect Task 0.9 to end with an escalation at G0 rather than a FeMoco compile.
 
 ## Global Constraints
 
@@ -77,7 +79,14 @@ GATE_SET = {
 
 **Tests (spec 12.6)**
 - Markers: `compiled`, `slow`, `release`, `canary`, `femoco`, `subprocess`. `release` implies `slow`.
-- Per commit: `scripts/test.sh -m "not slow and not release"` (15 min). Nightly: `scripts/test.sh -m "slow and not release"` (4 h). Release: `scripts/test.sh` (12 h).
+- `scripts/test.sh` runs 2 xdist workers at lowered priority (`DFTHC_TEST_WORKERS` overrides).
+- Per commit: `scripts/test.sh -m "not slow and not release"` (15 min). Nightly: `scripts/test.sh -m "slow and not release"` (4 h), only at phase gates, started by the orchestrator. Release: `scripts/test.sh` (8 h), once, at the end of Phase 5, after the user's go-ahead.
+
+**Load limits (master plan section 12.9; spec 15)**
+- The development laptop has 10 cores and 16 GB, and the user works on it. No process tree may exceed 8 GB of memory.
+- A heavy process is a run whose process tree exceeds 4 GB, keeps more than 2 cores busy or lasts longer than 30 minutes, or any FeMoco-shaped compile. Only the orchestrator starts heavy processes, one at a time, under the watchdog (`dfthc.testing.watchdog`), and logs each in the ledger.
+- During TDD, run only the targeted tests; run the per-commit tier once at commit time. Never start a heavy process yourself.
+- The per-commit and nightly tiers contain no FeMoco-shaped compile. FeMoco-54 values are asserted on the closed forms (`dfthc.costs`); the FeMoco-54 walk and controlled walk are compiled once, in Task 4.5.
 
 **Git (spec 15)**
 - Local branches and worktrees only. Merges go into local `main`. Never push, never modify remotes. The repo-local git identity (`dwierichs` / `david.wierichs@xanadu.ai`) is shared by all worktrees.
@@ -93,8 +102,10 @@ GATE_SET = {
 | `spikes/prototypes.py` | 0.7 | exact unary iteration, `ProtoTableRead`, `ProtoTableErase`, cost helpers |
 | `spikes/k3_mode_agnostic_erase.py` | 0.7 | K-3 verdict |
 | `spikes/k10_measurement_arrays.py` | 0.8 | K-10 verdict |
-| `spikes/k1_whole_program.py` | 0.9 | K-1 stand-in walk and driver |
-| `spikes/results/{k3,k10,k1_small,k1_femoco}.json` | 0.7 to 0.9 | recorded results |
+| `spikes/k1_whole_program.py` | 0.9 | K-1 stand-in walk, driver and FeMoco projection |
+| `spikes/results/{k3,k10,k1_small,k1_mid10,k1_mid14,k1_projection}.json` | 0.7 to 0.9 | recorded results |
+| `spikes/results/k10_femoco_dryrun.json` | 0.8 | the quoted FeMoco-shape timings of the plan's dry-run |
+| `spikes/results/k1_femoco.json` | 0.9 | only if the projection allows the FeMoco compile |
 
 Run spike scripts as `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python" spikes/<script>.py`, with `VENV` set as in Part 1.
 
@@ -237,7 +248,7 @@ git commit -m "Add K-7 capability tests for comparator and adder adjoints"
 
 ### Task 0.7: Spike K-3: a mode-agnostic measured-erase rule
 
-**Task id:** `0.7` · **Branch:** `phase0/0.7` · **Tier:** A (`claude-opus-5-5-high-fast`) · **Reviewers:** GPT-5.6 and Opus · **Depends on:** 0.2
+**Task id:** `0.7` · **Branch:** `phase0/0.7` · **Tier:** A (`inherit`) · **Reviewers:** GPT-5.6 and Opus · **Depends on:** 0.2
 
 **Files:**
 - Create: `spikes/prototypes.py`, `spikes/k3_mode_agnostic_erase.py`, `spikes/results/k3.json`
@@ -780,10 +791,10 @@ git commit -m "Add K-3 spike: measured erase in tape and capture mode"
 
 ### Task 0.8: Spike K-10: measurement-valued arrays as dynamic arguments
 
-**Task id:** `0.8` · **Branch:** `phase0/0.8` · **Tier:** A (`claude-opus-5-5-high-fast`) · **Reviewers:** GPT-5.6 and Opus · **Depends on:** 0.7
+**Task id:** `0.8` · **Branch:** `phase0/0.8` · **Tier:** A (`inherit`) · **Reviewers:** GPT-5.6 and Opus · **Depends on:** 0.7
 
 **Files:**
-- Create: `spikes/k10_measurement_arrays.py`, `spikes/results/k10.json`
+- Create: `spikes/k10_measurement_arrays.py`, `spikes/results/k10.json`, `spikes/results/k10_femoco_dryrun.json`
 
 **Interfaces:**
 - Consumes: `spikes/prototypes.py` (Task 0.7); `dfthc.compile`.
@@ -799,9 +810,9 @@ git commit -m "Add K-3 spike: measured erase in tape and capture mode"
 2. a junk-outcome array passed to an operator shaped like `InnerUnprepareFromOutcomes`;
 3. `earlier_bits` of shape (t,), covering both round t-1 (no entry set) and rounds with set entries.
 
-Each part simulates exactly at a small size in both modes. Parts 1 and 2 also compile at the FeMoco-54 inner-erase shape (416 outcomes, 8,640 parities, 390 junk outcomes) with non-symbolic counts and 416 measurements.
+Each part simulates exactly at a small size in both modes. Parts 1 and 2 also compile at two mid sizes with the FeMoco-54 inner-erase widths (416 outcomes, 390 of them junk), over 544 and 1,088 addresses, with non-symbolic counts and 416 measurements, and the growth exponent of each part's compile time between the two sizes is recorded. The FeMoco-54 shape (8,640 addresses) is not compiled: the large-compile policy (master plan section 12.9) forbids repeating it, and its dry-run timings are quoted in `k10_femoco_dryrun.json`. The mid sizes cannot reproduce part 2's FeMoco-size cost: in the round-3 calibration both parts grew about linearly up to 1,088 addresses.
 
-**Definition of done:** the script exits 0 with `verdict: pass`; `spikes/results/k10.json` committed; FeMoco compile times recorded in the report. If part 3 fails: corrections stay in the QPE driver (spec 11.1 fallback). If part 2 fails: Q-1 keeps only variant (a). The orchestrator records either in the ledger's decision log.
+**Definition of done:** the script exits 0 with `verdict: pass`; `spikes/results/k10.json` and `spikes/results/k10_femoco_dryrun.json` committed; the mid-size compile times and growth exponents recorded in the report. If part 3 fails: corrections stay in the QPE driver (spec 11.1 fallback). If part 2 fails: Q-1 keeps only variant (a). The orchestrator records either in the ledger's decision log.
 
 - [ ] **Step 1: Write the spike**
 
@@ -820,14 +831,19 @@ Three arrays cross an operator boundary (spec section 16, K-10):
    set in round j = t-1 and set entries in later rounds.
 Each part is simulated at a small size in both modes (lightning.qubit under capture; the tape
 path with deferred measurements on default.qubit) and must be exact. Parts 1 and 2 also compile
-at the FeMoco-54 inner-erase shape (416 outcomes, 8640 parities, 390 junk outcomes) with
-non-symbolic counts. Writes spikes/results/k10.json; exit status 1 on failure.
+at two mid sizes with the FeMoco-54 inner-erase widths (416 outcomes, 390 of them junk) over 544
+and 1088 addresses, with non-symbolic counts; the growth exponent of each part's compile time
+between the two sizes is recorded. Writes spikes/results/k10.json; exit status 1 on failure.
+
+The FeMoco-54 shape (8640 addresses) is not compiled (master plan section 12.9): the timings of the
+plan's dry-run are quoted in spikes/results/k10_femoco_dryrun.json.
 
 Run: CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 .venv/bin/python spikes/k10_measurement_arrays.py
-(add --small-only to skip the two FeMoco-shape compiles, about 4 and 25 minutes)
+(add --small-only to skip the four mid-size compiles, about 80 s together)
 """
 
 import json
+import math
 import sys
 import time
 from pathlib import Path
@@ -1093,19 +1109,23 @@ def round_bits_checks():
     return {"capture_ok": capture_ok, "tape_ok": tape_ok, "passed": capture_ok and tape_ok}
 
 
-# ----------------------------------------------------------------------- FeMoco-54 shape
+# ------------------------------------------------- mid sizes with the FeMoco-54 widths
 
-RC, X_BITS, B_POSITIONS, B_BITS = 270, 9, 32, 5   # loaded set of the inner read: 270 x 32
-TARGET_BITS, JUNK_BITS = 26, 390                   # d_2 and (K_2 - 1) d_2
-FEMOCO_RANGES = ((X_BITS, 0, RC), (B_BITS, 0, B_POSITIONS))
-NUM_ADDRESSES = RC * B_POSITIONS
+TARGET_BITS, JUNK_BITS = 26, 390                   # d_2 and (K_2 - 1) d_2 at FeMoco-54
+SHAPES = {                                         # (rows, row bits, b positions, b bits)
+    "mid544": (17, 5, 32, 5),
+    "mid1088": (34, 6, 32, 5),                     # an eighth of FeMoco-54's 270 x 32
+}
 
 
-def femoco_compile(part):
+def shape_compile(part, shape):
+    rows, row_bits, b_positions, b_bits = SHAPES[shape]
+    ranges = ((row_bits, 0, rows), (b_bits, 0, b_positions))
+    num_addresses = rows * b_positions
     rng = np.random.default_rng(10)
     num_outcomes = TARGET_BITS + JUNK_BITS
-    masks = tuple(int.from_bytes(rng.bytes(52), "little") for _ in range(NUM_ADDRESSES))
-    address = list(range(X_BITS + B_BITS))
+    masks = tuple(int.from_bytes(rng.bytes(52), "little") for _ in range(num_addresses))
+    address = list(range(row_bits + b_bits))
     target = list(range(14, 14 + TARGET_BITS))
     junk = list(range(40, 40 + JUNK_BITS))
     work = list(range(430, 445))
@@ -1113,19 +1133,30 @@ def femoco_compile(part):
     def qfunc():
         if part == 1:
             outcomes = [_measure_x(q) for q in target + junk]
-            ProtoParityFixup(mcm_parities(outcomes, masks), FEMOCO_RANGES, address, work)
+            ProtoParityFixup(mcm_parities(outcomes, masks), ranges, address, work)
         else:
             junk_outcomes = [_measure_x(q) for q in junk]
             mask_words = tuple(to_words(m, num_outcomes) for m in masks)
-            ProtoUnprepareFromOutcomes(junk_outcomes, mask_words, FEMOCO_RANGES, address, target,
-                                       work)
+            ProtoUnprepareFromOutcomes(junk_outcomes, mask_words, ranges, address, target, work)
 
     start = time.perf_counter()
     resources = compiled_resources(qfunc, num_wires=445)
     seconds = round(time.perf_counter() - start, 1)
     return {"seconds": seconds, "measurements": resources.measurements,
             "conditional_z_upper_bound": resources.counts.get("PauliZ", 0),
-            "num_addresses": NUM_ADDRESSES, "passed": resources.measurements == num_outcomes}
+            "num_addresses": num_addresses, "passed": resources.measurements == num_outcomes}
+
+
+def growth_exponents(results):
+    """Per part, d log(seconds) / d log(addresses) between the two mid sizes."""
+    exponents = {}
+    for part in (1, 2):
+        a, b = (results.get(f"part{part}_{shape}_compile", {}) for shape in SHAPES)
+        if a.get("passed") and b.get("passed"):
+            exponents[f"part{part}"] = round(
+                math.log(b["seconds"] / a["seconds"])
+                / math.log(b["num_addresses"] / a["num_addresses"]), 2)
+    return exponents
 
 
 def main():
@@ -1135,8 +1166,10 @@ def main():
         "part3_small": round_bits_checks,
     }
     if "--small-only" not in sys.argv:
-        checks["part1_femoco_compile"] = lambda: femoco_compile(1)
-        checks["part2_femoco_compile"] = lambda: femoco_compile(2)
+        for shape in SHAPES:
+            for part in (1, 2):
+                checks[f"part{part}_{shape}_compile"] = (
+                    lambda part=part, shape=shape: shape_compile(part, shape))
     results = {}
     for name, check in checks.items():
         try:
@@ -1145,6 +1178,9 @@ def main():
             results[name] = {"passed": False, "error": f"{type(exc).__name__}: {exc}"[:2000]}
         print(name, json.dumps(results[name], default=str), flush=True)
     passed = all(r.get("passed") for r in results.values())
+    if "--small-only" not in sys.argv:
+        results["compile_time_growth_exponents"] = growth_exponents(results)
+        print("compile_time_growth_exponents", json.dumps(results["compile_time_growth_exponents"]))
     results["verdict"] = "pass" if passed else "fail"
     out = Path(__file__).parent / "results" / "k10.json"
     out.parent.mkdir(exist_ok=True)
@@ -1169,51 +1205,81 @@ part3_small {"capture_ok": true, "tape_ok": true, "passed": true}
 verdict: pass
 ```
 
-- [ ] **Step 3: Run the full spike, including the FeMoco-shape compiles**
+- [ ] **Step 3: Run the full spike, with the mid-size compiles**
 
 Run: `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python" spikes/k10_measurement_arrays.py`
-Expected: the three small parts as above, then `part1_femoco_compile {"seconds": ..., "measurements": 416, "conditional_z_upper_bound": 8640, "num_addresses": 8640, "passed": true}` and the same for `part2_femoco_compile`, then `verdict: pass`. The dry-run took 274 s and 1,517 s for the two compiles; part 2 carries 8,640 masks as compilable data, which is the cost to avoid in production (derive masks inside the rule from the table, as `ProtoTableErase` does).
+Expected (about 2 minutes, below 2 GB, so not heavy): the three small parts as above, then
 
-- [ ] **Step 4: Lint and commit**
+```text
+part1_mid544_compile {"seconds": ..., "measurements": 416, "conditional_z_upper_bound": 544, "num_addresses": 544, "passed": true}
+part2_mid544_compile {"seconds": ..., "measurements": 416, "conditional_z_upper_bound": 544, "num_addresses": 544, "passed": true}
+part1_mid1088_compile {"seconds": ..., "measurements": 416, "conditional_z_upper_bound": 1088, "num_addresses": 1088, "passed": true}
+part2_mid1088_compile {"seconds": ..., "measurements": 416, "conditional_z_upper_bound": 1088, "num_addresses": 1088, "passed": true}
+compile_time_growth_exponents {"part1": ..., "part2": ...}
+verdict: pass
+```
+
+The counts are exact and must match; the times vary. In the round-3 calibration the four compiles took 13.2, 11.6, 30.9 and 23.2 s (peak 1.1 and 1.75 GB), growth exponents about 1.2 and 1.0. This round's dry-run ran the same code path at 64 and 128 addresses, where every count was exact; with some measurements dropped, part 1 counted 375 instead of 416 and the verdict was `fail`.
+
+- [ ] **Step 4: Record the FeMoco-shape dry-run as a quote**
+
+Create `spikes/results/k10_femoco_dryrun.json` with exactly this content. It quotes this plan's dry-run; it is not a measurement of this task:
+
+```json
+{
+  "status": "quoted, not reproduced: a dry-run measurement taken while writing the plan; the large-compile policy (master plan section 12.9) forbids repeating it",
+  "source": "docs/superpowers/plans/2026-11-11-dfthc-phase0-spikes.md at commit 994f7aa: the preamble and Task 0.8, Step 3",
+  "what": "K-10 parts 1 and 2 compiled at the FeMoco-54 inner-erase shape: 8640 addresses (270 rows x 32 b positions), 416 outcomes, 390 of them junk",
+  "conditions": "development laptop (10 cores, 16 GB), other compiles running at the same time; peak memory not recorded",
+  "part1_packed_parities_seconds": "199 to 274",
+  "part2_masks_as_compilable_data_seconds": 1517,
+  "conclusion": "masks are derived inside rules from the table and never passed as compilable data"
+}
+```
+
+- [ ] **Step 5: Lint and commit**
 
 Run: `"$VENV/bin/ruff" check spikes` · Expected: `All checks passed!`
 
 ```bash
-git add spikes/k10_measurement_arrays.py spikes/results/k10.json
+git add spikes/k10_measurement_arrays.py spikes/results/k10.json spikes/results/k10_femoco_dryrun.json
 git commit -m "Add K-10 spike: measurement arrays as dynamic arguments"
 ```
 
 ---
 
-### Task 0.9: Spike K-1: whole-program compile of the FeMoco-54-shaped stand-in walk
+### Task 0.9: Spike K-1: the whole-program stand-in walk at small and mid shapes, projected to FeMoco-54
 
-**Task id:** `0.9` · **Branch:** `phase0/0.9` · **Tier:** A (`claude-opus-5-5-high-fast`) · **Reviewers:** GPT-5.6 and Opus · **Depends on:** 0.7
+**Task id:** `0.9` · **Branch:** `phase0/0.9` · **Tier:** A (`inherit`) · **Reviewers:** GPT-5.6 and Opus · **Depends on:** 0.7
 
 **Files:**
-- Create: `spikes/k1_whole_program.py`, `spikes/results/k1_small.json`, `spikes/results/k1_femoco.json`
+- Create: `spikes/k1_whole_program.py`, `spikes/results/k1_small.json`, `spikes/results/k1_mid10.json`, `spikes/results/k1_mid14.json`, `spikes/results/k1_projection.json`; `spikes/results/k1_femoco.json` only if the projection allows the FeMoco compile (Step 5)
 
 **Interfaces:**
-- Consumes: `spikes/prototypes.py`; `dfthc.compile.compiled_resources`, `register_rule`, `resource_key`, `mcm_parities`.
-- Produces: the K-1 verdict and measurements (wall time, CPU time, peak memory, T, M and A per program), which gate Phase 1 (G0). Also:
+- Consumes: `spikes/prototypes.py`; `dfthc.compile.compiled_resources`, `register_rule`, `resource_key`, `mcm_parities`, `GATE_SET`, `FIXED_DECOMPS`; `dfthc.testing.watchdog.run_watched`, `MEMORY_CAP_MB`, `HEAVY_MEMORY_MB` (Task 0.2).
+- Produces: the K-1 measurements (wall time, CPU time, peak memory, T, M and A per program and shape) and the FeMoco projection, which gate Phase 1 (G0). Also:
   - the stand-in operator family `Proto*` (structure of spec 9.21 and 9.22, with pinned `Adjoint(...)` and `C(...)` rules);
-  - `Layout(shape)`, `random_tables(shape, seed)` and `build(shape_name, program) -> (qfunc, num_wires)`; `build` knows only the named shapes `small` and `femoco`.
+  - `Layout(shape)`, `random_tables(shape, seed)` and `build(shape_name, program) -> (qfunc, num_wires)` for the named shapes `small`, `mid10`, `mid14` and `femoco`;
+  - `stand_in_gates(shape_name, program) -> int`, the emitted gates from the resource functions (no compile), `project(calibration) -> dict` and `femoco_refusal() -> str | None`.
 
   Task 1B.3 (master plan) builds its benchmark workload the way `build` does, from `Shape`, `Layout`, `random_tables` and `ProtoWalk`, at two shapes:
   - the `H2_STO3G_TEST` shape, `Shape(N=2, R=2, B=2, C=1, n_plus=1, b_rot=4, b_k1=2, b_k2=2, k1=1, k2=1)`. A dry-run compiled the stand-in walk there: 67 wires with the control, T 138 and 140 (controlled), M 50, A 88 and 90;
   - the `H2_631G_TEST` shape, which is `SHAPES["small"]` (`n_plus` only sets sign flags in the tables).
 
-**Pass criteria (spec 16, K-1):**
-- walk and controlled walk each compile as one program within 60 minutes and 16 GB;
-- the diagnostic `InnerPrepare` and `InnerSelect` stand-in compiles take at most 10 minutes and 16 GB each;
-- counts are non-symbolic, and the controlled walk costs exactly 2 more Toffolis, 2 more measured uncomputes and the same number of explicit measurements as the walk. The driver checks this (`controlled_walk_check`) before it sets the verdict;
-- peak memory is the compile process's `ru_maxrss` plus that of its finished children, an upper bound on the peak total. Catalyst runs its compiler and linker as blocking subprocesses while Python holds the traced program, so the two peaks can coexist and the larger one alone would undercount. The method is recorded in the JSON as `memory_method`.
+**Pass criteria (spec 16, K-1; master plan section 12.9):**
+- the small shape (all four programs) and the mid shapes, `mid10` (N = 10, R = 8, B = 6, C = 5: walk and controlled walk) and `mid14` (N = 14, R = 6, B = 13, C = 8: walk, controlled walk and the diagnostic inner prepare and inner select), each compile as one program within `LIMITS`: 5 minutes at the small shape and 15 minutes at the mid shapes, and 4 GB, so none of them is a heavy process;
+- counts are non-symbolic, and the controlled walk costs exactly 2 more Toffolis, 2 more measured uncomputes and the same number of explicit measurements as the walk, at every shape that compiles both. The driver checks this (`controlled_walk_check`) before it sets the verdict;
+- every compile runs in its own process under `run_watched`, which samples the physical footprint of its process tree, kills the tree above the limit and records the kill. The sampled peak (`peak_mb`) is the gate metric; `rusage_sum_mb`, the compile process's `ru_maxrss` plus that of its finished children, is recorded as an upper bound (`memory_method` in the JSON);
+- `--project` fits the calibration shapes (`PROJECTION_METHOD`) and writes the projected FeMoco walk and controlled walk, with time, sampled peak, the upper bound and the method, to `k1_projection.json`. `femoco_allowed` is true only if both stay within 60 minutes and 8 GB. The projection refuses calibration results of other code (`code_hash()` over the driver, the prototypes and `dfthc.compile`);
+- the FeMoco driver (`--shape femoco --all`) refuses, with exit status 2 and without compiling, unless the projection belongs to the current code and allows the run, and unless no FeMoco result exists for the current code.
 
-**Definition of done:** `k1_small.json` and `k1_femoco.json` committed with `"verdict": "pass"`, or `k1_femoco.json` with `"verdict": "fail"` and the report escalating per the gate rule below; `ruff check spikes` clean.
+**Definition of done:** `k1_small.json`, `k1_mid10.json` and `k1_mid14.json` committed with `"verdict": "pass"`, and `k1_projection.json` committed; the report gives the projection with its method and says whether the FeMoco compile may run; `ruff check spikes` clean. Do not run the FeMoco driver yourself.
 
-**Gate rule if the FeMoco run fails** (spec 16, K-1):
-1. The orchestrator opens Task 0.9b (master plan), which applies remedy 1 in the stand-in and re-measures. Remedy 1 passes the bulk tables of never-adjointed operators (reads, angle loads, erases) as dynamic arrays and iterates with `qp.for_loop` and `qp.cond`.
-2. Remedy 2 (packing the parity constants) is already the baseline of `mcm_parities`. Its other half, never passing masks as compilable data, is already met by `ProtoTableErase`.
-3. If the budget is still exceeded, work stops before Phase 1 and the orchestrator escalates to the user with the measurements and options.
+**Gate rule** (spec 16, K-1; master plan section 12.6):
+1. If `femoco_allowed` is true, the orchestrator runs `--shape femoco --all` once, alone, at lowered priority under the watchdog (8 GB cap), as two of the six FeMoco-scale compiles, and commits `k1_femoco.json` on this task's branch.
+2. If the projection or that run exceeds 60 minutes or 8 GB, the orchestrator opens Task 0.9b (master plan), which applies remedy 1 in the stand-in and re-measures at the small and mid shapes. Remedy 1 passes the bulk tables of never-adjointed operators (reads, angle loads, erases) as dynamic arrays and iterates with `qp.for_loop` and `qp.cond`.
+3. Remedy 2 (packing the parity constants) is already the baseline of `mcm_parities`. Its other half, never passing masks as compilable data, is already met by `ProtoTableErase`.
+4. If the projection still exceeds the limits, the orchestrator escalates to the user at G0 with the measurements, the projection and the options: the FeMoco-size compiles on a larger machine, or in an approved idle-time window with a higher cap.
 
 - [ ] **Step 1: Write the stand-in and driver**
 
@@ -1229,23 +1295,30 @@ reads, measured erases, angle loads and angle erase with random tables of FeMoco
 (Hadamards and an X on the success flag) and the Majorana gate (five Toffoli-class gates).
 
 Usage:
-    python spikes/k1_whole_program.py --shape small --program walk      # one compile, JSON line
-    python spikes/k1_whole_program.py --shape femoco --all              # driver: each program in
-                                                                        # its own process
-Budgets (spec 16, K-1): walk and controlled walk 60 minutes and 16 GB each; the diagnostic
-InnerPrepare and InnerSelect compiles 10 minutes and 16 GB each. The controlled walk must cost
+    python spikes/k1_whole_program.py --shape small --program walk   # one compile, JSON line
+    python spikes/k1_whole_program.py --shape mid14 --all            # driver: one process per
+                                                                     # program, under the watchdog
+    python spikes/k1_whole_program.py --project                      # FeMoco projection
+The driver compiles SHAPE_PROGRAMS[shape] within LIMITS[shape] (seconds, MB per program) and
+writes spikes/results/k1_<shape>.json. Memory is MEMORY_METHOD. The controlled walk must cost
 exactly 2 more Toffolis, 2 more measured uncomputes and the same explicit measurements as the walk.
-The driver writes spikes/results/k1_<shape>.json and exits with status 1 if a compile fails, a
-budget is exceeded or the controlled-walk deltas differ. Peak memory is MEMORY_METHOD.
+Exit status 1 if a compile fails, is killed or over its limits, or the controlled-walk deltas
+differ.
+
+The FeMoco shape is a large-scale compile (master plan section 12.9). --project fits the small and
+mid results (PROJECTION_METHOD) and writes k1_projection.json. The FeMoco driver refuses, with exit
+status 2 and without compiling, unless that projection belongs to the current code and keeps the
+walk and the controlled walk within LIMITS["femoco"], and unless no FeMoco result exists yet for the
+current code: it compiles at most once per code version.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import resource
-import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -1254,6 +1327,7 @@ from pathlib import Path
 import numpy as np
 import pennylane as qp
 from pennylane.core import Operator2
+from pennylane.decomposition import DecompositionGraph
 from pennylane.typing import Wire
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -1269,7 +1343,16 @@ from prototypes import (  # noqa: E402
     to_words,
 )
 
-from dfthc.compile import compiled_resources, mcm_parities, register_rule, resource_key  # noqa: E402
+import dfthc.compile  # noqa: E402
+from dfthc.compile import (  # noqa: E402
+    FIXED_DECOMPS,
+    GATE_SET,
+    compiled_resources,
+    mcm_parities,
+    register_rule,
+    resource_key,
+)
+from dfthc.testing.watchdog import HEAVY_MEMORY_MB, MEMORY_CAP_MB, run_watched  # noqa: E402
 
 
 def lg(value: int) -> int:
@@ -1320,6 +1403,8 @@ class Shape:
 
 SHAPES = {
     "femoco": Shape(N=54, R=10, B=27, C=27, n_plus=27, b_rot=15, b_k1=15, b_k2=15, k1=2, k2=4),
+    "mid14": Shape(N=14, R=6, B=13, C=8, n_plus=4, b_rot=15, b_k1=15, b_k2=15, k1=2, k2=2),
+    "mid10": Shape(N=10, R=8, B=6, C=5, n_plus=5, b_rot=15, b_k1=15, b_k2=15, k1=2, k2=1),
     "small": Shape(N=4, R=2, B=2, C=2, n_plus=2, b_rot=4, b_k1=2, b_k2=2, k1=1, k2=1),
 }
 
@@ -2043,14 +2128,46 @@ register_rule("C(ProtoWalk)", qp.register_resources(_c_walk_resources)(_c_walk))
 # --------------------------------------------------------------------------- driver
 
 PROGRAMS = ("walk", "controlled_walk", "inner_prepare", "inner_select")
-BUDGET_SECONDS = {"walk": 3600, "controlled_walk": 3600, "inner_prepare": 600, "inner_select": 600}
-BUDGET_MB = 16 * 1024
+SHAPE_PROGRAMS = {
+    "small": PROGRAMS,
+    "mid10": ("walk", "controlled_walk"),
+    "mid14": PROGRAMS,
+    "femoco": ("walk", "controlled_walk"),
+}
+CALIBRATION_SHAPES = ("small", "mid10", "mid14")
+LIMITS = {
+    "small": (300, HEAVY_MEMORY_MB),
+    "mid10": (900, HEAVY_MEMORY_MB),
+    "mid14": (900, HEAVY_MEMORY_MB),
+    "femoco": (3600, MEMORY_CAP_MB),
+}
 CONTROL_DELTAS = {"toffoli": 2, "measured_and_uncomputes": 2, "measurements": 0}
 MEMORY_METHOD = (
-    "ru_maxrss of the compile process plus ru_maxrss of its finished child processes "
-    "(getrusage): an upper bound on the peak total RSS, because Catalyst runs its compiler "
-    "and linker as blocking subprocesses, one at a time, while Python holds the traced program"
+    "peak_mb: sampled peak of the summed physical footprint of the compile's process tree "
+    "(dfthc.testing.watchdog), the gate metric; the watchdog kills the tree above the limit. "
+    "rusage_sum_mb: ru_maxrss of the compile process plus ru_maxrss of its finished children "
+    "(getrusage), an upper bound, because Catalyst runs its compiler and linker as blocking "
+    "subprocesses while Python holds the traced program"
 )
+PROJECTION_METHOD = (
+    "size measure: the stand-in program's emitted gates, from its resource functions "
+    "(DecompositionGraph.resource_estimate, no compile). Time: power law through the two largest "
+    "calibration shapes, exponent at least 1. Memory: least-squares line through all calibration "
+    "shapes, slope at least 0, for peak_mb (gate) and rusage_sum_mb (upper bound). The FeMoco "
+    "compile may run if, for the walk and the controlled walk, the projected time and peak_mb "
+    "are within LIMITS['femoco']"
+)
+RESULTS = Path(__file__).resolve().parent / "results"
+_HASHED_FILES = (Path(__file__).resolve(), Path(__file__).resolve().parent / "prototypes.py",
+                 Path(dfthc.compile.__file__).resolve())
+
+
+def code_hash() -> str:
+    """SHA-256 over this driver, the prototypes and dfthc.compile: what a compile depends on."""
+    digest = hashlib.sha256()
+    for path in _HASHED_FILES:
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
 
 
 def build(shape_name: str, program: str):
@@ -2076,6 +2193,19 @@ def build(shape_name: str, program: str):
     return qfunc, lay.num_wires + 1
 
 
+def stand_in_gates(shape_name: str, program: str) -> int:
+    """Gates the walk or controlled walk emits, from the resource functions alone (no compile)."""
+    s = SHAPES[shape_name]
+    shape = tuple(getattr(s, f) for f in Shape.__dataclass_fields__)
+    lay = Layout(s)
+    with qp.queuing.AnnotatedQueue():
+        op = ProtoWalk(shape, random_tables(s), list(range(lay.num_wires)))
+        if program == "controlled_walk":
+            op = qp.ctrl(op, control=lay.num_wires)
+    graph = DecompositionGraph(operations=[op], gate_set=GATE_SET, fixed_decomps=FIXED_DECOMPS)
+    return int(graph.solve().resource_estimate(op).num_gates)
+
+
 def compile_one(shape_name: str, program: str) -> dict:
     qfunc, num_wires = build(shape_name, program)
     start = time.perf_counter()
@@ -2088,7 +2218,8 @@ def compile_one(shape_name: str, program: str) -> dict:
             "seconds": round(wall, 1),
             "cpu_seconds": round(own.ru_utime + own.ru_stime + children.ru_utime
                                  + children.ru_stime, 1),
-            "max_rss_mb": round((own.ru_maxrss + children.ru_maxrss) * scale / 2**20, 1),
+            "rusage_sum_mb": round((own.ru_maxrss + children.ru_maxrss) * scale / 2**20, 1),
+            "compiled_gates": sum(resources.counts.values()),
             "toffoli": resources.toffoli, "measurements": resources.measurements,
             "measured_and_uncomputes": resources.measured_and_uncomputes}
 
@@ -2102,47 +2233,139 @@ def controlled_walk_check(results: dict) -> dict:
     return {"ok": deltas == CONTROL_DELTAS, "deltas": deltas, "expected": CONTROL_DELTAS}
 
 
+def _fit_time(points, x):
+    (x1, t1), (x2, t2) = sorted(points)[-2:]
+    exponent = max(1.0, math.log(t2 / t1) / math.log(x2 / x1))
+    return t2 * (x / x2) ** exponent, exponent
+
+
+def _fit_memory(points, x):
+    xs, ys = np.array([p[0] for p in points], float), np.array([p[1] for p in points], float)
+    slope = max(0.0, float(np.polyfit(xs, ys, 1)[0]))
+    intercept = float(ys.mean() - slope * xs.mean())
+    return intercept + slope * x, slope
+
+
+def project(calibration: dict[str, dict]) -> dict:
+    """Project the FeMoco walk and controlled walk from the calibration results (PROJECTION_METHOD).
+
+    ``calibration`` maps each of CALIBRATION_SHAPES to its k1_<shape>.json content. Raises
+    ValueError if a result is missing, failed, or belongs to other code than the current.
+    """
+    current = code_hash()
+    for shape in CALIBRATION_SHAPES:
+        record = calibration.get(shape)
+        if record is None or record.get("verdict") != "pass":
+            raise ValueError(f"no passing k1_{shape}.json: run --shape {shape} --all first")
+        if record.get("code_hash") != current:
+            raise ValueError(f"k1_{shape}.json belongs to other code: rerun --shape {shape} --all")
+    seconds_limit, memory_limit = LIMITS["femoco"]
+    programs, reasons = {}, []
+    for program in SHAPE_PROGRAMS["femoco"]:
+        shapes = [s for s in CALIBRATION_SHAPES if program in calibration[s]]
+        gates = {s: stand_in_gates(s, program) for s in [*shapes, "femoco"]}
+        seconds, exponent = _fit_time(
+            [(gates[s], calibration[s][program]["seconds"]) for s in shapes], gates["femoco"])
+        peak, peak_slope = _fit_memory(
+            [(gates[s], calibration[s][program]["peak_mb"]) for s in shapes], gates["femoco"])
+        upper, _ = _fit_memory(
+            [(gates[s], calibration[s][program]["rusage_sum_mb"]) for s in shapes], gates["femoco"])
+        programs[program] = {
+            "gates": gates, "seconds": round(seconds), "time_exponent": round(exponent, 2),
+            "peak_mb": round(peak), "mb_per_1000_gates": round(1000 * peak_slope, 2),
+            "rusage_sum_mb_upper_bound": round(upper)}
+        if seconds > seconds_limit:
+            reasons.append(f"{program}: {seconds / 60:.0f} min > {seconds_limit / 60:.0f} min")
+        if peak > memory_limit:
+            reasons.append(f"{program}: {peak / 1024:.1f} GB > {memory_limit / 1024:.0f} GB")
+    return {"method": PROJECTION_METHOD, "limits": {"seconds": seconds_limit, "mb": memory_limit},
+            "programs": programs, "femoco_allowed": not reasons,
+            "reason": "; ".join(reasons) or "within the limits", "code_hash": current}
+
+
+def femoco_refusal() -> str | None:
+    """Why the FeMoco compile may not run now, or None if it may."""
+    projection_file = RESULTS / "k1_projection.json"
+    if not projection_file.exists():
+        return "no projection: run the small and mid shapes, then --project"
+    projection = json.loads(projection_file.read_text())
+    if projection.get("code_hash") != code_hash():
+        return "the projection belongs to other code: rerun the mid shapes and --project"
+    if not projection.get("femoco_allowed"):
+        return f"the projection exceeds the limits ({projection.get('reason')}); escalate at G0"
+    femoco_file = RESULTS / "k1_femoco.json"
+    if femoco_file.exists() and json.loads(femoco_file.read_text()).get("code_hash") == code_hash():
+        return "the FeMoco compile already ran for this code; it runs at most once"
+    return None
+
+
 def drive(shape_name: str) -> int:
+    if shape_name == "femoco":
+        refusal = femoco_refusal()
+        if refusal:
+            print("refused:", refusal, flush=True)
+            return 2
+    seconds_limit, memory_limit = LIMITS[shape_name]
     results, failed = {}, False
-    for program in PROGRAMS:
+    for program in SHAPE_PROGRAMS[shape_name]:
         command = [sys.executable, __file__, "--shape", shape_name, "--program", program]
-        try:
-            proc = subprocess.run(command, capture_output=True, text=True, check=False,
-                                  timeout=BUDGET_SECONDS[program] + 60)
-            lines = [line for line in proc.stdout.splitlines() if line.startswith("{")]
-            if proc.returncode != 0 or not lines:
-                results[program] = {"error": proc.stderr[-3000:]}
-                failed = True
-            else:
-                record = json.loads(lines[-1])
-                record["within_budget"] = (record["seconds"] <= BUDGET_SECONDS[program]
-                                           and record["max_rss_mb"] <= BUDGET_MB)
-                failed |= not record["within_budget"]
-                results[program] = record
-        except subprocess.TimeoutExpired:
-            results[program] = {"error": f"exceeded {BUDGET_SECONDS[program]} s"}
+        run = run_watched(command, cap_mb=memory_limit, timeout_s=seconds_limit + 60)
+        lines = [line for line in run.stdout.splitlines() if line.startswith("{")]
+        if run.killed or run.returncode != 0 or not lines:
+            reason = f"killed: {run.killed}" if run.killed else run.stderr[-3000:]
+            results[program] = {"error": reason, **run.summary()}
             failed = True
+        else:
+            record = json.loads(lines[-1])
+            record["peak_mb"] = round(run.peak_mb, 1)
+            record["within_budget"] = (record["seconds"] <= seconds_limit
+                                       and run.peak_mb <= memory_limit)
+            failed |= not record["within_budget"]
+            results[program] = record
         print(program, json.dumps(results[program])[:600], flush=True)
-    results["controlled_walk_check"] = controlled_walk_check(results)
-    failed |= not results["controlled_walk_check"]["ok"]
-    print("controlled_walk_check", json.dumps(results["controlled_walk_check"]), flush=True)
+    if "controlled_walk" in SHAPE_PROGRAMS[shape_name]:
+        results["controlled_walk_check"] = controlled_walk_check(results)
+        failed |= not results["controlled_walk_check"]["ok"]
+        print("controlled_walk_check", json.dumps(results["controlled_walk_check"]), flush=True)
+    results["limits"] = {"seconds": seconds_limit, "mb": memory_limit}
     results["memory_method"] = MEMORY_METHOD
+    results["code_hash"] = code_hash()
     results["verdict"] = "fail" if failed else "pass"
-    out = Path(__file__).parent / "results" / f"k1_{shape_name}.json"
-    out.parent.mkdir(exist_ok=True)
-    out.write_text(json.dumps(results, indent=2) + "\n")
+    RESULTS.mkdir(exist_ok=True)
+    (RESULTS / f"k1_{shape_name}.json").write_text(json.dumps(results, indent=2) + "\n")
     print("verdict:", results["verdict"])
     return 1 if failed else 0
 
 
+def write_projection() -> int:
+    calibration = {}
+    for shape in CALIBRATION_SHAPES:
+        path = RESULTS / f"k1_{shape}.json"
+        if path.exists():
+            calibration[shape] = json.loads(path.read_text())
+    projection = project(calibration)
+    (RESULTS / "k1_projection.json").write_text(json.dumps(projection, indent=2) + "\n")
+    for program, values in projection["programs"].items():
+        print(program, json.dumps(values), flush=True)
+    print("femoco_allowed:", projection["femoco_allowed"], "-", projection["reason"])
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--shape", choices=sorted(SHAPES), required=True)
+    parser.add_argument("--shape", choices=sorted(SHAPES))
     parser.add_argument("--program", choices=PROGRAMS)
     parser.add_argument("--all", action="store_true")
+    parser.add_argument("--project", action="store_true")
     args = parser.parse_args()
+    if args.project:
+        sys.exit(write_projection())
+    if args.shape is None:
+        parser.error("--shape is required unless --project is given")
     if args.all:
         sys.exit(drive(args.shape))
+    if args.shape == "femoco" and (refusal := femoco_refusal()):
+        sys.exit(f"refused: {refusal}")
     print(json.dumps(compile_one(args.shape, args.program)), flush=True)
 
 
@@ -2156,26 +2379,44 @@ Run: `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python
 Expected (about 45 s), as in the dry-run:
 
 ```text
-walk {"program": "walk", "shape": "small", "num_wires": 83, "seconds": 8.0, ..., "max_rss_mb": 632.2, "toffoli": 236, "measurements": 68, "measured_and_uncomputes": 175, "within_budget": true}
-controlled_walk {"program": "controlled_walk", ..., "toffoli": 238, "measurements": 68, "measured_and_uncomputes": 177, "within_budget": true}
-inner_prepare {"program": "inner_prepare", ..., "toffoli": 35, "measurements": 14, "measured_and_uncomputes": 24, "within_budget": true}
-inner_select {"program": "inner_select", ..., "toffoli": 66, "measurements": 15, "measured_and_uncomputes": 53, "within_budget": true}
+walk {"program": "walk", "shape": "small", "num_wires": 83, "seconds": 9.2, ..., "rusage_sum_mb": 635.1, "compiled_gates": 2201, "toffoli": 236, "measurements": 68, "measured_and_uncomputes": 175, "peak_mb": 498.7, "within_budget": true}
+controlled_walk {"program": "controlled_walk", ..., "toffoli": 238, "measurements": 68, "measured_and_uncomputes": 177, ..., "within_budget": true}
+inner_prepare {"program": "inner_prepare", ..., "toffoli": 35, "measurements": 14, "measured_and_uncomputes": 24, ..., "within_budget": true}
+inner_select {"program": "inner_select", ..., "toffoli": 66, "measurements": 15, "measured_and_uncomputes": 53, ..., "within_budget": true}
 controlled_walk_check {"ok": true, "deltas": {"toffoli": 2, "measured_and_uncomputes": 2, "measurements": 0}, ...}
 verdict: pass
 ```
 
-The Toffoli and measurement counts are exact and must match; times and memory vary. A wrong controlled rule shows up as `"ok": false` and `verdict: fail` (dry-run with canned driver input: T + 3 or M + 1 fails, as does 9 GB in Python plus 9 GB in the compiler against the 16 GB budget).
+The Toffoli and measurement counts are exact and must match; times and memory vary. A wrong controlled rule shows up as `"ok": false` and `verdict: fail` (round-2 dry-run with canned driver input: T + 3 or M + 1 fails).
 
-- [ ] **Step 3: Run the driver at the FeMoco-54 shape**
+- [ ] **Step 3: Run the driver at the mid shapes**
 
-Run: `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python" spikes/k1_whole_program.py --shape femoco --all`
-Expected: one JSON line per program, then `verdict: pass` or `verdict: fail`. Each program runs in its own process with a timeout of its budget plus 60 s. The full run takes up to about 2.5 hours, so run it in the background and poll; do not run other compiles in parallel, because they distort the timings. Copy the four program lines, the `controlled_walk_check` line and the verdict into the report.
+Run, one after the other (about 15 minutes together; each compile stays below 4 GB):
 
-- [ ] **Step 4: Lint and commit the results**
+```bash
+CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python" spikes/k1_whole_program.py --shape mid10 --all
+CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python" spikes/k1_whole_program.py --shape mid14 --all
+```
+
+Expected: one JSON line per program, the `controlled_walk_check` line with `"ok": true`, and `verdict: pass` for each shape. The round-3 calibration measured, with the stand-in and the sampled resident size of the process tree: the `mid10` walk 60 s and 1.6 GB, controlled walk 124 s and 2.3 GB; the `mid14` walk 128 to 146 s and 1.7 to 2.3 GB, inner prepare 105 s and 1.2 GB, inner select 50 s and 1.0 GB. The `mid14` controlled walk was not measured; expect about 5 minutes and 2.5 to 3.5 GB. If a compile is killed at 4 GB, stop and report: the orchestrator decides whether that shape runs as a heavy process.
+
+- [ ] **Step 4: Project to FeMoco-54**
+
+Run: `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python" spikes/k1_whole_program.py --project`
+Expected (a few seconds; nothing is compiled): one line per program with the gate counts per shape (FeMoco walk 627,557 and controlled walk 627,563 from the resource functions), the projected seconds, time exponent, `peak_mb`, MB per 1,000 gates and `rusage_sum_mb_upper_bound`, then `femoco_allowed: True` or `femoco_allowed: False - <reasons>`.
+
+The dry-run fed the projection the round-3 calibration (with the real small run above and an estimated `mid14` controlled walk) through a stub driver: walk 57 minutes and 12.5 GB (17.6 GB with the other `mid14` run), controlled walk 118 minutes and 17.3 GB, so `femoco_allowed: False`, and the FeMoco driver refused with exit status 2 without compiling. Fed an artificial calibration within the limits, it compiled the walk and the controlled walk once, each with the 8 GB cap, and refused a second run for the same code, a projection of other code, and stale mid results. A stubbed watchdog kill was recorded as `"error": "killed: memory"` with `verdict: fail`. The round-2 driver, given the same over-limit data, launched all four FeMoco compiles.
+
+- [ ] **Step 5: Hand over the FeMoco decision**
+
+Do not run `--shape femoco --all`. Report the projection lines and `femoco_allowed`. If it is true, the orchestrator runs the FeMoco driver once, alone, and adds `k1_femoco.json` to this branch (gate rule 1); otherwise gate rules 2 to 4 apply.
+
+- [ ] **Step 6: Lint and commit the results**
 
 Run: `"$VENV/bin/ruff" check spikes` · Expected: `All checks passed!`
 
 ```bash
-git add spikes/k1_whole_program.py spikes/results/k1_small.json spikes/results/k1_femoco.json
-git commit -m "Add K-1 spike: whole-program FeMoco-shaped stand-in compile"
+git add spikes/k1_whole_program.py spikes/results/k1_small.json spikes/results/k1_mid10.json \
+        spikes/results/k1_mid14.json spikes/results/k1_projection.json
+git commit -m "Add K-1 spike: small and mid stand-in compiles and FeMoco projection"
 ```

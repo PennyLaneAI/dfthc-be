@@ -73,7 +73,14 @@ GATE_SET = {
 
 **Tests (spec 12.6)**
 - Markers: `compiled`, `slow`, `release`, `canary`, `femoco`, `subprocess`. `release` implies `slow`.
-- Per commit: `scripts/test.sh -m "not slow and not release"` (15 min). Nightly: `scripts/test.sh -m "slow and not release"` (4 h). Release: `scripts/test.sh` (12 h).
+- `scripts/test.sh` runs 2 xdist workers at lowered priority (`DFTHC_TEST_WORKERS` overrides).
+- Per commit: `scripts/test.sh -m "not slow and not release"` (15 min). Nightly: `scripts/test.sh -m "slow and not release"` (4 h), only at phase gates, started by the orchestrator. Release: `scripts/test.sh` (8 h), once, at the end of Phase 5, after the user's go-ahead.
+
+**Load limits (master plan section 12.9; spec 15)**
+- The development laptop has 10 cores and 16 GB, and the user works on it. No process tree may exceed 8 GB of memory.
+- A heavy process is a run whose process tree exceeds 4 GB, keeps more than 2 cores busy or lasts longer than 30 minutes, or any FeMoco-shaped compile. Only the orchestrator starts heavy processes, one at a time, under the watchdog (`dfthc.testing.watchdog`), and logs each in the ledger.
+- During TDD, run only the targeted tests; run the per-commit tier once at commit time. Never start a heavy process yourself.
+- The per-commit and nightly tiers contain no FeMoco-shaped compile. FeMoco-54 values are asserted on the closed forms (`dfthc.costs`); the FeMoco-54 walk and controlled walk are compiled once, in Task 4.5.
 
 **Git (spec 15)**
 - Local branches and worktrees only. Merges go into local `main`. Never push, never modify remotes. The repo-local git identity (`dwierichs` / `david.wierichs@xanadu.ai`) is shared by all worktrees.
@@ -128,7 +135,7 @@ GATE_SET = {
 - L-19 `test_template_has_no_toffoli_level_path[UNIFORM_PREP|ALIAS_SAMPLING]` at L = 5: both fail with a missing rule.
 - L-23 `test_dynamic_list_argument_not_canonicalized`, L-24 `test_compilable_int_must_fit_int64`, L-25 `test_adjoint_of_class_traces_positional_arguments`.
 
-**Definition of done:** `scripts/test.sh tests/canary -q` gives `20 passed` (about 40 s); `docs/limitations.md` holds the "Decomposition rules, pins, control and templates" and "Operator arguments" sections; one commit.
+**Definition of done:** `scripts/test.sh tests/canary -q` gives `20 passed` (about 40 s in the dry-run with 10 workers; longer with the default 2); `docs/limitations.md` holds the "Decomposition rules, pins, control and templates" and "Operator arguments" sections; one commit.
 
 - [ ] **Step 1: Write canaries L-1 to L-5**
 
@@ -1522,7 +1529,7 @@ def test_compile_time_scaling():
 - [ ] **Step 4: Run the per-commit canaries**
 
 Run: `scripts/test.sh -m "not slow and not release" tests/canary -q`
-Expected: `35 passed` (20 from Task 0.3, including L-10, plus 15 here). The L-21 benchmark is deselected; with `-n auto`, pytest-xdist leaves the deselected count out of the summary.
+Expected: `35 passed` (20 from Task 0.3, including L-10, plus 15 here). The L-21 benchmark is deselected; with xdist workers, pytest-xdist leaves the deselected count out of the summary.
 
 - [ ] **Step 5: Record the compile-time baseline, serially**
 
@@ -1629,7 +1636,7 @@ Edit `docs/superpowers/specs/2026-11-11-dfthc-pennylane-design.md`. Make only th
 5. Section 14, L-19: replace "Neither has a path to the Toffoli-level gate set." with "For a non-power-of-two size neither has a path to the Toffoli-level gate set; for a power-of-two size `AliasSampling` compiles (observed 2026-11-11)."
 6. Section 14, L-20: replace the sentence starting "At runtime it ignores static data" with "On 2026-11-11 such an `Operator2` is decomposed by the device pass if it has a rule, and fails to compile for execution if it has none; it no longer reaches runtime as a bare named gate ([catalyst#3430](https://github.com/PennyLaneAI/catalyst/pull/3430))."
 7. Section 14, L-21: replace "Identical variants are recompiled ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173)), and compile time grows with table size and count." with "On 2026-11-11 each distinct table traces its rule twice, identical tables in one program share those traces, and compile time grows with table size and count ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173))." Replace its *Canary and benchmark* bullet with "*Canary:* `test_each_distinct_table_is_a_separate_rule_compile`. *Benchmark:* `test_compile_time_scaling` records compile time and peak memory for 1, 2 and 4 distinct tables, and for one table at sizes 64, 1,024 and 8,640 entries. It fails if a measurement exceeds twice the baseline stored in `tests/canary/compile_baseline.json`, or if the 8,640-entry compile costs less than five times the 64-entry one; refresh the baseline at each nightly bump."
-8. Section 14, L-5: replace "The recompilation and large-table compile-time claims are pinned by L-21's benchmark." with "The recompilation and large-table compile-time claims are pinned by L-21's canary and benchmark."
+8. Section 14, L-5: replace "Identical rule variants are recompiled many times, which dominates compile time ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173))." with "Each distinct rule variant (distinct compilable arguments, such as a distinct table) is compiled separately, while identical variants in one program share their compiles (L-21, observed 2026-11-11); many distinct variants dominate compile time ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173))." Then replace "The recompilation and large-table compile-time claims are pinned by L-21's benchmark." with "The per-variant compile and large-table compile-time claims are pinned by L-21's canary and benchmark."
 9. Section 14: after L-23 add
    "24. **L-24: Compilable integers must fit in signed 64 bits.** Larger values fail to compile (MLIR: large integer attributes are not supported).
        - *Mitigation:* wide table entries are tuples of 32-bit words (§8.4).

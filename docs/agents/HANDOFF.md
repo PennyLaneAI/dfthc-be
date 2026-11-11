@@ -95,10 +95,14 @@ Found while dry-running the Phase 0 plan (canaries L-24 and L-25 pin the first t
 - **Hinted conditionals count expected gates,** summed per gate type over the program and rounded
   up once.
 - **Never pass bulk masks or parity data as compilable arguments.** Derive them inside the rule
-  from the compilable table. One 8,640-address fixup compiled in about 4 min that way and in 25 min
-  with masks as compilable data.
+  from the compilable table. In the plan's dry-run (quoted, not reproduced), one 8,640-address
+  fixup compiled in about 4 min that way and in 25 min with masks as compilable data.
 - **The Cursor sandbox may block writes** to `.git` (worktrees, commits) or `.venv` (pip). Request
   the elevated permission for that single command. Never use it to push.
+- **The sandbox also forbids `ps` and setpriority()** (`nice`, `os.nice`; `nice` only warns and
+  runs the command unchanged). `scripts/test.sh` and `dfthc.testing.watchdog` handle this: they
+  lower the priority with `taskpolicy -c utility` and read memory through macOS `libproc`. Read a
+  niceness with `os.getpriority`, never `os.nice(0)`.
 
 ### 3.3 Running Python and tests from a worktree
 
@@ -109,8 +113,9 @@ CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python" <scr
 ```
 
 `scripts/test.sh` honours `DFTHC_VENV` (a different environment) and `DFTHC_TEST_WORKERS`
-(default `auto`; `0` runs serially). `tests/test_infrastructure.py` fails if the warning variable
-is not exported, so never run plain `pytest`.
+(default `2`; `0` runs serially), and runs pytest at lowered priority (section 3.5).
+`tests/test_infrastructure.py` fails if the warning variable is not exported, the worker count
+is not the requested one, or the priority is not lowered, so never run plain `pytest`.
 
 ### 3.4 `.venv-ref` for dfthcbe reference fixtures (Q-2: approved)
 
@@ -127,13 +132,39 @@ python3.12 -m venv .venv-ref
 dfthcbe requires `qualtran>=0.7`. The fixture provenance records the resolved Qualtran version.
 `.venv-ref/` is git-ignored. If it cannot be created, fixture tests skip with an explicit reason.
 
+### 3.5 Machine limits and heavy processes
+
+The development laptop has **10 cores and 16 GB of memory**, and the user works on it while you
+run. The user's directives (2026-11-11): "Keep large-scale compilations to a minimum" and "Try to
+not run heavy processes throughout." The full policy is master plan section 12.9.
+
+- **Heavy process:** any run whose process tree exceeds 4 GB of memory, keeps more than 2 cores
+  busy or lasts longer than 30 minutes, and any FeMoco-shaped compile (a program that holds a
+  FeMoco-54 table: the walk, the block encoding, a prepare, the select, a read, erase, fixup or
+  angle operator at FeMoco-54 shape, or a spike stand-in at that shape).
+- **You never start a heavy process.** If your brief needs one, it names the command; stop there
+  and report it, and the orchestrator runs it alone, under the watchdog.
+- **Memory cap:** no process tree may exceed 8 GB. Compiles that could grow large run through
+  `dfthc.testing.watchdog.run_watched`, which kills the tree at its cap and records the kill.
+- **Test runs:** run only the targeted tests while you develop (`scripts/test.sh tests/x.py -q`),
+  then the per-commit tier once at commit time. Never run the nightly or release tier: the
+  orchestrator runs the nightly tier at phase gates, and the release tier once in Phase 5.
+- **At most two implementers** run at once; a per-commit run with 2 workers is not heavy.
+- **FeMoco values in tests** are asserted on the closed forms of `dfthc.costs`. Compiled counts
+  are checked at `H2_STO3G_TEST`, `H2_631G_TEST` and `MID_NAPHTHALENE`. Table-free operators at
+  FeMoco widths (`ZeroReflection` on 46 wires, a 53-rung `GivensLadder`) compile in seconds and
+  are fine.
+- **Measure memory as the watchdog does:** the summed physical footprint of the process tree. The
+  resident size undercounts when the machine is under memory pressure.
+
 ## 4. Commands
 
 | Purpose | Command |
 | --- | --- |
-| Fast suite (per commit, 15 min budget) | `scripts/test.sh -m "not slow and not release"` |
-| Nightly tier (4 h) | `scripts/test.sh -m "slow and not release"` |
-| Release tier (12 h) | `scripts/test.sh` |
+| Fast suite (per commit, 15 min budget; once at commit time) | `scripts/test.sh -m "not slow and not release"` |
+| Nightly tier (4 h; orchestrator only, at phase gates, under the watchdog) | `scripts/test.sh -m "slow and not release"` |
+| Release tier (8 h; orchestrator only, once in Phase 5, after the user's go-ahead) | `scripts/test.sh` |
+| Heavy run under the watchdog (orchestrator only) | `PYTHONPATH=src "$VENV/bin/python" -m dfthc.testing.watchdog --timeout-min 300 -- <command>` |
 | One file or test | `scripts/test.sh tests/ops/test_x.py::test_name -q` |
 | Serial run (debugging) | `DFTHC_TEST_WORKERS=0 scripts/test.sh ... -x` |
 | Lint | `"$VENV/bin/ruff" check .` |
@@ -142,8 +173,9 @@ dfthcbe requires `qualtran>=0.7`. The fixture provenance records the resolved Qu
 | Spike | `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python" spikes/<script>.py` |
 
 Markers: `compiled`, `slow`, `release` (implies `slow`), `canary`, `femoco`, `subprocess`. Mark
-every compile test `compiled`, FeMoco-size tests `slow` and `femoco`, and tests that spawn
-Python processes `subprocess`.
+every compile test `compiled`, tests that spawn Python processes `subprocess`, and tests too slow
+for the per-commit tier `slow`. `femoco` is only for the release-tier check of the cached FeMoco
+counts (Task 4.5); no test compiles a FeMoco-shaped program.
 
 ## 5. Rules for operators and decomposition rules
 
@@ -254,7 +286,7 @@ differs from the spec's original claim (observed 2026-11-11).
 | L-18 | Warnings silenced by default; misleading "could not be parsed" | export the variable; read the full message |
 | L-19 | `UniformPrep`/`AliasSampling` need rotations (**changed**: power-of-two `AliasSampling` compiles) | `FlaggedUniformPrep` |
 | L-20 | Undecomposed operator at runtime; **changed**: decomposed or rejected by the device pass | device-level closure test |
-| L-21 | Each distinct table is a separate rule compile; cost grows with table size (one 8,640-entry table: 22 s, 1.6 GB with children) | few tables; K-1 budget |
+| L-21 | Each distinct table is a separate rule compile, while identical tables in one program share it; cost grows with table size (one 8,640-entry table: 22 s, 1.6 GB with children) | few tables; K-1 budget |
 | L-22 | Unresolved loops give symbolic counts | static loops; assert non-symbolic |
 | L-23 | List dynamic arguments not canonicalized | convert in `__init__` |
 | L-24 | Compilable ints limited to int64 | 32-bit word tuples |
@@ -273,8 +305,9 @@ differs from the spec's original claim (observed 2026-11-11).
 
 - [ ] Every requirement of the brief is implemented; nothing extra (YAGNI).
 - [ ] TDD evidence: the failing run (command, key output) and the passing run.
-- [ ] Task tests green; the fast suite green (`scripts/test.sh -m "not slow and not release"`);
-      `ruff check .` clean; test output free of warnings.
+- [ ] Task tests green; the fast suite green (`scripts/test.sh -m "not slow and not release"`,
+      once at commit time); `ruff check .` clean; test output free of warnings.
+- [ ] No heavy process started (section 3.5); any heavy run the brief needs is named in the report.
 - [ ] For each operator: the spec 9.0 docstring sections in order; `required_wires`; constructor
       validation with `ValueError`; T2 (`assert_valid_decomp_rule`), T3 (semantics), T4 (exact
       T, M and where relevant A against `dfthc.costs`), T5 (gate-set closure), T6 (rule
@@ -292,7 +325,9 @@ Write the full report to the report file named in your dispatch, with these sect
 1. **Implemented:** what and where (files).
 2. **Tests:** commands run and their key output lines (counts, pass/fail).
 3. **TDD evidence:** RED (command, failing output, why it was expected); GREEN (command, output).
-4. **Measurements** (spikes and compile-heavy tasks): time, memory, counts.
+4. **Measurements** (spikes and compile-heavy tasks): time, peak memory of the process tree (the
+   watchdog's sampled footprint, and the getrusage sum where recorded), counts; and any heavy run
+   the orchestrator must still do.
 5. **Self-review:** the checklist with findings.
 6. **Concerns and deviations:** anything that differs from the brief, and why.
 
@@ -325,4 +360,6 @@ For `BLOCKED` or `NEEDS_CONTEXT`, put the specifics in the reply itself.
 - A compiler crash, or a circuit whose compilation depends on gate order (L-10): keep a minimal
   reproducer under `tests/canary/reproducers/` and stop.
 - A canary flips: record the observation and report `DONE_WITH_CONCERNS`.
+- A run would be heavy (section 3.5), or a compile is killed at its memory cap: stop and report;
+  the orchestrator decides.
 - Anything that would require pushing, changing remotes, or recreating `.venv`.
