@@ -739,7 +739,7 @@ Only the walk-frame offset is involved; the physical-frame offset never enters $
 3. **Physical frame, $\eta$-electron sector, H2 instances,** with dfthcbe's per-instance factorization tolerances `FACTORS_ERROR`: $10^{-10}$ for `h2_sto3g_R2_B2_C1`, $3\times 10^{-2}$ for `h2_631g_R2_B2_C2`, $10^{-3}$ for `h2_631g_R2_B3_C3`.
    - The lowest eigenvalue of $H_{\mathrm{SA}}$ on the sector equals `e_gap` within the tolerance (mirroring dfthcbe's `test_walk_integrals_have_the_factors_gap`). On 2026-11-11 the observed deviations were below $10^{-15}$, $2.1\times 10^{-2}$ and $5.5\times 10^{-4}$.
    - For the exactly factorized `h2_sto3g_R2_B2_C1`, $H_{\mathrm{phys}}$ (from `integrals.npz`) minus $H_{\mathrm{walk}}$ equals $\Delta_\eta\, I$ on the sector to $10^{-10}$.
-3. **Reference fixtures.**
+4. **Reference fixtures.**
    - `scripts/make_dfthcbe_fixtures.py` runs once in a separate environment, `.venv-ref`, with Qualtran and dfthcbe at the pinned commit.
    - It writes alias and angle tables for given bits, the encoded $\langle 0\vert\mathrm{BE}\vert 0\rangle$ of `H2_STO3G_TEST` (dfthcbe contracts it with `exact_erase=True`), and dfthcbe's per-block Toffoli counts at FeMoco-54.
    - The output goes to `tests/fixtures/dfthcbe/`, with provenance: commit, Qualtran version and parameters.

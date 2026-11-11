@@ -110,7 +110,7 @@ This is a **rolling-wave** plan. It lists every task of Phases 0 to 5 with its i
 
 | Decision | Outcome | Where it acts |
 | --- | --- | --- |
-| Q-1 early junk measurement | **Open.** Decided by the user after the K-10 spike (Task 0.8) and the Phase 4 resource report, preferring variant (b) if K-10 passes. | Gate G4; conditional Task Q1b |
+| Q-1 early junk measurement | **Open.** Decided by the user after the K-10 spike (Task 0.8) and the Phase 4 resource report, preferring variant (b) if K-10 passes. | the Q-1 decision before G4; conditional Task Q1b |
 | Q-2 reference fixtures | **Yes:** Qualtran and dfthcbe go into a separate `.venv-ref` | Task 1A.6; HANDOFF |
 | Q-3 QPE driver | **Yes:** `iterative_phase_estimation` is a plain quantum function, exempt from R-4; `QPERound` and `ControlledWalkPower` stay `Operator2` | Task 4.1 |
 | Q-4 unary iteration | **Exact** now; truncated iteration and pruning are later optimizations | Tasks 1C.1, 1C.3, 1C.4 |
@@ -160,25 +160,25 @@ Tier A uses `claude-opus-5-5-high-fast`, Tier B uses `claude-sonnet-5-5-high`. E
 | 0.7 | Spike K-3: mode-agnostic measured erase; shared prototypes | A | 0.2 | phase0-spikes |
 | 0.8 | Spike K-10: measurement arrays as dynamic arguments | A | 0.7 | phase0-spikes |
 | 0.9 | Spike K-1: whole-program FeMoco-shaped compile | A | 0.7 | phase0-spikes |
-| 0.9b | (conditional) K-1 remedy 1 in the stand-in | A | 0.9 failed | written at G0 if needed |
+| 0.9b | (conditional) K-1 remedy 1 in the stand-in | A | 0.9 (failed budget) | written at G0 if needed |
 | 1A.1 | `WalkParams`, presets and `WalkLayout` | B | G0 | phase1-data |
 | 1A.2 | `DFTHCFactors`, loaders, `random_factors`; fermion matrices | B | G0 | phase1-data |
-| 1A.3 | Sum-of-squares quantities, both offset frames, spec 8.6 checks 1 to 3 | B | 1A.2 | phase1-data |
+| 1A.3 | Sum-of-squares quantities, both offset frames, spec 8.6 checks 1 to 3 | A | 1A.2 | phase1-data |
 | 1A.4 | Alias tables, Givens angles, `WalkTables` | B | 1A.1, 1A.2 | phase1-data |
 | 1A.5 | Encoded-Hamiltonian model and failure signs | A | 1A.3, 1A.4 | phase1-data |
 | 1A.6 | dfthcbe reference fixtures (`.venv-ref`) | B | 1A.4, 1A.5 | phase1-data |
 | 1A.7 | `dfthc.costs`: closed forms of spec 9.24 | B | 1A.1 | phase1-data |
 | 1B.1 | Sparse simulator core and differential tests | A | G0 | phase1-simulator |
 | 1B.2 | Measurements, conditionals, policies, tape front end | A | 1B.1 | phase1-simulator |
-| 1B.3 | Simulator benchmark gate | A | 1B.2 | phase1-simulator |
+| 1B.3 | Simulator benchmark gate | B | 1B.2 | phase1-simulator |
 | 1C.1 | Unary iteration helper and `PhaseGradientRotation` | A | 1A.7 | phase1-primitives |
 | 1C.2 | `FlaggedUniformPrep` | A | 1C.1 | phase1-primitives |
 | 1C.3 | `QROAMRead` | A | 1C.1 | phase1-primitives |
-| 1C.4 | `PhaseFixup` and `emit_phase_fixup` | A | 1C.1 | phase1-primitives |
-| 1C.5 | `QROAMErase` and round-trip certificates | A | 1C.3, 1C.4, 1B.2 | phase1-primitives |
-| 1C.6 | `ZeroReflection` | B | 1A.7 | phase1-primitives |
+| 1C.4 | `PhaseFixup` and `emit_phase_fixup` | A | 1C.3 | phase1-primitives |
+| 1C.5 | `QROAMErase` and round-trip certificates | A | 1C.4, 1B.2 | phase1-primitives |
+| 1C.6 | `ZeroReflection` | B | 1C.1 | phase1-primitives |
 | 2D.1 | `OuterPrepare` and its pinned adjoint | A | G1 | phase2-blocks |
-| 2D.2 | `InnerPrepare`, its pinned adjoint, `InnerSigns` | A | G1 | phase2-blocks |
+| 2D.2 | `InnerPrepare`, its pinned adjoint, `InnerSigns` | A | 2D.1 | phase2-blocks |
 | 2E.1 | `TailAngleLoad`, `SFAngleLoad` | B | G1 | phase2-blocks |
 | 2E.2 | `AngleErase` | A | 2E.1 | phase2-blocks |
 | 2E.3 | `SpinMux`, `SpinSwap` | B | G1 | phase2-blocks |
@@ -193,7 +193,7 @@ Tier A uses `claude-opus-5-5-high-fast`, Tier B uses `claude-sonnet-5-5-high`. E
 | 4.2 | QPE at FeMoco shape | B | 4.1 | phase4-application |
 | 4.3 | Resource report and `dfthc.costs_reference` | B | 4.1 | phase4-application |
 | 4.4 | Documentation set and docstring audit | B | 4.1, 4.2, 4.3 | phase4-application |
-| Q1b | (conditional) Q-1 variant (b): unprepare-from-outcomes operators | A | G4 decision | written at G4 if chosen |
+| Q1b | (conditional) Q-1 variant (b): unprepare-from-outcomes operators | A | the Q-1 decision after 4.4 | written at the decision if chosen |
 | 5.1 | Whole-branch final review | A (+ GPT-5.6) | G4 | phase5-final |
 | 5.2 | Fix wave, release tier, final merge | A | 5.1 | phase5-final |
 
@@ -223,16 +223,18 @@ flowchart LR
     A4 & A5 --> A6[1A.6]
     A1 --> A7[1A.7]
     B1 --> B2[1B.2] --> B3[1B.3]
-    A7 --> C1[1C.1] & C6[1C.6]
-    C1 --> C2[1C.2] & C3[1C.3] & C4[1C.4]
-    C3 & C4 & B2 --> C5[1C.5]
+    A7 --> C1[1C.1]
+    C1 --> C2[1C.2] & C3[1C.3] & C6[1C.6]
+    C3 --> C4[1C.4]
+    C4 & B2 --> C5[1C.5]
   end
   A6 & A7 & B3 & C2 & C5 & C6 --> G1{{G1}}
   subgraph P2[Phase 2]
-    G1 --> D1[2D.1] & D2[2D.2] & E1[2E.1] & E3[2E.3] & E4[2E.4] & E5[2E.5]
+    G1 --> D1[2D.1] & E1[2E.1] & E3[2E.3] & E4[2E.4] & E5[2E.5]
+    D1 --> D2[2D.2]
     E1 --> E2[2E.2]
   end
-  D1 & D2 & E2 & E3 & E4 & E5 --> G2{{G2}}
+  D2 & E2 & E3 & E4 & E5 --> G2{{G2}}
   subgraph P3[Phase 3]
     G2 --> S1[3.1] & S2[3.2]
     S1 & S2 --> S3[3.3] --> S4[3.4] --> S5[3.5]
@@ -243,15 +245,15 @@ flowchart LR
     Q1 --> R3[4.3]
     Q1 & Q2 & R3 --> R4[4.4]
   end
-  R4 --> G4{{G4: Q-1 decision}}
-  G4 -.-> Q1b[Q1b if variant b]
+  R4 --> QD{{Q-1 decision}}
+  QD -->|baseline| G4{{G4}}
+  QD -.->|variant b| Q1b[Q1b] -.-> G4
   subgraph P5[Phase 5]
     G4 --> F1[5.1] --> F2[5.2]
-    Q1b -.-> F1
   end
 ```
 
-**Parallel waves** (tasks in one wave touch disjoint files and run in separate worktrees; merges are serialized):
+**Parallel waves** (tasks in one wave touch disjoint files and run in separate worktrees; merges are serialized). Tasks that edit the same module are serialized rather than split: 1C.3 → 1C.4 → 1C.5 all edit `src/dfthc/ops/qroam.py`, and 2D.1 → 2D.2 both edit `src/dfthc/ops/prepare.py` and `tests/ops/test_certificates_prepare.py`. Spec 5.2 fixes those module layouts and 9.4 names `dfthc.ops.qroam.emit_phase_fixup`; the pairs also share code (the erase builds on the read and the fixup; the two prepares share the alias-sampling rule skeleton). 1C.6 waits for 1C.1, which creates `src/dfthc/ops/__init__.py`.
 
 | Wave | Tasks | Notes |
 | --- | --- | --- |
@@ -261,16 +263,17 @@ flowchart LR
 | 0-d | 0.4, 0.8, 0.9 | the 0.9 FeMoco run takes up to about 2.5 h; run nothing else compile-heavy alongside it |
 | 1-a | 1A.1, 1A.2, 1B.1 | Phase 1 C plan written once K-3 and K-7 are recorded |
 | 1-b | 1A.3, 1A.4, 1A.7, 1B.2 | |
-| 1-c | 1A.5, 1B.3, 1C.1, 1C.6 | |
-| 1-d | 1A.6, 1C.2, 1C.3, 1C.4 | |
-| 1-e | 1C.5 | |
-| 2-a | 2D.1, 2D.2, 2E.1, 2E.3, 2E.4, 2E.5 | at most four implementers at once |
-| 2-b | 2E.2 | |
+| 1-c | 1A.5, 1B.3, 1C.1 | |
+| 1-d | 1A.6, 1C.2, 1C.3, 1C.6 | |
+| 1-e | 1C.4 | |
+| 1-f | 1C.5 | |
+| 2-a | 2D.1, 2E.1, 2E.3, 2E.4, 2E.5 | at most four implementers at once; start 2D.1 and 2E.1 first (both head two-task chains) |
+| 2-b | 2D.2, 2E.2 | |
 | 3 | 3.1 and 3.2, then 3.3, 3.4, 3.5 | critical path |
-| 4 | 4.1, then 4.2 and 4.3, then 4.4 | |
+| 4 | 4.1, then 4.2 and 4.3, then 4.4; then the Q-1 decision, and Q1b if variant (b) is chosen | G4 completes after Q1b |
 | 5 | 5.1, then 5.2 | |
 
-The critical path is 0.1 → 0.2 → 0.7 → 0.9 → G0 → 1A.1 → 1A.7 → 1C.1 → 1C.3 → 1C.5 → G1 → 2D.2 → G2 → 3.1 → 3.3 → 3.4 → 3.5 → G3 → 4.1 → 4.2 → 4.4 → G4 → 5.1 → 5.2.
+The critical path is 0.1 → 0.2 → 0.7 → 0.9 → G0 → 1A.1 → 1A.7 → 1C.1 → 1C.3 → 1C.4 → 1C.5 → G1 → 2D.1 → 2D.2 → G2 → 3.1 → 3.3 → 3.4 → 3.5 → G3 → 4.1 → 4.3 → 4.4 → (Q1b) → G4 → 5.1 → 5.2. Two segments are ties: in Phase 2, 2E.1 → 2E.2 is as long as 2D.1 → 2D.2; in Phase 4, 4.1 → 4.2 → 4.4 is as long as 4.1 → 4.3 → 4.4.
 
 ---
 
@@ -362,7 +365,7 @@ Code-level steps: the three `phase0-*` files. The entries below are the master r
 - **Definition of done:** both result files committed. If the FeMoco verdict is `fail`, the gate rule of section 12.6 applies.
 
 ### Task 0.9b (conditional): K-1 remedy 1 in the stand-in
-- **Opened** by the orchestrator at G0 only if Task 0.9 fails its budget. **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Branch:** `phase0/0.9b`.
+- **Opened** by the orchestrator at G0 only if Task 0.9 fails its budget. **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 0.9 (failed budget). **Branch:** `phase0/0.9b`.
 - **Scope:** in `spikes/k1_whole_program.py`, the stand-in reads, angle loads and erases take their bulk tables as dynamic arrays and iterate with `qp.for_loop` and `qp.cond` (spec 16, K-1 remedy 1; never-adjointed operators only). Then re-run the FeMoco driver.
 - **Acceptance tests:** same budgets, plus Toffoli counts unchanged against the Task 0.9 measurement wherever that compile finished.
 - **Definition of done:** the new result is recorded. If still over budget, escalate to the user (section 12.6).
@@ -425,12 +428,16 @@ All Phase 1 tasks consume the Phase 0 interfaces (`dfthc.compile`, `dfthc.testin
   - Every vendored system loads and validates.
   - The preset sizes of 1A.1 equal the H2 factor shapes.
   - `random_factors` validates at FeMoco shape with n_plus = 27.
-  - The Majoranas satisfy {γ_a, γ_b} = 2δ_ab for N = 3, and γ_{j,0} = Z…ZX_j matches spec 6.2.
-  - `annihilation` lowers the particle number by one.
+  - The representation is spec 6.2's: an independent Jordan-Wigner string on each spin register. Checked at N = 3:
+    - within one spin register, {γ_{j,f,σ}, γ_{k,g,σ}} = 2 δ_jk δ_fg I;
+    - across spin registers, [γ_{j,f,↑}, γ_{k,g,↓}] = 0: odd operators on different spins commute, not anticommute;
+    - the even identities the walk relies on: i γ_{j,0,σ} γ_{j,1,σ} = −Z_{j,σ} (the SF Majorana action) and a†_{jσ} a_{jσ} = n_{jσ} = (I − Z_{j,σ})/2;
+    - on qubit 0 of a register (the Majorana-gate target), γ_0 = X, γ_1 = Y and a = (X + iY)/2;
+    - `annihilation` lowers the particle number by one, and `sector_projector` commutes with every same-spin bilinear a†_{jσ} a_{kσ}.
 - **Definition of done:** tests green.
 
 #### Task 1A.3: Sum-of-squares quantities and the two offset frames
-- **Tier:** B. **Reviewers:** GPT-5.6. **Depends on:** 1A.2. **Branch:** `phase1/1A.3`.
+- **Tier:** A: conflating the walk-frame and physical-frame offsets was a load-bearing finding in the spec reviews. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1A.2. **Branch:** `phase1/1A.3`.
 - **Files:** `src/dfthc/data/sos.py`, `tests/data/test_sos.py`.
 - **Interfaces produced:**
   - Weights and offsets: `outer_weights(factors) -> ndarray (X_o,)` (SF first, then 2 w_+, then 2 w_-), `inner_weights(factors) -> ndarray (RC, B+1)` (signed, w_B at b = B), `normalization(factors) -> float`, `e_sos_walk(factors) -> float`, `e_sos_phys(summary) -> float`, `frame_shift(factors, summary) -> float`, `lambda_eff(Lambda, e_gap) -> float`.
@@ -447,15 +454,21 @@ All Phase 1 tasks consume the Phase 0 interfaces (`dfthc.compile`, `dfthc.testin
 - **Files:** `src/dfthc/data/{alias,angles,tables}.py`, `tests/data/test_alias.py`, `tests/data/test_angles.py`, `tests/data/test_tables.py`.
 - **Interfaces produced:**
   - `alias.py`: `alias_tables(weights, bits) -> (alt: ndarray[int], keep: ndarray[int])` (dfthcbe's algorithm), `alias_probabilities(alt, keep, bits) -> ndarray` (spec 6.4 formula), and `inner_alias_row(signed_row, bits) -> (alt, keep, sgn, d_sgn)`.
-  - `angles.py`: `angles_from_vector(u) -> ndarray (N-1,)` in [0, 2π), `discretize_angles(theta, b_rot) -> ndarray[int]` (x = round(θ/(2π) · 2^(b−1)) mod 2^(b−1)), `vector_from_angles(x, b_rot) -> ndarray (N,)`, and `ladder_matrix(x, b_rot, N) -> ndarray`, the dense U(u) on one spin register.
+  - `angles.py`:
+    - `angles_from_vector(u) -> ndarray (N-1,)` in [0, 2π);
+    - `givens_vector(theta) -> ndarray (N,)`, the continuum inverse of `angles_from_vector`;
+    - `discretize_angles(theta, b_rot) -> ndarray[int]`, with x = round(θ/(2π) · 2^(b−1)) mod 2^(b−1);
+    - `vector_from_angles(x, b_rot) -> ndarray (N,)`, equal to `givens_vector(4π x / 2^b_rot)`, the ũ of spec 8.5;
+    - `ladder_matrix(x, b_rot, N) -> ndarray`, the dense U on one spin register built from the integer angles.
   - `@dataclass(frozen=True) class WalkTables`:
     - fields `outer_alt`, `outer_keep`, `inner_alt`, `inner_keep`, `inner_sgn`, `inner_d_sgn`, `tail_angles` (N × (N−1)) and `sf_angles` (R × B × (N−1)), all nested tuples of int;
     - `from_factors(factors, params) -> WalkTables`;
     - `as_compilable() -> tuple[tuple, ...]` (the eight fields in declaration order) and `WalkTables.from_compilable(values) -> WalkTables`. Every int is below 2^31 (L-24); operators compose wide entries as 32-bit word tuples. A tuple rather than a dict, because nested tuples are the compilable type the K-1 stand-in exercised.
 - **Acceptance tests:**
   - Alias probabilities reproduce the weights to within 2^-bits per entry, and the spec 6.4 formula holds.
-  - Angles round-trip to 1e-12 for random unit vectors at N = 2, 4, 10, 54.
-  - The ladder satisfies U(u)† γ_{0,f} U(u) = Σ u_j γ_{j,f} densely for N ≤ 4 (spec 6.3).
+  - Continuum factorization: `givens_vector(angles_from_vector(u)) == u` to 1e-12 for random unit vectors at N = 2, 4, 10, 54.
+  - Discretized reconstruction: with δ_k the wrapped rounding error of angle k, ‖`vector_from_angles(discretize_angles(θ, b), b)` − u‖₂ ≤ Σ_k |δ_k| ≤ (N − 1) π / 2^(b−1). Each rung is a planar rotation, so the error adds at most linearly. Checked at b = 4, 8, 15 and N = 2, 4, 10, 54; the bound is about 1.02e-2 at FeMoco-54.
+  - Ladder against the same integers: for integer angles x and ũ = `vector_from_angles(x, b)`, `ladder_matrix(x, b, N)` satisfies U† γ_{0,f} U = Σ_j ũ_j γ_{j,f} to 1e-12, densely for N ≤ 4 (spec 6.3).
   - `WalkTables` is hashable; `as_compilable()` round-trips through `from_compilable`, and every int in it is nonnegative and below 2^31.
   - Table shapes at FeMoco-54 with `random_factors`: inner tables (270, 28); tail (54, 53); SF (10, 27, 53).
 - **Definition of done:** tests green.
@@ -475,7 +488,7 @@ All Phase 1 tasks consume the Phase 0 interfaces (`dfthc.compile`, `dfthc.testin
   - Failure signs: ours are +1. The dfthcbe port equals ours when 2^{w_b} ≤ ⌈(B+1)/2^{k2}⌉ 2^{k2}, and differs as documented at (B+1, k2) = (5, 1) and (7, 0) (spec 8.5; T1 part of the spec 12.1 T3 item 3).
 - **Definition of done:** tests green. This model is the E-1 oracle (risk K-5).
 
-#### Task 1A.6: dfthcbe reference fixtures
+#### Task 1A.6: dfthcbe reference fixtures (spec 8.6 check 4)
 - **Tier:** B. **Reviewers:** GPT-5.6. **Depends on:** 1A.4, 1A.5. **Branch:** `phase1/1A.6`.
 - **Files:** `scripts/make_dfthcbe_fixtures.py`, `src/dfthc/testing/fixtures.py`, `tests/fixtures/dfthcbe/{provenance.json,tables_h2_sto3g_test.json,tables_h2_631g_test.json,encoded_h2_sto3g_test.npz,femoco_block_toffolis.json}`, `tests/data/test_dfthcbe_fixtures.py`.
 - **Interfaces produced:**
@@ -553,7 +566,7 @@ All Phase 1 tasks consume the Phase 0 interfaces (`dfthc.compile`, `dfthc.testin
 - **Definition of done:** tests green.
 
 #### Task 1B.3: Simulator benchmark gate
-- **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1B.2. **Branch:** `phase1/1B.3`.
+- **Tier:** B: it runs a defined benchmark and records measurements; the simulator's design lives in 1B.1 and 1B.2. If a spec 12.6 mitigation is needed (batching, vectorized handlers), the orchestrator re-dispatches the task to Tier A with an Opus review. **Reviewers:** GPT-5.6. **Depends on:** 1B.2. **Branch:** `phase1/1B.3`.
 - **Files:** `tests/sim/test_benchmark.py` (marked `slow`), `docs/agents/LEDGER.md` row (written by the orchestrator).
 - **Interfaces:**
   - Consumes `spikes/k1_whole_program.py`'s `Shape`, `Layout`, `random_tables` and the stand-in walk.
@@ -609,7 +622,7 @@ All Phase 1 tasks consume the Phase 0 interfaces (`dfthc.compile`, `dfthc.testin
 - **Definition of done:** tests green.
 
 #### Task 1C.4: `PhaseFixup` and `emit_phase_fixup`
-- **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1C.1. **Branch:** `phase1/1C.4`.
+- **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1C.3 (same module, `qroam.py`; the fixup tests use `QROAMRead.loaded_set` for realistic covered sets). **Branch:** `phase1/1C.4`.
 - **Files:** `src/dfthc/ops/qroam.py` (fixup part), `tests/ops/test_phase_fixup.py`.
 - **Interfaces produced:**
   - `PhaseFixup(parities, address_widths, covered, onehot_bits, control_value, address, onehot, work, control)`. `parities` is dynamic and converted to an array in `__init__` (L-23).
@@ -624,7 +637,7 @@ All Phase 1 tasks consume the Phase 0 interfaces (`dfthc.compile`, `dfthc.testin
 - **Definition of done:** tests green.
 
 #### Task 1C.5: `QROAMErase` and round-trip certificates
-- **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1C.3, 1C.4, 1B.2. **Branch:** `phase1/1C.5`.
+- **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1C.4 (and through it 1C.3), 1B.2. **Branch:** `phase1/1C.5`.
 - **Files:** `src/dfthc/ops/qroam.py` (erase part), `tests/ops/test_qroam_erase.py`, `tests/ops/test_certificates_qroam.py` (marked `slow`).
 - **Interfaces produced:** `QROAMErase(<QROAMRead's compilable arguments>, onehot_bits, address, target, junk, work, control, extra_onehot)`.
   - The rule X-measures target ‖ junk with reset, computes the parities with `mcm_parities` from masks built inside the rule, and calls `emit_phase_fixup` with the reset wires as its one-hot register.
@@ -639,7 +652,7 @@ All Phase 1 tasks consume the Phase 0 interfaces (`dfthc.compile`, `dfthc.testin
 - **Definition of done:** tests green; certificates in the nightly tier.
 
 #### Task 1C.6: `ZeroReflection`
-- **Tier:** B. **Reviewers:** GPT-5.6. **Depends on:** 1A.7. **Branch:** `phase1/1C.6`.
+- **Tier:** B. **Reviewers:** GPT-5.6. **Depends on:** 1C.1 (which creates `src/dfthc/ops/__init__.py`; `dfthc.costs` from 1A.7 comes with it). **Branch:** `phase1/1C.6`.
 - **Files:** `src/dfthc/ops/reflections.py` (`ZeroReflection` part), `tests/ops/test_zero_reflection.py`.
 - **Interfaces produced:** `ZeroReflection(zero_wires, one_wires, work)` with pinned `Adjoint(ZeroReflection)` (self) and `C(ZeroReflection)`, and `required_wires(n_zero, n_one, controlled=False)`.
 - **Acceptance tests:**
@@ -667,7 +680,7 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
 - **Definition of done:** tests green.
 
 #### Task 2D.2: `InnerPrepare`, its pinned adjoint, and `InnerSigns`
-- **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** G1. **Branch:** `phase2/2D.2`.
+- **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 2D.1 (same module, `prepare.py`, and the same certificate test file; reuses the alias-sampling rule skeleton that 2D.1 introduces). **Branch:** `phase2/2D.2`.
 - **Files:** `src/dfthc/ops/prepare.py` (inner part), `tests/ops/test_inner_prepare.py`, `tests/ops/test_certificates_prepare.py` (inner part).
 - **Interfaces produced:** `InnerPrepare(N, R, B, C, alt, keep, sgn_table, d_sgn_table, b_k2, k2, ke2, s_u, x_o, b, succ_b, succ_work_b, sigma_0, m_b, less_than_b, cmp_work_b, alt_b, keep_b, sgn, d_sgn, r, junk_b, phase_grad, work)`; `Adjoint(InnerPrepare)` (pinned); `InnerSigns(sgn, d_sgn, less_than_b)` with pinned self-adjoint.
   - The spec's table names `sgn` and `d_sgn` are the wire registers' names too, so the table arguments are `sgn_table` and `d_sgn_table`; the docstring says so.
@@ -820,12 +833,19 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
 - **Interfaces produced:**
   - `costs_reference.paper_table3(p) -> dict[str, int]` and `costs_reference.dfthcbe_blocks(p) -> dict[str, int]`;
   - `resource_report.main(argv) -> int`, which writes the spec 13.3 rows: block, steps, calls, measured T, closed form (must be equal), dfthcbe, paper, deltas, reason code, measurements, A, Cliffords (upper bound or expected), qubits from `WalkLayout`, compile time.
-- **Acceptance tests:**
-  - On `H2_STO3G_TEST` the report generates and every measured value equals its closed form.
-  - At FeMoco-54 the totals are paper 9,997, dfthcbe 9,641 and ours 9,793.
-  - Every delta has a reason code from spec 13.3.
-  - The script fails if a measured value differs from its formula.
-- **Definition of done:** D-3 met; `docs/resources.md` generated and committed.
+- **Acceptance tests** (the outputs of spec 13.3, enumerated):
+  - **Systems:** FeMoco-54 (`random_factors`, fixed seed) and every vendored system with default precisions: `h2_sto3g_R2_B2_C1`, `h2_631g_R2_B2_C2`, `h2_631g_R2_B3_C3`, `naphthalene`, `fe2s2` and `fe4s4`.
+  - **Programs per system,** each compiled separately with `compiled_resources` on `null.qubit`:
+    - L1: `PhaseGradientRotation`, `FlaggedUniformPrep` and its adjoint, `QROAMRead`, `PhaseFixup`, `QROAMErase`, `ZeroReflection` and its controlled version;
+    - L2: `OuterPrepare` and its adjoint, `InnerPrepare` and its adjoint, `InnerSigns`, `TailAngleLoad`, `SFAngleLoad`, `SpinMux`, `SpinSwap`, `GivensRotation`, `GivensLadder` and its adjoint, `MajoranaGate` and its adjoint, `AngleErase`, `InnerSelect` and its adjoint;
+    - L3: `RefT2` and `RefAB` with their controlled versions, `DFTHCBlockEncoding` and its controlled version, the walk, the controlled walk;
+    - L4: `ControlledWalkPower` with p = 1 and 2, and the QPE program with t = 1, 2, 3.
+  - **Columns per row:** block and paper steps; calls per walk; measured T, M and A; our closed form (the script exits non-zero if it differs from the measured value); gate-set closure (asserted by `compiled_resources`); the dfthcbe and paper values; the deltas; a reason code from spec 13.3 for every nonzero delta; Clifford counts marked "upper bound" or "expected (hinted)"; qubits from `WalkLayout`; compile time.
+  - **Tests:**
+    - `test_report_h2` (per commit): runs on `H2_STO3G_TEST` only and checks every program and column above, with measured equal to closed form.
+    - `test_report_full` (nightly; `slow`, `femoco`): runs on all systems and checks the FeMoco-54 totals (paper 9,997, dfthcbe 9,641, ours 9,793; controlled walk 9,795; M 2,524; A 8,675).
+    - `test_report_fails_on_mismatch`: a monkeypatched formula makes the script exit non-zero.
+- **Definition of done:** D-3 met; `docs/resources.md` and `docs/resources.json` generated and committed.
 
 #### Task 4.4: Documentation set and docstring audit
 - **Tier:** B. **Reviewers:** GPT-5.6. **Depends on:** 4.1, 4.2, 4.3. **Branch:** `phase4/4.4`.
@@ -836,16 +856,22 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
 - **Definition of done:** D-6 met.
 
 #### Task Q1b (conditional): Q-1 variant (b)
-- **Opened** at G4 only if the user chooses variant (b) and K-10 passed. **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Branch:** `phase4/Q1b`.
+- **Opened** at the Q-1 decision after Task 4.4, only if the user chooses variant (b) and K-10 passed. G4 completes only after Q1b, because Q1b changes artifacts that D-3 and D-6 rest on. **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** the Q-1 decision after 4.4. **Branch:** `phase4/Q1b`.
 - **Scope (spec 16, Q-1 variant (b)):**
   - `OuterUnprepareFromOutcomes` and `InnerUnprepareFromOutcomes`: the prepare's wires except junk, the prepare's compilable arguments, and dynamic `junk_outcomes` in `QROAMRead.junk_layout` order;
   - their pinned rules;
   - the block-encoding rule measuring junk after each prepare;
   - `WalkLayout` aliasing the freed junk wires with the angle registers;
-  - §9 catalog entries;
-  - T2 to T6 and the spec 12.5 certificates over target and junk outcomes.
-- **Acceptance tests:** T unchanged (9,793); total M unchanged; qubits reduced by about 460; E-1 still passes.
-- **Definition of done:** the code-level plan is written at G4 and executed before Phase 5.
+  - spec section 9 catalog entries and the spec 10.3 qubit budget;
+  - T2 to T6 and the spec 12.5 certificates over target and junk outcomes;
+  - the D-3 and D-6 artifacts brought up to date:
+    - regenerate `docs/resources.md` and `docs/resources.json` with `scripts/resource_report.py`;
+    - update `docs/architecture.md` (blocks and layout), `docs/verification.md` (the new certificates) and the operator docstrings.
+- **Acceptance tests:**
+  - T unchanged (9,793; controlled 9,795); total M unchanged (2,524); qubits reduced by about 460 (exact value from `WalkLayout`).
+  - E-1 to E-4 still pass under the nightly schedules.
+  - The report and documentation tests pass again: `tests/report/test_report.py` (including `test_report_full` in the nightly tier) and `tests/test_docstrings.py`.
+- **Definition of done:** the code-level plan is written at the Q-1 decision and executed; the regenerated report and updated documents are committed; then G4 completes.
 
 ---
 
@@ -909,7 +935,8 @@ For task `<id>` of phase `<N>` (consistent with superpowers subagent-driven-deve
 
 - Only tasks in the same wave of section 5, each in its own worktree, may run in parallel. At most four implementers run at once.
 - Merges are serialized in dependency order. Before each merge the branch is rebased onto the current `main`, and the fast suite runs on the rebased branch.
-- Tasks that append to a shared document (Task 0.4 after 0.3 in `docs/limitations.md`) are ordered by dependency rather than resolved by merge.
+- Tasks that edit the same file are ordered by dependency rather than resolved by merge: 0.3 → 0.4 (`docs/limitations.md`), 1C.3 → 1C.4 → 1C.5 (`qroam.py`), 2D.1 → 2D.2 (`prepare.py`), 2E.1 → 2E.2 (`angle_data.py`).
+- Package `__init__.py` files hold only a docstring and never re-export, so only the task that creates one ever edits it (0.1 `dfthc`, 0.2 `dfthc.testing`, 1A.2 `dfthc.data`, 1C.1 `dfthc.ops`). Code-level phase plans keep each task's file list disjoint from every other task in its wave.
 - This relaxes the superpowers rule "never dispatch implementers in parallel". The rule exists to prevent working-tree conflicts, which separate worktrees, disjoint file sets and serialized merges rule out.
 
 ### 12.4 Git rules
@@ -1068,7 +1095,7 @@ Each gate is a checklist the orchestrator completes and records in the ledger's 
 | **G1** (Phase 1) | Each workstream's tests green and reviewed. `dfthc.costs` equals the spec 9.24 table. The 1B.3 benchmark gate passes. Fixtures generated (or the skip reason recorded). Phase 2 plan approved. | **Simulator benchmark:** apply the spec 12.6 mitigations in order. If still over budget, escalate with measurements and options; checks are never dropped silently. |
 | **G2** (Phase 2) | Every paper block merged with T2 to T6 green. Erase certificates green in the nightly tier. Phase 3 plan approved. | Any block whose measured count differs from its closed form: the task fixes the construction or, if the construction is right, the orchestrator records a spec 9.24 correction with its delta (R-7: never tune a construction toward the paper). |
 | **G3** (Phase 3) | D-2 met: certificates and E-1 to E-4 under the release schedules. FeMoco walk counts equal 9,793 and 9,795, with M and A as in spec 9.24. Phase 4 plan approved. | Release-tier budget exceeded: escalate with measurements. An order-dependent compile (L-10) anywhere: compiler blocker; stop the task, preserve a reproducer, escalate. |
-| **G4** (Phase 4) | D-3, D-4 and D-6 met; resource report committed. **Q-1 decision:** present the report and the K-10 result; the user decides on variant (b) (Task Q1b) or the baseline. Phase 5 plan approved. | The Q-1 decision is the one planned user question. |
+| **G4** (Phase 4) | Tasks 4.1 to 4.4 merged; resource report committed. **Q-1 decision:** present the report and the K-10 result; the user chooses variant (b) or the baseline. If variant (b): Task Q1b, including the regenerated report and updated documentation, must be merged first. Then D-3, D-4 and D-6 are checked on the final artifacts, and the Phase 5 plan is approved. | The Q-1 decision is the one planned user question. |
 | **G5** (Phase 5) | D-1 to D-7 met with evidence; release tier green; ledger complete. | Unresolved Critical or Important findings block the final merge. |
 
 **Always escalate** a contradiction between the spec and a merged result, a canary that flips during development (record it; it does not block unless a mitigation breaks), and any request to push or change remotes (refuse).
@@ -1096,7 +1123,7 @@ Each gate is a checklist the orchestrator completes and records in the ledger's 
 
 | Item | Resolved by | Feeds |
 | --- | --- | --- |
-| Q-1 early junk measurement | K-10 verdict (Task 0.8) at G0, then the user's decision at G4 from the resource report (Task 4.3) | Task Q1b, or the baseline unchanged |
+| Q-1 early junk measurement | K-10 verdict (Task 0.8) at G0, then the user's decision after Task 4.4, from the resource report (Task 4.3) | Task Q1b (with the report and documentation regenerated) before G4 completes, or the baseline unchanged |
 | K-1 compile budget | Task 0.9 (and 0.9b) at G0 | Phase 1 go/no-go; whether bulk tables become dynamic arrays (then spec 7.4 rule 3's exception applies to Tasks 1C.3 to 1C.5, 2E.1, 2E.2) |
 | K-3 mode-agnostic erase | Task 0.7 | Task 1C.5: `mcm_parities` stays mode-agnostic or gains mode-specific branches |
 | K-7 comparator adjoints | Task 0.6 | Tasks 1C.2, 2D.1, 2D.2: PennyLane comparators or an own comparator |
@@ -1127,7 +1154,7 @@ Each gate is a checklist the orchestrator completes and records in the ledger's 
 | 8.1 vendored data | 0.5 |
 | 8.2 to 8.4 data model, parameters, tables | 1A.1, 1A.2, 1A.4 |
 | 8.5 encoded model | 1A.5 |
-| 8.6 checks against dfthcbe | 1A.3 (checks 1 to 3), 1A.6 (fixtures) |
+| 8.6 checks against dfthcbe | 1A.3 (checks 1 to 3), 1A.6 (check 4, reference fixtures) |
 | 9.0 operator conventions | every operator task; 4.4 audit |
 | 9.1 to 9.6 L1 operators | 1C.1 to 1C.6 |
 | 9.7 to 9.18 L2 blocks | 2D.1, 2D.2, 2E.1 to 2E.5, 3.1 |
