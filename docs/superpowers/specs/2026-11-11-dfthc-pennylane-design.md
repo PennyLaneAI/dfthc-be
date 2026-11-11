@@ -43,7 +43,12 @@ Correctness is established in three ways:
 - end to end on H2, with a purpose-built sparse-state simulator;
 - for QPE, on a toy walk.
 
-At FeMoco-54, the exact cost formulas (§9.24, built on probed PennyLane primitive costs) give 10,217 Toffolis and 2,524 mid-circuit measurements per walk, against the paper's 9,997 and dfthcbe's 9,641 Toffolis. The walk uses about 1,570 qubits, against the paper's 1,131. Differences are explained in a generated report, not tuned away.
+At FeMoco-54, the exact cost formulas (§9.24, built on probed PennyLane primitive costs) give, per walk:
+- 9,793 Toffolis (9,795 for the controlled walk), against the paper's 9,997 and dfthcbe's 9,641;
+- 2,524 explicit erase measurements, and 11,199 physical measurements in total once the 8,675 measured AND uncomputes are included;
+- about 1,570 qubits, against the paper's 1,131.
+
+Differences are explained in a generated report, not tuned away.
 
 ## 2. Requirements
 
@@ -56,7 +61,7 @@ These come from the user and apply to every part of the project.
 | R-1 | Use the latest nightly PennyLane and Catalyst, installed as in §7.1. |
 | R-2 | Compile with `qp.qjit(capture=True)` and `qp.decompose` (the graph decomposition system). Obtain resources with `qp.analyze`. |
 | R-3 | Decomposition rules are lowered as part of the `qjit` call. The precompiled decomposition-rule bytecode file is not used. |
-| R-4 | Every building block is an `Operator2` with clear documentation. The code is modular. Documented exemption, pending user confirmation (§16, Q-3): a top-level algorithm that returns classical measurement values, namely the iterative QPE driver of §11, is a quantum function. Its quantum content per round remains `Operator2`s (`QPERound`, `ControlledWalkPower`). |
+| R-4 | Every building block is an `Operator2` with clear documentation. The code is modular. Documented exemption, decided by the user (§16, Q-3): a top-level algorithm that returns classical measurement values, namely the iterative QPE driver of §11, is a plain quantum function. Its quantum content per round remains `Operator2`s (`QPERound`, `ControlledWalkPower`). |
 | R-5 | Resource-aware tests accompany all development. |
 | R-6 | Verifiability, testability and comprehensiveness: other people must be able to understand what was done and how the code works. |
 | R-7 | No workarounds to match the paper's or dfthcbe's resource counts beyond the paper's own constructions. Deltas are documented. |
@@ -80,7 +85,7 @@ Not in scope for this phase:
 - computing DFTHC factorizations or the sum-of-squares shift from molecular integrals;
 - Clifford+T synthesis and T counts;
 - Qualtran-specific refinements: aligned-block pruning of unary iteration, heterogeneous target layouts;
-- cost and qubit optimizations kept as open questions: early junk measurement (Q-1), truncated iteration (Q-4), the half-step angle grid (Q-5);
+- deferred cost and qubit optimizations: early junk measurement (Q-1, open) and truncated unary iteration (Q-4, decided as a later optimization);
 - spacetime or surface-code costing;
 - hardware execution;
 - simulating QPE on DFTHC instances.
@@ -129,6 +134,7 @@ Register widths use $\lg y := \lceil \log_2 y \rceil$. A register of width 0 is 
 | $\Delta_\eta = E_{\mathrm{SoS}}^{\mathrm{phys}} - E_{\mathrm{SoS}}^{\mathrm{walk}}$ | Frame shift on the $\eta$-electron sector | data |
 | $E_{\mathrm{gap}}$, $\lambda_{\mathrm{eff}}$ | Spectral gap and effective normalization (§3.3) | data |
 | $T$ | Toffoli count: number of `Toffoli` plus number of `TemporaryAND` (§7.6) | |
+| $M$, $A$ | Explicit erase measurements (`MidCircuitMeasure`) and measured AND uncomputes (`Adjoint(TemporaryAND)`); $M + A$ physical measurements (§7.6, §9.24) | |
 
 ### 3.2 The sum-of-squares Hamiltonian
 
@@ -285,15 +291,16 @@ Remedying Option 2 converges on Option 1. Option 3 re-implements primitives Penn
 4. **Structure-determining data are compilable arguments** ([catalyst#3172](https://github.com/PennyLaneAI/catalyst/issues/3172)). If compile time at FeMoco size is too high, the remedies of §16 K-1 keep the walk a single compiled program. Otherwise work stops and is escalated.
 5. **Bodies of operators that are auto-adjointed contain no `qp.for_loop`/`qp.cond`** ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)).
 6. **Rule selection is asserted.** Tests use measurement-count signatures and, where the output is capturable, the verbose rule listing of `catalyst.passes.graph_decomposition`. Conditionals carry `qp.hint` branch probabilities.
-7. **Junk persists from read to erase.** The qubit count therefore exceeds the paper's (§10.3). An alternative with no Toffoli penalty is open question Q-1 (§16).
-8. **Unary iteration is exact, not truncated** (review round 1; pending user confirmation, §16 Q-4).
+7. **Junk persists from read to erase.** The qubit count therefore exceeds the paper's (§10.3). An alternative with no Toffoli penalty stays open (Q-1, §16). The user decided to settle it after the Phase 0 probe K-10 and the Phase 4 resource report, preferring the argument variant if it works.
+8. **Unary iteration is exact, not truncated** (decided by the user, §16 Q-4). Truncated iteration and aligned-block pruning are later optimizations.
    - *Choice.* A leaf flag fires only for in-range addresses, so out-of-range addresses (failed uniform preparations, one-body rows in the inner read) load nothing. The behaviour on every computational address is specified (§9.3), and failed $b$ branches act as $+I$ (§8.5).
    - *Alternative.* Truncated iteration, as in the Babbush et al. walk, Qualtran and dfthcbe. It routes some out-of-range addresses onto live leaves.
    - *Why exact.* With truncation, routed addresses load live data, so the erase fixup would have to reproduce the read's routing at a different block granularity, and the failure signs would need a classical model (dfthcbe's `failure_signs`). Exact iteration makes the loaded set easy to enumerate and every failed-branch sign trivially $+1$.
    - *Cost at FeMoco-54 (§9.24).* +26 Toffolis per walk against truncated iteration in the alias reads and their erases (outer read 84 vs 79, inner reads 273 vs 268 each, outer fixup 22 vs 19, inner fixups 70 vs 66 each). A further +74 against dfthcbe's aligned-block-pruned angle loads and their fixups (tail 61 vs 56 and SF 291 vs 271 per load, SF fixup 41 vs 34 and tail fixup 61 vs 56 per erase); that pruning is a deferred refinement.
-9. **Exact $R_z$ in the Givens rotations: $b_{\mathrm{rot}}$ Toffolis per $R_z$, as the paper counts** (pending user confirmation, §16 Q-5).
-   - *Construction.* An exact $R_z(4\pi x/2^{b_{\mathrm{rot}}})$ adds $x$ or $-x$ into the phase gradient. $-x$ is the complement plus a carry-in of 1, realized with a $(b_{\mathrm{rot}}+1)$-bit `SemiAdder` ($b_{\mathrm{rot}}$ Toffolis; §9.14). A rung costs $2b_{\mathrm{rot}}$, the paper's $4b_{\mathrm{rot}}(N-1)$ per select.
-   - *Alternative.* Without the carry-in, a rung costs $2(b_{\mathrm{rot}} - 1)$, dfthcbe's count. But the complement alone realizes $\theta = 4\pi(x + \tfrac12)/2^{b_{\mathrm{rot}}}$: a half-step grid with the same precision, whose integer angle tables differ from dfthcbe's. That saves 424 Toffolis per walk at FeMoco-54.
+9. **Givens rotations use dfthcbe's exact construction at $2(b_{\mathrm{rot}} - 1)$ Toffolis per rung** (decided, §16 Q-5).
+   - *Construction (§9.14).* This is dfthcbe's `GivensRotationByPhaseGradient`, with Qualtran's `RzViaPhaseGradient`, which is a `ControlledAddOrSubtract`. Each $R_z(4\pi x/2^{b_{\mathrm{rot}}})$ on $q$ complements the phase-gradient register when $q = 0$, adds $x$ with an uncontrolled $b_{\mathrm{rot}}$-bit `SemiAdder`, and complements again. That subtracts $x$ exactly when $q = 0$ and adds it when $q = 1$, at $b_{\mathrm{rot}} - 1$ Toffolis. Angles are exact, $\theta = 4\pi x/2^{b_{\mathrm{rot}}}$, with dfthcbe's integer tables.
+   - *Verification (2026-11-11).* The probe `.scratch/spec-final/probe_exact_givens.py` compares the dense action on the two mode qubits with the exact Givens matrix for $b = 3, 4$ and every $x < 2^{b-1}$, on all four basis inputs, so both parities. The worst deviation is $2.5\times 10^{-14}$, the sign is correct ($\lvert 01\rangle \mapsto \cos\theta\lvert 01\rangle + \sin\theta\lvert 10\rangle$), and the action on the mode qubits is unitary, so the ancillas come back unentangled. `qp.analyze` gives $2(b-1)$ Toffolis per rotation: 6 at $b = 4$, 28 at $b = 15$.
+   - *What it supersedes.* The user chose the half-step grid to save 424 Toffolis per walk. This construction gives the same saving with exact angles and dfthcbe's tables, so it replaces the grid. It also replaces the earlier carry-in circuit, which cost $b_{\mathrm{rot}}$ per $R_z$ and had the wrong sign (review finding P-1).
 10. **Comparator work stays dirty until the unprepare.** PennyLane's comparators keep intermediate ANDs on their work wires, and their adjoints uncompute them by measurement at zero Toffolis (probed, §9.24). The keep-test and succ-flag comparator work wires therefore persist from prepare to unprepare as dedicated registers (§10.1). That costs 36 qubits and saves a comparator per unprepare.
 11. **No fallback redefines "done".** The complete walk and controlled walk must compile as single programs (D-3). Per-block compiles are diagnostics, never the deliverable (§16, K-1).
 
@@ -392,7 +399,7 @@ The implementation plan expands each phase into tasks.
 
 | Phase | Content | Exit criterion |
 | --- | --- | --- |
-| 0. Foundation and feasibility | Repository scaffold, environment script and lock, `dfthc.compile`, test infrastructure, canary suite, vendored data. Four spikes:<br>• the FeMoco-size compile check (K-1);<br>• the mode-agnostic erase rule (K-3);<br>• the measurement-array argument probe that decides Q-1's variant and `QPERound` (K-10);<br>• the comparator-adjoint check (K-7). | Fast suite green, and spike results recorded in the ledger. If K-1 exceeds its budget after its remedies, work stops and the orchestrator escalates to the user with options. |
+| 0. Foundation and feasibility | Repository scaffold, environment script and lock, `dfthc.compile`, test infrastructure, canary suite, vendored data. Four spikes:<br>• the whole-program compile check: a complete FeMoco-shaped stand-in walk and controlled walk (K-1);<br>• the mode-agnostic erase rule (K-3);<br>• the measurement-array argument probe that decides Q-1's variant and `QPERound` (K-10);<br>• the comparator-adjoint check (K-7). | Fast suite green, and spike results recorded in the ledger. If K-1 exceeds its budget after its remedies, work stops and the orchestrator escalates to the user with options. |
 | 1. Parallel workstreams | (A) L0 classical data and the encoded model, with reference fixtures; (B) the sparse simulator, including the benchmark gate of §12.6; (C) L1 primitives | Each workstream's tests green and reviewed. If the simulator benchmark misses its budget after the mitigations of §12.6, escalate. |
 | 2. Paper blocks | (D) `OuterPrepare`, `InnerPrepare`, `InnerSigns`; (E) the select components: angle loads, `AngleErase`, `SpinMux`, `SpinSwap`, Givens, `MajoranaGate` | Same |
 | 3. Assembly | `InnerSelect`, reflections, `DFTHCBlockEncoding`, `DFTHCWalk`, controlled versions, end-to-end checks E-1 to E-4 | D-2 met |
@@ -447,8 +454,8 @@ These conventions follow dfthcbe unless stated otherwise, so blocks can be compa
 ### 6.5 Phase-gradient register
 
 - The register holds the state that PennyLane's `PhaseGradientStatePrep` prepares on $b_{\mathrm{grad}}$ wires. It is prepared once at the start of every top-level circuit, outside the walk, and returned unchanged by every operator ("catalysed").
-- Adding the integer $k$ into the register multiplies the state by $e^{\pm 2\pi i k/2^{b_{\mathrm{grad}}}}$. A unit test pins the sign by checking the phase that `SemiAdder` kicks back when it adds 1.
-- Adding into the top $m$ qubits gives the phase $e^{\pm 2\pi i k/2^m}$.
+- Adding the integer $k$ into the register multiplies the state by $e^{+2\pi i k/2^{b_{\mathrm{grad}}}}$. The 2026-11-11 probes confirmed this sign (§4.4 item 9), and a unit test pins it by checking the phase that `SemiAdder` kicks back when it adds 1.
+- Adding into the top $m$ qubits gives the phase $e^{+2\pi i k/2^m}$.
 
 ### 6.6 Reflections and global phases
 
@@ -609,7 +616,7 @@ Each rule exists because of a confirmed limitation (§14).
 ### 7.6 Resource accounting
 
 - **Toffoli count** $T$: number of `Toffoli` plus number of `TemporaryAND`. `Adjoint(TemporaryAND)` is reported separately as "measured uncompute" and costs no Toffoli.
-- **Measurements:** number of `MidCircuitMeasure`. Each `qp.measure(..., reset=True)` also adds one conditional `PauliX`.
+- **Measurements:** $M$ is the number of `MidCircuitMeasure`, the explicit erase measurements. Each `qp.measure(..., reset=True)` also adds one conditional `PauliX`. The total number of physical measurements is $M + A$, where $A$ counts the measured uncomputes, `Adjoint(TemporaryAND)` (§9.24).
 - **Cliffords:** `PauliX`, `PauliY`, `PauliZ`, `Hadamard`, `S`, `Adjoint(S)`, `CNOT`, `CZ`, `SWAP`, `GlobalPhase`.
   - Without hints, `qp.analyze` counts a conditional at its maximum branch, so these counts are upper bounds.
   - Erase conditionals carry `qp.hint({"branch-prob": 0.5})`, so the report shows expected counts ([pennylane#10230](https://github.com/PennyLaneAI/pennylane/pull/10230)). The report states which kind each number is.
@@ -873,7 +880,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | --- | --- |
 | Action | $2\Pi - I$, with $\Pi = \lvert 0\cdots 0\rangle\langle 0\cdots 0\rvert_{\mathrm{zero\_wires}} \otimes \lvert 1\cdots 1\rangle\langle 1\cdots 1\rvert_{\mathrm{one\_wires}}$, exact including the global sign |
 | Wires | `zero_wires`, `one_wires` (possibly empty), `work` (for the multi-controlled Z) |
-| Rule | Multi-controlled Z with control values 0 on `zero_wires` and 1 on `one_wires`, built from a `TemporaryAND` ladder into `work` with measured uncompute, giving $I - 2\Pi$. Then `GlobalPhase(π)`. |
+| Rule | Multi-controlled Z with control values 0 on `zero_wires` and 1 on `one_wires`, giving $I - 2\Pi$. It is a `MultiControlledX` with $n_w - 1$ controls and $\max(n_w - 3, 0)$ zeroed `work` wires, with its target conjugated by `H` (and by `X` if the target's pattern value is 0). PennyLane decomposes it into one `Toffoli` and a `TemporaryAND` ladder with measured uncompute (probed, §9.24). Then `GlobalPhase(π)`. |
 | Adjoint | Self-adjoint (pinned) |
 | Control | Explicit `C(ZeroReflection)` (pinned): multi-controlled Z over control ∪ pattern, then `Z` on the control. This gives exactly $\lvert 0\rangle\langle 0\rvert \otimes I + \lvert 1\rangle\langle 1\rvert \otimes (2\Pi - I)$, because $Z_c\cdot C(I - 2\Pi)$ equals that operator. |
 | Cost | For $n_w$ wires in total: $T = \max(n_w - 2, 0)$, a `MultiControlledX` with $n_w - 1$ controls; controlled $T = n_w - 1$. $M = 0$. |
@@ -951,10 +958,10 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | | `GivensRotation` | `GivensLadder` |
 | --- | --- | --- |
 | Action | The rung of §6.3 on (`q_i`, `q_j`) with $\theta = 4\pi x/2^{b_{\mathrm{rot}}}$, where $x$ is the integer in `angle`; `angle` is unchanged | $U(u)$ of §6.3 on `system`, with $u$ = `vector_from_angles(angles)` |
-| Wires | `q_i`, `q_j`, `angle` ($b_{\mathrm{rot}}$), `phase_grad`, `work` ($b_{\mathrm{rot}} + 2$: the adder's work wires plus a carry bit and a one bit) | `system` ($N$), `angles`, `phase_grad`, `work` |
-| Rule | Basis changes ($\sqrt{X}$, $S$, CNOT, as in dfthcbe's `GivensRotationByPhaseGradient`) around two exact $R_z(\theta)$ (§4.4, item 9). Each $R_z(\theta)$ on qubit $q$:<br>1. CNOT $q$ onto every bit of `angle` (complement when $q = 1$) and onto the carry bit.<br>2. Set the one bit to $\lvert 1\rangle$.<br>3. `SemiAdder` of (`angle` ‖ carry) into (`phase_grad` ‖ one), on $b_{\mathrm{rot}} + 1$ bits. This adds $x$ or $\bar x + 1 = -x$ into the phase gradient, so $q$ picks up $e^{\mp 2\pi i x/2^{b_{\mathrm{rot}}}}$, exactly $R_z(4\pi x/2^{b_{\mathrm{rot}}})$.<br>4. CNOT $q$ onto the one bit (it holds $1 \oplus q$), reset it to 0, and undo the CNOTs of step 1.<br>A test checks the rung matrix for every $x$ at $b_{\mathrm{rot}} \le 4$. | Rungs $k = 0, \dots, N-2$ on $(q_k, q_{k+1})$, unrolled in Python, in the order that realizes `angles_from_vector` |
+| Wires | `q_i`, `q_j`, `angle` ($b_{\mathrm{rot}}$), `phase_grad` ($b_{\mathrm{rot}}$), `work` ($b_{\mathrm{rot}} - 1$, the adder's work wires) | `system` ($N$), `angles`, `phase_grad`, `work` |
+| Rule | dfthcbe's `GivensRotationByPhaseGradient` (§4.4, item 9), in time order:<br>1. $\sqrt{X}^\dagger$ on `q_i`; $S$, then $\sqrt{X}^\dagger$, on `q_j`.<br>2. CNOT(`q_i` → `q_j`), then $H$ on `q_i`.<br>3. $R_z(\theta)$ on `q_i`, then on `q_j`.<br>4. $H$ on `q_i`, then CNOT(`q_i` → `q_j`).<br>5. $\sqrt{X}$ on `q_i`; $\sqrt{X}$, then $S^\dagger$, on `q_j`.<br>Here $\sqrt{X} = HSH$ and $\sqrt{X}^\dagger = HS^\dagger H$ exactly.<br>Each $R_z(\theta)$ on qubit $q$ is Qualtran's `ControlledAddOrSubtract`: `X(q)`; CNOT $q$ onto every bit of `phase_grad`; `SemiAdder(angle, phase_grad, work)`; the same CNOTs again; `X(q)`. This maps the phase-gradient value $g \mapsto g + x$ when $q = 1$ and $g \mapsto g - x$ when $q = 0$. Adding $x$ multiplies PennyLane's phase-gradient state by $e^{+2\pi i x/2^{b_{\mathrm{rot}}}}$, and subtracting it by the conjugate phase (§6.5). So $q = 1$ picks up $e^{+2\pi i x/2^{b_{\mathrm{rot}}}}$ and $q = 0$ picks up $e^{-2\pi i x/2^{b_{\mathrm{rot}}}}$: exactly $R_z(4\pi x/2^{b_{\mathrm{rot}}})$, with no global phase.<br>Verified by `.scratch/spec-final/probe_exact_givens.py`. A unit test repeats the dense check for every $x$ at $b_{\mathrm{rot}} \le 4$. | Rungs $k = 0, \dots, N-2$ on $(q_k, q_{k+1})$, unrolled in Python, in the order that realizes `angles_from_vector` |
 | Adjoint | Auto-derived ($\theta \to -\theta$) | Auto-derived (reverse order; no loops in the body). An explicit rule is added only if the canary for L-6 shows the auto path failing. |
-| Cost | $T = 2b_{\mathrm{rot}}$ (two $(b_{\mathrm{rot}}+1)$-bit `SemiAdder`s), $M = 0$ | $T = 2b_{\mathrm{rot}}(N-1)$, $M = 0$; 1,590 at FeMoco-54 |
+| Cost | $T = 2(b_{\mathrm{rot}} - 1)$ (two $b_{\mathrm{rot}}$-bit `SemiAdder`s), $M = 0$ | $T = 2(b_{\mathrm{rot}} - 1)(N-1)$, $M = 0$; 1,484 at FeMoco-54 |
 
 ### 9.16 `MajoranaGate` (step 15)
 
@@ -987,7 +994,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Base rule | `TailAngleLoad`; `SFAngleLoad`; `SpinMux`; `SpinSwap`; `GivensLadder(psi_dn)`; `MajoranaGate`; adjoint `GivensLadder`; `SpinSwap`; `SpinMux`; `AngleErase` |
 | `Adjoint(InnerSelect)` (pinned) | The same sequence with the adjoint `MajoranaGate`: still loading first and erasing last |
 | Action | On valid branches it applies $V^\dagger\,\mathrm{Maj}\,V$, with $V$ the spin-selected swap and Givens ladder. This realizes the generator pieces of §3.2. |
-| Cost | $T = T_{\mathrm{tail}} + T_{\mathrm{SF}} + 2 + 2N + 2\cdot 2b_{\mathrm{rot}}(N-1) + 5 + T_{\mathrm{angle\,erase}}$, $M = (N-1)b_{\mathrm{rot}} + 3$; the same for the adjoint. At FeMoco-54: $61 + 291 + 2 + 108 + 3180 + 5 + 102 = 3749$, $M = 798$. |
+| Cost | $T = T_{\mathrm{tail}} + T_{\mathrm{SF}} + 2 + 2N + 2\cdot 2(b_{\mathrm{rot}} - 1)(N-1) + 5 + T_{\mathrm{angle\,erase}}$, $M = (N-1)b_{\mathrm{rot}} + 3$; the same for the adjoint. At FeMoco-54: $61 + 291 + 2 + 108 + 2968 + 5 + 102 = 3537$, $M = 798$. |
 
 ### 9.19 `RefT2` (step 23) and 9.20 `RefAB` (step 28)
 
@@ -1009,7 +1016,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Action | $\langle 0_{\mathrm{anc}}\vert\mathrm{BE}\vert 0_{\mathrm{anc}}\rangle = \tilde H_{\mathrm{SA}}/\tilde\Lambda - I$ |
 | Adjoint | Not provided; not used |
 | Control | `C(DFTHCBlockEncoding)` (pinned): the same sequence with `qp.ctrl(RefT2)` only |
-| Cost | $T = T_{\mathrm{out}} + T_{\mathrm{out}}^\dagger + 2\,(T_{\mathrm{in}} + T_{\mathrm{sel}} + T_{\mathrm{in}}^\dagger) + T_{\mathrm{RefT2}}$ (`InnerSigns` costs 0), $M = K_1 d_1 + 2\,(K_2 d_2 + (N-1)b_{\mathrm{rot}} + 3)$; controlled $T + 1$. At FeMoco-54: $T = 279 + 2\cdot 4937 + 20 = 10{,}173$, $M = 2524$. |
+| Cost | $T = T_{\mathrm{out}} + T_{\mathrm{out}}^\dagger + 2\,(T_{\mathrm{in}} + T_{\mathrm{sel}} + T_{\mathrm{in}}^\dagger) + T_{\mathrm{RefT2}}$ (`InnerSigns` costs 0), $M = K_1 d_1 + 2\,(K_2 d_2 + (N-1)b_{\mathrm{rot}} + 3)$; controlled $T + 1$. At FeMoco-54: $T = 279 + 2\cdot 4725 + 20 = 9{,}749$, $M = 2524$ explicit erase measurements. |
 
 ### 9.22 `DFTHCWalk` (steps 1–28)
 
@@ -1017,7 +1024,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | --- | --- |
 | Base rule | `DFTHCBlockEncoding`, then `RefAB` |
 | Control | `C(DFTHCWalk)` (pinned): `qp.ctrl(DFTHCBlockEncoding)`, then `qp.ctrl(RefAB)` |
-| Cost | $T = T_{\mathrm{BE}} + T_{\mathrm{RefAB}}$, $M = M_{\mathrm{BE}}$; controlled $T + 2$. At FeMoco-54: $T = 10{,}217$ (controlled 10,219), $M = 2524$. |
+| Cost | $T = T_{\mathrm{BE}} + T_{\mathrm{RefAB}}$, $M = M_{\mathrm{BE}}$; controlled $T + 2$. At FeMoco-54: $T = 9{,}793$ (controlled 9,795) and $M = 2524$ explicit erase measurements. The walk also has $A = 8{,}675$ measured AND uncomputes (controlled 8,677), so it makes $M + A = 11{,}199$ physical measurements (controlled 11,201; §9.24). |
 
 ### 9.23 `ControlledWalkPower`
 
@@ -1030,19 +1037,19 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 
 ### 9.24 Exact cost formulas
 
-Every formula below is implemented verbatim in `dfthc.costs` and asserted by T4. $T$ counts `Toffoli` plus `TemporaryAND`. $M$ counts `MidCircuitMeasure`. Measured AND uncomputes appear as `Adjoint(TemporaryAND)`, a gate-set primitive, and contribute to neither.
+Every formula below is implemented verbatim in `dfthc.costs` and asserted by T4. $T$ counts `Toffoli` plus `TemporaryAND`. $M$ counts `MidCircuitMeasure`, the explicit erase measurements. Measured AND uncomputes appear as `Adjoint(TemporaryAND)`, a gate-set primitive, and contribute to neither $T$ nor $M$. Their count $A$ is given at the end of this section. Each is one physical measurement on hardware, so a walk makes $M + A$ physical measurements.
 
 **PennyLane primitive costs.** Probed on 2026-11-11 with `qp.analyze` under the gate set of §7.3, at the sizes listed. A change in any of these breaks T4, which is intended: the formulas then need updating.
 
 | Primitive | $T$ | Notes (probed sizes) |
 | --- | --- | --- |
-| `SemiAdder` on $n$-bit registers, and its adjoint | $n - 1$ | $n = 1, 2, 3, 4, 6, 8, 15$ |
-| `LeftQuantumComparator`, $n$ bits, `"<="` or `"<"` | $n$ | needs $\ge n-1$ work wires and leaves them dirty; $n = 2, 3, 4, 6, 8$ |
+| `SemiAdder` on $n$-bit registers, and its adjoint | $n - 1$ | all `TemporaryAND`, each with a measured uncompute; $n = 1, 2, 3, 4, 6, 8, 15$ |
+| `LeftQuantumComparator`, $n$ bits, `"<="` or `"<"` | $n$ | all `TemporaryAND`; needs $\ge n-1$ work wires and leaves them dirty; $n = 2, 3, 4, 6, 8$ |
 | adjoint of `LeftQuantumComparator` | $0$ | measured uncompute ($n$ `Adjoint(TemporaryAND)`) |
-| `LeftClassicalComparator`, $n$ bits, `"<"` | $n - 1$ | independent of the value; work $\ge n-1$, left dirty; $n = 3, 5, 7$ |
-| adjoint of `LeftClassicalComparator` | $0$ | measured uncompute |
-| `MultiControlledX` with $k \ge 2$ controls and $k - 2$ zeroed work wires | $k - 1$ | $k = 2, 3, 4, 5, 8, 12$ |
-| `CSWAP` | $1$ | |
+| `LeftClassicalComparator`, $n$ bits, `"<"` | $n - 1$ | all `TemporaryAND`; independent of the value; work $\ge n-1$, left dirty; $n = 3, 5, 7$ |
+| adjoint of `LeftClassicalComparator` | $0$ | measured uncompute ($n - 1$ `Adjoint(TemporaryAND)`) |
+| `MultiControlledX` with $k \ge 2$ controls and $k - 2$ zeroed work wires | $k - 1$ | one `Toffoli` plus $k - 2$ `TemporaryAND`s with measured uncompute; $k = 2, 3, 4, 5, 8, 12$ |
+| `CSWAP` | $1$ | one `Toffoli` |
 | `TemporaryAND`; `Adjoint(TemporaryAND)` | $1$; $0$ | |
 
 **Exact unary iteration** (the `dfthc.ops.unary` construction of §9.3). Over the range $[lo, hi)$ of an $n$-bit register, with $c = 1$ if the root carries a control and $c = 0$ otherwise:
@@ -1071,10 +1078,10 @@ $$U(lo, hi, n, c) = \sum_{m=1}^{n}\Big(\big\lfloor (hi - 1)/2^m \big\rfloor - \b
 | `TailAngleLoad` | $U(RC, X_o, w_x, 0)$ | 0 |
 | `SFAngleLoad` | $U(0, R, w_r, 1) + R\, U(0, B, w_b, 1)$ | 0 |
 | `SpinMux`; `SpinSwap` | $1$; $N$ | 0 |
-| `GivensRotation`; `GivensLadder` (and adjoints) | $2b_{\mathrm{rot}}$; $2b_{\mathrm{rot}}(N-1)$ | 0 |
+| `GivensRotation`; `GivensLadder` (and adjoints) | $2(b_{\mathrm{rot}} - 1)$; $2(b_{\mathrm{rot}} - 1)(N-1)$ | 0 |
 | `MajoranaGate` (and adjoint) | 5 | 0 |
 | `AngleErase` | $U(0, R, w_r, 1) + O(w_b) + U(RC, X_o, w_x, 0)$ | $(N-1)b_{\mathrm{rot}} + 3$ |
-| `InnerSelect` (and adjoint) | $T_{\mathrm{tail}} + T_{\mathrm{SF}} + 2 + 2N + 4b_{\mathrm{rot}}(N-1) + 5 + T_{\mathrm{angle\,erase}}$ | $(N-1)b_{\mathrm{rot}} + 3$ |
+| `InnerSelect` (and adjoint) | $T_{\mathrm{tail}} + T_{\mathrm{SF}} + 2 + 2N + 4(b_{\mathrm{rot}} - 1)(N-1) + 5 + T_{\mathrm{angle\,erase}}$ | $(N-1)b_{\mathrm{rot}} + 3$ |
 | `RefT2`; `RefAB` | `ZeroReflection` with $n_w = w_b + b_{k2} + 2$; with $n_w = w_x + b_{k1} + w_b + b_{k2} + 2$ | 0 |
 | `DFTHCBlockEncoding` | $T_{\mathrm{out}} + T_{\mathrm{out}}^\dagger + 2(T_{\mathrm{in}} + T_{\mathrm{sel}} + T_{\mathrm{in}}^\dagger) + T_{\mathrm{RefT2}}$ | $K_1 d_1 + 2(K_2 d_2 + (N-1)b_{\mathrm{rot}} + 3)$ |
 | `DFTHCWalk`; controlled walk | $T_{\mathrm{BE}} + T_{\mathrm{RefAB}}$; $+2$ | $M_{\mathrm{BE}}$ |
@@ -1090,6 +1097,12 @@ The read and erase ranges are instantiated as in §9.3–9.5:
 
 The QPE correction term counts every conditional at its maximum branch. With the branch hints of §7.6 its expected value is half of it.
 
+**Measured AND uncomputes.** Every `TemporaryAND` in a walk is uncomputed inside the same walk by one `Adjoint(TemporaryAND)`. Comparator work wires stay dirty only from a prepare to its unprepare. So $A$ is $T$ minus the plain `Toffoli`s: the alias and QROAM swap-network `CSWAP`s, the `SpinSwap`s, the `SpinMux` Toffolis, one per reflection `MultiControlledX`, and three per `MajoranaGate`.
+
+$$T_{\mathrm{Toffoli}} = 2w_x + 4w_b + (K_1 - 1)d_1 + 2(K_2 - 1)d_2 + 4N + 12, \qquad A = T - T_{\mathrm{Toffoli}} .$$
+
+The controlled walk has the same $T_{\mathrm{Toffoli}}$, because each of its two extra controls adds a `TemporaryAND`. T4 asserts $A$ as the `Adjoint(TemporaryAND)` count.
+
 **Evaluation at FeMoco-54** (`FEMOCO54`, $w_r = 4$):
 
 | Quantity | Value |
@@ -1101,10 +1114,13 @@ The QPE correction term counts every conditional at its maximum branch. With the
 | $T_{\mathrm{read,out}}$; $T_{\mathrm{read,in}}$ | 156; 933 |
 | $T_{\mathrm{erase,out}}$; $T_{\mathrm{erase,in}}$ | 36; 196 |
 | `OuterPrepare` / adjoint; `InnerPrepare` / adjoint | 210 / 69; 971 / 217 |
-| `GivensLadder`; `AngleErase`; `InnerSelect` | 1,590; 102; 3,749 |
+| `GivensLadder`; `AngleErase`; `InnerSelect` | 1,484; 102; 3,537 |
 | `RefT2`; `RefAB` | 20; 44 |
-| Block encoding; walk; controlled walk | 10,173; 10,217; 10,219 |
-| $M$ per walk ($96 + 2\cdot 416 + 2\cdot 798$) | 2,524 |
+| Block encoding; walk; controlled walk | 9,749; 9,793; 9,795 |
+| $M$ per walk, explicit erase measurements ($96 + 2\cdot 416 + 2\cdot 798$) | 2,524 |
+| $T_{\mathrm{Toffoli}}$ per walk ($18 + 20 + 72 + 780 + 216 + 12$) | 1,118 |
+| $A$ per walk; controlled walk | 8,675; 8,677 |
+| Physical measurements $M + A$ per walk; controlled walk | 11,199; 11,201 |
 
 ## 10. Register layout and qubit budget
 
@@ -1140,7 +1156,7 @@ At FeMoco-54 (estimate; `WalkLayout` computes the exact number and the report pr
 | `outer` (51 index and data + 72 junk + 14 `cmp_work` + 6 `succ_work`) | 143 |
 | `inner` (49 index and data + 390 junk + 14 `cmp_work` + 2 `succ_work`) | 455 |
 | `select` (795 angles + 4 flags) | 799 |
-| `work` (the largest need is `RefAB`'s 43 zeroed `MultiControlledX` work wires) | ≈ 50 |
+| `work` (the largest need is `RefAB`'s 43 zeroed `MultiControlledX` work wires, 44 when controlled; the Givens adders need 14) | ≈ 50 |
 | **Total** | **≈ 1,570** |
 
 The paper reports 1,131. Its inner-read temporaries (313 qubits) share the 795 angle qubits, which requires measuring the inner junk before the angle load. In our design the junk persists from read to erase (§4.3), and the angle registers are live in between, so the two cannot share. Early junk measurement would recover about 460 qubits with no Toffoli penalty, in one of two variants (§16, Q-1).
@@ -1160,7 +1176,9 @@ Rounds run for $j = t-1, \dots, 0$, with $t$ = `num_bits`. Round $j$ is one `Ope
 3. Phase corrections from the bits already measured. For each earlier bit $l > j$, with $d = l - j + 1$, apply `qp.cond(earlier_bits[l], PhaseGradientRotation)(k=2**d - 1, m=d, ...)` on `control`, against `qpe_grad`. That is the phase $e^{2\pi i (2^d - 1)/2^d} = e^{-2\pi i/2^d}$ on $\lvert 1\rangle$ (§9.1).
 4. `H(control)`.
 
-`earlier_bits` is a dynamic argument holding the measured bits $m_{j+1}, \dots, m_{t-1}$. Whether such measurement-valued arrays work as dynamic arguments in both capture and tape mode is decided by the Phase 0 probe K-10. If they do not, steps 1–4 stay in the driver, with the same gates and counts; `ControlledWalkPower` remains the operator.
+`earlier_bits` is a dynamic boolean array of shape $(t,)$, indexed by bit position. Entry $l$ holds $m_l$ for $l > j$ and `False` for $l \le j$. The rule reads only `earlier_bits[l]` for $l > j$. The driver starts from an all-`False` array and sets entry $j$ after measuring $m_j$. Every round therefore gets an array of the same shape, so all rounds share one argument signature, including round $j = t-1$, in which no entry is set yet.
+
+Whether such measurement-valued arrays work as dynamic arguments in both capture and tape mode is decided by the Phase 0 probe K-10. If they do not, steps 1–4 stay in the driver, with the same gates and counts; `ControlledWalkPower` remains the operator.
 
 **Correction register.** The largest correction width is $d = t$, at $j = 0$ and $l = t-1$. So the corrections use their own phase-gradient register `qpe_grad` of $t$ wires, prepared once with `PhaseGradientStatePrep` (§10.1). The wrapper raises `ValueError` if `num_bits > len(qpe_grad)`. The walk's `phase_grad` ($b_{\mathrm{grad}} = b_{\mathrm{rot}}$ wires) is not used for corrections, so QPE precision is not limited by $b_{\mathrm{rot}}$. The correction scratch and work wires (`correction_wires`, $2t - 1$ wires) may reuse the walk's `work` pool, because corrections never overlap a walk power.
 
@@ -1187,7 +1205,7 @@ The QPE program compiles at FeMoco-54 shape for $t \in \{1, 2, 3\}$. Its worst-c
 - The walk is $W = \mathrm{REF}_{\mathrm{anc}}\,\mathrm{PREP}^\dagger\,\mathrm{SEL}\,\mathrm{PREP}$, with eigenphases $\pm\pi/4$ and $\pm 3\pi/4$.
 - It has an explicit `C(ToyWalk)` rule.
 
-With $t = 3$ and input $\lvert 0\rangle$, QPE returns $\varphi \in \{1/8, 7/8\}$ with total probability $\cos^2(\pi/8)$ and $\varphi \in \{3/8, 5/8\}$ with $\sin^2(\pi/8)$. Two tests check this:
+With $t = 3$ and input $\lvert 0\rangle$, QPE returns $\varphi \in \{1/8, 7/8\}$ with total probability $\cos^2(\pi/8)$ and $\varphi \in \{3/8, 5/8\}$ with $\sin^2(\pi/8)$. Both tests below pass `earlier_bits` with shape $(t,)$ to every round, so they cover round $j = t-1$ with no bit set as well as rounds with set bits. Two tests check the distribution:
 - **Exact distribution:** the sparse simulator branches on the control measurements and forces erasure-type measurements (§12.3).
 - **Compiled smoke test:** `lightning.qubit` with 2,000 shots, comparing within five standard deviations. It uses no postselection and no measurement inside `qp.cond` (§14, L-15).
 
@@ -1200,7 +1218,7 @@ With $t = 3$ and input $\lvert 0\rangle$, QPE returns $\varphi \in \{1/8, 7/8\}$
 | T1 | Classical data | Tables, $\Lambda$, both offset frames ($E_{\mathrm{SoS}}^{\mathrm{walk}}$, $E_{\mathrm{SoS}}^{\mathrm{phys}}$, $\Delta_\eta$), $\lambda_{\mathrm{eff}}$, the encoded model, and agreement with dfthcbe (§8.6) |
 | T2 | Rule validity | `qp.testing.assert_valid_decomp_rule(op, rule, check_matrix=...)` for every registered rule of every operator at two or more small sizes: declared resources equal emitted operators. `check_matrix=True` for measurement-free operators on 10 wires or fewer. |
 | T3 | Semantics | The action against NumPy references: compiled on `lightning.qubit` up to 25 wires, or with the sparse simulator beyond that. Classical (permutation) operators are checked on every basis input of small instances. Phase operators are checked on uniform superpositions; this is the `PhaseFixup` validation, run for random, all-ones and single-bit parity tables. Erase blocks get the outcome certificate of §12.5. **Exhaustive failed-address tests** run for $(B+1, k_2) \in \{(3,1), (5,1), (6,2), (7,0), (28,4)\}$, the last one only for the read itself.<br>1. For every computational address of the outer and inner reads, including failed $x_o \ge X_o$, failed $b \ge B+1$, one-body rows and dead block positions, the loaded `target ‖ junk` equals `loaded_bits` (§9.3).<br>2. For every basis input $(x_o, b, m_b)$ with $\mathrm{succ}_b = [b \le B]$, the read, keep test, alias swap and `InnerSigns` give the sign of the selected weight for a valid $b$, and $+1$ for a failed $b$ (§8.5).<br>3. Our failure signs equal the ported `dfthcbe_failure_signs` whenever $2^{w_b} \le \lceil (B+1)/2^{k_2}\rceil 2^{k_2}$. Otherwise, as at $(5, 1)$ and $(7, 0)$, the test asserts the documented difference instead. |
-| T4 | Exact resources | `compiled_resources` Toffoli and measurement counts equal the §9.24 formulas, as implemented in `dfthc.costs`, at three or more sizes per operator. This includes FeMoco-54 for the composite operators and for the complete walk and controlled walk (nightly tier). `is_symbolic` is false. Separate tests pin the PennyLane primitive costs that §9.24 assumes. |
+| T4 | Exact resources | `compiled_resources` Toffoli counts $T$ and measurement counts $M$ and $A$ equal the §9.24 formulas, as implemented in `dfthc.costs`, at three or more sizes per operator. This includes FeMoco-54 for the composite operators and for the complete walk and controlled walk (nightly tier). `is_symbolic` is false. Separate tests pin the PennyLane primitive costs that §9.24 assumes. |
 | T5 | Gate-set closure | The operators in `qp.analyze` output are a subset of `GATE_SET` ∪ {`MidCircuitMeasure`}. At `level="device"`, no undecomposed operator remains. |
 | T6 | Rule selection | Count signatures prove that the pinned measured rules were chosen. For example, in the compiled `Adjoint(OuterPrepare)`, `MidCircuitMeasure` equals the number of erased qubits ($d_1 + (K_1 - 1)d_1$), `Adjoint(TemporaryAND)` equals the expected measured AND uncomputes, and the Toffoli count equals the erase closed form rather than a second read. A test also compiles with `catalyst.passes.graph_decomposition(gate_set=..., fixed_decomps=..., verbose=True)` and asserts the listed rule names, if that output is capturable (checked in Phase 0). |
 | T7 | Canaries | One focused test per claim of every limitation in §14, asserting today's behaviour. A flipped canary is a signal to revisit the mitigation, not a failure to hide. Canaries that can abort the process run in a subprocess: compiler crashes and every "no decomposition path" case. |
@@ -1283,19 +1301,20 @@ Correctness for every outcome of an erase block is proved with GF(2) linearity, 
 - **Blocks certified:**
   - standalone `QROAMRead` → `QROAMErase` round trips in the outer and inner shapes of both test presets;
   - `TailAngleLoad` and `SFAngleLoad` followed by `AngleErase`;
-  - the composite unprepares, each preceded by its prepare: `OuterPrepare` → `Adjoint(OuterPrepare)` and `InnerPrepare` → `Adjoint(InnerPrepare)`, including the comparators and swaps in between.
+  - the composite unprepares, each preceded by its prepare: `OuterPrepare` → `Adjoint(OuterPrepare)` and `InnerPrepare` → `Adjoint(InnerPrepare)`, including the comparators and swaps in between;
+  - if Q-1 variant (b) is adopted, `OuterPrepare` → junk measurement → `OuterUnprepareFromOutcomes`, and likewise for the inner pair, with $\xi$ ranging over the concatenated target and junk outcomes.
 - **The $p = 1/2$ check** of strict mode stays as a precondition check only.
 - **End-to-end schedules are smoke tests:** S0 (every outcome 0), S1 (every outcome 1) and seeded random schedules, used per tier as in §12.6.
 
 ### 12.6 Organization, tiers and budgets
 
 - **Layout.** `tests/data`, `tests/ops` (one module per operator, holding T2–T6), `tests/integration` (T8 and QPE), `tests/sim`, `tests/canary`, `tests/report`.
-- **Markers.** `compiled`, `slow`, `release`, `canary`, `femoco`, `subprocess`.
+- **Markers.** `compiled`, `slow`, `release`, `canary`, `femoco`, `subprocess`. `release` implies `slow`: a `conftest.py` hook adds `slow` to every test marked `release`, and the tier commands also exclude `release` explicitly.
 - **Budgets** are wall-clock times on the development laptop with `-n auto`.
 
 | Tier | Command | Content | Budget |
 | --- | --- | --- | --- |
-| Per commit | `scripts/test.sh -m "not slow"` | T1; T2; T3, T4 and T6 at small sizes; T5; non-subprocess canaries; simulator differential tests | 15 min |
+| Per commit | `scripts/test.sh -m "not slow and not release"` | T1; T2; T3, T4 and T6 at small sizes; T5; non-subprocess canaries; simulator differential tests | 15 min |
 | Nightly | `scripts/test.sh -m "slow and not release"` | the §12.5 certificates; E-1 under S0 on all 16 inputs; E-2 ($k = 1, 2$) and E-3 (three control states) under S0 on 4 fixed inputs ($\lvert 00\rangle\lvert 00\rangle$, $\lvert 10\rangle\lvert 00\rangle$, $\lvert 10\rangle\lvert 10\rangle$, $\lvert 11\rangle\lvert 11\rangle$ in $\psi_\uparrow \otimes \psi_\downarrow$); E-4 on all 16 inputs; T4 at FeMoco-54 for the composite operators, walk and controlled walk; subprocess canaries; the compile-time benchmark | 4 h |
 | Release (Phase 3 exit, Phase 5) | `scripts/test.sh` | everything, plus E-1 and E-3 on all 16 inputs under S1 and two seeded random schedules, and `H2_631G_TEST` E-1 on its 28 two-electron inputs under S0 | 12 h |
 
@@ -1327,21 +1346,22 @@ Toffolis per walk at FeMoco-54.
 | Angle erase (×2) | 74 ¹ | 180 | 204 | same, for the fixups |
 | Spin multiplexer (×2) | 0 | 8 | 4 | one Toffoli to build, one to unbuild (`mux`) |
 | Spin swaps (×4) | 216 | 216 | 216 | none |
-| Givens ladders (×4) | 6,360 | 5,936 | 6,360 | exact $R_z$ with carry-in, $b_{\mathrm{rot}}$ per $R_z$ as in the paper (`exact-rz`) |
+| Givens ladders (×4) | 6,360 | 5,936 | 5,936 | dfthcbe's exact construction, $b_{\mathrm{rot}} - 1$ per $R_z$; the paper counts $b_{\mathrm{rot}}$ (`rz-addsub`) |
 | Majorana gate (×2) | 14 | 10 | 10 | none |
 | $\mathrm{REF}_{T_2}$ | 21 | 20 | 20 | none |
 | $\mathrm{REF}_{\mathcal A\cup\mathcal B}$ | 46 | 45 | 44 | constants |
-| **Total** | **9,997** | **9,641** | **10,217** | |
+| **Total** | **9,997** | **9,641** | **9,793** | |
 
 ¹ The paper counts the tail-angle phase fixup ($N$) under the inner erase (its B50). dfthcbe and we count it under the angle erase (step 18). The report shows both attributions.
 
-Ours minus the paper is +220, by cause:
+Ours minus the paper is −204, by cause:
+- **Givens ladders: −424.** Each $R_z$ costs $b_{\mathrm{rot}} - 1$ Toffolis with Qualtran's `ControlledAddOrSubtract`, as in dfthcbe. The paper counts $b_{\mathrm{rot}}$.
 - **Inner reads: +186.** Our swapped inner entry has $d_2 = 26$ bits (alt, keep, sgn, d_sgn and $r$), against the 20-bit entries of the paper's Table III.
 - **Angle loads and erases, and the inner erase: +80**, after moving the paper's tail fixup to step 18. These come from exact boundaries in place of pruned iteration, and from one-hot padding.
 - **Uniform preparations and the outer erase: −46.** Measured uncomputes and the free comparator adjoints of PennyLane's primitives.
 - **Remaining terms: net 0.** Outer read +3, spin multiplexer +4, Majorana gate −4, reflections −3.
 
-The Givens ladders equal the paper's (6,360). The controlled walk costs two more Toffolis than the walk. The deferred refinements (§4.4 items 8 and 9; §9.3) would save up to 524 Toffolis: 100 from truncated or pruned iteration and 424 from the half-step angle grid.
+Ours minus dfthcbe is +152: the same inner-read, boundary and padding causes, partly offset by the free comparator adjoints. The Givens ladders equal dfthcbe's (5,936). The controlled walk costs two more Toffolis than the walk. The deferred refinements (§4.4 item 8; §9.3) would save up to 100 Toffolis, from truncated or pruned iteration.
 
 ### 13.2 Qubits
 
@@ -1379,7 +1399,7 @@ Reason codes:
 | `mux` | Spin-multiplexer construction |
 | `attrib` | The paper attributes the cost to a different step |
 | `junk-qubits` | Junk persists until the erase |
-| `exact-rz` | Exact $R_z$ in the Givens rotations, $b_{\mathrm{rot}}$ Toffolis each (the paper's count). dfthcbe counts $b_{\mathrm{rot}} - 1$ (§4.4 item 9). |
+| `rz-addsub` | Each Givens $R_z$ is Qualtran's `ControlledAddOrSubtract`, with $b_{\mathrm{rot}} - 1$ Toffolis, as in dfthcbe. The paper counts $b_{\mathrm{rot}}$ (§4.4 item 9). |
 | `cmp-free` | PennyLane's comparators uncompute by measurement, so their adjoints cost no Toffoli |
 
 The report never adjusts measured numbers.
@@ -1504,7 +1524,13 @@ The implementation plan specifies tasks, prompts and acceptance checks. This sec
 **Risks**, each with how and when it is resolved:
 
 1. **K-1: Compile time and IR size at FeMoco-54.** Contributing factors are the compilable tables, Python-unrolled rules, packed parity constants and rule recompiles ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173)).
-   - *Resolution, Phase 0 spike:* compile FeMoco-shaped `InnerPrepare` (read and erase) and `InnerSelect` stand-ins built from `QROAMRead`, `QROAMErase` and a 53-rung ladder, then extrapolate to the complete walk. Budget: 10 minutes and 16 GB per block, and a projected 60 minutes and 16 GB each for the complete walk and controlled walk.
+   - *Resolution, Phase 0 spike:* assemble and compile a complete FeMoco-54-shaped stand-in walk and controlled walk, each as one program, without extrapolating. Placeholder semantics are allowed, but the structure must be the walk's:
+     - the `WalkLayout` registers;
+     - the operator instances and nesting of §9.21–9.22, with their pins;
+     - prototype `QROAMRead`, `QROAMErase`, angle loads and `AngleErase` with FeMoco-shaped random tables;
+     - 53-rung ladders.
+
+     This exposes rule recompiles and whole-module IR growth, which per-block compiles cannot predict. Budget: 60 minutes and 16 GB each. Separate `InnerPrepare` and `InnerSelect` stand-in compiles (10 minutes and 16 GB per block) are kept as diagnostics that locate the cost.
    - *Remedies, applied in order. All keep the walk one compiled program:*
      1. pass the bulk tables of never-adjointed operators (`QROAMRead`, the angle loads, the erases) as dynamic arrays, with `qp.for_loop` and `qp.cond` (Toffoli counts stay exact; Clifford counts become hinted);
      2. pack the parity constants.
@@ -1531,23 +1557,40 @@ The implementation plan specifies tasks, prompts and acceptance checks. This sec
 9. **K-9: Qubits above the paper's count** (§10.3).
    - *Resolution:* documented in the Phase 4 report.
 10. **K-10: Measurement-valued arrays as dynamic arguments.**
-    - *Resolution, Phase 0 probe:* in tape mode and under capture, pass the exact packed parity-array shape of the inner erase (and an array of measured bits, as `QPERound` needs) as a dynamic `Operator2` argument. Check that both modes decompose and compile, that `qp.analyze` counts are exact (not symbolic), and that the simulated state is exact.
+    - *Resolution, Phase 0 probe:* in tape mode and under capture, pass these measurement-valued arrays as dynamic `Operator2` arguments:
+      - the exact packed parity-array shape of the inner erase;
+      - the junk-outcome array of Q-1 variant (b) ($(K_2 - 1)d_2 = 390$ entries at FeMoco-54), passed to a base operator shaped like `InnerUnprepareFromOutcomes`;
+      - `QPERound`'s `earlier_bits` with shape $(t,)$ (§11.1), for both round $j = t-1$ (no entry set) and a round with set entries.
+
+      Check that both modes decompose and compile, that `qp.analyze` counts are exact (not symbolic), and that the simulated state is exact.
     - *The outcome decides* Q-1's variant (b) and the `QPERound` form (§11.1).
     - *Fallback:* corrections stay in the QPE driver, and Q-1 keeps only variant (a).
 
-**Open questions for the user.** None blocks Phase 0. Q-3 to Q-5 confirm defaults already in the baseline; changing one changes the formulas of §9.24 before Phase 1.
+**Questions for the user.** The user decided Q-2 to Q-5 on 2026-11-11; the decisions are recorded below and in the baseline. Q-1 stays open and does not block Phase 0.
 
-- **Q-1: Early junk measurement, to be decided after the Phase 4 report.**
+- **Q-1: Early junk measurement. Open; decided after K-10 and the Phase 4 report.**
   - *What it is.* Each read's junk is X-measured right after its swap network. That frees about 460 qubits at FeMoco-54 (72 outer and 390 inner junk wires), which can then hold the angle registers as in the paper's 1,131-qubit count.
   - *No Toffoli penalty.* The outcomes are XORed into the parities of the later erase, so no extra fixup is needed. That outcomes survive nested `Operator2` calls inside one rule was verified on 2026-11-11, on the compiled path and the tape path.
   - *Variant (a): a composite owns the measurements.* The measurement and its fixup sit in one rule. For each inner round, `InnerPrepare` and its adjoint (steps 5–8 and 19–22) merge into one composite with `InnerSigns` and `InnerSelect`, and `DFTHCBlockEncoding` owns the outer junk. The separately pinned prepare and unprepare operators disappear.
-  - *Variant (b): outcomes passed as dynamic arguments.* `DFTHCBlockEncoding`'s rule measures the junk right after each prepare and passes the outcome arrays to the matching unprepare as a dynamic argument. Block boundaries stay as they are. Feasibility is decided by K-10.
+  - *Variant (b): outcomes passed to dedicated unprepare operators.* Explicit symbolic adjoint rules take only `(base)`, so `Adjoint(OuterPrepare)` and `Adjoint(InnerPrepare)` cannot receive outcomes. Variant (b) therefore adds two base operators, `OuterUnprepareFromOutcomes` and `InnerUnprepareFromOutcomes`:
+    - *Signature.* Wires: the matching prepare's wires except its junk register. Compilable: the prepare's compilable arguments. Dynamic: `junk_outcomes`, a boolean array with one entry per junk qubit ($(K_1 - 1)d_1$ outer, $(K_2 - 1)d_2$ inner), in the order of `QROAMRead.junk_layout`.
+    - *Rule.* As the pinned adjoint of §9.7 or §9.8, with the erase split:
+      1. the alias `CSWAP`s;
+      2. the adjoint comparator;
+      3. X-measure the target qubits only;
+      4. compute the parities with `mcm_parities` from the concatenated (target ‖ `junk_outcomes`) outcomes, and apply `emit_phase_fixup` over the read's loaded set;
+      5. the `H`s;
+      6. the adjoint `FlaggedUniformPrep`.
+
+      $T$ and the total $M$ are unchanged. The junk's share of $M$ moves into the block-encoding rule.
+    - *Pins and use.* Both rules are pinned in `FIXED_DECOMPS`. The operators are never adjointed or controlled. `DFTHCBlockEncoding`'s rule X-measures each prepare's junk right after the prepare and passes the outcomes to the matching unprepare operator. `WalkLayout` then lets the angle registers reuse the freed junk wires.
+    - *Catalog and tests.* If adopted, both operators get §9 entries, T2–T6 tests and §12.5 certificates (outcome vectors over target and junk). The adjoint prepares remain for the baseline. Block boundaries stay as they are. Feasibility is decided by K-10.
   - *Trade-off.* Implementation complexity, and for (a) changed block boundaries, against about 460 qubits.
-  - *Status.* The baseline keeps the junk until the erase.
-- **Q-2: Generating dfthcbe reference fixtures.** This requires installing Qualtran from PyPI into the separate `.venv-ref`. We assume that is acceptable; if not, the fixture tests are skipped as described in §8.6.
-- **Q-3: The QPE driver is a quantum function** (R-4 exemption, §11.1). It returns measured bits, which an `Operator2` cannot. Its quantum content per round is the `Operator2` `QPERound`, or `ControlledWalkPower` if K-10 fails.
-- **Q-4: Exact versus truncated unary iteration** (§4.4 item 8). Exact iteration costs 26 more Toffolis per walk than truncated iteration in the alias reads and erases. It costs 74 more than dfthcbe's pruned angle loads and fixups, a deferred refinement. In return it gives simple semantics on every address and trivial failure signs.
-- **Q-5: Exact $R_z$ versus the half-step angle grid** (§4.4 item 9). Exact costs $2b_{\mathrm{rot}}$ per rung, the paper's count, and keeps dfthcbe's integer angle tables. The half-step grid costs $2(b_{\mathrm{rot}} - 1)$ per rung, saving 424 Toffolis per walk at the same precision, but its stored integers differ from dfthcbe's.
+  - *Status.* Open. The user decides after K-10 (Phase 0) and the Phase 4 resource report, preferring variant (b) if K-10 passes. The baseline keeps the junk until the erase.
+- **Q-2: Generating dfthcbe reference fixtures. Decided: yes.** Agents may install Qualtran and dfthcbe into the separate `.venv-ref` to generate the reference fixtures (§8.6). The skip path of §8.6 remains for machines where `.venv-ref` cannot be created.
+- **Q-3: The QPE driver is a plain quantum function. Decided: yes** (R-4 exemption, §2.1, §11.1). It returns measured bits, which an `Operator2` cannot. `QPERound` and `ControlledWalkPower` stay `Operator2`. If K-10 fails, the per-round quantum content is `ControlledWalkPower` alone (§11.1).
+- **Q-4: Exact versus truncated unary iteration. Decided: exact now** (§4.4 item 8). Exact iteration costs 26 more Toffolis per walk than truncated iteration in the alias reads and erases, and 74 more than dfthcbe's pruned angle loads and fixups. In return it gives simple semantics on every address and trivial failure signs. Truncated iteration and pruning are later optimizations, worth up to 100 Toffolis per walk at FeMoco-54.
+- **Q-5: Angle construction of the Givens rotations. Decided: dfthcbe's exact construction** (§4.4 item 9, §9.14). The user chose the half-step grid for its 424-Toffoli saving. Review finding P-2 then showed that dfthcbe's exact construction costs the same $2(b_{\mathrm{rot}} - 1)$ per rung with exact angles and dfthcbe's integer tables. The 2026-11-11 probe verified the port, so it supersedes both the half-step grid and the earlier carry-in circuit.
 
 ## 17. References
 
