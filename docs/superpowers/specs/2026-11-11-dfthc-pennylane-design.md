@@ -43,7 +43,7 @@ Correctness is established in three ways:
 - end to end on H2, with a purpose-built sparse-state simulator;
 - for QPE, on a toy walk.
 
-The expected cost at FeMoco-54 is about 9.8k Toffolis per walk, against the paper's 9,997 and dfthcbe's 9,641. Differences are explained in a generated report, not tuned away.
+The expected cost at FeMoco-54 is about 9.9k Toffolis per walk, against the paper's 9,997 and dfthcbe's 9,641. Differences are explained in a generated report, not tuned away.
 
 ## 2. Requirements
 
@@ -122,14 +122,20 @@ Register widths use $\lg y := \lceil \log_2 y \rceil$. A register of width 0 is 
 | $M_2 = RC \lceil (B+1)/K_2 \rceil$ | Live leaves of the inner read | 540 |
 | $\Lambda$ | Block-encoding normalization (§3.2) | data |
 | $\tilde\Lambda$, $\tilde H_{\mathrm{SA}}$ | Normalization and Hamiltonian that the circuit encodes for the rounded tables (§8.5) | data |
-| $E_{\mathrm{SoS}}$, $E_{\mathrm{gap}}$, $\lambda_{\mathrm{eff}}$ | Sum-of-squares offset, spectral gap and effective normalization (§3.3) | data |
+| $\eta$ | Number of electrons of the target sector (`eta` in `factors.npz`) | data |
+| $E_{\mathrm{SoS}}^{\mathrm{walk}}$ | Walk-frame sum-of-squares offset, from the factors (§3.2) | data |
+| $E_{\mathrm{SoS}}^{\mathrm{phys}}$ | Physical-frame offset on the $\eta$-electron sector: `summary.json` `e_sos` (§3.2) | data |
+| $\Delta_\eta = E_{\mathrm{SoS}}^{\mathrm{phys}} - E_{\mathrm{SoS}}^{\mathrm{walk}}$ | Frame shift on the $\eta$-electron sector | data |
+| $E_{\mathrm{gap}}$, $\lambda_{\mathrm{eff}}$ | Spectral gap and effective normalization (§3.3) | data |
 | $T$ | Toffoli count: number of `Toffoli` plus number of `TemporaryAND` (§7.6) | |
 
 ### 3.2 The sum-of-squares Hamiltonian
 
-With its two-body tensor DFTHC-factorized, the electronic-structure Hamiltonian $H$ on $N$ spatial orbitals satisfies, up to a constant $E_{\mathrm{SoS}}$:
+With its two-body tensor DFTHC-factorized, the electronic-structure Hamiltonian on $N$ spatial orbitals is written, up to a constant offset (§3.2.1), as the sum-of-squares operator
 
-$$H_{\mathrm{SA}} = H - E_{\mathrm{SoS}} = \sum_{\alpha} O_\alpha^\dagger O_\alpha \succeq 0 .$$
+$$H_{\mathrm{SA}} = \sum_{\alpha} O_\alpha^\dagger O_\alpha \succeq 0 .$$
+
+$H_{\mathrm{SA}}$ is a fixed operator on the whole Fock space; the block encoding encodes exactly this operator and no offset.
 
 The sum runs over $2N + RC$ generators, written with rotated Majoranas $\tilde\gamma_{u\sigma f} = \sum_p u_p \gamma_{p\sigma f}$ of flavour $f \in \{0, 1\}$ and spin $\sigma$, and with $a_{u\sigma} = (\tilde\gamma_{u\sigma 0} + i\tilde\gamma_{u\sigma 1})/2$:
 
@@ -148,7 +154,15 @@ The normalization is:
 
 $$\Lambda = \tfrac12 \sum_\alpha \lambda_\alpha^2 = \lVert h^{(1)\prime}\rVert_1 + \tfrac14 \sum_{r,c}\Big(\sum_{b\in[B+1]}\lvert w_b^{(r,c)}\rvert\Big)^2 .$$
 
-Here $\lVert\cdot\rVert_1$ is the sum of absolute eigenvalues. $E_{\mathrm{SoS}}$ follows the paper (Eq. 30 in the walk's frame, as in dfthcbe's `walk_e_sos` and `walk_integrals`). Our implementation must reproduce dfthcbe's `summary.json` value `e_sos` (§8.6).
+Here $\lVert\cdot\rVert_1$ is the sum of absolute eigenvalues.
+
+#### 3.2.1 Two offset frames
+
+Two different constants relate $H_{\mathrm{SA}}$ to energies. They are not equal in general and must not be conflated.
+
+- **Walk frame, the whole Fock space.** $E_{\mathrm{SoS}}^{\mathrm{walk}} = -2\sum_r w_-^{(r)} - \tfrac12\sum_{r,c}\big(w_B^{(r,c)} - \sum_{b<B} w_b^{(r,c)}\big)^2$, as in dfthcbe's `walk_e_sos`. Then $H_{\mathrm{SA}} + E_{\mathrm{SoS}}^{\mathrm{walk}}$ is exactly the BLISS-shifted Hamiltonian whose integrals dfthcbe's `walk_integrals` returns, as an operator on the whole Fock space.
+- **Physical frame, the $\eta$-electron sector.** $E_{\mathrm{SoS}}^{\mathrm{phys}}$ is `summary.json` `e_sos`, which equals `e_upper − e_gap` for every vendored system. On the $\eta$-electron sector, the physical electronic Hamiltonian $H_{\mathrm{phys}}$ satisfies $H_{\mathrm{phys}} = H_{\mathrm{SA}} + E_{\mathrm{SoS}}^{\mathrm{phys}}$. Here $H_{\mathrm{phys}}$ is built from `integrals.npz` (`h1e`, `eri`), without `core_energy`, and `e_upper` is its lowest eigenvalue on the sector (verified for the H2 instances). This holds exactly for exactly factorized instances, and up to the factorization error otherwise. $E_{\mathrm{SoS}}^{\mathrm{phys}}$ is input data from the factorization pipeline; it is not recomputed from the factors.
+- **Frame shift.** $\Delta_\eta = E_{\mathrm{SoS}}^{\mathrm{phys}} - E_{\mathrm{SoS}}^{\mathrm{walk}}$ is the constant by which the two frames differ on the $\eta$-electron sector. For `h2_sto3g_R2_B2_C1` (verified on 2026-11-11): $E_{\mathrm{SoS}}^{\mathrm{walk}} = -0.6923157$, $E_{\mathrm{SoS}}^{\mathrm{phys}} = -2.0132705$, and $\Delta_\eta = -1.3209547$. On the two-electron sector, the matrix $H_{\mathrm{phys}} - H_{\mathrm{SA}} - E_{\mathrm{SoS}}^{\mathrm{walk}}$ equals $\Delta_\eta$ times the identity to $10^{-10}$.
 
 ### 3.3 Block encoding, walk and controlled walk
 
@@ -165,7 +179,7 @@ $$\mathrm{BE}\Big[\frac{H_{\mathrm{SA}}}{\Lambda} - I\Big] = U^\dagger\, \mathrm
 
 Spectrum and cost:
 - $W$ has eigenphases $\pm\arccos(E_j/\Lambda - 1)$ for the eigenvalues $E_j$ of $H_{\mathrm{SA}}$.
-- The lowest eigenvalue is $E_{\mathrm{gap}} = E_{\mathrm{gs}} - E_{\mathrm{SoS}}$.
+- The gap $E_{\mathrm{gap}}$ is the lowest eigenvalue of $H_{\mathrm{SA}}$ on the $\eta$-electron sector. It is frame-independent: $E_{\mathrm{gap}} = E_{\mathrm{gs}}^{\mathrm{phys}} - E_{\mathrm{SoS}}^{\mathrm{phys}}$, with $E_{\mathrm{gs}}^{\mathrm{phys}}$ the physical ground energy (`e_upper`).
 - Resolving energies near the gap to $\delta E$ takes about $\lambda_{\mathrm{eff}}/\delta E$ walk steps, with $\lambda_{\mathrm{eff}} = \sqrt{E_{\mathrm{gap}}(2\Lambda - E_{\mathrm{gap}})}$.
 
 On states whose ancillas start in $\lvert 0\rangle$ we have $U^\dagger U = I$. So the controlled walk controls only the two reflections:
@@ -176,7 +190,11 @@ The controlled reflections must reproduce the global sign of $2\Pi - I$ exactly,
 
 ### 3.4 Energy estimation
 
-QPE on $C(W)$ estimates an eigenphase $\theta$. The energy follows as $E = \tilde\Lambda(1 + \cos\theta)$, where $\tilde\Lambda$ is the effective normalization of §8.5. The two eigenphases $\pm\theta$ that belong to one eigenvalue give the same energy.
+QPE on $C(W)$ estimates an eigenphase $\theta$. The two eigenphases $\pm\theta$ that belong to one eigenvalue give the same energy. Energies follow in three steps:
+
+1. **Sum-of-squares eigenvalue.** $E_{\mathrm{SA}} = \tilde\Lambda(1 + \cos\theta)$ is an eigenvalue of $\tilde H_{\mathrm{SA}}$, with $\tilde\Lambda$ the effective normalization of §8.5.
+2. **Physical electronic energy.** For an $\eta$-electron input state, $E_{\mathrm{phys}} = E_{\mathrm{SA}} + E_{\mathrm{SoS}}^{\mathrm{phys}}$. The walk-frame energy is $E_{\mathrm{SA}} + E_{\mathrm{SoS}}^{\mathrm{walk}}$.
+3. **Total energy.** Add `core_energy` from `integrals.npz` where it is available.
 
 ### 3.5 The circuit, step by step
 
@@ -266,7 +284,8 @@ Remedying Option 2 converges on Option 1. Option 3 re-implements primitives Penn
 4. **Structure-determining data are compilable arguments** ([catalyst#3172](https://github.com/PennyLaneAI/catalyst/issues/3172)). A measured fallback exists if compile time at FeMoco size is too high (§16, K-1).
 5. **Bodies of operators that are auto-adjointed contain no `qp.for_loop`/`qp.cond`** ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)).
 6. **Rule selection is asserted.** Tests use measurement-count signatures and, where the output is capturable, the verbose rule listing of `catalyst.passes.graph_decomposition`. Conditionals carry `qp.hint` branch probabilities.
-7. **Junk persists from read to erase.** The qubit count therefore exceeds the paper's (§10.3).
+7. **Junk persists from read to erase.** The qubit count therefore exceeds the paper's (§10.3). An alternative with no Toffoli penalty is open question Q-1 (§16).
+8. **Unary iteration is exact** (review round 1). Out-of-range addresses load nothing, the behaviour on every computational address is specified (§9.3), and the failure-sign term of the encoded model follows from it (§8.5).
 
 ## 5. Architecture
 
@@ -321,7 +340,7 @@ dfthc-be/
       majorana.py             MajoranaGate
       select.py               InnerSelect
       walk.py                 DFTHCBlockEncoding, DFTHCWalk
-    qpe.py                    ControlledWalkPower, iterative_phase_estimation(), energy_from_phase()
+    qpe.py                    ControlledWalkPower, iterative_phase_estimation(), energy_from_phase(), physical_energy()
     testing/
       sparse_sim.py           sparse-state simulator (§12.3)
       tape.py                 tape-path decomposition for simulation
@@ -404,7 +423,7 @@ These conventions follow dfthcbe unless stated otherwise, so blocks can be compa
 ### 6.3 Givens angles
 
 - **Ladder.** Rung $k \in [N-1)$ acts on modes $(q_k, q_{k+1})$ with angle $\theta_k$. The ladder applies $U(u)$ with $U(u)^\dagger \gamma_{0,f} U(u) = \sum_j u_j\gamma_{j,f}$.
-- **Angles and storage.** Angles come from the one-column Givens factorization of $u$ (`angles_from_vector`). They are stored as $x_k = \mathrm{round}(\theta_k/(2\pi)\cdot 2^{b_{\mathrm{rot}}-1}) \bmod 2^{b_{\mathrm{rot}}}$. The rung realizes $\theta = 4\pi x/2^{b_{\mathrm{rot}}}$ exactly.
+- **Angles and storage.** Angles come from the one-column Givens factorization of $u$ (`angles_from_vector`, angles in $[0, 2\pi)$). They are stored as $x_k = \mathrm{round}(\theta_k/(2\pi)\cdot 2^{b_{\mathrm{rot}}-1}) \bmod 2^{b_{\mathrm{rot}}-1}$, exactly as dfthcbe's `discretize_angles`. So $x_k \in [0, 2^{b_{\mathrm{rot}}-1})$, and the top bit of each $b_{\mathrm{rot}}$-wire angle register is always 0. The rung realizes $\theta = 4\pi x/2^{b_{\mathrm{rot}}}$ exactly.
 - **Rung matrix.** In the basis $\{\lvert 01\rangle, \lvert 10\rangle\}$ of $(q_k, q_{k+1})$ it is $\begin{pmatrix}\cos\theta & -\sin\theta\\ \sin\theta & \cos\theta\end{pmatrix}$. The states $\lvert 00\rangle$ and $\lvert 11\rangle$ are fixed.
 
 ### 6.4 Alias sampling
@@ -665,14 +684,38 @@ Presets:
 - the rounded angles, as $\tilde u = $ `vector_from_angles` of the discretized angles;
 - the identity term $b = B$;
 - failed uniform preparation of $x_o$: $\mathrm{REF}_{T_2}$ is $-I$ there, which renormalizes $\Lambda$ by $1 - P_{\mathrm{fail}}(x_o)$ as in dfthcbe;
-- failed uniform preparation of $b$: the Majorana gate is gated on $\mathrm{succ}_b$ for SF branches only.
+- failed uniform preparation of $b$, derived below from our read construction.
 
-It is built from the Jordan-Wigner matrices of `dfthc.data.fermion`. This model is the oracle for the end-to-end checks (§12.4).
+It is built from the Jordan-Wigner matrices of `dfthc.data.fermion`, in two independent ways that must agree to $10^{-10}$ (§8.6, check 2):
+- directly from the generators of §3.2, with the encoded weights and unit vectors;
+- as $H_{\mathrm{walk}} - E_{\mathrm{SoS}}^{\mathrm{walk}}$ of the encoded factors (dfthcbe's convention for `encoded_factors`).
+
+Only the walk-frame offset is involved; the physical-frame offset never enters $\tilde H_{\mathrm{SA}}$ (§3.2.1). This model is the oracle for the end-to-end checks (§12.4).
+
+**Failed uniform preparation of $b$.**
+- **Where the failure goes.** The uniform preparation of $b$ leaves probability $P_{\mathrm{fail}}(b)$, the same for every row, on values $b \in [B+1, 2^{w_b})$ with $\mathrm{succ}_b = 0$.
+- **What our read loads there.** On SF rows the inner `QROAMRead` loads, for every such $b$, a target entry of zeros (§9.3: padding inside a partially live block, or nothing at all in a block outside the live range). So $\mathrm{keep} = 0$, the comparator always sets $\mathrm{less\_than}_b$, the alias swap moves $\mathrm{alt} = 0$ into `b`, and $\mathrm{sgn} = \mathrm{d\_sgn} = 0$. `InnerSigns` therefore applies no sign. The Majorana gate is off because $\mathrm{succ}_b = 0$, so `InnerSelect` acts as $V^\dagger V = I$.
+- **Result.** Every failed branch of an SF row acts as $+I$, so our failure sign is $\sigma_{\mathrm{fail}} = +1$ for every SF row. With $s_b$ the sign of $w_b$ and $\tilde q_b$ the prepared inner probabilities, the inner amplitudes are $a_b = (1 - P_{\mathrm{fail}}(b))\, s_b\, \tilde q_b$ for $b \le B$, and the identity term gains $a_B \mathrel{+}= P_{\mathrm{fail}}(b)\,\sigma_{\mathrm{fail}}$. These become $\tilde w_b = a_b\sqrt{4\tilde\Lambda\,\tilde p_{rc}}$ and $\tilde w_\pm = \tilde\Lambda\,\tilde p$, the same structure as dfthcbe's `encoded_factors`.
+- **One-body rows** are unaffected: their select does not depend on $b$, and their inner read loads nothing for any $b$.
+
+**Comparison with dfthcbe's `failure_signs`.**
+- **How dfthcbe differs.** dfthcbe's unary iteration is truncated (its `_leaf`): a failed $b$ whose block index $\lfloor b/2^{k_2}\rfloor$ is at least the live block count $\lceil (B+1)/2^{k_2}\rceil$ lands on a live leaf. It can therefore read a live entry $e \le B$ and inherit that entry's keep-averaged sign. Its `failure_signs` is the mean over failed $b$.
+- **When the two agree.** Every failed $b$ reads padding in both constructions when $2^{w_b} \le \lceil (B+1)/2^{k_2}\rceil\, 2^{k_2}$, that is, when the last live block covers the whole register. Then dfthcbe's failure sign is also $+1$. This holds at FeMoco-54 ($B+1 = 28$, $k_2 = 4$) and in both test presets.
+- **Where they differ.** For example $B+1 = 5$, $k_2 = 1$ (dfthcbe's own test case): there the failed $b = 6$ reads entry 4 in dfthcbe and padding in ours.
+- **Port for comparison.** `dfthc.data.encoded.dfthcbe_failure_signs` ports dfthcbe's function, including `_leaf`, so §12.1 (T1 and T3) can compare the two.
 
 ### 8.6 Checks against dfthcbe
 
-1. **Scalars against `summary.json`, relative tolerance $10^{-10}$.** These are $\Lambda$ (`lambda_sos`), $E_{\mathrm{SoS}}$ (`e_sos`) and $\lambda_{\mathrm{eff}}$ (`lambda_eff`), computed from the factors.
-2. **Ground energy, H2 instances, relative tolerance $10^{-8}$.** The lowest eigenvalue of the dense $H_{\mathrm{SA}}$ built from the unrounded factors equals `e_gap`. This mirrors dfthcbe's `test_walk_integrals_have_the_factors_gap`.
+1. **Scalars against `summary.json`, relative tolerance $10^{-10}$.**
+   - $\Lambda$ from the factors equals `lambda_sos`.
+   - $\lambda_{\mathrm{eff}}$ from $\Lambda$ and `e_gap` equals `lambda_eff`.
+   - The data satisfy `e_sos == e_upper - e_gap`, and $E_{\mathrm{SoS}}^{\mathrm{phys}}$ is read from `e_sos` (§3.2.1).
+2. **Walk frame, full Fock space, H2 instances ($N \le 4$).**
+   - The dense $H_{\mathrm{SA}}$ built from the generators of §3.2 with `dfthc.data.fermion` equals $H_{\mathrm{walk}} - E_{\mathrm{SoS}}^{\mathrm{walk}}$ to $10^{-10}$, where $H_{\mathrm{walk}}$ is built from our port of dfthcbe's `walk_integrals`.
+   - $H_{\mathrm{SA}}$ is positive semidefinite.
+3. **Physical frame, $\eta$-electron sector, H2 instances,** with dfthcbe's per-instance factorization tolerances `FACTORS_ERROR`: $10^{-10}$ for `h2_sto3g_R2_B2_C1`, $3\times 10^{-2}$ for `h2_631g_R2_B2_C2`, $10^{-3}$ for `h2_631g_R2_B3_C3`.
+   - The lowest eigenvalue of $H_{\mathrm{SA}}$ on the sector equals `e_gap` within the tolerance (mirroring dfthcbe's `test_walk_integrals_have_the_factors_gap`). On 2026-11-11 the observed deviations were below $10^{-15}$, $2.1\times 10^{-2}$ and $5.5\times 10^{-4}$.
+   - For the exactly factorized `h2_sto3g_R2_B2_C1`, $H_{\mathrm{phys}}$ (from `integrals.npz`) minus $H_{\mathrm{walk}}$ equals $\Delta_\eta\, I$ on the sector to $10^{-10}$.
 3. **Reference fixtures.**
    - `scripts/make_dfthcbe_fixtures.py` runs once in a separate environment, `.venv-ref`, with Qualtran and dfthcbe at the pinned commit.
    - It writes alias and angle tables for given bits, the encoded $\langle 0\vert\mathrm{BE}\vert 0\rangle$ of `H2_STO3G_TEST` (dfthcbe contracts it with `exact_erase=True`), and dfthcbe's per-block Toffoli counts at FeMoco-54.
@@ -706,9 +749,9 @@ Used inside `FlaggedUniformPrep` (steps 1, 5, 22, 27) and for QPE corrections.
 
 | | |
 | --- | --- |
-| Action | $\lvert t\rangle \mapsto e^{i\phi t}\lvert t\rangle$ on qubit `target`, with $\phi = \pm 2\pi k/2^m$ (sign per §6.5) |
-| Wires | `target` (1), `phase_grad` ($b_{\mathrm{grad}}$), `scratch` ($m$), `work` ($m-1$) |
-| Compilable | `k` (int, $0 \le k < 2^m$), `m` (int, $1 \le m \le b_{\mathrm{grad}}$) |
+| Action | $\lvert t\rangle \mapsto e^{2\pi i k t/2^m}\lvert t\rangle$ on qubit `target`. The sign is fixed: the rule adds $k$ or $2^m - k$ into the top $m$ qubits of the phase-gradient register, whichever realizes this sign under the convention pinned in §6.5. So $k = 2^m - 1$ gives $e^{-2\pi i/2^m}$. |
+| Wires | `target` (1), `phase_grad` (a phase-gradient register of at least $m$ wires: the walk's `phase_grad`, or `qpe_grad` for QPE corrections), `scratch` ($m$), `work` ($m-1$) |
+| Compilable | `k` (int, $0 \le k < 2^m$), `m` (int, $1 \le m \le$ `len(phase_grad)`) |
 | Pre | `phase_grad` holds the phase-gradient state; `scratch` and `work` are $\lvert 0\rangle$ |
 | Post | The same registers are restored; only `target` picks up the phase |
 | Rule | Fan out `target` into the bits of `scratch` where $k$ has ones (CNOTs). Then `SemiAdder(scratch, phase_grad[:m], work)`. Then undo the fan-out. |
@@ -740,24 +783,37 @@ The paper's QROAM read for steps 2 and 6. It is also the engine of steps 10 and 
 
 **Address model.**
 - **Registers and order.** The address consists of registers $A_1, \dots, A_p$ ($p \le 2$) of widths $w_i$, concatenated with $A_1$ most significant.
-- **Live ranges.** Each register has a live range $[lo_i, hi_i)$. Iteration is nested: $A_1$ outer, $A_p$ inner. Entries outside the live ranges are zero and are never visited.
-- **Blocks.** The low $k$ bits of $A_p$ select an entry inside a block of $K = 2^k$ entries. The unary iteration visits the blocks $(a_1, \dots, a_{p-1}, a_p \gg k)$ whose ranges intersect the live ranges.
+- **Live ranges.** Each register has a live range $[lo_i, hi_i)$. Iteration is nested: $A_1$ outer, $A_p$ inner.
+- **Blocks.** The low $k$ bits of $A_p$ select a position inside a block of $K = 2^k$ entries. The unary iteration visits exactly the blocks $(a_1, \dots, a_{p-1}, a_p \gg k)$ whose address ranges intersect the live ranges. In a visited block, positions outside the live range hold padding entries of zeros.
+- **Exact iteration.** The `dfthc.ops.unary` helper is exact: a leaf flag is 1 if and only if the address's high part equals that leaf's value and lies in the iterated range. An address outside the range raises no flag. This differs from the truncated unary iteration that Qualtran and dfthcbe use, which can route an out-of-range address onto a live leaf. The cost is at most one extra Toffoli per address bit at each range end.
+
+**Behaviour on every computational address** $a$ (also stated in the docstring and tested exhaustively, §12.1 T3):
+
+| Case | `target` | `junk` |
+| --- | --- | --- |
+| $a$ in a visited block, at a live position (enable satisfied) | $T[a]$ | the block's other $K-1$ entries (padding zeros at dead positions), in the order `QROAMRead.junk_layout` |
+| $a$ in a visited block, at a dead position, for example a failed $b \in [B+1, 2^{w_b})$ inside the last live block (enable satisfied) | 0 (padding) | the block's other $K-1$ entries |
+| $a$ in a block that is not visited, for example rows outside $[lo_1, hi_1)$ such as one-body rows or failed $x_o \ge X_o$, or $b$ beyond the last live block | 0 | 0 |
+| enable not satisfied | 0 | 0 |
+
+The *loaded set* is the set of addresses in visited blocks (the first two rows). `QROAMRead.loaded_bits(table, a)` returns the content of `target ‖ junk` for every computational address, and it is zero outside the loaded set. The read never adds a phase.
 
 | | |
 | --- | --- |
-| Action | `target` ← $T[a]$ for live addresses $a$ (and enable satisfied). `junk` ← the other $K-1$ entries of $a$'s block, in the fixed order `QROAMRead.junk_layout`. Nothing is loaded elsewhere. No phases. |
+| Action | As in the table above |
 | Wires | `address` ($\sum_i w_i$), `target` (`width`), `junk` ($(K-1)\cdot$`width`), `work` (unary-iteration ancillas, per `required_wires`), `control` (0 or 1 wire) |
 | Compilable | `table` (nested tuple of ints of `width` bits), `address_widths`, `live_ranges`, `width`, `block_bits` $k$, `control_value` (`None`, 0 or 1) |
 | Pre | `target`, `junk` and `work` are $\lvert 0\rangle$ |
 | Post | As in Action. `work` is $\lvert 0\rangle$, the address is unchanged. |
 | Rule | 1. Nested unary iteration over live blocks: the `dfthc.ops.unary` helper builds a `TemporaryAND` ladder whose uncompute is measured (`Adjoint(TemporaryAND)`). 2. At each block leaf, fan out all $K$ entries into `target ‖ junk` with CNOTs from the leaf flag. 3. A swap-with-zero network on the low $k$ address bits moves the selected entry into `target`, using $(K-1)\cdot$`width` exact `CSWAP`s. |
-| Classical helper | `QROAMRead.loaded_bits(table, address)` returns the full content of `target ‖ junk` for an address. A test checks it against simulation for every address of small instances. |
+| Classical helper | `QROAMRead.loaded_bits(table, address)` (defined above). A test checks it against simulation for every computational address of small instances. |
 | Adjoint | The auto-derived adjoint (a reverse re-read) is valid. It is used only as a test reference; the walk erases with `QROAMErase`, a different operator, so the solver never chooses between the two. |
-| Cost | (number of live blocks) $- 1$ + [control] + boundary terms + $(K-1)\cdot$`width`. Outer ≈ $80 + 72 = 152$; inner ≈ $539 + 390 = 929$. |
+| Cost | (number of visited blocks) $- 1$ + [control] + exact-boundary terms (at most one per address bit at each range end) + $(K-1)\cdot$`width`. Outer ≈ $80 + 3 + 72 = 155$; inner ≈ $539 + 5 + 390 = 934$. |
 
 **Known deltas against dfthcbe (deferred refinements).**
 - $r$ is part of every inner entry, so it is carried through the swap: +60 per inner read at FeMoco-54. dfthcbe writes it as a "flat" target.
 - Unary-iteration boundary terms are not pruned to aligned blocks.
+- Iteration is exact rather than truncated. This costs a few Toffolis per range end, and it changes what failed addresses load, hence the failure signs (§8.5).
 
 ### 9.4 `PhaseFixup`
 
@@ -767,15 +823,15 @@ Its rule body is the helper `dfthc.ops.qroam.emit_phase_fixup`. `QROAMErase` and
 
 | | |
 | --- | --- |
-| Action | Multiplies each live address basis state $\lvert a\rangle$ by $(-1)^{f(a)}$ and applies no other phase |
+| Action | Multiplies each basis state $\lvert a\rangle$ of the *covered set* by $(-1)^{f(a)}$, applies no other phase, and does nothing outside the covered set. For erase use, the covered set is the read's loaded set (§9.3). |
 | Wires | `address`, `onehot` ($2^{\mathrm{ob}}$ wires), `work`, `control` (0 or 1) |
-| Arguments | Compilable: `address_widths`, `live_ranges`, `onehot_bits` (ob), `control_value`. Dynamic: `parities`, a boolean array with one entry per live address in the canonical order of `PhaseFixup.address_order`. |
+| Arguments | Compilable: `address_widths`, `covered` (the covered set as nested ranges), `onehot_bits` (ob), `control_value`. Dynamic: `parities`, a boolean array with one entry per covered address in the canonical order of `PhaseFixup.address_order`. |
 | Pre | `onehot` and `work` are $\lvert 0\rangle$ |
 | Post | `onehot` and `work` are $\lvert 0\rangle$; the address register carries the phases |
-| Rule | 1. Build the one-hot encoding of the low ob address bits with a `TemporaryAND` tree. 2. Run unary iteration over the high part, visiting only high values with a live address. At leaf $h$, for each one-hot position $j$ whose address $a = (h, j)$ is live, apply `qp.cond(parities[a], qp.CZ)(leaf_flag, onehot[j])` with `qp.hint({"branch-prob": 0.5})`. 3. Uncompute the tree with `Adjoint(TemporaryAND)` (measured, free). |
-| Fallback | With `onehot_bits = 0`, this is plain unary iteration with a conditional `Z` on each leaf flag. It costs about one Toffoli per live address and needs no one-hot register. Every caller can switch to it with one argument. |
+| Rule | 1. Build the one-hot encoding of the low ob address bits with a `TemporaryAND` tree. 2. Run exact unary iteration (§9.3) over the high part, visiting only high values with a covered address. At leaf $h$, for each one-hot position $j$ whose address $a = (h, j)$ is covered, apply `qp.cond(parities[a], qp.CZ)(leaf_flag, onehot[j])` with `qp.hint({"branch-prob": 0.5})`. 3. Uncompute the tree with `Adjoint(TemporaryAND)` (measured, free). |
+| Fallback | With `onehot_bits = 0`, this is plain unary iteration with a conditional `Z` on each leaf flag. It costs about one Toffoli per covered address and needs no one-hot register. Every caller can switch to it with one argument. |
 | Adjoint and control | Never adjointed or controlled |
-| Cost | ≈ (live high values $- 1$) + ($2^{\mathrm{ob}} - 2$) + [control] |
+| Cost | ≈ (covered high values $- 1$) + ($2^{\mathrm{ob}} - 2$) + [control] + exact-boundary terms |
 
 Validation is in §12.1, T3. The design deliberately avoids PennyLane's `QROM` here (§14, L-12).
 
@@ -789,9 +845,9 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Compilable | The read's arguments, plus the fixup's `onehot_bits` |
 | Pre | `target ‖ junk` hold exactly what the matching read produced for the current address. Operations between read and erase may act on the address and other registers, provided they preserve this. In the walk, they act on the address only as controls or as permutations that are undone before the erase. |
 | Post | `target`, `junk` and `work` are $\lvert 0\rangle$. The address state equals its pre-read state exactly, for every measurement outcome. |
-| Rule | 1. Apply `H`, then `qp.measure(q, reset=True)`, to every qubit of `target ‖ junk`, giving outcomes $\xi$. 2. Compute the parities $f(a) = \xi\cdot g(a) \bmod 2$, with $g(a) =$ `QROAMRead.loaded_bits(table, a)`, via `dfthc.compile.mcm_parities`. 3. Apply the fixup with `emit_phase_fixup(f, ...)` (§9.4), using the freshly reset `target ‖ junk` wires as its one-hot register. |
+| Rule | 1. Apply `H`, then `qp.measure(q, reset=True)`, to every qubit of `target ‖ junk`, giving outcomes $\xi$. 2. Compute the parities $f(a) = \xi\cdot g(a) \bmod 2$, with $g(a) =$ `QROAMRead.loaded_bits(table, a)`, via `dfthc.compile.mcm_parities`, for every address of the read's loaded set. That includes dead positions of visited blocks, whose junk is not zero. Outside the loaded set $g(a) = 0$, so no fixup is needed there. 3. Apply the fixup with `emit_phase_fixup(f, ...)` (§9.4) over the loaded set, using the freshly reset `target ‖ junk` wires as its one-hot register. |
 | Adjoint and control | Never: its rule contains measurements, which Catalyst excludes from auto-derived adjoints and controls anyway |
-| Cost | The fixup cost. Outer (ob = $k_{e1}$ = 4) ≈ $20 + 14 = 34$; inner (ob = $k_{e2} + w_b$ = 7) ≈ $67 + 126 = 193$. |
+| Cost | The fixup cost. Outer (ob = $k_{e1}$ = 4) ≈ $20 + 14 + 2 = 36$; inner (ob = $k_{e2} + w_b$ = 7) ≈ $67 + 126 + 4 = 197$. |
 
 ### 9.6 `ZeroReflection`
 
@@ -813,7 +869,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Base rule | 1. `FlaggedUniformPrep(L=X_o)` on (`x_o`, `succ_x_o`). 2. `H` on `m_x_o` and `sigma_1`. 3. `QROAMRead` of (alt ‖ keep) over $x_o \in [0, X_o)$ with $k_1$ block bits. 4. `LeftQuantumComparator` writes $[\mathrm{keep} \le m]$ into `less_than_x_o`. 5. $w_x$ `CSWAP`s swap `alt_x_o` and `x_o`, controlled by `less_than_x_o`. |
 | Post | On $\mathrm{succ}_{x_o} = 1$: $\sum_x \sqrt{\tilde p(x)}\lvert x\rangle\lvert\mathrm{garb}(x)\rangle \otimes \lvert +\rangle_{\sigma_1}$, with $\tilde p$ the $b_{k1}$-bit alias distribution. Failure branches behave as in dfthcbe. |
 | `Adjoint(OuterPrepare)` (pinned) | `CSWAP`s (self-inverse), adjoint comparator, `QROAMErase`, `H` on `m_x_o` and `sigma_1`, adjoint `FlaggedUniformPrep` |
-| Cost | Prepare ≈ $37 + 152 + 15 + 9 = 213$; unprepare ≈ $9 + 15 + 34 + 37 = 95$ |
+| Cost | Prepare ≈ $37 + 155 + 15 + 9 = 216$; unprepare ≈ $9 + 15 + 36 + 37 = 97$ |
 
 ### 9.8 `InnerPrepare` (steps 5–8) and its adjoint (steps 19–22)
 
@@ -823,7 +879,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Compilable | $N, R, B, C$, the inner tables `alt`, `keep`, `sgn`, `d_sgn` (shape $(RC, B+1)$), $b_{k2}$, $k_2$, $k_{e2}$, $s_u$ |
 | Base rule | 1. `FlaggedUniformPrep(L=B+1)` on (`b`, `succ_b`). 2. `H` on `sigma_0` and `m_b`. 3. `QROAMRead` with rows $x_o \in [0, RC)$, block axis $b \in [0, B+1)$ with $k_2$ block bits, and entries (alt, keep, sgn, d_sgn, $\lfloor x_o/C\rfloor$). 4. Comparator into `less_than_b`. 5. $w_b$ `CSWAP`s for alt and `b`. One-body rows load nothing, and the uniform preparation of $b$ runs unconditionally (as in dfthcbe). |
 | `Adjoint(InnerPrepare)` (pinned) | `CSWAP`s, adjoint comparator, `QROAMErase` (one-hot over the low $k_{e2}$ bits of $x_o$ and all bits of $b$), `H`s, adjoint `FlaggedUniformPrep` |
-| Cost | Prepare ≈ $21 + 929 + 15 + 5 = 970$; unprepare ≈ $5 + 15 + 193 + 21 = 234$ |
+| Cost | Prepare ≈ $21 + 934 + 15 + 5 = 975$; unprepare ≈ $5 + 15 + 197 + 21 = 238$ |
 
 ### 9.9 `InnerSigns` (step 9)
 
@@ -851,7 +907,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Wires | `r` ($w_r$), `b` ($w_b$), `G0` (enable, value 0), `angles`, `b_neq_B`, `work` |
 | Compilable | `sf_angles` ($R \times B \times (N-1)$), $R$, $B$ |
 | Rule | `QROAMRead` with address ($r$ outer over $[0, R)$, $b$ inner over $[0, B)$), no swap, enable on $G_0 = 0$, and entries (angles, $[b \ne B] = 1$) |
-| Cost | ≈ $RB + R - 1 + 1$ ≈ 280 |
+| Cost | ≈ $RB + (R - 1) + 1$ plus exact boundaries of the $R$ inner iterations over $b \in [0, B)$ (about 2 each) ≈ 300 |
 
 ### 9.12 `SpinMux` (steps 12 and 17)
 
@@ -902,7 +958,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Post | All of them are $\lvert 0\rangle$, with exact phases, for every outcome |
 | Rule (order matters) | 1. `H` and measure-with-reset on all angle qubits and `b_neq_B`, giving $\xi_a$. 2. SF phase fixup (`emit_phase_fixup`) over $(r, b) \in [0,R)\times[0,B)$, enabled on $G_0 = 0$, with $f(r, b) = \xi_a\cdot(\mathrm{sf\_angles}[r][b] \Vert 1)$. 3. `H` and measure-with-reset on `G0` and `G1`, giving $\xi_g$. 4. Tail phase fixup (`emit_phase_fixup`) over $x_o \in [RC, X_o)$ with $f(x_o) = \xi_a\cdot(\mathrm{tail\_angles}[x_o-RC] \Vert 0) \oplus \xi_g\cdot(1, [x_o - RC \ge N_+])$. The SF fixup must run while $G_0$ still distinguishes SF from tail branches. |
 | Adjoint and control | Never |
-| Cost | SF ≈ $9 + 30 + 1 = 40$; tail ≈ 60; total ≈ 100 |
+| Cost | SF ≈ $9 + 30 + 1 + 2 = 42$; tail ≈ 60; total ≈ 102 |
 
 ### 9.18 `InnerSelect` (steps 10–18) and its adjoint
 
@@ -913,7 +969,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Base rule | `TailAngleLoad`; `SFAngleLoad`; `SpinMux`; `SpinSwap`; `GivensLadder(psi_dn)`; `MajoranaGate`; adjoint `GivensLadder`; `SpinSwap`; `SpinMux`; `AngleErase` |
 | `Adjoint(InnerSelect)` (pinned) | The same sequence with the adjoint `MajoranaGate`: still loading first and erasing last |
 | Action | On valid branches it applies $V^\dagger\,\mathrm{Maj}\,V$, with $V$ the spin-selected swap and Givens ladder. This realizes the generator pieces of §3.2. |
-| Cost | ≈ $60 + 280 + 1 + 54 + 1484 + 5 + 1484 + 54 + 1 + 100 = 3523$ |
+| Cost | ≈ $60 + 300 + 1 + 54 + 1484 + 5 + 1484 + 54 + 1 + 102 = 3545$ |
 
 ### 9.19 `RefT2` (step 23) and 9.20 `RefAB` (step 28)
 
@@ -935,7 +991,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Action | $\langle 0_{\mathrm{anc}}\vert\mathrm{BE}\vert 0_{\mathrm{anc}}\rangle = \tilde H_{\mathrm{SA}}/\tilde\Lambda - I$ |
 | Adjoint | Not provided; not used |
 | Control | `C(DFTHCBlockEncoding)` (pinned): the same sequence with `qp.ctrl(RefT2)` only |
-| Cost | ≈ 9,784; controlled +1 |
+| Cost | ≈ 9,849; controlled +1 |
 
 ### 9.22 `DFTHCWalk` (steps 1–28)
 
@@ -943,7 +999,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | --- | --- |
 | Base rule | `DFTHCBlockEncoding`, then `RefAB` |
 | Control | `C(DFTHCWalk)` (pinned): `qp.ctrl(DFTHCBlockEncoding)`, then `qp.ctrl(RefAB)` |
-| Cost | ≈ 9,828; controlled ≈ 9,830 |
+| Cost | ≈ 9,893; controlled ≈ 9,895 |
 
 ### 9.23 `ControlledWalkPower`
 
@@ -958,7 +1014,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 
 ### 10.1 `WalkLayout`
 
-`dfthc.registers.WalkLayout.from_params(params, with_qpe=False)` returns non-overlapping named `Wires` in these groups:
+`dfthc.registers.WalkLayout.from_params(params, qpe_bits=0)` returns non-overlapping named `Wires` in these groups:
 
 | Group | Registers, in order |
 | --- | --- |
@@ -968,7 +1024,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | `select` | `angles`, `G0`, `G1`, `b_neq_B`, `sg` |
 | `phase_grad` | $b_{\mathrm{grad}}$ wires |
 | `work` | Shared pool, sized as the maximum, over all steps, of the work that the active operator requires |
-| `qpe_control` | 1 wire, only if `with_qpe` |
+| `qpe_control`, `qpe_grad` | 1 wire and `qpe_bits` wires, only if `qpe_bits > 0` (§11.1) |
 
 ### 10.2 Reuse rules
 
@@ -990,7 +1046,7 @@ At FeMoco-54 (estimate; `WalkLayout` computes the exact number and the report pr
 | `work` | ≈ 50 |
 | **Total** | **≈ 1,534** |
 
-The paper reports 1,131. Its inner-read temporaries (313 qubits) share the 795 angle qubits, which requires measuring the inner junk before the angle load. In our design the junk persists from read to erase (§4.3), and the angle registers are live in between, so the two cannot share. Early junk measurement is a deferred optimization (§16, Q-1).
+The paper reports 1,131. Its inner-read temporaries (313 qubits) share the 795 angle qubits, which requires measuring the inner junk before the angle load. In our design the junk persists from read to erase (§4.3), and the angle registers are live in between, so the two cannot share. Early junk measurement would recover about 460 qubits with no Toffoli penalty. The price is that each read's measurement and its later fixup have to sit in one composite rule (§16, Q-1).
 
 The `H2_STO3G_TEST` configuration needs about 60 wires, exactly as computed by `WalkLayout`.
 
@@ -998,15 +1054,19 @@ The `H2_STO3G_TEST` configuration needs about 60 wires, exactly as computed by `
 
 ### 11.1 Algorithm
 
-`dfthc.qpe.iterative_phase_estimation(apply_controlled_power, control, num_bits, correction_wires)` is a quantum function, not an `Operator2`: it returns mid-circuit measurement results. Rounds run for $j = t-1, \dots, 0$, with $t$ = `num_bits`. Each round:
+`dfthc.qpe.iterative_phase_estimation(apply_controlled_power, control, num_bits, qpe_grad, correction_wires)` is a quantum function, not an `Operator2`: it returns mid-circuit measurement results. Rounds run for $j = t-1, \dots, 0$, with $t$ = `num_bits`. Each round:
 
 1. `H(control)`.
 2. `apply_controlled_power(2**j, control)`, a `ControlledWalkPower` in the DFTHC case.
-3. Phase corrections from the bits already measured: one `qp.cond(m_l, PhaseGradientRotation)(...)` per earlier bit $l > j$, with angle $-2\pi\, 2^{-(l-j+1)}$.
+3. Phase corrections from the bits already measured. For each earlier bit $l > j$, with $d = l - j + 1$, apply `qp.cond(m_l, PhaseGradientRotation)(k=2**d - 1, m=d, ...)` on `control`, against `qpe_grad`. That is the phase $e^{2\pi i (2^d - 1)/2^d} = e^{-2\pi i/2^d}$ on $\lvert 1\rangle$ (§9.1).
 4. `H(control)`.
 5. $m_j$ = `qp.measure(control, reset=True)`.
 
-The estimated phase is $\varphi = \sum_j m_j 2^{-(j+1)}$, and $\theta = 2\pi\varphi$. `energy_from_phase(phi, Lambda, shift=1.0)` returns $\tilde\Lambda(\mathrm{shift} + \cos 2\pi\varphi)$: shift 1 for the DFTHC walk, shift 0 for standard qubitization.
+**Correction register.** The largest correction width is $d = t$, at $j = 0$ and $l = t-1$. So the corrections use their own phase-gradient register `qpe_grad` of $t$ wires, prepared once with `PhaseGradientStatePrep` (§10.1). The wrapper raises `ValueError` if `num_bits > len(qpe_grad)`. The walk's `phase_grad` ($b_{\mathrm{grad}} = b_{\mathrm{rot}}$ wires) is not used for corrections, so QPE precision is not limited by $b_{\mathrm{rot}}$. The correction scratch and work wires (`correction_wires`, $2t - 1$ wires) may reuse the walk's `work` pool, because corrections never overlap a walk power.
+
+**Energies.** The estimated phase is $\varphi = \sum_j m_j 2^{-(j+1)}$, and $\theta = 2\pi\varphi$.
+- `energy_from_phase(phi, Lambda, shift=1.0)` returns the sum-of-squares eigenvalue $E_{\mathrm{SA}} = \tilde\Lambda(\mathrm{shift} + \cos 2\pi\varphi)$: shift 1 for the DFTHC walk, shift 0 for standard qubitization.
+- `physical_energy(E_SA, e_sos_phys, core_energy=0.0)` returns $E_{\mathrm{SA}} + E_{\mathrm{SoS}}^{\mathrm{phys}}$ (+ `core_energy`) for $\eta$-electron inputs (§3.4).
 
 ### 11.2 Gate set
 
@@ -1037,9 +1097,9 @@ With $t = 3$ and input $\lvert 0\rangle$, QPE returns $\varphi \in \{1/8, 7/8\}$
 
 | Code | Kind | What it establishes |
 | --- | --- | --- |
-| T1 | Classical data | Tables, $\Lambda$, $E_{\mathrm{SoS}}$, $\lambda_{\mathrm{eff}}$, the encoded model, and agreement with dfthcbe (§8.6) |
+| T1 | Classical data | Tables, $\Lambda$, both offset frames ($E_{\mathrm{SoS}}^{\mathrm{walk}}$, $E_{\mathrm{SoS}}^{\mathrm{phys}}$, $\Delta_\eta$), $\lambda_{\mathrm{eff}}$, the encoded model, and agreement with dfthcbe (§8.6) |
 | T2 | Rule validity | `qp.testing.assert_valid_decomp_rule(op, rule, check_matrix=...)` for every registered rule of every operator at two or more small sizes: declared resources equal emitted operators. `check_matrix=True` for measurement-free operators on 10 wires or fewer. |
-| T3 | Semantics | The action against NumPy references: compiled on `lightning.qubit` up to 25 wires, or with the sparse simulator beyond that. Classical (permutation) operators are checked on every basis input of small instances. Phase operators are checked on uniform superpositions; this is the `PhaseFixup` validation, run for random, all-ones and single-bit parity tables. Erase operators are checked as read-then-erase round trips that restore the address state and clear every ancilla, for every forced outcome pattern up to 10 measured qubits and five seeded schedules beyond that. |
+| T3 | Semantics | The action against NumPy references: compiled on `lightning.qubit` up to 25 wires, or with the sparse simulator beyond that. Classical (permutation) operators are checked on every basis input of small instances. Phase operators are checked on uniform superpositions; this is the `PhaseFixup` validation, run for random, all-ones and single-bit parity tables. Erase operators are checked as read-then-erase round trips that restore the address state and clear every ancilla, for every forced outcome pattern up to 10 measured qubits and five seeded schedules beyond that. **Exhaustive failed-address tests** run for $(B+1, k_2) \in \{(3,1), (5,1), (6,2), (7,0), (28,4)\}$, the last one only for the read itself.<br>1. For every computational address of the outer and inner reads, including failed $x_o \ge X_o$, failed $b \ge B+1$, one-body rows and dead block positions, the loaded `target ‖ junk` equals `loaded_bits` (§9.3).<br>2. For every basis input $(x_o, b, m_b)$ with $\mathrm{succ}_b = [b \le B]$, the read, keep test, alias swap and `InnerSigns` give the sign of the selected weight for a valid $b$, and $+1$ for a failed $b$ (§8.5).<br>3. Our failure signs equal the ported `dfthcbe_failure_signs` whenever $2^{w_b} \le \lceil (B+1)/2^{k_2}\rceil 2^{k_2}$. Otherwise, as at $(5, 1)$ and $(7, 0)$, the test asserts the documented difference instead. |
 | T4 | Exact resources | `compiled_resources` Toffoli and measurement counts equal the `dfthc.costs` closed forms at three or more sizes per operator, including FeMoco-54 for composite operators in the slow suite. `is_symbolic` is false. |
 | T5 | Gate-set closure | The operators in `qp.analyze` output are a subset of `GATE_SET` ∪ {`MidCircuitMeasure`}. At `level="device"`, no undecomposed operator remains. |
 | T6 | Rule selection | Count signatures prove that the pinned measured rules were chosen. For example, in the compiled `Adjoint(OuterPrepare)`, `MidCircuitMeasure` equals the number of erased qubits ($d_1 + (K_1 - 1)d_1$), `Adjoint(TemporaryAND)` equals the expected measured AND uncomputes, and the Toffoli count equals the erase closed form rather than a second read. A test also compiles with `catalyst.passes.graph_decomposition(gate_set=..., fixed_decomps=..., verbose=True)` and asserts the listed rule names, if that output is capturable (checked in Phase 0). |
@@ -1078,7 +1138,7 @@ Supporting tests:
 - *seeded*: random outcomes from a seed;
 - *branch*: on listed wires only, used for QPE control bits.
 
-The simulator projects, renormalizes by $1/\sqrt{p}$, and records $(p, \text{outcome})$. In strict mode it asserts $p = 1/2$ (absolute tolerance $10^{-12}$) for every measurement that is not on a branch wire. An erase measurement has outcome probability exactly 1/2 for every input if and only if the measured qubit is a deterministic function of the other registers. So this assertion certifies every measured erase. Measured AND uncomputes stay primitive `Adjoint(TemporaryAND)` gates in the gate set, and the precondition assertion above certifies those.
+The simulator projects, renormalizes by $1/\sqrt{p}$, and records $(p, \text{outcome})$. In strict mode it asserts $p = 1/2$ (absolute tolerance $10^{-12}$) for every measurement that is not on a branch wire. This verifies that every erase measurement has uniformly random X outcomes. That the measured qubits hold a deterministic function of the address (the premise under which the fixup restores the state exactly) is established separately, by the structural read tests and the read-then-erase round trips (§12.1, T3). Measured AND uncomputes stay primitive `Adjoint(TemporaryAND)` gates in the gate set, and the precondition assertion above certifies those.
 
 **Rule choice for PennyLane primitives.** The tape path may decompose PennyLane primitives with rules that the compiled path does not use; for example, allocating rules exist only in the Python graph. This does not affect the checks: our operators are pinned, primitives are semantically equivalent across rules, and the simulator is used for semantics, never for counts. Counts always come from `qp.analyze` on the compiled program.
 
@@ -1119,27 +1179,27 @@ Toffolis per walk at FeMoco-54. The "Ours" column is a planning estimate: exact 
 | Block (calls per walk) | Paper (Table III) | dfthcbe | Ours (est.) | Main reason for Ours − dfthcbe |
 | --- | ---: | ---: | ---: | --- |
 | Uniform preparation of $x_o$, prepare and unprepare | 72 | 74 | ≈ 74 | same construction |
-| Outer read, keep test and swap | 177 | 175 | ≈ 176 | unary-iteration constants |
-| Outer unprepare and erase | 61 | 57 | ≈ 58 | one-hot constants |
+| Outer read, keep test and swap | 177 | 175 | ≈ 179 | unary-iteration constants; exact range boundaries |
+| Outer unprepare and erase | 61 | 57 | ≈ 60 | one-hot constants; exact range boundaries |
 | Uniform preparation of $b$ (×4) | 80 | 84 | ≈ 84 | same construction |
-| Inner read, keep test and swap (×2) | 1,720 | 1,784 | ≈ 1,898 | $r$ carried through the swap (+60 per read); no aligned-block pruning |
-| Inner unprepare and erase (×2) | 508 ¹ | 398 | ≈ 426 | one-hot over 128 positions instead of 112 |
-| Angle loads (×2) | 648 | 654 | ≈ 680 | range boundaries; nested $(r, b)$ iteration |
-| Angle erase (×2) | 74 ¹ | 180 | ≈ 202 | constants |
+| Inner read, keep test and swap (×2) | 1,720 | 1,784 | ≈ 1,908 | $r$ carried through the swap (+60 per read); exact range boundaries; no aligned-block pruning |
+| Inner unprepare and erase (×2) | 508 ¹ | 398 | ≈ 434 | one-hot over 128 positions instead of 112; exact range boundaries |
+| Angle loads (×2) | 648 | 654 | ≈ 720 | exact range boundaries, including those of the nested $b$ iterations |
+| Angle erase (×2) | 74 ¹ | 180 | ≈ 204 | constants |
 | Spin multiplexer (×2) | 0 | 8 | ≈ 4 | one Toffoli to build, one to unbuild |
 | Spin swaps (×4) | 216 | 216 | 216 | none |
 | Givens ladders (×4) | 6,360 | 5,936 | 5,936 | none (two `SemiAdder` passes per rung) |
 | Majorana gate (×2) | 14 | 10 | ≈ 10 | none |
 | $\mathrm{REF}_{T_2}$ | 21 | 20 | ≈ 20 | constants |
 | $\mathrm{REF}_{\mathcal A\cup\mathcal B}$ | 46 | 45 | ≈ 44 | constants |
-| **Total** | **9,997** | **9,641** | **≈ 9,828** | |
+| **Total** | **9,997** | **9,641** | **≈ 9,893** | |
 
 ¹ The paper counts the tail-angle phase fixup ($N$) under the inner erase (its B50). dfthcbe and we count it under the angle erase (step 18). The report shows both attributions.
 
 Ours minus the paper, by cause:
 - Givens ladders: −424, from two `SemiAdder` passes of $b_{\mathrm{rot}} - 1$ Toffolis per rung, against the paper's $b_{\mathrm{rot}}$.
-- Inner reads: +178. Our swapped inner entry has $d_2 = 26$ bits (alt, keep, sgn, d_sgn and $r$), against the 20-bit entries of the paper's Table III, so the swap network carries 6 more bits per position.
-- Erase, angle-load and constant terms: small, in both directions.
+- Inner reads: +188. Our swapped inner entry has $d_2 = 26$ bits (alt, keep, sgn, d_sgn and $r$), against the 20-bit entries of the paper's Table III, so the swap network carries 6 more bits per position.
+- Erase, angle-load and constant terms: about +130 net, mostly from exact range boundaries (§9.3), which make every out-of-range address load nothing.
 
 The controlled walk costs two more Toffolis than the walk.
 
@@ -1173,6 +1233,7 @@ Reason codes:
 | --- | --- |
 | `flat-r` | $r$ is carried through the inner swap; heterogeneous targets are deferred |
 | `no-prune` | No aligned-block pruning of unary-iteration boundaries |
+| `exact-iter` | Exact unary iteration: out-of-range addresses raise no flag, which costs at most one Toffoli per address bit at each range end. dfthcbe's truncated iteration is cheaper and routes some out-of-range addresses onto live leaves (§9.3, §8.5). |
 | `onehot-pad` | The fixup one-hot is padded to a power of two |
 | `adder-const` | `SemiAdder` constants differ from Qualtran's |
 | `mux` | Spin-multiplexer construction |
@@ -1308,7 +1369,11 @@ The implementation plan specifies tasks, prompts and acceptance checks. This sec
 
 **Open questions for the user.** Neither blocks Phases 0–3.
 
-- **Q-1: Early junk measurement, to be decided after the Phase 4 report.** It would bring qubits near the paper's count (about −460 at FeMoco-54). It needs either an immediate extra phase fixup per read (≈ +420 Toffolis per walk), or classical outcome data carried from the read to the erase across operator boundaries, which `Operator2` rules cannot express.
+- **Q-1: Early junk measurement, to be decided after the Phase 4 report.**
+  - *What it is.* Each read's junk is X-measured right after its swap network. That frees about 460 qubits at FeMoco-54 (72 outer and 390 inner junk wires), which can then hold the angle registers as in the paper's 1,131-qubit count.
+  - *No Toffoli penalty.* The outcomes stay classical values inside the rule: SSA values under capture, `MeasurementValue`s in tape mode. Nested `Operator2` calls in between do not disturb them, and they are XORed into the parities of the later erase, so no extra fixup is needed. Verified on 2026-11-11 on the compiled path and the tape path.
+  - *The price.* Implementation complexity and changed block boundaries. The measurement and its fixup must sit in one rule. So for each inner round, `InnerPrepare` and its adjoint (steps 5–8 and 19–22) merge into one composite with `InnerSigns` and `InnerSelect`, and `DFTHCBlockEncoding` itself owns the outer junk. The separately pinned prepare and unprepare operators, which the current design tests in isolation, disappear.
+  - *Status.* The baseline keeps the current boundaries.
 - **Q-2: Generating dfthcbe reference fixtures.** This requires installing Qualtran from PyPI into the separate `.venv-ref`. We assume that is acceptable; if not, the fixture tests are skipped as described in §8.6.
 
 ## 17. References
