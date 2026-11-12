@@ -58,8 +58,11 @@ def unary_nested(outer: Range, inner: Range, controlled: bool) -> int:
 
 def truncated_unary(L: int, controlled: bool) -> int:
     """Truncated iteration of Qualtran and dfthcbe over ``[0, L)``, for comparison only (spec
-    9.24): ``L + c - 2``."""
-    return L + int(controlled) - 2
+    9.24, "Truncated iteration"): ``max(L + c - 2, 0)`` for ``L >= 1``. A single leaf needs no
+    AND: the root control, if any, is its flag. ``L < 1`` raises ``ValueError``."""
+    if L < 1:
+        raise ValueError(f"truncated iteration needs L >= 1 leaves; got {L}")
+    return max(L + int(controlled) - 2, 0)
 
 
 def onehot(ob: int) -> int:

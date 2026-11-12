@@ -10,12 +10,18 @@ import pytest
 
 from dfthc import costs
 from dfthc.costs import Cost
-from dfthc.params import FEMOCO54, H2_STO3G_TEST, MID_NAPHTHALENE, lg
+from dfthc.params import FEMOCO54, H2_STO3G_TEST, MID_NAPHTHALENE, WalkParams, lg
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "spikes"))
 from prototypes import unary_toffolis  # noqa: E402
 
 P = FEMOCO54
+H2 = H2_STO3G_TEST
+ODD = WalkParams(N=3, R=3, B=3, C=1, n_plus=1, b_rot=5, b_k1=3, b_k2=4, s_u=3,
+                 k1=1, k2=1, ke1=1, ke2=1)
+"""A second and a third shape, derived by hand from spec 9.24 (derivations in the Task 1A.7
+report). ``ODD`` has ``X_o = 6``, ``w_x = 3``, ``w_b = 2``, ``w_r = 2``, ``d1 = 6``, ``d2 = 10``
+and ``n_plus != N / 2``."""
 
 
 def test_unary_iteration_rows():
@@ -42,6 +48,12 @@ def test_unary_equals_the_prototype_on_a_grid():
 def test_truncated_unary_and_onehot():
     assert [costs.truncated_unary(L, c) for L, c in [(81, False), (81, True), (2, False)]] == [
         79, 80, 0]
+    assert costs.truncated_unary(1, False) == costs.truncated_unary(1, True) == 0
+    assert [costs.truncated_unary(L, c) for L, c in [(2, True), (3, False), (3, True)]] == [1, 1, 2]
+    with pytest.raises(ValueError, match="L >= 1"):
+        costs.truncated_unary(0, False)
+    with pytest.raises(ValueError, match="L >= 1"):
+        costs.truncated_unary(0, True)
     assert [costs.onehot(ob) for ob in (0, 1, 2, 4, 7)] == [0, 0, 2, 14, 126]
 
 
@@ -95,6 +107,21 @@ def test_block_rows():
     assert costs.majorana_gate() == Cost(5)
     assert costs.angle_erase(P) == Cost(102, 798)
     assert costs.inner_select(P) == Cost(3537, 798)
+    # the second and third shape, derived by hand (report)
+    assert (costs.outer_prepare(H2), costs.outer_unprepare(H2)) == (Cost(8), Cost(2, 8))
+    assert (costs.inner_prepare(H2), costs.inner_unprepare(H2)) == (Cost(21), Cost(14, 14))
+    assert (costs.tail_angle_load(H2), costs.sf_angle_load(H2)) == (Cost(1), Cost(5))
+    assert (costs.spin_swap(H2), costs.givens_rotation(H2), costs.givens_ladder(H2)) == (
+        Cost(2), Cost(6), Cost(6))
+    assert costs.angle_erase(H2) == Cost(4, 7)
+    assert costs.inner_select(H2) == Cost(33, 7)
+    assert (costs.outer_prepare(ODD), costs.outer_unprepare(ODD)) == (Cost(21), Cost(11, 12))
+    assert (costs.inner_prepare(ODD), costs.inner_unprepare(ODD)) == (Cost(22), Cost(9, 20))
+    assert (costs.tail_angle_load(ODD), costs.sf_angle_load(ODD)) == (Cost(4), Cost(12))
+    assert (costs.spin_swap(ODD), costs.givens_rotation(ODD), costs.givens_ladder(ODD)) == (
+        Cost(3), Cost(8), Cost(16))
+    assert costs.angle_erase(ODD) == Cost(9, 13)
+    assert costs.inner_select(ODD) == Cost(70, 13)
 
 
 def test_reflection_rows():
@@ -104,6 +131,11 @@ def test_reflection_rows():
     assert [costs.zero_reflection(n, True).toffoli for n in (1, 2, 3, 6, 46)] == [0, 1, 2, 5, 45]
     with pytest.raises(ValueError, match="n_w"):
         costs.zero_reflection(0, False)
+    for params, t2, ab in ((H2, 4, 8), (ODD, 6, 12)):  # n_w = 6, 10 and 8, 14
+        assert (costs.ref_t2(params, False), costs.ref_t2(params, True)) == (
+            Cost(t2), Cost(t2 + 1))
+        assert (costs.ref_ab(params, False), costs.ref_ab(params, True)) == (
+            Cost(ab), Cost(ab + 1))
 
 
 def test_totals():
@@ -116,6 +148,17 @@ def test_totals():
     assert costs.measured_and_uncomputes(P, True) == 8677
     assert costs.walk(P, False).measurements + costs.measured_and_uncomputes(P, False) == 11199
     assert costs.walk(P, True).measurements + costs.measured_and_uncomputes(P, True) == 11201
+    # H2: T_Toffoli = 4 + 8 + 4 + 14 + 8 + 12; ODD: 6 + 8 + 6 + 20 + 12 + 12 (report)
+    assert costs.block_encoding(H2, False) == Cost(150, 50)
+    assert costs.block_encoding(H2, True) == Cost(151, 50)
+    assert (costs.walk(H2, False), costs.walk(H2, True)) == (Cost(158, 50), Cost(160, 50))
+    assert costs.toffoli_only(H2) == 4 + 8 + 4 + 14 + 8 + 12 == 50
+    assert [costs.measured_and_uncomputes(H2, c) for c in (False, True)] == [108, 110]
+    assert costs.block_encoding(ODD, False) == Cost(240, 78)
+    assert costs.block_encoding(ODD, True) == Cost(241, 78)
+    assert (costs.walk(ODD, False), costs.walk(ODD, True)) == (Cost(252, 78), Cost(254, 78))
+    assert costs.toffoli_only(ODD) == 6 + 8 + 6 + 20 + 12 + 12 == 64
+    assert [costs.measured_and_uncomputes(ODD, c) for c in (False, True)] == [188, 190]
 
 
 def test_application_rows():
@@ -127,6 +170,11 @@ def test_application_rows():
         expected = Cost((2**t - 1) * cw.toffoli + (t**3 - t) // 6, (2**t - 1) * w.measurements + t)
         assert costs.iterative_qpe(P, t) == expected
         assert sum(costs.qpe_round(P, j, t).toffoli for j in range(t)) == expected.toffoli
+    # literal values at the small shapes: round 1 of 3 bits is 2 T_C(W) + 1 (report)
+    assert costs.qpe_round(H2, 1, 3) == Cost(2 * 160 + 1, 2 * 50)
+    assert costs.iterative_qpe(H2, 3) == Cost(7 * 160 + 4, 7 * 50 + 3) == Cost(1124, 353)
+    assert costs.qpe_round(ODD, 1, 3) == Cost(2 * 254 + 1, 2 * 78) == Cost(509, 156)
+    assert costs.iterative_qpe(ODD, 2) == Cost(3 * 254 + 1, 3 * 78 + 2) == Cost(763, 236)
 
 
 def test_cheapest_block_bits_is_a_brute_force_minimizer():
@@ -141,6 +189,8 @@ def test_cheapest_block_bits_is_a_brute_force_minimizer():
         assert costs.walk(chosen, False).toffoli == brute
     assert costs.cheapest_block_bits(P) == (2, 4, 4, 2)  # the FEMOCO54 preset's block bits
     assert costs.cheapest_block_bits(MID_NAPHTHALENE) == (1, 2, 3, 1)  # the preset's, dfthcbe's
+    # X_O_5 ties (0, 0, 1, 0) with (0, 0, 2, 0) at T = 7 for the outer read and erase: smallest wins
+    assert costs.cheapest_block_bits(X_O_5) == (0, 0, 1, 0)
 
 
 def test_cost_values_are_python_ints():
