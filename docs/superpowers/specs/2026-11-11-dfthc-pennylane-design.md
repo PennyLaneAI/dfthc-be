@@ -472,7 +472,7 @@ These conventions follow dfthcbe unless stated otherwise, so blocks can be compa
 - Integers in registers are big-endian: the first wire is the most significant bit.
 - Register names follow dfthcbe: `x_o`, `succ_x_o`, `sigma_1`, `m_x_o`, `less_than_x_o`, `alt_x_o`, `keep_x_o`, `junk_x_o`, `b`, `succ_b`, `sigma_0`, `m_b`, `less_than_b`, `alt_b`, `keep_b`, `sgn`, `d_sgn`, `r`, `junk_b`, `angles`, `G0`, `G1`, `b_neq_B`, `sg`, `psi_up`, `psi_dn`, `phase_grad`, `work`.
 - `angles` is the concatenation of $N - 1$ registers of $b_{\mathrm{rot}}$ wires; register $k$ drives rung $k$.
-- Composite operators take grouped wire arguments (`outer`, `inner`, `select`, `system`, `phase_grad`, `work`). `dfthc.registers.WalkLayout` defines the order of the registers inside each group, and every operator splits groups only through `WalkLayout` helpers.
+- `InnerSelect` and `InnerSelectDagger` (§9.18) and the assembly operators (§9.21 to §9.23) take grouped wire arguments (`outer`, `inner`, `select`, `system`, `phase_grad`, `work`). `dfthc.registers.WalkLayout` defines the order of the registers inside each group, and every operator splits groups only through `WalkLayout` helpers. The blocks they call take the registers their §9 tables list (the prepares of §9.7 and §9.8 take named registers), so that every composite passes each child only the registers it needs (§9.0).
 
 ## 7. Toolchain and compilation model
 
@@ -915,9 +915,9 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | | |
 | --- | --- |
 | Wires | `x_o` ($w_x$), `succ_x_o`, `succ_work_x_o` ($\lg l_x - 1$), `sigma_1`, `m_x_o` ($b_{k1}$), `less_than_x_o`, `cmp_work_x_o` ($b_{k1} - 1$), `alt_x_o` ($w_x$), `keep_x_o` ($b_{k1}$), `junk_x_o` ($(K_1-1) d_1$), `phase_grad`, `work`. Here $l_x$ is the odd part of $X_o$. The two `*_work` registers stay dirty from prepare to unprepare (§4.4, item 10). |
-| Compilable | $X_o$, `alt` and `keep` (tuples of length $X_o$), $b_{k1}$, $k_1$, $k_{e1}$, $s_u$ |
+| Compilable | $X_o$, `alt` and `keep` (tuples of length $X_o$), $b_{k1}$, $k_1$, $k_{e1}$ with $2^{k_{e1}} \le K_1 d_1$ (the erase's one-hot fits in the reset `alt_x_o ‖ keep_x_o ‖ junk_x_o`, so `QROAMErase` needs no `extra_onehot`; the constructors check it), $s_u$ |
 | Base rule | 1. `FlaggedUniformPrep(L=X_o)` on (`x_o`, `succ_x_o`). 2. `H` on `m_x_o` and `sigma_1`. 3. `QROAMRead` of (alt ‖ keep) over $x_o \in [0, X_o)$ with $k_1$ block bits; its `leaf_words` are built in the rule from the compilable `alt` and `keep`. 4. `LeftQuantumComparator(keep_x_o, m_x_o, less_than_x_o, cmp_work_x_o, "<=")` writes $[\mathrm{keep} \le m]$. 5. $w_x$ `CSWAP`s swap `alt_x_o` and `x_o`, controlled by `less_than_x_o`. |
-| Post | On $\mathrm{succ}_{x_o} = 1$: $\sum_x \sqrt{\tilde p(x)}\lvert x\rangle\lvert\mathrm{garb}(x)\rangle \otimes \lvert +\rangle_{\sigma_1}$, with $\tilde p$ the $b_{k1}$-bit alias distribution. Failure branches behave as in dfthcbe. |
+| Post | On $\mathrm{succ}_{x_o} = 1$: $e^{i\varphi}\sqrt{1 - P_{\mathrm{fail}}(X_o, s_u)}\,\sum_x \sqrt{\tilde p(x)}\lvert x\rangle\lvert\mathrm{garb}(x)\rangle \otimes \lvert +\rangle_{\sigma_1}$, with $\tilde p$ the $b_{k1}$-bit alias distribution, $P_{\mathrm{fail}}(X_o, s_u)$ = `uniform_failure_probability(X_o, s_u)` and $e^{i\varphi}$ the one phase of `FlaggedUniformPrep`'s $\mathrm{succ} = 1$ amplitudes ($\varphi = 0$ when $X_o$ is a power of two; $\varphi = 2.207$ at FeMoco-54). The read, the comparator and the swaps permute basis states, so every basis term has the amplitude $e^{i\varphi}\sqrt{(1 - P_{\mathrm{fail}}(X_o, s_u))/X_o}\,/\sqrt{2^{b_{k1}+1}}$. The failure part, of weight $P_{\mathrm{fail}}(X_o, s_u)$ and with $\mathrm{succ}_{x_o} = 0$, comes from drawn values $x_0 \ge X_o$: there the selected target entry `alt_x_o ‖ keep_x_o` is zero (the junk may hold other entries of a visited block), so $\mathrm{less\_than}_{x_o} = 1$ and the swap leaves $x_o = 0$ and $x_0$ in `alt_x_o`. The walk does not see the phase (the unprepare is the exact inverse); the factor enters only through $\tilde\Lambda$ (§8.5). |
 | `OuterUnprepare` (own class, pinned base rule; same wires and compilable arguments as `OuterPrepare`) | `CSWAP`s (self-inverse), adjoint comparator (measured uncompute; also cleans `cmp_work_x_o`), `QROAMErase`, `H` on `m_x_o` and `sigma_1`, adjoint `FlaggedUniformPrep` |
 | Cost | Prepare $T = F(X_o) + T_{\mathrm{read,out}} + b_{k1} + w_x$; unprepare $T = w_x + T_{\mathrm{erase,out}} + F^\dagger(X_o)$, $M = K_1 d_1$ (§9.24). At FeMoco-54: prepare $30 + 156 + 15 + 9 = 210$; unprepare $9 + 36 + 24 = 69$, $M = 96$. |
 
@@ -926,8 +926,9 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | | |
 | --- | --- |
 | Wires | `x_o` (read-only), `b` ($w_b$), `succ_b`, `succ_work_b` ($\lg l_b - 1$), `sigma_0`, `m_b` ($b_{k2}$), `less_than_b`, `cmp_work_b` ($b_{k2} - 1$), `alt_b` ($w_b$), `keep_b` ($b_{k2}$), `sgn`, `d_sgn`, `r` ($w_r$), `junk_b` ($(K_2-1) d_2$), `phase_grad`, `work`. Here $l_b$ is the odd part of $B+1$. The `*_work` registers stay dirty from prepare to unprepare. |
-| Compilable | $N, R, B, C$, the inner tables `alt`, `keep`, `sgn`, `d_sgn` (shape $(RC, B+1)$), $b_{k2}$, $k_2$, $k_{e2}$, $s_u$ |
+| Compilable | $N, R, B, C$, the inner tables `alt`, `keep`, `sgn`, `d_sgn` (shape $(RC, B+1)$; the arguments are named `sgn_table` and `d_sgn_table`, because `sgn` and `d_sgn` name wire registers), $b_{k2}$, $k_2$, $k_{e2}$ with $2^{k_{e2} + w_b} \le K_2 d_2$ (no `extra_onehot`; the constructors check it), $s_u$ |
 | Base rule | 1. `FlaggedUniformPrep(L=B+1)` on (`b`, `succ_b`). 2. `H` on `sigma_0` and `m_b`. 3. `QROAMRead` with rows $x_o \in [0, RC)$, block axis $b \in [0, B+1)$ with $k_2$ block bits, and entries (alt, keep, sgn, d_sgn, $\lfloor x_o/C\rfloor$); its `leaf_words` are built in the rule from the compilable inner tables. 4. `LeftQuantumComparator(keep_b, m_b, less_than_b, cmp_work_b, "<=")`. 5. $w_b$ `CSWAP`s for alt and `b`. One-body rows load nothing, and the uniform preparation of $b$ runs unconditionally (as in dfthcbe). |
+| Post | `x_o` is unchanged. On an SF row $x_o = x < RC$ the $\mathrm{succ}_b = 1$ part is $e^{i\varphi_b}\sqrt{1 - P_{\mathrm{fail}}(B + 1, s_u)}\,\sum_b \sqrt{\tilde q_x(b)}\lvert b\rangle\lvert\mathrm{garb}_{x,b}\rangle \otimes \lvert +\rangle_{\sigma_0}$, with $\tilde q_x$ the $b_{k2}$-bit alias distribution of row $x$, $P_{\mathrm{fail}}(B + 1, s_u)$ = `uniform_failure_probability(B + 1, s_u)` and $e^{i\varphi_b}$ the success phase of `FlaggedUniformPrep` ($\varphi_b = 2.051$ at FeMoco-54); `sgn`, `d_sgn` and $r = \lfloor x/C\rfloor$ hold the drawn entry's columns, and every basis term has the uniform preparation's amplitude for the drawn $b_0$ over $\sqrt{2^{b_{k2}+1}}$. Where the selected target entry is zero (one-body rows, failed $x_o$, and failed $b_0 > B$, which have $\mathrm{succ}_b = 0$; the junk may hold other entries of a visited block): $\mathrm{less\_than}_b = 1$, the swap leaves $b = 0$ and $b_0$ in `alt_b`, and `sgn` $=$ `d_sgn` $= r = 0$ (§8.5). |
 | `InnerUnprepare` (own class, pinned base rule; same wires and compilable arguments as `InnerPrepare`) | `CSWAP`s, adjoint comparator (measured uncompute), `QROAMErase` (one-hot over the low $k_{e2}$ bits of $x_o$ and all bits of $b$), `H`s, adjoint `FlaggedUniformPrep` |
 | Cost | Prepare $T = F(B+1) + T_{\mathrm{read,in}} + b_{k2} + w_b$; unprepare $T = w_b + T_{\mathrm{erase,in}} + F^\dagger(B+1)$, $M = K_2 d_2$ (§9.24). At FeMoco-54: prepare $18 + 933 + 15 + 5 = 971$; unprepare $5 + 196 + 16 = 217$, $M = 416$. |
 
@@ -945,7 +946,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | | |
 | --- | --- |
 | Wires | `x_o`, `angles` ($(N-1) b_{\mathrm{rot}}$), `G0`, `G1`, `work` |
-| Compilable | `tail_angles` ($N \times (N-1)$, D1 rows first), $N_+$, $RC$, $X_o$ |
+| Compilable | `tail_angles` ($N \times (N-1)$, D1 rows first), $N_+$, $RC$, $X_o$, $b_{\mathrm{rot}}$ (it sizes `angles`) |
 | Rule | `QROAMRead` with rows $x_o \in [RC, X_o)$, no swap, and entries (angles, $G_0 = 1$, $G_1 = [x_o - RC \ge N_+]$) |
 | Post | Tail branches hold their angles and flags; SF branches are untouched |
 | Cost | $T = U(RC, X_o, w_x, 0)$, $M = 0$ (§9.24). At FeMoco-54: 61. |
@@ -955,8 +956,8 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | | |
 | --- | --- |
 | Wires | `r` ($w_r$), `b` ($w_b$), `G0` (enable, value 0), `angles`, `b_neq_B`, `work` |
-| Compilable | `sf_angles` ($R \times B \times (N-1)$), $R$, $B$ |
-| Rule | `QROAMRead` with address ($r$ outer over $[0, R)$, $b$ inner over $[0, B)$), no swap, enable on $G_0 = 0$, and entries (angles, $[b \ne B] = 1$) |
+| Compilable | `sf_angles` ($R \times B \times (N-1)$), $R$, $B$, $b_{\mathrm{rot}}$ (it sizes `angles`) |
+| Rule | `QROAMRead` with address ($r$ outer over $[0, R)$, $b$ inner over $[0, B)$), no swap, enable on $G_0 = 0$, and entries (angles, $[b \ne B] = 1$); for $R = 1$ ($w_r = 0$) the address is $b$ alone, and T3 compiles and executes this case under capture, with $b = B$ and a failed $b$ |
 | Cost | $T = U(0, R, w_r, 1) + R\cdot U(0, B, w_b, 1)$, $M = 0$ (§9.24). At FeMoco-54: $11 + 10\cdot 28 = 291$. |
 
 ### 9.12 `SpinMux` (steps 12 and 17)
@@ -1003,12 +1004,12 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | | |
 | --- | --- |
 | Wires | `angles`, `b_neq_B`, `G0`, `G1`, `x_o`, `r`, `b`, `work` |
-| Compilable | `tail_angles`, `sf_angles`, $N_+$, sizes, and the SF fixup's one-hot bits ($w_b$) |
+| Compilable | `tail_angles`, `sf_angles`, $N_+$, sizes, and the SF fixup's one-hot bits ob: $w_b$ in the walk; any $0 \le \mathrm{ob} \le w_b$ with $2^{\mathrm{ob}} \le (N-1)b_{\mathrm{rot}} + 1$ (the one-hot lives on the reset angle and `b_neq_B` wires), ob $= 0$ being the fallback of §9.4 |
 | Pre | The angle and flag registers hold exactly what `TailAngleLoad` and `SFAngleLoad` wrote |
 | Post | All of them are $\lvert 0\rangle$, with exact phases, for every outcome |
 | Rule (order matters) | 1. `H` and measure-with-reset on all angle qubits and `b_neq_B`, giving $\xi_a$. 2. SF phase fixup (`emit_phase_fixup`) over $(r, b) \in [0,R)\times[0,B)$, enabled on $G_0 = 0$, with $f(r, b) = \xi_a\cdot(\mathrm{sf\_angles}[r][b] \Vert 1)$. 3. `H` and measure-with-reset on `G0` and `G1`, giving $\xi_g$. 4. Tail phase fixup (`emit_phase_fixup`) over $x_o \in [RC, X_o)$ with $f(x_o) = \xi_a\cdot(\mathrm{tail\_angles}[x_o-RC] \Vert 0) \oplus \xi_g\cdot(1, [x_o - RC \ge N_+])$. The SF fixup must run while $G_0$ still distinguishes SF from tail branches. |
 | Adjoint and control | Never |
-| Cost | $T = [U(0, R, w_r, 1) + O(w_b)] + U(RC, X_o, w_x, 0)$, $M = (N-1)b_{\mathrm{rot}} + 3$ (§9.24). At FeMoco-54: $T = (11 + 30) + 61 = 102$, $M = 798$. |
+| Cost | $T = [U(0, R, w_r, 1) + O(w_b)] + U(RC, X_o, w_x, 0)$, $M = (N-1)b_{\mathrm{rot}} + 3$ (§9.24), for ob $= w_b$; for a smaller ob the bracket is the `PhaseFixup` cost of §9.24 over the SF fix-up's high ranges. At FeMoco-54: $T = (11 + 30) + 61 = 102$, $M = 798$. |
 
 ### 9.18 `InnerSelect` (steps 10–18) and `InnerSelectDagger`
 
@@ -1241,7 +1242,7 @@ With $t = 3$ and input $\lvert 0\rangle$, QPE returns $\varphi \in \{1/8, 7/8\}$
 | Code | Kind | What it establishes |
 | --- | --- | --- |
 | T1 | Classical data | Tables, $\Lambda$, both offset frames ($E_{\mathrm{SoS}}^{\mathrm{walk}}$, $E_{\mathrm{SoS}}^{\mathrm{phys}}$, $\Delta_\eta$), $\lambda_{\mathrm{eff}}$, the encoded model, and agreement with dfthcbe (§8.6) |
-| T2 | Rule validity | `qp.testing.assert_valid_decomp_rule(op, rule, check_matrix=...)` for every registered rule of every operator at two or more small sizes: declared resources equal emitted operators. `check_matrix=True` compares matrices only for operators with a matrix representation; dfthc operators define none, so the tests pass `check_matrix=False`, and their T3 tests check the action exactly. |
+| T2 | Rule validity | `qp.testing.assert_valid_decomp_rule(op, rule, check_matrix=...)` for every registered rule of every operator at two or more small sizes: declared resources equal emitted operators. `check_matrix=True` compares matrices only for operators with a matrix representation; of the dfthc operators only `SpinMux` and `SpinSwap` define one (`compute_matrix`, a permutation matrix), and their T2 passes `check_matrix=True`; the others pass `check_matrix=False`, and their T3 tests check the action exactly. |
 | T3 | Semantics | The action against NumPy references: compiled on `lightning.qubit` up to 25 wires, or with the sparse simulator beyond that. Classical (permutation) operators are checked on every basis input of small instances. Phase operators are checked on uniform superpositions; this is the `PhaseFixup` validation, run for random, all-ones and single-bit parity tables. Erase blocks get the outcome certificate of §12.5. **Exhaustive failed-address tests** run for $(B+1, k_2) \in \{(3,1), (5,1), (6,2), (7,0), (28,4)\}$, the last one only for the read itself.<br>1. For every computational address of the outer and inner reads, including failed $x_o \ge X_o$, failed $b \ge B+1$, one-body rows and dead block positions, the loaded `target ‖ junk` equals `loaded_bits` (§9.3).<br>2. For every basis input $(x_o, b, m_b)$ with $\mathrm{succ}_b = [b \le B]$, the read, keep test, alias swap and `InnerSigns` give the sign of the selected weight for a valid $b$, and $+1$ for a failed $b$ (§8.5).<br>3. Our failure signs equal the ported `dfthcbe_failure_signs` whenever $2^{w_b} \le \lceil (B+1)/2^{k_2}\rceil 2^{k_2}$. Otherwise, as at $(5, 1)$ and $(7, 0)$, the test asserts the documented difference instead. |
 | T4 | Exact resources | `compiled_resources` Toffoli counts $T$ and measurement counts $M$ and $A$ equal the §9.24 formulas, as implemented in `dfthc.costs`, at three or more sizes per operator: `H2_STO3G_TEST` and `H2_631G_TEST` (per commit) and `MID_NAPHTHALENE` (nightly). FeMoco-54 values are asserted on the closed forms without compiling; the complete FeMoco-54 walk and controlled walk are compiled once, by the resource report (§13.3, §15). `is_symbolic` is false. Separate tests pin the PennyLane primitive costs that §9.24 assumes. |
 | T5 | Gate-set closure | The operators in `qp.analyze` output are a subset of `GATE_SET` ∪ {`MidCircuitMeasure`}. At `level="device"`, no undecomposed operator remains. |
