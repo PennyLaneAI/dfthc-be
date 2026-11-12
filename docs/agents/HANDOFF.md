@@ -247,7 +247,11 @@ Spec 7.4. Each rule exists because of a confirmed limitation (section 7 below).
    (`dfthc.compile.mcm_parities`).
 10. **Exact swaps only** (`CSWAP`).
 11. **No `Subroutine`, no `qp.pow`** on our operators.
-12. **Warning policy.** Tests fail on any `RuleLoweringWarning` that names a dfthc operator.
+12. **Warning policy.** Tests fail on any `RuleLoweringWarning` that names a dfthc operator,
+    except Catalyst's "Skipped ... it contains a mid-circuit measurement" warning for an
+    `Adjoint`/`C`-wrapped dfthc operator (section 3; spec 7.4 rule 12). A needed modified operator
+    with no remaining rule fails the compile with a `CompileError`; a substitute rule is caught by
+    the exact counts (T4).
 13. **Adjoints use the instance form** `qp.adjoint(Op(...))` (L-25).
 
 The canonical minimal example of an operator with a pinned measured adjoint rule is
