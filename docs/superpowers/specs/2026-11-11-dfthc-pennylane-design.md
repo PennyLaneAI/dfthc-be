@@ -601,6 +601,7 @@ Each rule exists because of a confirmed limitation (§14).
 10. **Exact swaps only.** `CSWAP` decomposes to one Toffoli and two CNOTs. Approximate swaps that leave signs are not used, because those signs would survive the measured erase.
 11. **No `Subroutine`, and no `qp.pow` on our operators.** `Subroutine` cannot take part in graph decomposition. Catalyst supports only the adjoint and control modifiers on custom operators.
 12. **Warning policy.** Tests fail on any `RuleLoweringWarning` that names a dfthc operator, except Catalyst's "Skipped the <rule> decomposition rule for <Adjoint/C of a dfthc operator>: it contains a mid-circuit measurement" warning. Catalyst also lowers the generic adjoint and controlled candidates of operators with pinned rules and drops the measuring ones. If a modified operator that the program needs has no remaining rule, the compile fails with a `CompileError`; if a non-measuring rule remains, Catalyst chooses it silently (pins do not prevent this, L-2) and the exact counts (T4) catch the substitute path. The gate-set closure (T5) backs both. Tests filter the PennyLane noise of §7.1.
+13. **Adjoints use the instance form** `qp.adjoint(Op(...))`, never `qp.adjoint(Op)(*positional_args)` (L-25).
 
 ### 7.5 Pinned rules
 
@@ -703,7 +704,7 @@ Presets:
   - Tail rows give $u_+$ rows (D1 first), then $u_-$ rows (Q1); SF rows give `U[r, b]` for $b < B$.
   - `angles_from_vector`, `discretize_angles` and `vector_from_angles` implement §6.3.
   - The tail table has shape $(N, N-1)$; the SF table has shape $(R, B, N-1)$.
-- **`WalkTables`.** A frozen, hashable dataclass of all of the above. `WalkTables.as_compilable()` returns the nested tuples of integers that operators take as compilable arguments.
+- **`WalkTables`.** A frozen, hashable dataclass of all of the above. `WalkTables.as_compilable()` returns the nested tuples of integers that operators take as compilable arguments. Integers wider than 32 bits are stored as tuples of 32-bit words, least significant word first (L-24).
 
 ### 8.5 The encoded-Hamiltonian model
 
@@ -1424,7 +1425,7 @@ The report never adjusts measured numbers.
 1. **L-1: Rules that allocate are excluded.** Rules with `work_wires=` in their resources are excluded, even when pinned ([catalyst#3243](https://github.com/PennyLaneAI/catalyst/pull/3243)). Built-in examples are `_toffoli_elbow`, the MCX `*_worker(s)` rules and the `_ppm` rules.
    - *Mitigation:* explicit ancilla arguments (§7.4, rule 1).
    - *Canary:* `test_allocating_rule_is_excluded`.
-2. **L-2: Measurement rules are skipped inside adjoint or control regions.** Rules that declare measurements are skipped when they would be wrapped in such a region, on both the Catalyst side and the PennyLane side ([pennylane#9629](https://github.com/PennyLaneAI/pennylane/pull/9629)). Explicit `Adjoint(Op)` rules taking `base`, and plain explicit `C(Op)` rules, are kept. `C(Adjoint(Op))` with a measuring adjoint rule has no path.
+2. **L-2: Measurement rules are skipped inside adjoint or control regions.** Rules that declare measurements are skipped when they would be wrapped in such a region, on both the Catalyst side and the PennyLane side ([pennylane#9629](https://github.com/PennyLaneAI/pennylane/pull/9629)). Explicit `Adjoint(Op)` rules taking `base`, and plain explicit `C(Op)` rules, are kept. `C(Adjoint(Op))` skips the measuring adjoint rule; the solver then controls the unitary inverse of `Op`'s base rule if one exists, and has no path otherwise (observed 2026-11-11).
    - *Mitigation:* §7.4, rules 5 and 6.
    - *Canary:* `test_measuring_adjoint_rule_has_no_controlled_path`.
 3. **L-3: Rule selection is cost-based.** With unweighted counts, the solver preferred an auto-derived unitary inverse over an explicit measured adjoint rule. A Toffoli-weighted gate set or `fixed_decomps` fixed it.
@@ -1433,10 +1434,10 @@ The report never adjusts measured numbers.
 4. **L-4: `fixed_decomps` also applies to nested same-name operators.** Pinning `QROM` to select-swap made its nested `QROM` unsatisfiable.
    - *Mitigation:* pin dfthc names only.
    - *Canary:* `test_pin_applies_to_nested_instances`.
-5. **L-5: Rules are compiled once against abstract inputs.** Only compilable arguments are concrete inside rules ([catalyst#3172](https://github.com/PennyLaneAI/catalyst/issues/3172)). Identical rule variants are recompiled many times, which dominates compile time ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173)).
+5. **L-5: Rules are compiled once against abstract inputs.** Only compilable arguments are concrete inside rules ([catalyst#3172](https://github.com/PennyLaneAI/catalyst/issues/3172)). Each distinct rule variant (distinct compilable arguments, such as a distinct table) is compiled separately, while identical variants in one program share their compiles (L-21, observed 2026-11-11); many distinct variants dominate compile time ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173)).
    - *Mitigation:* compilable structure arguments (§7.4, rule 3); the FeMoco-size compile check in Phase 0 (K-1).
-   - *Canaries:* `test_rule_branch_on_dynamic_value_is_not_specialized` (abstract specialization). The recompilation and large-table compile-time claims are pinned by L-21's benchmark.
-6. **L-6: Adjoint lowering can crash.** It hits an `IRMapping` assertion on nested `for_loop` or `cond` inside adjoint regions ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)).
+   - *Canaries:* `test_rule_branch_on_dynamic_value_is_not_specialized` (abstract specialization). The per-variant compile and large-table compile-time claims are pinned by L-21's canary and benchmark.
+6. **L-6: Adjoint lowering can crash.** It hits an `IRMapping` assertion on nested `for_loop` or `cond` inside adjoint regions ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)). The canary's reproducer compiled on 2026-11-11 (not reproduced; regression sentinel); the issue is open, so the mitigation stays. The canary fails if the crash returns; it cannot detect a fix.
    - *Mitigation:* no loops or conditionals in auto-adjointed bodies (§7.4, rule 4).
    - *Canary:* `test_auto_adjoint_with_nested_control_flow` (subprocess).
 7. **L-7: `C(ChangeOpBasis)` loses its saving under capture.** The "control only the middle" saving is lost ([pennylane#10357](https://github.com/PennyLaneAI/pennylane/issues/10357)).
@@ -1445,7 +1446,7 @@ The report never adjusts measured numbers.
 8. **L-8: Generic controlled wrapping adds Xs.** It counts one `PauliX` per control wire ([pennylane#10080](https://github.com/PennyLaneAI/pennylane/issues/10080)).
    - *Mitigation:* explicit `C(...)` rules with control value 1.
    - *Canary:* `test_generic_ctrl_adds_paulix_per_control`.
-9. **L-9: Function calls inside control regions raise.** This is the case for function calls inside `quantum.ctrl` regions ([catalyst#3330](https://github.com/PennyLaneAI/catalyst/pull/3330), [catalyst#3384](https://github.com/PennyLaneAI/catalyst/issues/3384)).
+9. **L-9: Function calls inside control regions are not decomposed.** On 2026-11-11 a controlled `qp.capture.subroutine` leaves `C(PauliX)` undecomposed at `level="user"`, and compiling for execution fails ([catalyst#3330](https://github.com/PennyLaneAI/catalyst/pull/3330), [catalyst#3384](https://github.com/PennyLaneAI/catalyst/issues/3384)).
    - *Mitigation:* no `Subroutine`; explicit `C(...)` rules.
    - *Canary:* `test_function_call_in_ctrl_region_raises`.
 10. **L-10: Whether a circuit compiles can depend on gate order** ([catalyst#3431](https://github.com/PennyLaneAI/catalyst/issues/3431)).
@@ -1464,8 +1465,8 @@ The report never adjusts measured numbers.
     - *Mitigation:* explicit work wires.
     - *Canary:* `test_mcx_without_work_wires_has_no_path` (subprocess).
 15. **L-15: Measurement-related bugs.**
-    - Hardware-like one-shot postselection gives wrong results under capture ([pennylane#8379](https://github.com/PennyLaneAI/pennylane/issues/8379)).
-    - Measurements nested in `cond` are missed by one-shot execution ([catalyst#2382](https://github.com/PennyLaneAI/catalyst/issues/2382)).
+    - Hardware-like one-shot postselection is rejected under capture with a `CompileError` (observed 2026-11-11; [pennylane#8379](https://github.com/PennyLaneAI/pennylane/issues/8379)).
+    - Measurements nested in `cond` are missed by one-shot execution ([catalyst#2382](https://github.com/PennyLaneAI/catalyst/issues/2382)). The canary's reproducer was not affected on 2026-11-11.
     - `qp.pauli_measure(postselect=...)` is ignored ([catalyst#3338](https://github.com/PennyLaneAI/catalyst/issues/3338)).
     - *Mitigation:* §12.2.
     - *Canaries:* `test_hw_like_postselection_wrong_under_capture`, `test_mcm_inside_cond_missed`, `test_pauli_measure_postselect_ignored`.
@@ -1488,21 +1489,27 @@ The report never adjusts measured numbers.
       - `test_warnings_silenced_without_env` (subprocess, variable unset);
       - `test_warnings_visible_with_env` (subprocess, variable exported before start);
       - `test_unreachable_op_reports_missing_rule` (subprocess).
-19. **L-19: `UniformPrep` and `AliasSampling` need arbitrary rotations.** Neither has a path to the Toffoli-level gate set.
+19. **L-19: `UniformPrep` and `AliasSampling` need arbitrary rotations.** For a non-power-of-two size neither has a path to the Toffoli-level gate set; for a power-of-two size `AliasSampling` compiles (observed 2026-11-11).
     - *Mitigation:* `FlaggedUniformPrep`.
     - *Canaries:* `test_uniform_prep_has_no_toffoli_level_path` and `test_alias_sampling_has_no_toffoli_level_path` (both subprocess).
-20. **L-20: An undecomposed `OperatorOp` runs as a bare named gate.** At runtime it ignores static data, work wires and the parameters forwarded to its rules ([catalyst#3430](https://github.com/PennyLaneAI/catalyst/pull/3430)).
+20. **L-20: An undecomposed `OperatorOp` runs as a bare named gate.** On 2026-11-11 such an `Operator2` is decomposed by the device pass if it has a rule, and fails to compile for execution if it has none; it no longer reaches runtime as a bare named gate ([catalyst#3430](https://github.com/PennyLaneAI/catalyst/pull/3430)).
     - *Mitigation:* the `level="device"` closure test of every composite operator (T5) asserts that no `OperatorOp` survives.
     - *Canary:* `test_undecomposed_operator_op_reaches_runtime`: an `Operator2` listed in the gate set reaches the device program as a named operation.
-21. **L-21: Each distinct compilable table is a distinct graph node and rule compile.** Identical variants are recompiled ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173)), and compile time grows with table size and count.
+21. **L-21: Each distinct compilable table is a distinct graph node and rule compile.** On 2026-11-11 each distinct table traces its rule twice, identical tables in one program share those traces, and compile time grows with table size and count ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173)).
     - *Mitigation:* few distinct table operators per walk (§9); the K-1 budget.
-    - *Canary and benchmark:* `test_compile_time_scaling` records compile time and peak memory for 1, 2 and 4 distinct tables, and for one table at sizes 64, 1,024 and 8,640 entries. It fails if a measurement exceeds twice the baseline stored in `tests/canary/compile_baseline.json`; refresh the baseline at each nightly bump.
+    - *Canary:* `test_each_distinct_table_is_a_separate_rule_compile`. *Benchmark:* `test_compile_time_scaling` records compile time and peak memory for 1, 2 and 4 distinct tables, and for one table at sizes 64, 1,024 and 8,640 entries. It fails if a measurement exceeds twice the baseline stored in `tests/canary/compile_baseline.json`, or if the 8,640-entry compile costs less than five times the 64-entry one; refresh the baseline at each nightly bump.
 22. **L-22: Unresolved loops produce symbolic counts.** Loops whose bounds are not concrete, including the inner loops of PennyLane's select-swap `QROM`, give symbolic `qp.analyze` counts.
     - *Mitigation:* loops unrolled in Python or with static bounds; T4 asserts `is_symbolic == False`.
     - *Canary:* shared with L-12 and L-17 (`test_select_swap_qrom_counts_are_symbolic`, `test_dynamic_loop_counts_are_symbolic`).
 23. **L-23: Canonicalizing list-valued dynamic `Operator2` arguments is the subclass's job** ([pennylane#10060](https://github.com/PennyLaneAI/pennylane/pull/10060), open).
     - *Mitigation:* every dfthc operator with a dynamic argument converts lists to arrays in `__init__` (today `PhaseFixup` and `QPERound`).
     - *Canary:* `test_dynamic_list_argument_not_canonicalized`, which pins today's base-class behaviour for a list-valued dynamic argument.
+24. **L-24: Compilable integers must fit in signed 64 bits.** Larger values fail to compile (MLIR: large integer attributes are not supported).
+    - *Mitigation:* wide table entries are tuples of 32-bit words (§8.4).
+    - *Canary:* `test_compilable_int_must_fit_int64` (subprocess).
+25. **L-25: `qp.adjoint(OpClass)(*args)` traces positional arguments under capture,** so a compilable argument passed positionally is rejected.
+    - *Mitigation:* apply adjoints as `qp.adjoint(Op(...))` (§7.4, rule 13).
+    - *Canary:* `test_adjoint_of_class_traces_positional_arguments`.
 
 ## 15. Orchestration overview
 

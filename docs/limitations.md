@@ -3,8 +3,8 @@
 One entry per limitation of spec section 14, with the behaviour the canary in `tests/canary/`
 pins today. A flipped canary is a signal to revisit the mitigation, not a failure to hide. All
 observations are from 2026-11-11 (PennyLane 0.46.0.dev151, Catalyst 0.16.0.dev140). Entries marked
-**changed** differ from the spec's original wording; Task 0.4 updates spec section 14 to match,
-and until then this file is authoritative where the two differ.
+**changed** differ from the spec's original wording; as of Task 0.4, spec section 14 matches this
+file.
 
 ## Decomposition rules, pins, control and templates
 
@@ -81,3 +81,53 @@ and until then this file is authoritative where the two differ.
   constant"); keyword arguments, `qp.adjoint(Op(...))` and `qp.adjoint(lambda: Op(...))()` work.
   Canary: `test_adjoint_of_class_traces_positional_arguments`. Mitigation: always use the
   instance form `qp.adjoint(Op(...))`.
+
+## Measurements, analysis, device level, warnings and compile time
+
+- **L-15, measurement-related bugs.**
+  - Hardware-like postselection (pennylane#8379), **changed**: `qp.qjit(capture=True)` now rejects
+    `postselect_mode="hw-like"` with a `CompileError`. Canary:
+    `test_hw_like_postselection_wrong_under_capture`.
+  - Measurements nested in `qp.cond` (catalyst#2382), **changed**: under one-shot execution the
+    canary's nested measurement runs on every shot (mean 0.5 within five standard deviations);
+    the bug was not reproduced. Canary: `test_mcm_inside_cond_missed`.
+  - `qp.pauli_measure(postselect=...)` is ignored (catalyst#3338): the postselected outcome
+    appears on about half the shots. Canary: `test_pauli_measure_postselect_ignored`.
+  - Mitigation for all three: spec 12.2 (no hardware-like postselection, no measurements inside
+    `qp.cond`, no `pauli_measure` postselection).
+- **L-16, execution decomposes again to the device gate set** (catalyst#3275). At
+  `level="device"` a `TemporaryAND` becomes a Toffoli and PauliX gates; a decomposed `Operator2`
+  leaves no named operation. Canaries: `test_device_pass_runs`,
+  `test_device_level_has_no_operator_op`. Mitigation: counts at `level="user"`; closure at
+  `level="device"` (`compiled_resources(level="device")`).
+- **L-17, `qp.analyze` behaviour.** It accepts only qjit-compiled QNodes (`ValueError`); an
+  unhinted conditional counts its most expensive branch and warns; branch-probability hints give
+  expected counts, summed per gate type over the program and rounded up once (four one-X
+  conditionals at probability 1/2 count 2); a runtime loop bound gives symbolic counts; a
+  `num-iters` hint makes them concrete. Canaries: `test_analyze_requires_qjit`,
+  `test_unhinted_cond_counts_max_branch_with_warning`, `test_branch_prob_hint_gives_expected_counts`,
+  `test_dynamic_loop_counts_are_symbolic`, `test_num_iters_hint_makes_loop_concrete`.
+  Mitigation: `compiled_resources()`, hints, static loop bounds.
+- **L-18, rule-lowering warnings are silenced by default** (catalyst#3190), and a solver failure
+  reports "the rules file could not be parsed" (catalyst#2767); the message also names the
+  operator without a rule. Canaries: `test_warnings_silenced_without_env`,
+  `test_warnings_visible_with_env`, `test_unreachable_op_reports_missing_rule`. Mitigation: spec
+  7.1 and 7.4 rule 12.
+- **L-20, undecomposed `Operator2` at runtime** (catalyst#3430), **changed**. An `Operator2`
+  listed in the gate set stays undecomposed at `level="user"`; with a rule, the device pass
+  decomposes it and the result is correct; without a rule, compiling for execution fails. It no
+  longer reaches runtime as a bare named gate. Canary:
+  `test_undecomposed_operator_op_reaches_runtime`. Mitigation kept: the `level="device"` closure
+  test of every composite operator (T5).
+- **L-21, compile cost grows with distinct tables and table size** (catalyst#3173). Canary:
+  `test_each_distinct_table_is_a_separate_rule_compile` (per commit). On 2026-11-11 each distinct
+  table traces its rule twice, and identical tables in one program share those traces.
+  Benchmark: `test_compile_time_scaling` (nightly) compiles 1, 2 and 4 distinct 64-entry tables
+  and single tables of 64, 1,024 and 8,640 entries. It fails above twice
+  `tests/canary/compile_baseline.json` in CPU time or peak memory (the process plus its finished
+  children), or if the 8,640-entry case costs less than 5 times the CPU time of the 64-entry
+  case. On the development laptop the ratio was 27, and one 8,640-entry table took 22 s wall,
+  60 s CPU and 1.6 GB. Mitigation: few distinct table operators per walk; the K-1 budget.
+- **L-22, unresolved loops give symbolic counts.** Shared with L-12 and L-17
+  (`test_select_swap_qrom_counts_are_symbolic`, `test_dynamic_loop_counts_are_symbolic`).
+  Mitigation: loops unrolled in Python or with static bounds; T4 asserts `is_symbolic == False`.

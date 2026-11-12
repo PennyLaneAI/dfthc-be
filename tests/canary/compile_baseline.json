@@ -1,0 +1,27 @@
+{
+  "tables_1_size_1024": {
+    "cpu_seconds": 13.39,
+    "max_rss_mb": 507.8,
+    "seconds": 5.84
+  },
+  "tables_1_size_64": {
+    "cpu_seconds": 5.29,
+    "max_rss_mb": 365.1,
+    "seconds": 1.25
+  },
+  "tables_1_size_8640": {
+    "cpu_seconds": 138.68,
+    "max_rss_mb": 1640.8,
+    "seconds": 36.13
+  },
+  "tables_2_size_64": {
+    "cpu_seconds": 3.69,
+    "max_rss_mb": 378.4,
+    "seconds": 0.66
+  },
+  "tables_4_size_64": {
+    "cpu_seconds": 3.76,
+    "max_rss_mb": 398.0,
+    "seconds": 0.97
+  }
+}
