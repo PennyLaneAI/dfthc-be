@@ -39,7 +39,10 @@ class FlaggedUniformPrep(Operator2):
     **Action.** From :math:`|0\rangle_t|0\rangle_{succ}`, prepare a state whose ``succ = 1``
     part is exactly uniform over :math:`t \in [0, L)` and whose ``succ = 0`` part is supported on
     :math:`t \ge L`. The weight of the ``succ = 0`` part is
-    :func:`dfthc.data.encoded.uniform_failure_probability` ``(L, s)``.
+    :func:`dfthc.data.encoded.uniform_failure_probability` ``(L, s)``. The ``succ = 1``
+    amplitudes share one complex phase (not 1 unless ``l = 1``) and have weight
+    ``(1 - P_fail) / L`` each; the ``succ = 0`` amplitudes are equal on every ``t >= L``. Only
+    these weights enter the walk, because the unprepare is the exact adjoint.
 
     **Registers.** Write :math:`L = 2^\eta l` with ``l`` odd and :math:`n = \lg l`.
 

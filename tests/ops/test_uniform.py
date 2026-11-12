@@ -1,5 +1,7 @@
 """FlaggedUniformPrep (spec 9.2): exact uniformity, the failure weight, round trips and counts."""
 
+import re
+
 import numpy as np
 import pennylane as qp
 import pytest
@@ -9,6 +11,7 @@ from dfthc.compile import FIXED_DECOMPS, GATE_SET, compiled_resources
 from dfthc.data.encoded import uniform_failure_probability
 from dfthc.ops.uniform import FlaggedUniformPrep, _flagged_uniform_prep, amplitude_angles
 from dfthc.params import lg, odd_part
+from dfthc.testing.resources import chosen_rules, verbose_program
 from dfthc.testing.sparse_sim import SparseSimulator
 from dfthc.testing.tape import decompose_for_simulation
 
@@ -30,8 +33,8 @@ def _prep(L, s, wires):
                               wires["phase_grad"], wires["work"])
 
 
-def _simulate(L, s, round_trip=False):
-    wires, num_wires = _layout(L, s)
+def _simulate(L, s, grad=None, round_trip=False):
+    wires, num_wires = _layout(L, s, grad)
 
     def qfunc():
         qp.PhaseGradientStatePrep(wires=wires["phase_grad"])
@@ -66,24 +69,46 @@ def _without_gradient(state, wires):
     return {key: values[0] for key, values in amplitudes.items()}, len(others)
 
 
+def _expected_target_amplitudes(L, s):
+    """Spec 9.2's amplitudes on t in [0, 2**lg(L)) for l > 1, with k recomputed from the spec
+    formula: H on target, phase on top < l, H on top, phase on top = 0, H on top."""
+    odd, n = odd_part(L), lg(odd_part(L))
+    angle = np.arccos(1 - 2 ** (odd.bit_length() - 1) / odd)
+    k = int(np.floor(angle / (2 * np.pi) * 2**s)) % 2**s
+    phase = np.exp(2j * np.pi * k / 2**s)
+    h = np.ones((1, 1))
+    for _ in range(n):
+        h = np.kron(h, [[1, 1], [1, -1]]) / np.sqrt(2)
+    top = h @ (np.where(np.arange(2**n) < odd, phase, 1) / np.sqrt(2**n))
+    top[0] *= phase
+    eta = lg(L) - n
+    return np.repeat(h @ top, 2**eta) / np.sqrt(2**eta)
+
+
 @pytest.mark.parametrize("s", [3, 7])
 @pytest.mark.parametrize("L", [3, 5, 6, 7])
 def test_succ_part_is_exactly_uniform(L, s):
     """T3 (sparse simulator): succ = 1 exactly on t < L with equal amplitudes, succ = 0 only on
-    t >= L, and the failure weight equals uniform_failure_probability (spec 8.5)."""
-    state, wires = _simulate(L, s)
+    t >= L, and the failure weight equals uniform_failure_probability (spec 8.5). The gradient
+    has s + 1 wires, so the rotations must add into its top s wires. Every amplitude, phase
+    included, equals spec 9.2's."""
+    state, wires = _simulate(L, s, grad=s + 1)
     amplitudes, num_others = _without_gradient(state, wires)
     shift = num_others - lg(L)
     succ_shift = shift - 1
     good, failure = [], 0.0
+    observed = np.zeros(2 ** lg(L), dtype=complex)
     for key, amp in amplitudes.items():
         t, succ = key >> shift, (key >> succ_shift) & 1
         assert succ == int(t < L), (t, succ)
+        assert observed[t] == 0, t
+        observed[t] = amp
         if t < L:
             good.append(amp)
         else:
             failure += abs(amp) ** 2
     assert len(good) == L and np.allclose(good, good[0], rtol=0, atol=1e-12)
+    assert np.allclose(observed, _expected_target_amplitudes(L, s), rtol=0, atol=1e-12)
     assert abs(failure - uniform_failure_probability(L, s)) < 1e-12
     assert abs(L * abs(good[0]) ** 2 + failure - 1) < 1e-12
 
@@ -108,9 +133,10 @@ def _lightning(num_wires, body, returns):
 
 
 @pytest.mark.compiled
-@pytest.mark.parametrize("L", [5, 6])
+@pytest.mark.parametrize("L", [5, 8])
 def test_compiled_distribution_on_lightning(L):
-    """T3 on the compiled path (s = 3): P(t, succ) on lightning.qubit."""
+    """T3 on the compiled path (s = 3): P(t, succ) on lightning.qubit; L = 8 is the l = 1
+    branch (Hadamards and X(succ))."""
     s = 3
     wires, num_wires = _layout(L, s)
 
@@ -188,9 +214,21 @@ def test_prepare_and_unprepare_uncompute_every_and():
 
 
 @pytest.mark.compiled
-def test_no_dfthc_operator_survives_at_device_level():
+def test_pinned_rule_is_chosen_and_nothing_survives_at_device_level(capfd):
+    """T6: the solver names the pinned rule for the prepare and its adjoint-lowered instance for
+    the auto-derived adjoint; T5 at level="device" (L-20)."""
     wires, num_wires = _layout(6, 3)
-    compiled_resources(lambda: _prep(6, 3, wires), num_wires=num_wires, level="device")
+
+    def program():
+        _prep(6, 3, wires)
+        qp.adjoint(_prep(6, 3, wires))
+
+    qp.analyze(verbose_program(program, num_wires=num_wires), level="user")()
+    captured = capfd.readouterr()
+    rules = chosen_rules(captured.out + captured.err)
+    assert "_flagged_uniform_prep" in rules
+    assert any(re.fullmatch(r"_flagged_uniform_prep_\d+", rule) for rule in rules), rules
+    compiled_resources(program, num_wires=num_wires, level="device")
 
 
 @pytest.mark.parametrize(("L", "s"), [(5, 3), (12, 4), (8, 3)])
