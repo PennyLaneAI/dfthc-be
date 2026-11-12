@@ -1,0 +1,101 @@
+{
+  "part1_small": {
+    "capture_seeds_ok": [
+      true,
+      true,
+      true
+    ],
+    "tape_ok": true,
+    "passed": true,
+    "warnings": {
+      "prototype": [],
+      "other": [],
+      "noise": 30
+    }
+  },
+  "part2_small": {
+    "capture_seeds_ok": [
+      true,
+      true,
+      true
+    ],
+    "tape_ok": true,
+    "passed": true,
+    "warnings": {
+      "prototype": [],
+      "other": [],
+      "noise": 30
+    }
+  },
+  "part3_small": {
+    "capture_ok": true,
+    "tape_ok": true,
+    "passed": true,
+    "warnings": {
+      "prototype": [],
+      "other": [],
+      "noise": 2
+    }
+  },
+  "part1_mid544_compile": {
+    "seconds": 15.7,
+    "measurements": 416,
+    "conditional_z_upper_bound": 544,
+    "num_addresses": 544,
+    "passed": true,
+    "warnings": {
+      "prototype": [],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 20
+    }
+  },
+  "part2_mid544_compile": {
+    "seconds": 15.3,
+    "measurements": 416,
+    "conditional_z_upper_bound": 544,
+    "num_addresses": 544,
+    "passed": true,
+    "warnings": {
+      "prototype": [],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 20
+    }
+  },
+  "part1_mid1088_compile": {
+    "seconds": 36.8,
+    "measurements": 416,
+    "conditional_z_upper_bound": 1088,
+    "num_addresses": 1088,
+    "passed": true,
+    "warnings": {
+      "prototype": [],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 20
+    }
+  },
+  "part2_mid1088_compile": {
+    "seconds": 36.3,
+    "measurements": 416,
+    "conditional_z_upper_bound": 1088,
+    "num_addresses": 1088,
+    "passed": true,
+    "warnings": {
+      "prototype": [],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 20
+    }
+  },
+  "compile_time_growth_exponents": {
+    "part1": 1.23,
+    "part2": 1.25
+  },
+  "verdict": "pass"
+}
