@@ -9,7 +9,7 @@ cotengra==0.8.3
 cycler==0.12.1
 cytoolz==1.2.0
 decorator==5.3.1
-dfthcbe @ file:///Users/david.wierichs/repos/dfthc-be/.worktrees/lane-a/.scratch/tmp/dfthcbe-src
+dfthcbe @ https://codeload.github.com/Covestro-HPQC/dfthcbe/tar.gz/930255020cec30172e0a7d17c0071d9476a687d1
 duet==0.2.9
 executing==2.3.0
 fonttools==4.68.0

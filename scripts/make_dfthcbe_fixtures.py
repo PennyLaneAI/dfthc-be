@@ -16,7 +16,15 @@ Writes into ``--out``:
   ``random_factors(2, 3, 1, 1, n_plus=1, seed=3)`` (dfthcbe's ``x_o_fails`` shape);
 - ``femoco_block_toffolis.json``: dfthcbe's Toffolis per block at ``FEMOCO54`` (``k_e1 = 4``,
   ``k_e2 = 2``, ``s = 7``), from its symbolic call graph, so no FeMoco table is built;
-- ``provenance.json``: the dfthcbe commit, package versions and parameters.
+- ``provenance.json``: the dfthcbe commit, package versions, parameters and inputs. Three fields
+  pin the dfthcbe source: ``dfthcbe_source_url``, the immutable codeload tarball of the commit;
+  ``dfthcbe_source_sha256``, the digest of that tree that the environment recipe verifies (SHA-256
+  of ``pyproject.toml`` and the package's ``.py`` files, as ``shasum -a 256`` lists them); and
+  ``dfthcbe_installed_sha256``, computed here from the imported package (SHA-256 over its ``.py``
+  files sorted by path relative to the package directory, each fed as the POSIX relative path, a
+  zero byte and the file's bytes), so the fixture records what was actually imported. ``inputs``
+  gives, per encoded fixture, the source of its factors and :func:`factor_digest` of the arrays
+  handed to dfthcbe; the tests recompute the digest from the arrays they feed to our code.
 
 The heavy imports (Qualtran, dfthcbe) happen inside the functions, so the test suite can import
 this module's constants in the main environment.
@@ -26,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import hashlib
 import importlib.metadata
 import json
 import platform
@@ -41,6 +50,8 @@ from dfthc.data.factors import random_factors  # noqa: E402
 from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, WalkParams  # noqa: E402
 
 DFTHCBE_COMMIT = "930255020cec30172e0a7d17c0071d9476a687d1"
+DFTHCBE_SOURCE_URL = f"https://codeload.github.com/Covestro-HPQC/dfthcbe/tar.gz/{DFTHCBE_COMMIT}"
+DFTHCBE_SOURCE_SHA256 = "802221370175be502cde773d1c369f02c77a0d167d72ddffc1fb2d5df7df3c27"
 DATA = REPO / "data" / "dfthc"
 KEYS = ("U", "W", "w_B", "w_plus", "u_plus", "w_minus", "u_minus")
 X_O_FAILS = WalkParams(N=2, R=3, B=1, C=1, n_plus=1, b_rot=6, b_k1=3, b_k2=2, s_u=3, k1=1, k2=1,
@@ -63,6 +74,31 @@ FIXTURES = (*TABLE_FIXTURES, *ENCODED_FIXTURES, FEMOCO_FIXTURE, PROVENANCE)
 FEMOCO_BLOCKS = ("outer_prepare", "outer_unprepare", "inner_prepare", "inner_unprepare",
                  "inner_select", "inner_select_adjoint", "ref_t2", "ref_ab", "block_encoding",
                  "controlled_block_encoding", "walk", "controlled_walk")
+
+
+def factor_digest(arrays: dict) -> str:
+    """SHA-256 of factor arrays: for each of :data:`KEYS` in order, the key name, the shape, the
+    dtype string and the C-contiguous bytes. Pure NumPy, so the tests can recompute it."""
+    digest = hashlib.sha256()
+    for key in KEYS:
+        array = np.asarray(arrays[key])
+        for part in (key, str(array.shape), array.dtype.str):
+            digest.update(part.encode())
+        digest.update(np.ascontiguousarray(array).tobytes())
+    return digest.hexdigest()
+
+
+def installed_digest() -> str:
+    """SHA-256 of the imported ``dfthcbe`` package: its ``.py`` files sorted by relative path,
+    each fed as the POSIX relative path, a zero byte and the file's bytes."""
+    import dfthcbe
+
+    root = Path(dfthcbe.__file__).resolve().parent
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*.py"), key=lambda path: path.relative_to(root).as_posix()):
+        digest.update(path.relative_to(root).as_posix().encode() + b"\0")
+        digest.update(path.read_bytes())
+    return digest.hexdigest()
 
 
 def _factors(source: str) -> dict:
@@ -165,10 +201,15 @@ def provenance() -> dict:
                "X_O_FAILS": X_O_FAILS}
     return {
         "dfthcbe_commit": DFTHCBE_COMMIT,
+        "dfthcbe_source_url": DFTHCBE_SOURCE_URL,
+        "dfthcbe_source_sha256": DFTHCBE_SOURCE_SHA256,
+        "dfthcbe_installed_sha256": installed_digest(),
         "versions": versions | {"python": platform.python_version()},
         "parameters": {name: dataclasses.asdict(p) for name, p in presets.items()},
         "systems": {name: system for name, (_, system) in TABLE_FIXTURES.items()}
         | {name: source for name, (_, source) in ENCODED_FIXTURES.items()},
+        "inputs": {name: {"factors": source, "sha256": factor_digest(_factors(source))}
+                   for name, (_, source) in ENCODED_FIXTURES.items()},
         "encoded_block": "exact tensor contraction of DFTHCBlockEncoding.from_factors(..., "
                          "exact_erase=True) with every ancilla pinned to |0>",
         "femoco_counts": "DFTHCWalk.symbolic call graph evaluated at FEMOCO54; Toffolis = "
