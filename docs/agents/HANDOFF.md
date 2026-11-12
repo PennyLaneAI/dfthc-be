@@ -68,17 +68,26 @@ From spec 7.1:
 - **No editable install.** pytest's `pythonpath = ["src"]` makes every worktree test its own
   sources against the shared `.venv`.
 - **Built-in warning noise is filtered** by `dfthc.testing.resources`. The autouse pytest fixture
-  records every `RuleLoweringWarning`, fails the test on one that names a dfthc operator, and only
-  then drops the noise below (Task 0.2). Scripts outside pytest see the noise; the spikes classify
-  it with `spikes/prototypes.classify_warnings`.
+  records every `RuleLoweringWarning`, fails the test on one that names a dfthc operator (except
+  the expected measuring-rule warning below), and only then drops the noise below (Tasks 0.2,
+  0.2b). Scripts outside pytest see the noise; the spikes classify it with
+  `spikes/prototypes.classify_warnings`.
   - `Excluded the <rule> decomposition rule for <op> since --decompose-lowering cannot work with
     multiple registers yet` (for `_ppm`, `_*_ppm`, `_toffoli_elbow`, `_cphase_to_single_phase`,
     `use_allocation(...)` and the MCX `*_worker(s)` rules);
-  - `Skipped the _adjoint_temporary_and... rule for C(Adjoint(TemporaryAND))`;
+  - `Skipped the _adjoint_temporary_and(_ppm) decomposition rule for C(Adjoint(TemporaryAND)){...}: it contains a mid-circuit measurement, which cannot be placed in a control region.`;
   - the `qp.analyze` UserWarning "unable to determine the branch". PennyLane's own `SemiAdder`
     triggers it, and so does our measured erase's fixup (`qp.cond` on measurement parities).
     `qp.analyze` then counts the larger branch, so a conditional Toffoli would be counted without
     a visible signal; exact T4 counts are the backstop.
+- **One expected warning that names a dfthc operator** (`classify_rule_warning` returns
+  `"expected"`; tests record and drop it): `Skipped the <rule> decomposition rule for
+  <Adjoint/C of a dfthc operator>{...}: it contains a mid-circuit measurement, which is not
+  supported with adjoint or control regions.` Catalyst also lowers the generic `Adjoint(...)` and
+  `C(...)` candidates of operators with pinned rules and drops the measuring ones; the pinned rules
+  are used. A needed modified operator without a remaining rule fails with a `CompileError`; a
+  remaining non-measuring rule is chosen silently, which exact T4 counts and T5 closure catch
+  (spec 7.4 rule 12).
 - **"the rules file could not be parsed" alone proves nothing.** A successful verbose compile also
   prints it (spike T6). In a failed compile the real cause, `Decomposition rule not found for
   operator '<op>'`, is in the same error message; assert on that and the exception type.

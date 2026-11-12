@@ -1,6 +1,7 @@
 """Tests for dfthc.compile and dfthc.testing.resources (plan Task 0.2)."""
 
 import itertools
+import re
 import time
 import warnings
 from types import SimpleNamespace
@@ -10,6 +11,7 @@ import numpy as np
 import pennylane as qp
 import pytest
 from catalyst.decomposition.rule_lowering_warning import RuleLoweringWarning
+from catalyst.utils.exceptions import CompileError
 from pennylane.core import Operator2
 from pennylane.typing import Wire
 
@@ -64,6 +66,29 @@ def _compile_test_unload(base):
 
 register_rule(CompileTestLoad, _compile_test_load)
 register_rule("Adjoint(CompileTestLoad)", _compile_test_unload)
+
+
+class CompileTestMeasureOnly(Operator2):
+    """Test-local operator whose only rule measures; never pinned through ``register_rule``."""
+
+    wire_argnames = ("target", "aux")
+
+    def __init__(self, target, aux):
+        super().__init__(target, aux)
+
+
+def _compile_test_measure_only_resources(target, aux):
+    return {qp.H: 1, resource_key(lambda: qp.ops.MidMeasure(Wire[1], reset=True)): 1, qp.Z: 1}
+
+
+@qp.register_resources(_compile_test_measure_only_resources)
+def _compile_test_measure_only(target, aux):
+    qp.H(target[0])
+    outcome = qp.measure(target[0], reset=True)
+    qp.cond(outcome, qp.Z)(aux[0])
+
+
+qp.add_decomps(CompileTestMeasureOnly, _compile_test_measure_only)
 
 
 def test_gate_set_matches_spec():
@@ -371,6 +396,236 @@ def test_classify_rule_warning(rule):
     skipped = "Skipped the _outer rule for Adjoint(OuterPrepare)"
     assert classify_rule_warning(skipped, names) == "dfthc"
     assert classify_rule_warning("Something new about CNOT", names) == "other"
+
+
+_SUFFIX = (
+    ": it contains a mid-circuit measurement, which is not supported with adjoint or control "
+    "regions."
+)
+_ANGLE_DUMP = (
+    "{}{wires:82}{shape = [4, 2, 2, 2, 2, 4, 2, 2, 1, 1], "
+    "tables = [[[0, [2]], [1, [18]]], [[0, [48]], [1, [59]]]]}"
+)
+_TABLE_DUMP = (
+    "{}{high:2,junk:5,low:1,target:5,work:13}{block_bits = 1 : i64, high_ranges = [[2, 0, 4]], "
+    "table = [[0, [2]], [1, [18]]], width = 5 : i64}"
+)
+# The three wrapper forms of Task 0.9's recorded texts (spikes/results/k1_small.json), tables
+# shortened.
+_ANGLE_RULE = "Skipped the _proto_angle_erase decomposition rule for "
+_TABLE_RULE = "Skipped the _proto_table_erase decomposition rule for "
+EXPECTED_ADJOINT = f"{_ANGLE_RULE}Adjoint(ProtoAngleErase){_ANGLE_DUMP}{_SUFFIX}"
+EXPECTED_CONTROL = f"{_TABLE_RULE}C(ProtoTableErase){_TABLE_DUMP}{_SUFFIX}"
+EXPECTED_CONTROL_ADJOINT = f"{_ANGLE_RULE}C(Adjoint(ProtoAngleErase)){_ANGLE_DUMP}{_SUFFIX}"
+BOTH = {"ProtoAngleErase", "ProtoTableErase"}
+
+
+@pytest.mark.parametrize(
+    ("message", "names"),
+    [
+        (EXPECTED_ADJOINT, {"ProtoAngleErase"}),
+        (EXPECTED_CONTROL, {"ProtoTableErase"}),
+        (EXPECTED_CONTROL_ADJOINT, {"ProtoAngleErase"}),
+        (EXPECTED_CONTROL_ADJOINT, ["ProtoAngleErase"]),
+        (EXPECTED_ADJOINT.replace("ProtoAngleErase", "CompileTestLoad"), None),
+        (EXPECTED_CONTROL_ADJOINT.replace("ProtoAngleErase", "CompileTestLoad"), None),
+        (
+            "Skipped the _rule decomposition rule for Adjoint(C(Adjoint(ProtoAngleErase)))"
+            + "{}{wires:1}{}" + _SUFFIX,
+            {"ProtoAngleErase"},
+        ),
+    ],
+)
+def test_classify_expected_measuring_rule_warning(message, names):
+    assert classify_rule_warning(message, names) == "expected"
+
+
+def test_classify_expected_accepts_the_dfthc_names_by_default():
+    assert "CompileTestLoad" in dfthc_operator_names()
+    message = EXPECTED_CONTROL.replace("ProtoTableErase", "CompileTestLoad")
+    assert classify_rule_warning(message) == "expected"
+    assert classify_rule_warning(message, {"OtherOperator"}) == "other"
+
+
+@pytest.mark.parametrize(
+    ("message", "names"),
+    [
+        # An unwrapped operator, and unknown wrapper names.
+        (EXPECTED_CONTROL.replace("C(ProtoTableErase)", "ProtoTableErase"), {"ProtoTableErase"}),
+        (EXPECTED_CONTROL.replace("C(ProtoTableErase)", "Pow(ProtoTableErase)"),
+         {"ProtoTableErase"}),
+        # Unbalanced wrappers.
+        (EXPECTED_CONTROL_ADJOINT.replace("ProtoAngleErase))", "ProtoAngleErase)"),
+         {"ProtoAngleErase"}),
+        (EXPECTED_CONTROL_ADJOINT.replace("ProtoAngleErase))", "ProtoAngleErase)))"),
+         {"ProtoAngleErase"}),
+        (EXPECTED_ADJOINT.replace("Adjoint(ProtoAngleErase)", "Adjoint(ProtoAngleErase"),
+         {"ProtoAngleErase"}),
+        # The suffix without its final period, or with text after it.
+        (EXPECTED_ADJOINT.removesuffix("."), {"ProtoAngleErase"}),
+        (EXPECTED_ADJOINT + " Also ProtoAngleErase.", {"ProtoAngleErase"}),
+        # A second name of `names`: before the suffix, in the rule name, in an attribute dump.
+        (EXPECTED_CONTROL.replace("{}{high:2", "{}{ProtoAngleErase:2"), BOTH),
+        (EXPECTED_CONTROL.replace("_proto_table_erase", "x.ProtoAngleErase"), BOTH),
+        (EXPECTED_CONTROL.replace("table = [[0, [2]]", "table = ProtoAngleErase, [[0, [2]]"), BOTH),
+        # A different reason after the colon.
+        (EXPECTED_ADJOINT.replace(
+            "which is not supported with adjoint or control regions",
+            "which cannot be placed in a control region"), {"ProtoAngleErase"}),
+        (EXPECTED_ADJOINT.replace("it contains a mid-circuit measurement", "it is slow"),
+         {"ProtoAngleErase"}),
+        # A different message shape that names the operator.
+        ("Skipped the _rule rule for Adjoint(ProtoAngleErase)", {"ProtoAngleErase"}),
+        (EXPECTED_ADJOINT.replace("Skipped the", "Excluded the"), {"ProtoAngleErase"}),
+    ],
+)
+def test_classify_other_messages_naming_a_dfthc_operator_stay_dfthc(message, names):
+    assert classify_rule_warning(message, names) == "dfthc"
+
+
+def test_classify_expected_needs_a_whole_word_operator_name():
+    message = EXPECTED_ADJOINT.replace("Adjoint(ProtoAngleErase)", "Adjoint(MyProtoAngleErase)")
+    assert classify_rule_warning(message, {"ProtoAngleErase"}) == "other"
+
+
+def test_classify_rule_warning_rejects_a_bare_string_of_names():
+    with pytest.raises(TypeError, match="names"):
+        classify_rule_warning(EXPECTED_ADJOINT, names="ProtoAngleErase")
+
+
+def test_classify_rule_warning_accepts_a_generator_of_names():
+    assert classify_rule_warning(EXPECTED_ADJOINT, (n for n in ["ProtoAngleErase"])) == "expected"
+
+
+# The real texts of PennyLane's own controlled adjoint TemporaryAND candidate, as printed by a
+# few-qubit compile of qp.ctrl(qp.SemiAdder(x_wires=[0, 1], y_wires=[2, 3], work_wires=[4]),
+# control=5) with CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 (Task 0.2b). They name "rule for"
+# after "decomposition", and give a different reason than the measuring-rule warning.
+NOISE_ADJOINT_AND = (
+    "Skipped the _adjoint_temporary_and decomposition rule for "
+    "C(Adjoint(TemporaryAND)){control_values:[tensor<2xi1>]}{wires:3}{}: it contains a "
+    "mid-circuit measurement, which cannot be placed in a control region."
+)
+NOISE_ADJOINT_AND_PPM = NOISE_ADJOINT_AND.replace(
+    "_adjoint_temporary_and ", "_adjoint_temporary_and_ppm "
+)
+
+
+@pytest.mark.parametrize("message", [NOISE_ADJOINT_AND, NOISE_ADJOINT_AND_PPM])
+@pytest.mark.parametrize("names", [None, {"ProtoAngleErase"}])
+def test_classify_adjoint_temporary_and_text_as_noise(message, names):
+    assert classify_rule_warning(message, names) == "noise"
+
+
+def test_classify_adjoint_temporary_and_old_text_form_is_still_noise():
+    old = NOISE_ADJOINT_AND.replace(" decomposition rule", " rule")
+    assert classify_rule_warning(old, {"ProtoAngleErase"}) == "noise"
+
+
+def test_classify_adjoint_temporary_and_text_naming_a_dfthc_operator_stays_dfthc():
+    message = NOISE_ADJOINT_AND.replace("{wires:3}", "{ProtoAngleErase:3}")
+    assert classify_rule_warning(message, {"ProtoAngleErase"}) == "dfthc"
+
+
+def test_expected_warning_is_recorded_and_neither_fails_nor_is_re_emitted():
+    """The filters keep the warning; the autouse fixture classifies it "expected" and drops it.
+
+    The warning is raised at test level, outside any recorder of our own, so the autouse fixture
+    sees it: a "dfthc" classification would fail this test at teardown, and a re-emission would
+    show up in pytest's warnings summary (the output stays pristine).
+    """
+    message = EXPECTED_ADJOINT.replace("ProtoAngleErase", "CompileTestLoad")
+    with warnings.catch_warnings(record=True) as records:
+        install_warning_filters()
+        warnings.warn(RuleLoweringWarning(message), stacklevel=1)
+    assert [str(record.message) for record in records] == [message]
+    assert classify_rule_warning(str(records[0].message)) == "expected"
+    warnings.warn(RuleLoweringWarning(message), stacklevel=1)
+
+
+@pytest.mark.compiled
+@pytest.mark.parametrize(
+    ("wrapper", "key"),
+    [
+        (lambda op: qp.adjoint(op), "Adjoint(CompileTestMeasureOnly)"),
+        (lambda op: qp.ctrl(op, control=2), "C(CompileTestMeasureOnly)"),
+    ],
+    ids=["adjoint", "control"],
+)
+def test_modified_operator_without_a_remaining_rule_fails_to_compile(wrapper, key):
+    """The safety net of spec 7.4 rule 12: Catalyst drops the measuring candidate of the wrapped
+    operator with an "expected" warning, and without another rule the compile fails loudly."""
+    pins = {**FIXED_DECOMPS, "CompileTestMeasureOnly": _compile_test_measure_only}
+    with warnings.catch_warnings(record=True) as records:
+        install_warning_filters()
+        with pytest.raises(CompileError, match="Decomposition rule not found for operator '"
+                           + re.escape(key)):
+            compiled_resources(
+                lambda: wrapper(CompileTestMeasureOnly([0], [1])), num_wires=3, fixed_decomps=pins
+            )
+    skipped = [
+        str(record.message) for record in records
+        if issubclass(record.category, RuleLoweringWarning)
+        and str(record.message).startswith("Skipped the _compile_test_measure_only")
+    ]
+    assert skipped, "Catalyst no longer reports the dropped measuring rule"
+    assert {classify_rule_warning(message, {"CompileTestMeasureOnly"}) for message in skipped} == {
+        "expected"
+    }
+    assert all(f"for {key}{{" in message for message in skipped)
+
+
+def test_mcm_parities_tape_mode_keeps_the_processing_function_of_each_outcome():
+    """[~m0, m1] over all four inputs, with deferred measurements: parity (1 - a) ^ b."""
+
+    def outcomes_of():
+        m0, m1 = qp.measure(0), qp.measure(1)
+        return [~m0, m1]
+
+    dev = qp.device("default.qubit", wires=3)
+
+    @qp.qnode(dev, mcm_method="deferred")
+    def circuit(a, b):
+        qp.BasisState(np.array([a, b]), wires=[0, 1])
+        qp.cond(mcm_parities(outcomes_of(), [0b11])[0], qp.X)(2)
+        return qp.probs(wires=2)
+
+    for a, b in itertools.product([0, 1], repeat=2):
+        expected = np.zeros(2)
+        expected[(1 - a) ^ b] = 1.0
+        assert np.allclose(circuit(a, b), expected), (a, b)
+
+
+def test_mcm_parities_tape_mode_sample_works_under_one_shot():
+    """qp.sample(op=parity) needs a one-measurement-per-outcome MeasurementValue."""
+
+    def outcomes_of():
+        m0, m1 = qp.measure(0), qp.measure(1)
+        return [~m0, m1]
+
+    dev = qp.device("default.qubit", wires=2)
+
+    @qp.set_shots(5)
+    @qp.qnode(dev, mcm_method="one-shot")
+    def circuit(a, b):
+        qp.BasisState(np.array([a, b]), wires=[0, 1])
+        measured = outcomes_of()
+        return qp.sample(op=mcm_parities(measured, [0b11])[0])
+
+    for a, b in itertools.product([0, 1], repeat=2):
+        assert np.asarray(circuit(a, b)).ravel().tolist() == [(1 - a) ^ b] * 5, (a, b)
+
+
+def test_mcm_parities_tape_mode_rejects_an_outcome_with_two_measurements():
+    with qp.queuing.AnnotatedQueue():
+        m0, m1, m2 = qp.measure(0), qp.measure(1), qp.measure(2)
+        composite = m0 + m1
+        assert len(composite.measurements) == 2
+        with pytest.raises(ValueError, match="outcome 1"):
+            mcm_parities([m2, composite], [0b10])
+        # An unchosen composite outcome is not read, and a zero mask needs no outcome.
+        assert mcm_parities([m2, composite], [0b01])[0].measurements == m2.measurements
+        assert mcm_parities([m2, composite], [0]) == [False]
 
 
 def test_assert_resources_reports_all_mismatches():

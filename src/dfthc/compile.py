@@ -190,10 +190,25 @@ def mcm_parities(outcomes: Sequence, masks: Sequence[int]) -> list:
 
 
 def _tape_parity(outcomes: Sequence, mask: int):
-    chosen = [outcomes[i].measurements[0] for i in range(len(outcomes)) if (mask >> i) & 1]
-    if not chosen:
+    """One flat ``MeasurementValue`` over the chosen outcomes' measurements.
+
+    Each outcome keeps its own ``processing_fn``, so a composite outcome such as ``~m0`` gives the
+    right bit. Every chosen outcome must depend on exactly one measurement.
+    """
+    indices = [i for i in range(len(outcomes)) if (mask >> i) & 1]
+    if not indices:
         return False
-    return qp.ops.MeasurementValue(chosen, lambda *bits: sum(map(int, bits)) % 2)
+    for i in indices:
+        if len(outcomes[i].measurements) != 1:
+            raise ValueError(
+                f"outcome {i} depends on {len(outcomes[i].measurements)} measurements; "
+                "each outcome must depend on exactly one"
+            )
+    fns = [outcomes[i].processing_fn for i in indices]
+    return qp.ops.MeasurementValue(
+        [outcomes[i].measurements[0] for i in indices],
+        lambda *bits: sum(fn(bit) for fn, bit in zip(fns, bits, strict=True)) % 2,
+    )
 
 
 def pack_masks(masks: Sequence[int], num_outcomes: int) -> np.ndarray:

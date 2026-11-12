@@ -342,7 +342,8 @@ def test_command_line_reports_a_kill():
     assert result.returncode == KILLED_EXIT_STATUS, result.stderr
     summary = json.loads(result.stdout.splitlines()[-1].removeprefix("WATCHDOG "))
     assert summary["killed"] == "memory"
-    assert summary["peak_mb"] > watchdog.SAFETY_FRACTION * 200
+    # The summary rounds peak_mb to one decimal, so a peak just above the bound can report as equal.
+    assert summary["peak_mb"] >= round(watchdog.SAFETY_FRACTION * 200, 1)
     assert summary["cap_mb"] == 200
 
 

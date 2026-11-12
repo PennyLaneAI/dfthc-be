@@ -24,7 +24,10 @@ NOISE_PATTERNS: tuple[re.Pattern[str], ...] = (
         rf"^Excluded the {_EXCLUDED_RULE} decomposition rule for \S+ since "
         r"--decompose-lowering cannot work with multiple registers yet$"
     ),
-    re.compile(r"^Skipped the _adjoint_temporary_and\w* rule for C\(Adjoint\(TemporaryAND\)\)"),
+    re.compile(
+        r"^Skipped the _adjoint_temporary_and\w* (?:decomposition )?rule for "
+        r"C\(Adjoint\(TemporaryAND\)\)"
+    ),
 )
 """RuleLoweringWarning texts that PennyLane's own rules print on every compile (spec 7.1)."""
 
@@ -35,13 +38,40 @@ UNRESOLVED_BRANCH_MESSAGE = (
 every compile, so it is filtered; exact T4 counts and the erase-hint tests guard our own code."""
 
 
-def classify_rule_warning(message: str, names: Iterable[str] | None = None) -> str:
-    """Return ``"dfthc"``, ``"noise"`` or ``"other"`` for a RuleLoweringWarning message.
+_EXPECTED_SHAPE = re.compile(
+    r"^Skipped the \S+ decomposition rule for "
+    r"(?P<wrapped>(?P<open>(?:(?:Adjoint|C)\()+)(?P<name>\w+)(?P<close>\)+))"
+    r"(?:\{[^{}]*\})*"
+    r": it contains a mid-circuit measurement, which is not supported with adjoint or control "
+    r"regions\.\Z"
+)
+"""Catalyst's drop of a measuring rule for a modified operator (spec 7.4 rule 12). Nested
+``Adjoint(...)``/``C(...)`` wrappers around one operator name, then only attribute dumps; the
+parentheses are balanced if the wrapper opens equal the closes (checked in the classifier)."""
 
-    A message naming a dfthc operator is ``"dfthc"`` even if it also matches a noise pattern.
+
+def classify_rule_warning(message: str, names: Iterable[str] | None = None) -> str:
+    """Return ``"expected"``, ``"dfthc"``, ``"noise"`` or ``"other"`` for a RuleLoweringWarning.
+
+    ``"expected"`` is exactly Catalyst's "Skipped the <rule> decomposition rule for <wrapped op>:
+    it contains a mid-circuit measurement, which is not supported with adjoint or control
+    regions." where ``<wrapped op>`` is nested ``Adjoint(...)``/``C(...)`` around an operator in
+    ``names`` and that operator is the only name of ``names`` in the message. Every other message
+    naming a dfthc operator is ``"dfthc"``, even if it also matches a noise pattern. ``names``
+    defaults to the dfthc operator names of the pinned rules; a bare ``str`` raises ``TypeError``.
     """
-    names = dfthc_operator_names() if names is None else set(names)
-    if any(re.search(rf"\b{re.escape(name)}\b", message) for name in names):
+    if isinstance(names, str):
+        raise TypeError(f"names must be an iterable of operator names, not the string {names!r}")
+    names = dfthc_operator_names() if names is None else frozenset(names)
+    named = {name for name in names if re.search(rf"\b{re.escape(name)}\b", message)}
+    match = _EXPECTED_SHAPE.match(message)
+    if (
+        match
+        and named == {match["name"]}
+        and match["open"].count("(") == len(match["close"])
+    ):
+        return "expected"
+    if named:
         return "dfthc"
     if any(pattern.search(message) for pattern in NOISE_PATTERNS):
         return "noise"
