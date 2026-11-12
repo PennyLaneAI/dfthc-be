@@ -1,0 +1,3639 @@
+{
+  "walk": {
+    "program": "walk",
+    "shape": "mid10",
+    "arm": "PX",
+    "num_wires": 421,
+    "seconds": 11.2,
+    "cpu_seconds": 12.5,
+    "rusage_sum_mb": 992.3,
+    "rusage_self_mb": 801.6,
+    "rusage_children_mb": 190.8,
+    "analyzed_gates_upper_bound": 48662,
+    "toffoli": 1896,
+    "measurements": 452,
+    "measured_and_uncomputes": 1711,
+    "counts": {
+      "Adjoint(S)": 108,
+      "Adjoint(TemporaryAND)": 1711,
+      "CNOT": 41084,
+      "CZ": 398,
+      "GlobalPhase": 2,
+      "Hadamard": 944,
+      "MidCircuitMeasure": 452,
+      "PauliX": 1946,
+      "PauliZ": 12,
+      "PhaseGradientStatePrep": 1,
+      "S": 108,
+      "TemporaryAND": 1711,
+      "Toffoli": 185
+    },
+    "cnot_analyzed": 41084,
+    "table_word_dtype": "int64",
+    "diagnostics": {
+      "compile_seconds": 11.2,
+      "rule_capture_seconds": 6.73,
+      "rule_targets": 179,
+      "rule_equations": 70166,
+      "modified_target_lowerings": 82,
+      "modified_target_seconds": 0.63,
+      "modified_target_equations": 549,
+      "modified_target_signatures": 45,
+      "modified_target_ids": [
+        "Adjoint(CNOT)",
+        "Adjoint(CZ)",
+        "Adjoint(ControlledPhaseShift)",
+        "Adjoint(GlobalPhase)",
+        "Adjoint(Hadamard)",
+        "Adjoint(LeftQuantumComparator)",
+        "Adjoint(MultiRZ)",
+        "Adjoint(PPR_2)",
+        "Adjoint(PPR_4)",
+        "Adjoint(PPR_8)",
+        "Adjoint(PauliRot)",
+        "Adjoint(PauliX)",
+        "Adjoint(PauliZ)",
+        "Adjoint(PhaseShift)",
+        "Adjoint(ProtoGivensRotation)",
+        "Adjoint(ProtoMajorana)",
+        "Adjoint(ProtoUniformPrep)",
+        "Adjoint(RX)",
+        "Adjoint(RY)",
+        "Adjoint(RZ)",
+        "Adjoint(Rot)",
+        "Adjoint(S)",
+        "Adjoint(SemiAdder)",
+        "Adjoint(T)",
+        "Adjoint(TemporaryAND)",
+        "Adjoint(Toffoli)"
+      ],
+      "modified_target_lowerings_by_id": {
+        "Adjoint(CNOT)": 2,
+        "Adjoint(CZ)": 2,
+        "Adjoint(ControlledPhaseShift)": 2,
+        "Adjoint(GlobalPhase)": 2,
+        "Adjoint(Hadamard)": 2,
+        "Adjoint(LeftQuantumComparator)": 1,
+        "Adjoint(MultiRZ)": 4,
+        "Adjoint(PPR_2)": 4,
+        "Adjoint(PPR_4)": 14,
+        "Adjoint(PPR_8)": 16,
+        "Adjoint(PauliRot)": 8,
+        "Adjoint(PauliX)": 2,
+        "Adjoint(PauliZ)": 2,
+        "Adjoint(PhaseShift)": 2,
+        "Adjoint(ProtoGivensRotation)": 1,
+        "Adjoint(ProtoMajorana)": 1,
+        "Adjoint(ProtoUniformPrep)": 2,
+        "Adjoint(RX)": 2,
+        "Adjoint(RY)": 2,
+        "Adjoint(RZ)": 2,
+        "Adjoint(Rot)": 2,
+        "Adjoint(S)": 1,
+        "Adjoint(SemiAdder)": 1,
+        "Adjoint(T)": 1,
+        "Adjoint(TemporaryAND)": 2,
+        "Adjoint(Toffoli)": 2
+      }
+    },
+    "warnings": {
+      "prototype": [],
+      "expected": [],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 11
+    },
+    "loops": {
+      "captured": {
+        "read_bit": [],
+        "fixup_leaf": [],
+        "givens_base": [],
+        "givens_adjoint": [],
+        "read_leaf": [
+          10,
+          13,
+          48,
+          160
+        ]
+      },
+      "targets": {
+        "read_bit": 0,
+        "fixup_leaf": 3,
+        "givens_base": 1,
+        "givens_adjoint": 0,
+        "read_leaf": 4
+      }
+    },
+    "inventory": {
+      "cells": {
+        "composite|explicit_class": {
+          "targets": 3,
+          "traced_targets": 3,
+          "rules": 3,
+          "top": 8469,
+          "nested": 8469,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "composite|plain": {
+          "targets": 7,
+          "traced_targets": 7,
+          "rules": 7,
+          "top": 29262,
+          "nested": 29262,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "erase|plain": {
+          "targets": 3,
+          "traced_targets": 3,
+          "rules": 3,
+          "top": 7603,
+          "nested": 9159,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "ladder|distributed_adjoint": {
+          "targets": 1,
+          "traced_targets": 1,
+          "rules": 1,
+          "top": 6,
+          "nested": 798,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 1
+        },
+        "ladder|explicit_class": {
+          "targets": 1,
+          "traced_targets": 1,
+          "rules": 1,
+          "top": 2065,
+          "nested": 2065,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 1,
+          "rung_targets": 0
+        },
+        "ladder|plain": {
+          "targets": 2,
+          "traced_targets": 2,
+          "rules": 2,
+          "top": 2862,
+          "nested": 2862,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 1,
+          "rung_targets": 1
+        },
+        "other|distributed_adjoint": {
+          "targets": 3,
+          "traced_targets": 3,
+          "rules": 3,
+          "top": 15,
+          "nested": 140,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "other|plain": {
+          "targets": 8,
+          "traced_targets": 8,
+          "rules": 8,
+          "top": 661,
+          "nested": 661,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "pennylane|distributed_adjoint": {
+          "targets": 41,
+          "traced_targets": 40,
+          "rules": 68,
+          "top": 75,
+          "nested": 2006,
+          "loops": 3,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "pennylane|plain": {
+          "targets": 69,
+          "traced_targets": 65,
+          "rules": 98,
+          "top": 13123,
+          "nested": 15188,
+          "loops": 67,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "pennylane|registered_modified": {
+          "targets": 37,
+          "traced_targets": 37,
+          "rules": 39,
+          "top": 453,
+          "nested": 486,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "read_load|plain": {
+          "targets": 4,
+          "traced_targets": 4,
+          "rules": 4,
+          "top": 231,
+          "nested": 17787,
+          "loops": 231,
+          "read_roles": {
+            "inner": 1,
+            "outer": 1,
+            "sf": 1,
+            "tail": 1
+          },
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "read_skeleton|plain": {
+          "targets": 4,
+          "traced_targets": 4,
+          "rules": 4,
+          "top": 5341,
+          "nested": 5341,
+          "loops": 0,
+          "read_roles": {
+            "inner": 1,
+            "outer": 1,
+            "sf": 1,
+            "tail": 1
+          },
+          "ladder_targets": 0,
+          "rung_targets": 0
+        }
+      },
+      "total": {
+        "rules": 237,
+        "traced": 237,
+        "top": 70166,
+        "nested": 94224,
+        "loops": 301,
+        "targets": 179
+      },
+      "cell_sum": 94224,
+      "sum_check": true,
+      "by_class": {
+        "read_load": 17787,
+        "read_skeleton": 5341,
+        "composite": 37731,
+        "erase": 9159,
+        "ladder": 5725,
+        "pennylane": 17680,
+        "other": 801
+      },
+      "by_bucket": {
+        "plain": 80260,
+        "registered_modified": 486,
+        "distributed_adjoint": 2944,
+        "distributed_control": 0,
+        "distributed_control_of_adjoint": 0,
+        "explicit_class": 10534
+      },
+      "loops_by_bucket": {
+        "plain": 298,
+        "registered_modified": 0,
+        "distributed_adjoint": 3,
+        "distributed_control": 0,
+        "distributed_control_of_adjoint": 0,
+        "explicit_class": 0
+      },
+      "keys": {
+        "Adjoint(CNOT)": {
+          "targets": 2,
+          "nested": 69,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(CZ)",
+            "Adjoint(ControlledPhaseShift)",
+            "Adjoint(LeftQuantumComparator)",
+            "Adjoint(MultiRZ)",
+            "Adjoint(PPR_4)",
+            "Adjoint(PPR_8)",
+            "Adjoint(ProtoGivensRotation)",
+            "Adjoint(SemiAdder)",
+            "Adjoint(TemporaryAND)",
+            "Adjoint(Toffoli)"
+          ]
+        },
+        "Adjoint(CZ)": {
+          "targets": 2,
+          "nested": 91,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(CNOT)",
+            "Adjoint(ProtoMajorana)"
+          ]
+        },
+        "Adjoint(ControlledPhaseShift)": {
+          "targets": 2,
+          "nested": 105,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(CZ)"
+          ]
+        },
+        "Adjoint(GlobalPhase)": {
+          "targets": 2,
+          "nested": 2,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(CNOT)",
+            "Adjoint(CZ)",
+            "Adjoint(ControlledPhaseShift)",
+            "Adjoint(Hadamard)",
+            "Adjoint(PPR_2)",
+            "Adjoint(PPR_4)",
+            "Adjoint(PPR_8)",
+            "Adjoint(PauliX)",
+            "Adjoint(PauliZ)",
+            "Adjoint(PhaseShift)",
+            "Adjoint(RZ)",
+            "Adjoint(S)",
+            "Adjoint(T)",
+            "Adjoint(Toffoli)"
+          ]
+        },
+        "Adjoint(Hadamard)": {
+          "targets": 2,
+          "nested": 54,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(CNOT)",
+            "Adjoint(CZ)",
+            "Adjoint(PPR_4)",
+            "Adjoint(PPR_8)",
+            "Adjoint(PauliRot)",
+            "Adjoint(ProtoGivensRotation)",
+            "Adjoint(ProtoMajorana)",
+            "Adjoint(ProtoUniformPrep)",
+            "Adjoint(RX)",
+            "Adjoint(RY)",
+            "Adjoint(RZ)",
+            "Adjoint(TemporaryAND)",
+            "Adjoint(Toffoli)"
+          ]
+        },
+        "Adjoint(LeftQuantumComparator)": {
+          "targets": 1,
+          "nested": 216,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint"
+          ],
+          "parents": [
+            "ProtoInnerUnprepareX",
+            "ProtoOuterUnprepareX"
+          ]
+        },
+        "Adjoint(MultiRZ)": {
+          "targets": 4,
+          "nested": 85,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(PauliRot)"
+          ]
+        },
+        "Adjoint(PPR_2)": {
+          "targets": 4,
+          "nested": 24,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(Hadamard)",
+            "Adjoint(PauliX)",
+            "Adjoint(PauliZ)"
+          ]
+        },
+        "Adjoint(PPR_4)": {
+          "targets": 14,
+          "nested": 130,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(CNOT)",
+            "Adjoint(CZ)",
+            "Adjoint(Hadamard)",
+            "Adjoint(PauliRot)",
+            "Adjoint(S)"
+          ]
+        },
+        "Adjoint(PPR_8)": {
+          "targets": 16,
+          "nested": 223,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(T)",
+            "Adjoint(TemporaryAND)",
+            "Adjoint(Toffoli)"
+          ]
+        },
+        "Adjoint(PauliRot)": {
+          "targets": 8,
+          "nested": 64,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(ControlledPhaseShift)",
+            "Adjoint(MultiRZ)",
+            "Adjoint(RX)",
+            "Adjoint(RY)",
+            "Adjoint(RZ)"
+          ]
+        },
+        "Adjoint(PauliX)": {
+          "targets": 2,
+          "nested": 22,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(LeftQuantumComparator)",
+            "Adjoint(PPR_2)",
+            "Adjoint(ProtoGivensRotation)",
+            "Adjoint(ProtoUniformPrep)",
+            "Adjoint(TemporaryAND)",
+            "MultiControlledX"
+          ]
+        },
+        "Adjoint(PauliZ)": {
+          "targets": 2,
+          "nested": 21,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(PPR_2)"
+          ]
+        },
+        "Adjoint(PhaseShift)": {
+          "targets": 2,
+          "nested": 17,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(PauliZ)",
+            "Adjoint(RZ)",
+            "Adjoint(S)",
+            "Adjoint(T)"
+          ]
+        },
+        "Adjoint(ProtoGivensRotation)": {
+          "targets": 1,
+          "nested": 798,
+          "class": "ladder",
+          "buckets": [
+            "distributed_adjoint"
+          ],
+          "parents": [
+            "ProtoGivensLadderDaggerX"
+          ]
+        },
+        "Adjoint(ProtoMajorana)": {
+          "targets": 1,
+          "nested": 90,
+          "class": "other",
+          "buckets": [
+            "distributed_adjoint"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX"
+          ]
+        },
+        "Adjoint(ProtoUniformPrep)": {
+          "targets": 2,
+          "nested": 50,
+          "class": "other",
+          "buckets": [
+            "distributed_adjoint"
+          ],
+          "parents": [
+            "ProtoInnerUnprepareX",
+            "ProtoOuterUnprepareX"
+          ]
+        },
+        "Adjoint(RX)": {
+          "targets": 2,
+          "nested": 74,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(Hadamard)",
+            "Adjoint(PauliX)",
+            "Adjoint(RY)",
+            "Adjoint(RZ)"
+          ]
+        },
+        "Adjoint(RY)": {
+          "targets": 2,
+          "nested": 90,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(Hadamard)",
+            "Adjoint(RX)",
+            "Adjoint(RZ)",
+            "Adjoint(Rot)"
+          ]
+        },
+        "Adjoint(RZ)": {
+          "targets": 2,
+          "nested": 99,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(ControlledPhaseShift)",
+            "Adjoint(Hadamard)",
+            "Adjoint(MultiRZ)",
+            "Adjoint(PhaseShift)",
+            "Adjoint(RX)",
+            "Adjoint(RY)",
+            "Adjoint(Rot)"
+          ]
+        },
+        "Adjoint(Rot)": {
+          "targets": 2,
+          "nested": 28,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(RX)",
+            "Adjoint(RY)",
+            "Adjoint(RZ)"
+          ]
+        },
+        "Adjoint(S)": {
+          "targets": 1,
+          "nested": 15,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint"
+          ],
+          "parents": [
+            "Adjoint(PPR_4)",
+            "Adjoint(PPR_8)",
+            "Adjoint(ProtoGivensRotation)",
+            "Adjoint(RX)",
+            "Adjoint(RY)",
+            "Adjoint(RZ)",
+            "PPR_4",
+            "PPR_8",
+            "ProtoGivensRotation",
+            "RX",
+            "RY",
+            "RZ",
+            "TemporaryAND"
+          ]
+        },
+        "Adjoint(SemiAdder)": {
+          "targets": 1,
+          "nested": 511,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint"
+          ],
+          "parents": [
+            "Adjoint(ProtoGivensRotation)"
+          ]
+        },
+        "Adjoint(T)": {
+          "targets": 1,
+          "nested": 15,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint"
+          ],
+          "parents": [
+            "Adjoint(PPR_8)",
+            "Adjoint(TemporaryAND)",
+            "Adjoint(Toffoli)",
+            "PPR_8",
+            "TemporaryAND",
+            "Toffoli"
+          ]
+        },
+        "Adjoint(TemporaryAND)": {
+          "targets": 2,
+          "nested": 370,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(LeftQuantumComparator)",
+            "Adjoint(ProtoMajorana)",
+            "Adjoint(SemiAdder)",
+            "MultiControlledX",
+            "ProtoAngleEraseF",
+            "ProtoMajorana",
+            "ProtoTableEraseF",
+            "ProtoTableReadP",
+            "SemiAdder"
+          ]
+        },
+        "Adjoint(Toffoli)": {
+          "targets": 2,
+          "nested": 167,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(ProtoMajorana)",
+            "Adjoint(TemporaryAND)",
+            "MultiControlledX"
+          ]
+        },
+        "CNOT": {
+          "targets": 1,
+          "nested": 49,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(CNOT)",
+            "CSWAP",
+            "CZ",
+            "ControlledPhaseShift",
+            "LeftQuantumComparator",
+            "MultiRZ",
+            "PPR_4",
+            "PPR_8",
+            "ProtoAngleEraseF",
+            "ProtoGivensRotation",
+            "ProtoSpinMux",
+            "ProtoTableEraseF",
+            "ProtoTableReadP",
+            "SemiAdder",
+            "TemporaryAND",
+            "Toffoli"
+          ]
+        },
+        "CSWAP": {
+          "targets": 1,
+          "nested": 113,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerPrepareP",
+            "ProtoInnerUnprepareX",
+            "ProtoOuterPrepareP",
+            "ProtoOuterUnprepareX",
+            "ProtoSpinSwap",
+            "ProtoTableReadP"
+          ]
+        },
+        "CZ": {
+          "targets": 1,
+          "nested": 67,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(CZ)",
+            "Adjoint(TemporaryAND)",
+            "CNOT",
+            "ProtoAngleEraseF",
+            "ProtoInnerSigns",
+            "ProtoMajorana",
+            "ProtoTableEraseF"
+          ]
+        },
+        "ControlledPhaseShift": {
+          "targets": 1,
+          "nested": 81,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(ControlledPhaseShift)",
+            "CZ"
+          ]
+        },
+        "GlobalPhase": {
+          "targets": 1,
+          "nested": 0,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(GlobalPhase)",
+            "CNOT",
+            "CSWAP",
+            "CZ",
+            "ControlledPhaseShift",
+            "Hadamard",
+            "PPR_2",
+            "PPR_4",
+            "PPR_8",
+            "PauliX",
+            "PauliY",
+            "PauliZ",
+            "PhaseGradientStatePrep",
+            "PhaseShift",
+            "ProtoZeroReflection",
+            "RZ",
+            "S",
+            "T",
+            "Toffoli"
+          ]
+        },
+        "Hadamard": {
+          "targets": 1,
+          "nested": 45,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(Hadamard)",
+            "Adjoint(TemporaryAND)",
+            "CNOT",
+            "CZ",
+            "PPR_4",
+            "PPR_8",
+            "PauliRot",
+            "PhaseGradientStatePrep",
+            "ProtoAngleEraseF",
+            "ProtoGivensRotation",
+            "ProtoInnerPrepareP",
+            "ProtoInnerUnprepareX",
+            "ProtoMajorana",
+            "ProtoOuterPrepareP",
+            "ProtoOuterUnprepareX",
+            "ProtoTableEraseF",
+            "ProtoUniformPrep",
+            "ProtoZeroReflection",
+            "RX",
+            "RY",
+            "RZ",
+            "TemporaryAND",
+            "Toffoli"
+          ]
+        },
+        "LeftQuantumComparator": {
+          "targets": 1,
+          "nested": 215,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerPrepareP",
+            "ProtoOuterPrepareP"
+          ]
+        },
+        "MidMeasure": {
+          "targets": 1,
+          "nested": 0,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(TemporaryAND)",
+            "ProtoAngleEraseF",
+            "ProtoTableEraseF"
+          ]
+        },
+        "MultiControlledX": {
+          "targets": 3,
+          "nested": 2332,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "MultiControlledX",
+            "ProtoZeroReflection"
+          ]
+        },
+        "MultiRZ": {
+          "targets": 2,
+          "nested": 62,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(MultiRZ)",
+            "PauliRot"
+          ]
+        },
+        "PPR_2": {
+          "targets": 5,
+          "nested": 25,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PPR_2)",
+            "Hadamard",
+            "PauliX",
+            "PauliY",
+            "PauliZ",
+            "PhaseGradientStatePrep"
+          ]
+        },
+        "PPR_4": {
+          "targets": 10,
+          "nested": 114,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PPR_4)",
+            "CNOT",
+            "CZ",
+            "Hadamard",
+            "PauliRot",
+            "PhaseGradientStatePrep",
+            "S"
+          ]
+        },
+        "PPR_8": {
+          "targets": 21,
+          "nested": 401,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PPR_8)",
+            "CSWAP",
+            "PhaseGradientStatePrep",
+            "T",
+            "TemporaryAND",
+            "Toffoli"
+          ]
+        },
+        "PauliMeasure": {
+          "targets": 2,
+          "nested": 0,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(TemporaryAND)"
+          ]
+        },
+        "PauliRot": {
+          "targets": 4,
+          "nested": 27,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PauliRot)",
+            "ControlledPhaseShift",
+            "MultiRZ",
+            "RX",
+            "RY",
+            "RZ"
+          ]
+        },
+        "PauliX": {
+          "targets": 1,
+          "nested": 14,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PauliX)",
+            "Adjoint(TemporaryAND)",
+            "LeftQuantumComparator",
+            "MultiControlledX",
+            "PPR_2",
+            "PhaseGradientStatePrep",
+            "ProtoAngleEraseF",
+            "ProtoGivensRotation",
+            "ProtoSFAngleLoadP",
+            "ProtoTableEraseF",
+            "ProtoTableReadP",
+            "ProtoUniformPrep",
+            "ProtoZeroReflection",
+            "TemporaryAND"
+          ]
+        },
+        "PauliY": {
+          "targets": 1,
+          "nested": 14,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "PPR_2",
+            "PhaseGradientStatePrep"
+          ]
+        },
+        "PauliZ": {
+          "targets": 1,
+          "nested": 13,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PauliZ)",
+            "PPR_2",
+            "PhaseGradientStatePrep",
+            "ProtoAngleEraseF",
+            "ProtoInnerSigns"
+          ]
+        },
+        "PhaseGradientStatePrep": {
+          "targets": 1,
+          "nested": 10464,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": []
+        },
+        "PhaseShift": {
+          "targets": 1,
+          "nested": 9,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PhaseShift)",
+            "PauliZ",
+            "RZ",
+            "S",
+            "T"
+          ]
+        },
+        "ProtoAngleEraseF": {
+          "targets": 1,
+          "nested": 3013,
+          "class": "erase",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX",
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoBlockEncodingPX": {
+          "targets": 1,
+          "nested": 17186,
+          "class": "composite",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoWalkPX"
+          ]
+        },
+        "ProtoGivensLadder": {
+          "targets": 1,
+          "nested": 2065,
+          "class": "ladder",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX",
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoGivensLadderDaggerX": {
+          "targets": 1,
+          "nested": 2065,
+          "class": "ladder",
+          "buckets": [
+            "explicit_class"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX",
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoGivensRotation": {
+          "targets": 1,
+          "nested": 797,
+          "class": "ladder",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoGivensLadder"
+          ]
+        },
+        "ProtoInnerPrepareP": {
+          "targets": 1,
+          "nested": 539,
+          "class": "composite",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoBlockEncodingPX"
+          ]
+        },
+        "ProtoInnerSelectDaggerPX": {
+          "targets": 1,
+          "nested": 7249,
+          "class": "composite",
+          "buckets": [
+            "explicit_class"
+          ],
+          "parents": [
+            "ProtoBlockEncodingPX"
+          ]
+        },
+        "ProtoInnerSelectPX": {
+          "targets": 1,
+          "nested": 7249,
+          "class": "composite",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoBlockEncodingPX"
+          ]
+        },
+        "ProtoInnerSigns": {
+          "targets": 1,
+          "nested": 14,
+          "class": "other",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoBlockEncodingPX"
+          ]
+        },
+        "ProtoInnerUnprepareX": {
+          "targets": 1,
+          "nested": 538,
+          "class": "composite",
+          "buckets": [
+            "explicit_class"
+          ],
+          "parents": [
+            "ProtoBlockEncodingPX"
+          ]
+        },
+        "ProtoMajorana": {
+          "targets": 1,
+          "nested": 89,
+          "class": "other",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoOuterPrepareP": {
+          "targets": 1,
+          "nested": 683,
+          "class": "composite",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoBlockEncodingPX"
+          ]
+        },
+        "ProtoOuterUnprepareX": {
+          "targets": 1,
+          "nested": 682,
+          "class": "composite",
+          "buckets": [
+            "explicit_class"
+          ],
+          "parents": [
+            "ProtoBlockEncodingPX"
+          ]
+        },
+        "ProtoSFAngleLoadP": {
+          "targets": 1,
+          "nested": 565,
+          "class": "composite",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX",
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoSpinMux": {
+          "targets": 1,
+          "nested": 35,
+          "class": "other",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX",
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoSpinSwap": {
+          "targets": 1,
+          "nested": 103,
+          "class": "other",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX",
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoTableEraseF": {
+          "targets": 2,
+          "nested": 6146,
+          "class": "erase",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerUnprepareX",
+            "ProtoOuterUnprepareX"
+          ]
+        },
+        "ProtoTableReadP": {
+          "targets": 4,
+          "nested": 23128,
+          "class": "read",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerPrepareP",
+            "ProtoOuterPrepareP",
+            "ProtoSFAngleLoadP",
+            "ProtoTailAngleLoadP"
+          ]
+        },
+        "ProtoTailAngleLoadP": {
+          "targets": 1,
+          "nested": 560,
+          "class": "composite",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX",
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoUniformPrep": {
+          "targets": 2,
+          "nested": 48,
+          "class": "other",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerPrepareP",
+            "ProtoOuterPrepareP"
+          ]
+        },
+        "ProtoWalkPX": {
+          "targets": 1,
+          "nested": 2480,
+          "class": "composite",
+          "buckets": [
+            "plain"
+          ],
+          "parents": []
+        },
+        "ProtoZeroReflection": {
+          "targets": 2,
+          "nested": 372,
+          "class": "other",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoBlockEncodingPX",
+            "ProtoWalkPX"
+          ]
+        },
+        "RX": {
+          "targets": 1,
+          "nested": 62,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(RX)",
+            "Hadamard",
+            "PauliX",
+            "RY",
+            "RZ"
+          ]
+        },
+        "RY": {
+          "targets": 1,
+          "nested": 78,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(RY)",
+            "Hadamard",
+            "PauliY",
+            "RX",
+            "RZ",
+            "Rot"
+          ]
+        },
+        "RZ": {
+          "targets": 1,
+          "nested": 86,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(RZ)",
+            "ControlledPhaseShift",
+            "Hadamard",
+            "MultiRZ",
+            "PhaseShift",
+            "RX",
+            "RY",
+            "Rot"
+          ]
+        },
+        "Rot": {
+          "targets": 1,
+          "nested": 18,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(Rot)",
+            "RX",
+            "RY",
+            "RZ"
+          ]
+        },
+        "S": {
+          "targets": 1,
+          "nested": 13,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PPR_4)",
+            "Adjoint(PPR_8)",
+            "Adjoint(ProtoGivensRotation)",
+            "Adjoint(RX)",
+            "Adjoint(RY)",
+            "Adjoint(RZ)",
+            "Adjoint(TemporaryAND)",
+            "PPR_4",
+            "PPR_8",
+            "PhaseGradientStatePrep",
+            "ProtoGivensRotation",
+            "RX",
+            "RY",
+            "RZ"
+          ]
+        },
+        "SemiAdder": {
+          "targets": 1,
+          "nested": 510,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoGivensRotation"
+          ]
+        },
+        "T": {
+          "targets": 1,
+          "nested": 13,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PPR_8)",
+            "Adjoint(TemporaryAND)",
+            "Adjoint(Toffoli)",
+            "PPR_8",
+            "PhaseGradientStatePrep",
+            "TemporaryAND",
+            "Toffoli"
+          ]
+        },
+        "TemporaryAND": {
+          "targets": 1,
+          "nested": 225,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(ProtoMajorana)",
+            "Adjoint(SemiAdder)",
+            "LeftQuantumComparator",
+            "MultiControlledX",
+            "ProtoAngleEraseF",
+            "ProtoMajorana",
+            "ProtoTableEraseF",
+            "ProtoTableReadP",
+            "SemiAdder"
+          ]
+        },
+        "Toffoli": {
+          "targets": 1,
+          "nested": 138,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(TemporaryAND)",
+            "Adjoint(Toffoli)",
+            "CSWAP",
+            "MultiControlledX",
+            "ProtoMajorana",
+            "ProtoSpinMux",
+            "TemporaryAND"
+          ]
+        }
+      },
+      "other_names": [
+        "ProtoInnerSigns",
+        "ProtoMajorana",
+        "ProtoSpinMux",
+        "ProtoSpinSwap",
+        "ProtoUniformPrep",
+        "ProtoZeroReflection"
+      ],
+      "read_targets": [
+        {
+          "name": "ProtoTableReadP",
+          "bucket": "plain",
+          "traced": 1,
+          "loops": 13,
+          "read_load": 1001,
+          "read_skeleton": 954,
+          "read": {
+            "role": "outer",
+            "leaves": 13,
+            "cswaps": 63,
+            "loads_expected": 13
+          }
+        },
+        {
+          "name": "ProtoTableReadP",
+          "bucket": "plain",
+          "traced": 1,
+          "loops": 160,
+          "read_load": 12320,
+          "read_skeleton": 3052,
+          "read": {
+            "role": "inner",
+            "leaves": 160,
+            "cswaps": 23,
+            "loads_expected": 160
+          }
+        },
+        {
+          "name": "ProtoTableReadP",
+          "bucket": "plain",
+          "traced": 1,
+          "loops": 10,
+          "read_load": 770,
+          "read_skeleton": 310,
+          "read": {
+            "role": "tail",
+            "leaves": 10,
+            "cswaps": 0,
+            "loads_expected": 10
+          }
+        },
+        {
+          "name": "ProtoTableReadP",
+          "bucket": "plain",
+          "traced": 1,
+          "loops": 48,
+          "read_load": 3696,
+          "read_skeleton": 1025,
+          "read": {
+            "role": "sf",
+            "leaves": 48,
+            "cswaps": 0,
+            "loads_expected": 48
+          }
+        }
+      ],
+      "read_partition": {
+        "ok": true,
+        "mismatches": [],
+        "read_targets": 4
+      },
+      "scopes": 1,
+      "instrument_seconds": 0.05,
+      "instrument_errors": [],
+      "rule_capture_seconds": 6.69
+    },
+    "timeline": {
+      "pre_capture_tree_mb": 191.0,
+      "peak_own_mb": 694.4,
+      "peak_child_mb": 107.4,
+      "peak_tree_mb": 801.8,
+      "phases": [
+        {
+          "phase": "capture",
+          "start": 0.01,
+          "end": 7.47,
+          "seconds": 7.46,
+          "own_max_mb": 642.9,
+          "tree_max_mb": 642.9,
+          "child_max_mb": 13.9
+        },
+        {
+          "phase": "instrument",
+          "start": 0.01,
+          "end": 11.16,
+          "seconds": 11.15,
+          "own_max_mb": 694.4,
+          "tree_max_mb": 801.8,
+          "child_max_mb": 107.4
+        },
+        {
+          "phase": "rules",
+          "start": 0.04,
+          "end": 7.46,
+          "seconds": 7.42,
+          "own_max_mb": 642.9,
+          "tree_max_mb": 642.9,
+          "child_max_mb": 13.9
+        },
+        {
+          "phase": "generate_ir",
+          "start": 7.51,
+          "end": 9.12,
+          "seconds": 1.61,
+          "own_max_mb": 675.4,
+          "tree_max_mb": 675.4,
+          "child_max_mb": 0.2
+        },
+        {
+          "phase": "compile",
+          "start": 9.12,
+          "end": 11.09,
+          "seconds": 1.97,
+          "own_max_mb": 694.4,
+          "tree_max_mb": 801.8,
+          "child_max_mb": 107.4
+        },
+        {
+          "phase": "cli",
+          "start": 9.33,
+          "end": 11.09,
+          "seconds": 1.76,
+          "own_max_mb": 694.4,
+          "tree_max_mb": 801.8,
+          "child_max_mb": 107.4
+        }
+      ],
+      "marks": [
+        [
+          0.01,
+          "instrument_start"
+        ],
+        [
+          0.01,
+          "capture_start"
+        ],
+        [
+          0.04,
+          "rules_start"
+        ],
+        [
+          7.46,
+          "rules_end"
+        ],
+        [
+          7.47,
+          "capture_end"
+        ],
+        [
+          7.51,
+          "generate_ir_start"
+        ],
+        [
+          9.12,
+          "generate_ir_end"
+        ],
+        [
+          9.12,
+          "compile_start"
+        ],
+        [
+          9.33,
+          "cli_start"
+        ],
+        [
+          11.09,
+          "cli_end"
+        ],
+        [
+          11.09,
+          "compile_end"
+        ],
+        [
+          11.16,
+          "instrument_end"
+        ]
+      ],
+      "every_second": [
+        [
+          0.01,
+          191.1729278564453,
+          191.1729278564453
+        ],
+        [
+          1.87,
+          352.64188385009766,
+          356.59500885009766
+        ],
+        [
+          3.87,
+          494.86067962646484,
+          494.86067962646484
+        ],
+        [
+          7.87,
+          660.7826690673828,
+          660.9545440673828
+        ],
+        [
+          9.83,
+          693.8295669555664,
+          764.8613433837891
+        ]
+      ]
+    },
+    "read_implementation_hash": "94c6f01b58d4fef283a32f3c687a4713f590d997f25df985d1fbfeecfad7d20c",
+    "class_check": {
+      "ok": true,
+      "explicit_missing": [],
+      "converted_old_keys_found": [],
+      "unexpected_modified_prototype_keys": [],
+      "retained_missing": [],
+      "modified_read_keys": [],
+      "modified_explicit_or_forward_role_keys": [],
+      "explicit_present": [
+        "ProtoGivensLadderDaggerX",
+        "ProtoInnerSelectDaggerPX",
+        "ProtoInnerUnprepareX",
+        "ProtoOuterUnprepareX"
+      ],
+      "retained_prototype_keys": [
+        "Adjoint(ProtoGivensRotation)",
+        "Adjoint(ProtoMajorana)",
+        "Adjoint(ProtoUniformPrep)"
+      ],
+      "retained_non_prototype_keys": {
+        "Adjoint(CNOT)": "gate-set modifier",
+        "Adjoint(CZ)": "gate-set modifier",
+        "Adjoint(ControlledPhaseShift)": "PennyLane-template modifier",
+        "Adjoint(GlobalPhase)": "gate-set modifier",
+        "Adjoint(Hadamard)": "gate-set modifier",
+        "Adjoint(LeftQuantumComparator)": "PennyLane-template modifier",
+        "Adjoint(MultiRZ)": "PennyLane-template modifier",
+        "Adjoint(PPR_2)": "PennyLane-template modifier",
+        "Adjoint(PPR_4)": "PennyLane-template modifier",
+        "Adjoint(PPR_8)": "PennyLane-template modifier",
+        "Adjoint(PauliRot)": "PennyLane-template modifier",
+        "Adjoint(PauliX)": "gate-set modifier",
+        "Adjoint(PauliZ)": "gate-set modifier",
+        "Adjoint(PhaseShift)": "PennyLane-template modifier",
+        "Adjoint(RX)": "PennyLane-template modifier",
+        "Adjoint(RY)": "PennyLane-template modifier",
+        "Adjoint(RZ)": "PennyLane-template modifier",
+        "Adjoint(Rot)": "PennyLane-template modifier",
+        "Adjoint(S)": "gate-set modifier",
+        "Adjoint(SemiAdder)": "PennyLane-template modifier",
+        "Adjoint(T)": "PennyLane-template modifier",
+        "Adjoint(TemporaryAND)": "gate-set modifier",
+        "Adjoint(Toffoli)": "gate-set modifier"
+      },
+      "retained_reason": "small or leaf modified operation legitimately used by the explicit rule",
+      "class_check_hash": "de23ba5967699f8c3178d4dbd096aa213ed29a2bad079852d361c9944cd40067"
+    },
+    "peak_mb": 801.8,
+    "within_budget": true,
+    "watched_seconds": 13.5,
+    "compressor_mb_before": 8017.8,
+    "compressor_mb_after": 9364.8,
+    "compressor_mb_delta": 1347.0,
+    "expected": {
+      "tma_resource_functions": [
+        1896,
+        452,
+        1711
+      ],
+      "tma_independent": [
+        1896,
+        452,
+        1711
+      ],
+      "conditional_sites": 808,
+      "loops": {
+        "read_bit": [],
+        "fixup_leaf": [],
+        "givens_base": [],
+        "givens_adjoint": [],
+        "read_leaf": [
+          10,
+          13,
+          48,
+          160
+        ]
+      },
+      "cnot_upper_bound": 41084,
+      "cnot_set_bits": 23704,
+      "static": {
+        "static_size": 17086,
+        "projection_loop_sites": {
+          "read_bit": 0,
+          "fixup_leaf": 0,
+          "givens_base": 0,
+          "givens_adjoint": 0,
+          "read_leaf": 449
+        },
+        "conditional_sites": 808
+      },
+      "tma_B": [
+        1896,
+        452,
+        1711
+      ],
+      "tma_B_measured": [
+        1896,
+        452,
+        1711
+      ]
+    },
+    "gate": {
+      "ok": true,
+      "problems": []
+    }
+  },
+  "controlled_walk": {
+    "program": "controlled_walk",
+    "shape": "mid10",
+    "arm": "PX",
+    "num_wires": 421,
+    "seconds": 11.3,
+    "cpu_seconds": 12.9,
+    "rusage_sum_mb": 1007.4,
+    "rusage_self_mb": 816.5,
+    "rusage_children_mb": 190.9,
+    "analyzed_gates_upper_bound": 48670,
+    "toffoli": 1898,
+    "measurements": 452,
+    "measured_and_uncomputes": 1713,
+    "counts": {
+      "Adjoint(S)": 108,
+      "Adjoint(TemporaryAND)": 1713,
+      "CNOT": 41084,
+      "CZ": 398,
+      "Hadamard": 944,
+      "MidCircuitMeasure": 452,
+      "PauliX": 1950,
+      "PauliZ": 14,
+      "PhaseGradientStatePrep": 1,
+      "S": 108,
+      "TemporaryAND": 1713,
+      "Toffoli": 185
+    },
+    "cnot_analyzed": 41084,
+    "table_word_dtype": "int64",
+    "diagnostics": {
+      "compile_seconds": 11.3,
+      "rule_capture_seconds": 6.8,
+      "rule_targets": 179,
+      "rule_equations": 70209,
+      "modified_target_lowerings": 82,
+      "modified_target_seconds": 0.31,
+      "modified_target_equations": 549,
+      "modified_target_signatures": 45,
+      "modified_target_ids": [
+        "Adjoint(CNOT)",
+        "Adjoint(CZ)",
+        "Adjoint(ControlledPhaseShift)",
+        "Adjoint(GlobalPhase)",
+        "Adjoint(Hadamard)",
+        "Adjoint(LeftQuantumComparator)",
+        "Adjoint(MultiRZ)",
+        "Adjoint(PPR_2)",
+        "Adjoint(PPR_4)",
+        "Adjoint(PPR_8)",
+        "Adjoint(PauliRot)",
+        "Adjoint(PauliX)",
+        "Adjoint(PauliZ)",
+        "Adjoint(PhaseShift)",
+        "Adjoint(ProtoGivensRotation)",
+        "Adjoint(ProtoMajorana)",
+        "Adjoint(ProtoUniformPrep)",
+        "Adjoint(RX)",
+        "Adjoint(RY)",
+        "Adjoint(RZ)",
+        "Adjoint(Rot)",
+        "Adjoint(S)",
+        "Adjoint(SemiAdder)",
+        "Adjoint(T)",
+        "Adjoint(TemporaryAND)",
+        "Adjoint(Toffoli)"
+      ],
+      "modified_target_lowerings_by_id": {
+        "Adjoint(CNOT)": 2,
+        "Adjoint(CZ)": 2,
+        "Adjoint(ControlledPhaseShift)": 2,
+        "Adjoint(GlobalPhase)": 2,
+        "Adjoint(Hadamard)": 2,
+        "Adjoint(LeftQuantumComparator)": 1,
+        "Adjoint(MultiRZ)": 4,
+        "Adjoint(PPR_2)": 4,
+        "Adjoint(PPR_4)": 14,
+        "Adjoint(PPR_8)": 16,
+        "Adjoint(PauliRot)": 8,
+        "Adjoint(PauliX)": 2,
+        "Adjoint(PauliZ)": 2,
+        "Adjoint(PhaseShift)": 2,
+        "Adjoint(ProtoGivensRotation)": 1,
+        "Adjoint(ProtoMajorana)": 1,
+        "Adjoint(ProtoUniformPrep)": 2,
+        "Adjoint(RX)": 2,
+        "Adjoint(RY)": 2,
+        "Adjoint(RZ)": 2,
+        "Adjoint(Rot)": 2,
+        "Adjoint(S)": 1,
+        "Adjoint(SemiAdder)": 1,
+        "Adjoint(T)": 1,
+        "Adjoint(TemporaryAND)": 2,
+        "Adjoint(Toffoli)": 2
+      }
+    },
+    "warnings": {
+      "prototype": [],
+      "expected": [],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 11
+    },
+    "loops": {
+      "captured": {
+        "read_bit": [],
+        "fixup_leaf": [],
+        "givens_base": [],
+        "givens_adjoint": [],
+        "read_leaf": [
+          10,
+          13,
+          48,
+          160
+        ]
+      },
+      "targets": {
+        "read_bit": 0,
+        "fixup_leaf": 3,
+        "givens_base": 1,
+        "givens_adjoint": 0,
+        "read_leaf": 4
+      }
+    },
+    "inventory": {
+      "cells": {
+        "composite|explicit_class": {
+          "targets": 5,
+          "traced_targets": 5,
+          "rules": 5,
+          "top": 28146,
+          "nested": 28146,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "composite|plain": {
+          "targets": 5,
+          "traced_targets": 5,
+          "rules": 5,
+          "top": 9596,
+          "nested": 9596,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "erase|plain": {
+          "targets": 3,
+          "traced_targets": 3,
+          "rules": 3,
+          "top": 7603,
+          "nested": 9159,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "ladder|distributed_adjoint": {
+          "targets": 1,
+          "traced_targets": 1,
+          "rules": 1,
+          "top": 6,
+          "nested": 798,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 1
+        },
+        "ladder|explicit_class": {
+          "targets": 1,
+          "traced_targets": 1,
+          "rules": 1,
+          "top": 2065,
+          "nested": 2065,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 1,
+          "rung_targets": 0
+        },
+        "ladder|plain": {
+          "targets": 2,
+          "traced_targets": 2,
+          "rules": 2,
+          "top": 2862,
+          "nested": 2862,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 1,
+          "rung_targets": 1
+        },
+        "other|distributed_adjoint": {
+          "targets": 3,
+          "traced_targets": 3,
+          "rules": 3,
+          "top": 15,
+          "nested": 140,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "other|explicit_class": {
+          "targets": 2,
+          "traced_targets": 2,
+          "rules": 2,
+          "top": 388,
+          "nested": 388,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "other|plain": {
+          "targets": 6,
+          "traced_targets": 6,
+          "rules": 6,
+          "top": 289,
+          "nested": 289,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "pennylane|distributed_adjoint": {
+          "targets": 41,
+          "traced_targets": 40,
+          "rules": 68,
+          "top": 75,
+          "nested": 2006,
+          "loops": 3,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "pennylane|plain": {
+          "targets": 69,
+          "traced_targets": 65,
+          "rules": 98,
+          "top": 13139,
+          "nested": 15274,
+          "loops": 69,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "pennylane|registered_modified": {
+          "targets": 37,
+          "traced_targets": 37,
+          "rules": 39,
+          "top": 453,
+          "nested": 486,
+          "loops": 0,
+          "read_roles": {},
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "read_load|plain": {
+          "targets": 4,
+          "traced_targets": 4,
+          "rules": 4,
+          "top": 231,
+          "nested": 17787,
+          "loops": 231,
+          "read_roles": {
+            "inner": 1,
+            "outer": 1,
+            "sf": 1,
+            "tail": 1
+          },
+          "ladder_targets": 0,
+          "rung_targets": 0
+        },
+        "read_skeleton|plain": {
+          "targets": 4,
+          "traced_targets": 4,
+          "rules": 4,
+          "top": 5341,
+          "nested": 5341,
+          "loops": 0,
+          "read_roles": {
+            "inner": 1,
+            "outer": 1,
+            "sf": 1,
+            "tail": 1
+          },
+          "ladder_targets": 0,
+          "rung_targets": 0
+        }
+      },
+      "total": {
+        "rules": 237,
+        "traced": 237,
+        "top": 70209,
+        "nested": 94337,
+        "loops": 303,
+        "targets": 179
+      },
+      "cell_sum": 94337,
+      "sum_check": true,
+      "by_class": {
+        "read_load": 17787,
+        "read_skeleton": 5341,
+        "composite": 37742,
+        "erase": 9159,
+        "ladder": 5725,
+        "pennylane": 17766,
+        "other": 817
+      },
+      "by_bucket": {
+        "plain": 60308,
+        "registered_modified": 486,
+        "distributed_adjoint": 2944,
+        "distributed_control": 0,
+        "distributed_control_of_adjoint": 0,
+        "explicit_class": 30599
+      },
+      "loops_by_bucket": {
+        "plain": 300,
+        "registered_modified": 0,
+        "distributed_adjoint": 3,
+        "distributed_control": 0,
+        "distributed_control_of_adjoint": 0,
+        "explicit_class": 0
+      },
+      "keys": {
+        "Adjoint(CNOT)": {
+          "targets": 2,
+          "nested": 69,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(CZ)",
+            "Adjoint(ControlledPhaseShift)",
+            "Adjoint(LeftQuantumComparator)",
+            "Adjoint(MultiRZ)",
+            "Adjoint(PPR_4)",
+            "Adjoint(PPR_8)",
+            "Adjoint(ProtoGivensRotation)",
+            "Adjoint(SemiAdder)",
+            "Adjoint(TemporaryAND)",
+            "Adjoint(Toffoli)"
+          ]
+        },
+        "Adjoint(CZ)": {
+          "targets": 2,
+          "nested": 91,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(CNOT)",
+            "Adjoint(ProtoMajorana)"
+          ]
+        },
+        "Adjoint(ControlledPhaseShift)": {
+          "targets": 2,
+          "nested": 105,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(CZ)"
+          ]
+        },
+        "Adjoint(GlobalPhase)": {
+          "targets": 2,
+          "nested": 2,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(CNOT)",
+            "Adjoint(CZ)",
+            "Adjoint(ControlledPhaseShift)",
+            "Adjoint(Hadamard)",
+            "Adjoint(PPR_2)",
+            "Adjoint(PPR_4)",
+            "Adjoint(PPR_8)",
+            "Adjoint(PauliX)",
+            "Adjoint(PauliZ)",
+            "Adjoint(PhaseShift)",
+            "Adjoint(RZ)",
+            "Adjoint(S)",
+            "Adjoint(T)",
+            "Adjoint(Toffoli)"
+          ]
+        },
+        "Adjoint(Hadamard)": {
+          "targets": 2,
+          "nested": 54,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(CNOT)",
+            "Adjoint(CZ)",
+            "Adjoint(PPR_4)",
+            "Adjoint(PPR_8)",
+            "Adjoint(PauliRot)",
+            "Adjoint(ProtoGivensRotation)",
+            "Adjoint(ProtoMajorana)",
+            "Adjoint(ProtoUniformPrep)",
+            "Adjoint(RX)",
+            "Adjoint(RY)",
+            "Adjoint(RZ)",
+            "Adjoint(TemporaryAND)",
+            "Adjoint(Toffoli)"
+          ]
+        },
+        "Adjoint(LeftQuantumComparator)": {
+          "targets": 1,
+          "nested": 216,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint"
+          ],
+          "parents": [
+            "ProtoInnerUnprepareX",
+            "ProtoOuterUnprepareX"
+          ]
+        },
+        "Adjoint(MultiRZ)": {
+          "targets": 4,
+          "nested": 85,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(PauliRot)"
+          ]
+        },
+        "Adjoint(PPR_2)": {
+          "targets": 4,
+          "nested": 24,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(Hadamard)",
+            "Adjoint(PauliX)",
+            "Adjoint(PauliZ)"
+          ]
+        },
+        "Adjoint(PPR_4)": {
+          "targets": 14,
+          "nested": 130,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(CNOT)",
+            "Adjoint(CZ)",
+            "Adjoint(Hadamard)",
+            "Adjoint(PauliRot)",
+            "Adjoint(S)"
+          ]
+        },
+        "Adjoint(PPR_8)": {
+          "targets": 16,
+          "nested": 223,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(T)",
+            "Adjoint(TemporaryAND)",
+            "Adjoint(Toffoli)"
+          ]
+        },
+        "Adjoint(PauliRot)": {
+          "targets": 8,
+          "nested": 64,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(ControlledPhaseShift)",
+            "Adjoint(MultiRZ)",
+            "Adjoint(RX)",
+            "Adjoint(RY)",
+            "Adjoint(RZ)"
+          ]
+        },
+        "Adjoint(PauliX)": {
+          "targets": 2,
+          "nested": 22,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(LeftQuantumComparator)",
+            "Adjoint(PPR_2)",
+            "Adjoint(ProtoGivensRotation)",
+            "Adjoint(ProtoUniformPrep)",
+            "Adjoint(TemporaryAND)",
+            "MultiControlledX"
+          ]
+        },
+        "Adjoint(PauliZ)": {
+          "targets": 2,
+          "nested": 21,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(PPR_2)"
+          ]
+        },
+        "Adjoint(PhaseShift)": {
+          "targets": 2,
+          "nested": 17,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(PauliZ)",
+            "Adjoint(RZ)",
+            "Adjoint(S)",
+            "Adjoint(T)"
+          ]
+        },
+        "Adjoint(ProtoGivensRotation)": {
+          "targets": 1,
+          "nested": 798,
+          "class": "ladder",
+          "buckets": [
+            "distributed_adjoint"
+          ],
+          "parents": [
+            "ProtoGivensLadderDaggerX"
+          ]
+        },
+        "Adjoint(ProtoMajorana)": {
+          "targets": 1,
+          "nested": 90,
+          "class": "other",
+          "buckets": [
+            "distributed_adjoint"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX"
+          ]
+        },
+        "Adjoint(ProtoUniformPrep)": {
+          "targets": 2,
+          "nested": 50,
+          "class": "other",
+          "buckets": [
+            "distributed_adjoint"
+          ],
+          "parents": [
+            "ProtoInnerUnprepareX",
+            "ProtoOuterUnprepareX"
+          ]
+        },
+        "Adjoint(RX)": {
+          "targets": 2,
+          "nested": 74,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(Hadamard)",
+            "Adjoint(PauliX)",
+            "Adjoint(RY)",
+            "Adjoint(RZ)"
+          ]
+        },
+        "Adjoint(RY)": {
+          "targets": 2,
+          "nested": 90,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(Hadamard)",
+            "Adjoint(RX)",
+            "Adjoint(RZ)",
+            "Adjoint(Rot)"
+          ]
+        },
+        "Adjoint(RZ)": {
+          "targets": 2,
+          "nested": 99,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(ControlledPhaseShift)",
+            "Adjoint(Hadamard)",
+            "Adjoint(MultiRZ)",
+            "Adjoint(PhaseShift)",
+            "Adjoint(RX)",
+            "Adjoint(RY)",
+            "Adjoint(Rot)"
+          ]
+        },
+        "Adjoint(Rot)": {
+          "targets": 2,
+          "nested": 28,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(RX)",
+            "Adjoint(RY)",
+            "Adjoint(RZ)"
+          ]
+        },
+        "Adjoint(S)": {
+          "targets": 1,
+          "nested": 15,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint"
+          ],
+          "parents": [
+            "Adjoint(PPR_4)",
+            "Adjoint(PPR_8)",
+            "Adjoint(ProtoGivensRotation)",
+            "Adjoint(RX)",
+            "Adjoint(RY)",
+            "Adjoint(RZ)",
+            "PPR_4",
+            "PPR_8",
+            "ProtoGivensRotation",
+            "RX",
+            "RY",
+            "RZ",
+            "TemporaryAND"
+          ]
+        },
+        "Adjoint(SemiAdder)": {
+          "targets": 1,
+          "nested": 511,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint"
+          ],
+          "parents": [
+            "Adjoint(ProtoGivensRotation)"
+          ]
+        },
+        "Adjoint(T)": {
+          "targets": 1,
+          "nested": 15,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint"
+          ],
+          "parents": [
+            "Adjoint(PPR_8)",
+            "Adjoint(TemporaryAND)",
+            "Adjoint(Toffoli)",
+            "PPR_8",
+            "TemporaryAND",
+            "Toffoli"
+          ]
+        },
+        "Adjoint(TemporaryAND)": {
+          "targets": 2,
+          "nested": 370,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(LeftQuantumComparator)",
+            "Adjoint(ProtoMajorana)",
+            "Adjoint(SemiAdder)",
+            "MultiControlledX",
+            "ProtoAngleEraseF",
+            "ProtoMajorana",
+            "ProtoTableEraseF",
+            "ProtoTableReadP",
+            "SemiAdder"
+          ]
+        },
+        "Adjoint(Toffoli)": {
+          "targets": 2,
+          "nested": 167,
+          "class": "pennylane",
+          "buckets": [
+            "distributed_adjoint",
+            "registered_modified"
+          ],
+          "parents": [
+            "Adjoint(ProtoMajorana)",
+            "Adjoint(TemporaryAND)",
+            "MultiControlledX"
+          ]
+        },
+        "CNOT": {
+          "targets": 1,
+          "nested": 49,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(CNOT)",
+            "CSWAP",
+            "CZ",
+            "ControlledPhaseShift",
+            "LeftQuantumComparator",
+            "MultiRZ",
+            "PPR_4",
+            "PPR_8",
+            "ProtoAngleEraseF",
+            "ProtoGivensRotation",
+            "ProtoSpinMux",
+            "ProtoTableEraseF",
+            "ProtoTableReadP",
+            "SemiAdder",
+            "TemporaryAND",
+            "Toffoli"
+          ]
+        },
+        "CSWAP": {
+          "targets": 1,
+          "nested": 113,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerPrepareP",
+            "ProtoInnerUnprepareX",
+            "ProtoOuterPrepareP",
+            "ProtoOuterUnprepareX",
+            "ProtoSpinSwap",
+            "ProtoTableReadP"
+          ]
+        },
+        "CZ": {
+          "targets": 1,
+          "nested": 67,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(CZ)",
+            "Adjoint(TemporaryAND)",
+            "CNOT",
+            "ProtoAngleEraseF",
+            "ProtoInnerSigns",
+            "ProtoMajorana",
+            "ProtoTableEraseF"
+          ]
+        },
+        "ControlledPhaseShift": {
+          "targets": 1,
+          "nested": 81,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(ControlledPhaseShift)",
+            "CZ"
+          ]
+        },
+        "GlobalPhase": {
+          "targets": 1,
+          "nested": 0,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(GlobalPhase)",
+            "CNOT",
+            "CSWAP",
+            "CZ",
+            "ControlledPhaseShift",
+            "Hadamard",
+            "PPR_2",
+            "PPR_4",
+            "PPR_8",
+            "PauliX",
+            "PauliY",
+            "PauliZ",
+            "PhaseGradientStatePrep",
+            "PhaseShift",
+            "RZ",
+            "S",
+            "T",
+            "Toffoli"
+          ]
+        },
+        "Hadamard": {
+          "targets": 1,
+          "nested": 45,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(Hadamard)",
+            "Adjoint(TemporaryAND)",
+            "CNOT",
+            "CZ",
+            "PPR_4",
+            "PPR_8",
+            "PauliRot",
+            "PhaseGradientStatePrep",
+            "ProtoAngleEraseF",
+            "ProtoControlledRefABX",
+            "ProtoControlledRefT2X",
+            "ProtoGivensRotation",
+            "ProtoInnerPrepareP",
+            "ProtoInnerUnprepareX",
+            "ProtoMajorana",
+            "ProtoOuterPrepareP",
+            "ProtoOuterUnprepareX",
+            "ProtoTableEraseF",
+            "ProtoUniformPrep",
+            "RX",
+            "RY",
+            "RZ",
+            "TemporaryAND",
+            "Toffoli"
+          ]
+        },
+        "LeftQuantumComparator": {
+          "targets": 1,
+          "nested": 215,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerPrepareP",
+            "ProtoOuterPrepareP"
+          ]
+        },
+        "MidMeasure": {
+          "targets": 1,
+          "nested": 0,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(TemporaryAND)",
+            "ProtoAngleEraseF",
+            "ProtoTableEraseF"
+          ]
+        },
+        "MultiControlledX": {
+          "targets": 3,
+          "nested": 2418,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "MultiControlledX",
+            "ProtoControlledRefABX",
+            "ProtoControlledRefT2X"
+          ]
+        },
+        "MultiRZ": {
+          "targets": 2,
+          "nested": 62,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(MultiRZ)",
+            "PauliRot"
+          ]
+        },
+        "PPR_2": {
+          "targets": 5,
+          "nested": 25,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PPR_2)",
+            "Hadamard",
+            "PauliX",
+            "PauliY",
+            "PauliZ",
+            "PhaseGradientStatePrep"
+          ]
+        },
+        "PPR_4": {
+          "targets": 10,
+          "nested": 114,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PPR_4)",
+            "CNOT",
+            "CZ",
+            "Hadamard",
+            "PauliRot",
+            "PhaseGradientStatePrep",
+            "S"
+          ]
+        },
+        "PPR_8": {
+          "targets": 21,
+          "nested": 401,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PPR_8)",
+            "CSWAP",
+            "PhaseGradientStatePrep",
+            "T",
+            "TemporaryAND",
+            "Toffoli"
+          ]
+        },
+        "PauliMeasure": {
+          "targets": 2,
+          "nested": 0,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(TemporaryAND)"
+          ]
+        },
+        "PauliRot": {
+          "targets": 4,
+          "nested": 27,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PauliRot)",
+            "ControlledPhaseShift",
+            "MultiRZ",
+            "RX",
+            "RY",
+            "RZ"
+          ]
+        },
+        "PauliX": {
+          "targets": 1,
+          "nested": 14,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PauliX)",
+            "Adjoint(TemporaryAND)",
+            "LeftQuantumComparator",
+            "MultiControlledX",
+            "PPR_2",
+            "PhaseGradientStatePrep",
+            "ProtoAngleEraseF",
+            "ProtoControlledRefABX",
+            "ProtoGivensRotation",
+            "ProtoSFAngleLoadP",
+            "ProtoTableEraseF",
+            "ProtoTableReadP",
+            "ProtoUniformPrep",
+            "TemporaryAND"
+          ]
+        },
+        "PauliY": {
+          "targets": 1,
+          "nested": 14,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "PPR_2",
+            "PhaseGradientStatePrep"
+          ]
+        },
+        "PauliZ": {
+          "targets": 1,
+          "nested": 13,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PauliZ)",
+            "PPR_2",
+            "PhaseGradientStatePrep",
+            "ProtoAngleEraseF",
+            "ProtoControlledRefABX",
+            "ProtoControlledRefT2X",
+            "ProtoInnerSigns"
+          ]
+        },
+        "PhaseGradientStatePrep": {
+          "targets": 1,
+          "nested": 10464,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": []
+        },
+        "PhaseShift": {
+          "targets": 1,
+          "nested": 9,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PhaseShift)",
+            "PauliZ",
+            "RZ",
+            "S",
+            "T"
+          ]
+        },
+        "ProtoAngleEraseF": {
+          "targets": 1,
+          "nested": 3013,
+          "class": "erase",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX",
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoControlledBlockEncodingPX": {
+          "targets": 1,
+          "nested": 17191,
+          "class": "composite",
+          "buckets": [
+            "explicit_class"
+          ],
+          "parents": [
+            "ProtoControlledWalkPX"
+          ]
+        },
+        "ProtoControlledRefABX": {
+          "targets": 1,
+          "nested": 259,
+          "class": "other",
+          "buckets": [
+            "explicit_class"
+          ],
+          "parents": [
+            "ProtoControlledWalkPX"
+          ]
+        },
+        "ProtoControlledRefT2X": {
+          "targets": 1,
+          "nested": 129,
+          "class": "other",
+          "buckets": [
+            "explicit_class"
+          ],
+          "parents": [
+            "ProtoControlledBlockEncodingPX"
+          ]
+        },
+        "ProtoControlledWalkPX": {
+          "targets": 1,
+          "nested": 2486,
+          "class": "composite",
+          "buckets": [
+            "explicit_class"
+          ],
+          "parents": []
+        },
+        "ProtoGivensLadder": {
+          "targets": 1,
+          "nested": 2065,
+          "class": "ladder",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX",
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoGivensLadderDaggerX": {
+          "targets": 1,
+          "nested": 2065,
+          "class": "ladder",
+          "buckets": [
+            "explicit_class"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX",
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoGivensRotation": {
+          "targets": 1,
+          "nested": 797,
+          "class": "ladder",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoGivensLadder"
+          ]
+        },
+        "ProtoInnerPrepareP": {
+          "targets": 1,
+          "nested": 539,
+          "class": "composite",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoControlledBlockEncodingPX"
+          ]
+        },
+        "ProtoInnerSelectDaggerPX": {
+          "targets": 1,
+          "nested": 7249,
+          "class": "composite",
+          "buckets": [
+            "explicit_class"
+          ],
+          "parents": [
+            "ProtoControlledBlockEncodingPX"
+          ]
+        },
+        "ProtoInnerSelectPX": {
+          "targets": 1,
+          "nested": 7249,
+          "class": "composite",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoControlledBlockEncodingPX"
+          ]
+        },
+        "ProtoInnerSigns": {
+          "targets": 1,
+          "nested": 14,
+          "class": "other",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoControlledBlockEncodingPX"
+          ]
+        },
+        "ProtoInnerUnprepareX": {
+          "targets": 1,
+          "nested": 538,
+          "class": "composite",
+          "buckets": [
+            "explicit_class"
+          ],
+          "parents": [
+            "ProtoControlledBlockEncodingPX"
+          ]
+        },
+        "ProtoMajorana": {
+          "targets": 1,
+          "nested": 89,
+          "class": "other",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoOuterPrepareP": {
+          "targets": 1,
+          "nested": 683,
+          "class": "composite",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoControlledBlockEncodingPX"
+          ]
+        },
+        "ProtoOuterUnprepareX": {
+          "targets": 1,
+          "nested": 682,
+          "class": "composite",
+          "buckets": [
+            "explicit_class"
+          ],
+          "parents": [
+            "ProtoControlledBlockEncodingPX"
+          ]
+        },
+        "ProtoSFAngleLoadP": {
+          "targets": 1,
+          "nested": 565,
+          "class": "composite",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX",
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoSpinMux": {
+          "targets": 1,
+          "nested": 35,
+          "class": "other",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX",
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoSpinSwap": {
+          "targets": 1,
+          "nested": 103,
+          "class": "other",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX",
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoTableEraseF": {
+          "targets": 2,
+          "nested": 6146,
+          "class": "erase",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerUnprepareX",
+            "ProtoOuterUnprepareX"
+          ]
+        },
+        "ProtoTableReadP": {
+          "targets": 4,
+          "nested": 23128,
+          "class": "read",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerPrepareP",
+            "ProtoOuterPrepareP",
+            "ProtoSFAngleLoadP",
+            "ProtoTailAngleLoadP"
+          ]
+        },
+        "ProtoTailAngleLoadP": {
+          "targets": 1,
+          "nested": 560,
+          "class": "composite",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerSelectDaggerPX",
+            "ProtoInnerSelectPX"
+          ]
+        },
+        "ProtoUniformPrep": {
+          "targets": 2,
+          "nested": 48,
+          "class": "other",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoInnerPrepareP",
+            "ProtoOuterPrepareP"
+          ]
+        },
+        "RX": {
+          "targets": 1,
+          "nested": 62,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(RX)",
+            "Hadamard",
+            "PauliX",
+            "RY",
+            "RZ"
+          ]
+        },
+        "RY": {
+          "targets": 1,
+          "nested": 78,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(RY)",
+            "Hadamard",
+            "PauliY",
+            "RX",
+            "RZ",
+            "Rot"
+          ]
+        },
+        "RZ": {
+          "targets": 1,
+          "nested": 86,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(RZ)",
+            "ControlledPhaseShift",
+            "Hadamard",
+            "MultiRZ",
+            "PhaseShift",
+            "RX",
+            "RY",
+            "Rot"
+          ]
+        },
+        "Rot": {
+          "targets": 1,
+          "nested": 18,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(Rot)",
+            "RX",
+            "RY",
+            "RZ"
+          ]
+        },
+        "S": {
+          "targets": 1,
+          "nested": 13,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PPR_4)",
+            "Adjoint(PPR_8)",
+            "Adjoint(ProtoGivensRotation)",
+            "Adjoint(RX)",
+            "Adjoint(RY)",
+            "Adjoint(RZ)",
+            "Adjoint(TemporaryAND)",
+            "PPR_4",
+            "PPR_8",
+            "PhaseGradientStatePrep",
+            "ProtoGivensRotation",
+            "RX",
+            "RY",
+            "RZ"
+          ]
+        },
+        "SemiAdder": {
+          "targets": 1,
+          "nested": 510,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "ProtoGivensRotation"
+          ]
+        },
+        "T": {
+          "targets": 1,
+          "nested": 13,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(PPR_8)",
+            "Adjoint(TemporaryAND)",
+            "Adjoint(Toffoli)",
+            "PPR_8",
+            "PhaseGradientStatePrep",
+            "TemporaryAND",
+            "Toffoli"
+          ]
+        },
+        "TemporaryAND": {
+          "targets": 1,
+          "nested": 225,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(ProtoMajorana)",
+            "Adjoint(SemiAdder)",
+            "LeftQuantumComparator",
+            "MultiControlledX",
+            "ProtoAngleEraseF",
+            "ProtoMajorana",
+            "ProtoTableEraseF",
+            "ProtoTableReadP",
+            "SemiAdder"
+          ]
+        },
+        "Toffoli": {
+          "targets": 1,
+          "nested": 138,
+          "class": "pennylane",
+          "buckets": [
+            "plain"
+          ],
+          "parents": [
+            "Adjoint(TemporaryAND)",
+            "Adjoint(Toffoli)",
+            "CSWAP",
+            "MultiControlledX",
+            "ProtoMajorana",
+            "ProtoSpinMux",
+            "TemporaryAND"
+          ]
+        }
+      },
+      "other_names": [
+        "ProtoControlledRefABX",
+        "ProtoControlledRefT2X",
+        "ProtoInnerSigns",
+        "ProtoMajorana",
+        "ProtoSpinMux",
+        "ProtoSpinSwap",
+        "ProtoUniformPrep"
+      ],
+      "read_targets": [
+        {
+          "name": "ProtoTableReadP",
+          "bucket": "plain",
+          "traced": 1,
+          "loops": 13,
+          "read_load": 1001,
+          "read_skeleton": 954,
+          "read": {
+            "role": "outer",
+            "leaves": 13,
+            "cswaps": 63,
+            "loads_expected": 13
+          }
+        },
+        {
+          "name": "ProtoTableReadP",
+          "bucket": "plain",
+          "traced": 1,
+          "loops": 160,
+          "read_load": 12320,
+          "read_skeleton": 3052,
+          "read": {
+            "role": "inner",
+            "leaves": 160,
+            "cswaps": 23,
+            "loads_expected": 160
+          }
+        },
+        {
+          "name": "ProtoTableReadP",
+          "bucket": "plain",
+          "traced": 1,
+          "loops": 10,
+          "read_load": 770,
+          "read_skeleton": 310,
+          "read": {
+            "role": "tail",
+            "leaves": 10,
+            "cswaps": 0,
+            "loads_expected": 10
+          }
+        },
+        {
+          "name": "ProtoTableReadP",
+          "bucket": "plain",
+          "traced": 1,
+          "loops": 48,
+          "read_load": 3696,
+          "read_skeleton": 1025,
+          "read": {
+            "role": "sf",
+            "leaves": 48,
+            "cswaps": 0,
+            "loads_expected": 48
+          }
+        }
+      ],
+      "read_partition": {
+        "ok": true,
+        "mismatches": [],
+        "read_targets": 4
+      },
+      "scopes": 1,
+      "instrument_seconds": 0.04,
+      "instrument_errors": [],
+      "rule_capture_seconds": 6.76
+    },
+    "timeline": {
+      "pre_capture_tree_mb": 191.9,
+      "peak_own_mb": 697.2,
+      "peak_child_mb": 108.3,
+      "peak_tree_mb": 805.5,
+      "phases": [
+        {
+          "phase": "capture",
+          "start": 0.01,
+          "end": 7.57,
+          "seconds": 7.56,
+          "own_max_mb": 660.2,
+          "tree_max_mb": 660.2,
+          "child_max_mb": 6.0
+        },
+        {
+          "phase": "instrument",
+          "start": 0.01,
+          "end": 11.34,
+          "seconds": 11.33,
+          "own_max_mb": 697.2,
+          "tree_max_mb": 805.5,
+          "child_max_mb": 108.3
+        },
+        {
+          "phase": "rules",
+          "start": 0.04,
+          "end": 7.57,
+          "seconds": 7.53,
+          "own_max_mb": 660.2,
+          "tree_max_mb": 660.2,
+          "child_max_mb": 6.0
+        },
+        {
+          "phase": "generate_ir",
+          "start": 7.61,
+          "end": 9.26,
+          "seconds": 1.65,
+          "own_max_mb": 679.1,
+          "tree_max_mb": 679.1,
+          "child_max_mb": 0.4
+        },
+        {
+          "phase": "compile",
+          "start": 9.26,
+          "end": 11.28,
+          "seconds": 2.02,
+          "own_max_mb": 697.2,
+          "tree_max_mb": 805.5,
+          "child_max_mb": 108.3
+        },
+        {
+          "phase": "cli",
+          "start": 9.47,
+          "end": 11.27,
+          "seconds": 1.8,
+          "own_max_mb": 697.2,
+          "tree_max_mb": 805.5,
+          "child_max_mb": 108.3
+        }
+      ],
+      "marks": [
+        [
+          0.01,
+          "instrument_start"
+        ],
+        [
+          0.01,
+          "capture_start"
+        ],
+        [
+          0.04,
+          "rules_start"
+        ],
+        [
+          7.57,
+          "rules_end"
+        ],
+        [
+          7.57,
+          "capture_end"
+        ],
+        [
+          7.61,
+          "generate_ir_start"
+        ],
+        [
+          9.26,
+          "generate_ir_end"
+        ],
+        [
+          9.26,
+          "compile_start"
+        ],
+        [
+          9.47,
+          "cli_start"
+        ],
+        [
+          11.27,
+          "cli_end"
+        ],
+        [
+          11.28,
+          "compile_end"
+        ],
+        [
+          11.34,
+          "instrument_end"
+        ]
+      ],
+      "every_second": [
+        [
+          0.01,
+          192.12589263916016,
+          192.14151763916016
+        ],
+        [
+          1.78,
+          358.23558807373047,
+          358.23558807373047
+        ],
+        [
+          4.64,
+          522.6263046264648,
+          528.6419296264648
+        ],
+        [
+          7.93,
+          666.1420211791992,
+          666.2201461791992
+        ],
+        [
+          10.23,
+          697.1732940673828,
+          773.6113204956055
+        ]
+      ]
+    },
+    "read_implementation_hash": "94c6f01b58d4fef283a32f3c687a4713f590d997f25df985d1fbfeecfad7d20c",
+    "class_check": {
+      "ok": true,
+      "explicit_missing": [],
+      "converted_old_keys_found": [],
+      "unexpected_modified_prototype_keys": [],
+      "retained_missing": [],
+      "modified_read_keys": [],
+      "modified_explicit_or_forward_role_keys": [],
+      "explicit_present": [
+        "ProtoControlledBlockEncodingPX",
+        "ProtoControlledRefABX",
+        "ProtoControlledRefT2X",
+        "ProtoControlledWalkPX",
+        "ProtoGivensLadderDaggerX",
+        "ProtoInnerSelectDaggerPX",
+        "ProtoInnerUnprepareX",
+        "ProtoOuterUnprepareX"
+      ],
+      "retained_prototype_keys": [
+        "Adjoint(ProtoGivensRotation)",
+        "Adjoint(ProtoMajorana)",
+        "Adjoint(ProtoUniformPrep)"
+      ],
+      "retained_non_prototype_keys": {
+        "Adjoint(CNOT)": "gate-set modifier",
+        "Adjoint(CZ)": "gate-set modifier",
+        "Adjoint(ControlledPhaseShift)": "PennyLane-template modifier",
+        "Adjoint(GlobalPhase)": "gate-set modifier",
+        "Adjoint(Hadamard)": "gate-set modifier",
+        "Adjoint(LeftQuantumComparator)": "PennyLane-template modifier",
+        "Adjoint(MultiRZ)": "PennyLane-template modifier",
+        "Adjoint(PPR_2)": "PennyLane-template modifier",
+        "Adjoint(PPR_4)": "PennyLane-template modifier",
+        "Adjoint(PPR_8)": "PennyLane-template modifier",
+        "Adjoint(PauliRot)": "PennyLane-template modifier",
+        "Adjoint(PauliX)": "gate-set modifier",
+        "Adjoint(PauliZ)": "gate-set modifier",
+        "Adjoint(PhaseShift)": "PennyLane-template modifier",
+        "Adjoint(RX)": "PennyLane-template modifier",
+        "Adjoint(RY)": "PennyLane-template modifier",
+        "Adjoint(RZ)": "PennyLane-template modifier",
+        "Adjoint(Rot)": "PennyLane-template modifier",
+        "Adjoint(S)": "gate-set modifier",
+        "Adjoint(SemiAdder)": "PennyLane-template modifier",
+        "Adjoint(T)": "PennyLane-template modifier",
+        "Adjoint(TemporaryAND)": "gate-set modifier",
+        "Adjoint(Toffoli)": "gate-set modifier"
+      },
+      "retained_reason": "small or leaf modified operation legitimately used by the explicit rule",
+      "class_check_hash": "de23ba5967699f8c3178d4dbd096aa213ed29a2bad079852d361c9944cd40067"
+    },
+    "peak_mb": 805.5,
+    "within_budget": true,
+    "watched_seconds": 14.1,
+    "compressor_mb_before": 9202.2,
+    "compressor_mb_after": 9372.6,
+    "compressor_mb_delta": 170.4,
+    "expected": {
+      "tma_resource_functions": [
+        1898,
+        452,
+        1713
+      ],
+      "tma_independent": [
+        1898,
+        452,
+        1713
+      ],
+      "conditional_sites": 808,
+      "loops": {
+        "read_bit": [],
+        "fixup_leaf": [],
+        "givens_base": [],
+        "givens_adjoint": [],
+        "read_leaf": [
+          10,
+          13,
+          48,
+          160
+        ]
+      },
+      "cnot_upper_bound": 41084,
+      "cnot_set_bits": 23704,
+      "static": {
+        "static_size": 17092,
+        "projection_loop_sites": {
+          "read_bit": 0,
+          "fixup_leaf": 0,
+          "givens_base": 0,
+          "givens_adjoint": 0,
+          "read_leaf": 449
+        },
+        "conditional_sites": 808
+      },
+      "tma_B": [
+        1898,
+        452,
+        1713
+      ],
+      "tma_B_measured": [
+        1898,
+        452,
+        1713
+      ]
+    },
+    "gate": {
+      "ok": true,
+      "problems": []
+    }
+  },
+  "controlled_walk_check": {
+    "ok": true,
+    "deltas": {
+      "toffoli": 2,
+      "measured_and_uncomputes": 2,
+      "measurements": 0
+    },
+    "expected": {
+      "toffoli": 2,
+      "measured_and_uncomputes": 2,
+      "measurements": 0
+    }
+  },
+  "read_implementation_hash": "94c6f01b58d4fef283a32f3c687a4713f590d997f25df985d1fbfeecfad7d20c",
+  "read_check_reference": {
+    "read_implementation_hash_of_P_check": "94c6f01b58d4fef283a32f3c687a4713f590d997f25df985d1fbfeecfad7d20c",
+    "same_as_PX": true,
+    "passed": true
+  },
+  "limits": {
+    "seconds": 900,
+    "mb": 3840.0,
+    "cap_mb": 4096
+  },
+  "memory_method": "peak_mb: sampled peak of the summed physical footprint of the compile's process tree (dfthc.testing.watchdog), the gate metric; the watchdog kills the tree above the limit. rusage_sum_mb: the getrusage companion, ru_maxrss of the compile process plus ru_maxrss of its finished children. It is not an upper bound: under memory pressure the resident size drops compressed pages that the footprint keeps counting, so it can fall below peak_mb",
+  "notes": [
+    "Table words are int64 holding 32 data bits each: with uint32 words, Catalyst builds no rule for ProtoTableReadR1 ('Failed to synthesize the distributed decomposition rules ...: ui32') and the compile fails; reproducer: .scratch/task-0.9b/dtype_repro.py (not committed)",
+    "Arm F follows one spike-local ob rule at every shape (erase_geometry). At mid10 the spec's MID_NAPHTHALENE parameters (k_e1 = 2, k_e2 = 1) would give the outer erase ob 2 (T 15) instead of this rule's 3 (T 12); the inner ob 4 agrees",
+    "All arms remain stand-ins: erase masks and tables are compilable constants (no dynamic-mask erase path), and the SF angle load keeps its enable placeholder",
+    "Erase conditionals carry qp.hint({'branch-prob': 0.5}): analyzed CZ and Z counts are expected values; T, M and A are exact",
+    "Task 0.9d: one compile per resource count (Task 0.2c, compiled_resources with enable_aot_compilation=False); earlier k1_*, k1r1_* and k1c_* records held two compiles",
+    "nested equations: every DecompTargetSpec of the single analyze capture, registered and distributed specs counted separately, each equation once (loop bodies, cond branches and modifier regions included)",
+    "mid10k4 has one K2 = 16 block per inner row; FeMoco has two"
+  ],
+  "code_hash": "87e5bfdc3dd1fec972a3b9900666d41e1ee44d336786032c5c8d6487be15bb3b",
+  "environment": {
+    "python": "3.12.7",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "pennylane": "0.46.0.dev151",
+    "pennylane_catalyst": "0.16.0.dev140",
+    "pennylane_lightning": "0.46.0.dev34",
+    "jax": "0.7.1",
+    "jaxlib": "0.7.1",
+    "numpy": "2.5.4",
+    "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+  },
+  "verdict": "pass"
+}
