@@ -1,0 +1,140 @@
+{
+  "walk": {
+    "program": "walk",
+    "shape": "small",
+    "num_wires": 83,
+    "seconds": 8.6,
+    "cpu_seconds": 9.1,
+    "rusage_sum_mb": 615.6,
+    "compiled_gates": 2201,
+    "toffoli": 236,
+    "measurements": 68,
+    "measured_and_uncomputes": 175,
+    "warnings": {
+      "prototype": [],
+      "expected": [
+        "Skipped the _proto_angle_erase decomposition rule for Adjoint(ProtoAngleErase){}{wires:82}{shape = [4, 2, 2, 2, 2, 4, 2, 2, 1, 1], tables = [[[0, [2]], [1, [18]], [2, [4]], [3, [22]], [4, [6]], [5, [12]], [6, [18]], [7, [3]]], [[0, [48]], [1, [59]], [2, [57]], [4, [59]], [5, [1]], [6, [30]], [8, [80]], [9, [109]], [10, [116]], [12, [73]], [13, [84]], [14, [75]]], [[4, [4704]], [5, [5699]], [6, [12658]], [7, [13601]]], [[0, [4944]], [1, [4118]], [4, [4869]], [5, [5122]]]]}: it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_angle_erase decomposition rule for Adjoint(ProtoAngleErase){}{wires:82}{shape = [4, 2, 2, 2, 2, 4, 2, 2, 1, 1], tables = [[[0, [2]], [1, [18]], [2, [4]], [3, [22]], [4, [6]], [5, [12]], [6, [18]], [7, [3]]], [[0, [48]], [1, [59]], [2, [57]], [4, [59]], [5, [1]], [6, [30]], [8, [80]], [9, [109]], [10, [116]], [12, [73]], [13, [84]], [14, [75]]], [[4, [4704]], [5, [5699]], [6, [12658]], [7, [13601]]], [[0, [4944]], [1, [4118]], [4, [4869]], [5, [5122]]]]}: it contains a mid-circuit measurement, which is not supported with adjoint or control regions."
+      ],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 22
+    },
+    "peak_mb": 479.8,
+    "within_budget": true
+  },
+  "controlled_walk": {
+    "program": "controlled_walk",
+    "shape": "small",
+    "num_wires": 83,
+    "seconds": 30.0,
+    "cpu_seconds": 23.9,
+    "rusage_sum_mb": 809.7,
+    "compiled_gates": 2209,
+    "toffoli": 238,
+    "measurements": 68,
+    "measured_and_uncomputes": 177,
+    "warnings": {
+      "prototype": [],
+      "expected": [
+        "Skipped the _proto_angle_erase decomposition rule for Adjoint(ProtoAngleErase){}{wires:82}{shape = [4, 2, 2, 2, 2, 4, 2, 2, 1, 1], tables = [[[0, [2]], [1, [18]], [2, [4]], [3, [22]], [4, [6]], [5, [12]], [6, [18]], [7, [3]]], [[0, [48]], [1, [59]], [2, [57]], [4, [59]], [5, [1]], [6, [30]], [8, [80]], [9, [109]], [10, [116]], [12, [73]], [13, [84]], [14, [75]]], [[4, [4704]], [5, [5699]], [6, [12658]], [7, [13601]]], [[0, [4944]], [1, [4118]], [4, [4869]], [5, [5122]]]]}: it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_table_erase decomposition rule for C(ProtoTableErase){}{high:2,junk:5,low:1,target:5,work:13}{block_bits = 1 : i64, high_ranges = [[2, 0, 4]], table = [[0, [2]], [1, [18]], [2, [4]], [3, [22]], [4, [6]], [5, [12]], [6, [18]], [7, [3]]], width = 5 : i64}: it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_table_erase decomposition rule for C(ProtoTableErase){}{high:4,junk:7,low:1,target:7,work:13}{block_bits = 1 : i64, high_ranges = [[3, 0, 4], [1, 0, 2]], table = [[0, [48]], [1, [59]], [2, [57]], [4, [59]], [5, [1]], [6, [30]], [8, [80]], [9, [109]], [10, [116]], [12, [73]], [13, [84]], [14, [75]]], width = 7 : i64}: it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_angle_erase decomposition rule for C(ProtoAngleErase){}{wires:82}{shape = [4, 2, 2, 2, 2, 4, 2, 2, 1, 1], tables = [[[0, [2]], [1, [18]], [2, [4]], [3, [22]], [4, [6]], [5, [12]], [6, [18]], [7, [3]]], [[0, [48]], [1, [59]], [2, [57]], [4, [59]], [5, [1]], [6, [30]], [8, [80]], [9, [109]], [10, [116]], [12, [73]], [13, [84]], [14, [75]]], [[4, [4704]], [5, [5699]], [6, [12658]], [7, [13601]]], [[0, [4944]], [1, [4118]], [4, [4869]], [5, [5122]]]]}: it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_angle_erase decomposition rule for C(Adjoint(ProtoAngleErase)){}{wires:82}{shape = [4, 2, 2, 2, 2, 4, 2, 2, 1, 1], tables = [[[0, [2]], [1, [18]], [2, [4]], [3, [22]], [4, [6]], [5, [12]], [6, [18]], [7, [3]]], [[0, [48]], [1, [59]], [2, [57]], [4, [59]], [5, [1]], [6, [30]], [8, [80]], [9, [109]], [10, [116]], [12, [73]], [13, [84]], [14, [75]]], [[4, [4704]], [5, [5699]], [6, [12658]], [7, [13601]]], [[0, [4944]], [1, [4118]], [4, [4869]], [5, [5122]]]]}: it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_angle_erase decomposition rule for Adjoint(ProtoAngleErase){}{wires:82}{shape = [4, 2, 2, 2, 2, 4, 2, 2, 1, 1], tables = [[[0, [2]], [1, [18]], [2, [4]], [3, [22]], [4, [6]], [5, [12]], [6, [18]], [7, [3]]], [[0, [48]], [1, [59]], [2, [57]], [4, [59]], [5, [1]], [6, [30]], [8, [80]], [9, [109]], [10, [116]], [12, [73]], [13, [84]], [14, [75]]], [[4, [4704]], [5, [5699]], [6, [12658]], [7, [13601]]], [[0, [4944]], [1, [4118]], [4, [4869]], [5, [5122]]]]}: it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_table_erase decomposition rule for C(ProtoTableErase){}{high:2,junk:5,low:1,target:5,work:13}{block_bits = 1 : i64, high_ranges = [[2, 0, 4]], table = [[0, [2]], [1, [18]], [2, [4]], [3, [22]], [4, [6]], [5, [12]], [6, [18]], [7, [3]]], width = 5 : i64}: it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_table_erase decomposition rule for C(ProtoTableErase){}{high:4,junk:7,low:1,target:7,work:13}{block_bits = 1 : i64, high_ranges = [[3, 0, 4], [1, 0, 2]], table = [[0, [48]], [1, [59]], [2, [57]], [4, [59]], [5, [1]], [6, [30]], [8, [80]], [9, [109]], [10, [116]], [12, [73]], [13, [84]], [14, [75]]], width = 7 : i64}: it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_angle_erase decomposition rule for C(ProtoAngleErase){}{wires:82}{shape = [4, 2, 2, 2, 2, 4, 2, 2, 1, 1], tables = [[[0, [2]], [1, [18]], [2, [4]], [3, [22]], [4, [6]], [5, [12]], [6, [18]], [7, [3]]], [[0, [48]], [1, [59]], [2, [57]], [4, [59]], [5, [1]], [6, [30]], [8, [80]], [9, [109]], [10, [116]], [12, [73]], [13, [84]], [14, [75]]], [[4, [4704]], [5, [5699]], [6, [12658]], [7, [13601]]], [[0, [4944]], [1, [4118]], [4, [4869]], [5, [5122]]]]}: it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_angle_erase decomposition rule for C(Adjoint(ProtoAngleErase)){}{wires:82}{shape = [4, 2, 2, 2, 2, 4, 2, 2, 1, 1], tables = [[[0, [2]], [1, [18]], [2, [4]], [3, [22]], [4, [6]], [5, [12]], [6, [18]], [7, [3]]], [[0, [48]], [1, [59]], [2, [57]], [4, [59]], [5, [1]], [6, [30]], [8, [80]], [9, [109]], [10, [116]], [12, [73]], [13, [84]], [14, [75]]], [[4, [4704]], [5, [5699]], [6, [12658]], [7, [13601]]], [[0, [4944]], [1, [4118]], [4, [4869]], [5, [5122]]]]}: it contains a mid-circuit measurement, which is not supported with adjoint or control regions."
+      ],
+      "other": [
+        "Skipped the _adjoint_temporary_and_ppm decomposition rule for C(Adjoint(TemporaryAND)){control_values:[tensor<2xi1>]}{wires:3}{}: it contains a mid-circuit measurement, which cannot be placed in a control region.",
+        "Skipped the _adjoint_temporary_and decomposition rule for C(Adjoint(TemporaryAND)){control_values:[tensor<2xi1>]}{wires:3}{}: it contains a mid-circuit measurement, which cannot be placed in a control region.",
+        "Skipped the _adjoint_temporary_and_ppm decomposition rule for C(Adjoint(TemporaryAND)){control_values:[tensor<2xi1>]}{wires:3}{}: it contains a mid-circuit measurement, which cannot be placed in a control region.",
+        "Skipped the _adjoint_temporary_and decomposition rule for C(Adjoint(TemporaryAND)){control_values:[tensor<2xi1>]}{wires:3}{}: it contains a mid-circuit measurement, which cannot be placed in a control region.",
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 56
+    },
+    "peak_mb": 765.4,
+    "within_budget": true
+  },
+  "inner_prepare": {
+    "program": "inner_prepare",
+    "shape": "small",
+    "num_wires": 83,
+    "seconds": 5.2,
+    "cpu_seconds": 6.0,
+    "rusage_sum_mb": 474.2,
+    "compiled_gates": 280,
+    "toffoli": 35,
+    "measurements": 14,
+    "measured_and_uncomputes": 24,
+    "warnings": {
+      "prototype": [],
+      "expected": [],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 20
+    },
+    "peak_mb": 316.3,
+    "within_budget": true
+  },
+  "inner_select": {
+    "program": "inner_select",
+    "shape": "small",
+    "num_wires": 83,
+    "seconds": 5.1,
+    "cpu_seconds": 6.5,
+    "rusage_sum_mb": 488.3,
+    "compiled_gates": 703,
+    "toffoli": 66,
+    "measurements": 15,
+    "measured_and_uncomputes": 53,
+    "warnings": {
+      "prototype": [],
+      "expected": [],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 20
+    },
+    "peak_mb": 323.3,
+    "within_budget": true
+  },
+  "controlled_walk_check": {
+    "ok": true,
+    "deltas": {
+      "toffoli": 2,
+      "measured_and_uncomputes": 2,
+      "measurements": 0
+    },
+    "expected": {
+      "toffoli": 2,
+      "measured_and_uncomputes": 2,
+      "measurements": 0
+    }
+  },
+  "limits": {
+    "seconds": 300,
+    "mb": 3840.0,
+    "cap_mb": 4096
+  },
+  "memory_method": "peak_mb: sampled peak of the summed physical footprint of the compile's process tree (dfthc.testing.watchdog), the gate metric; the watchdog kills the tree above the limit. rusage_sum_mb: ru_maxrss of the compile process plus ru_maxrss of its finished children (getrusage), an upper bound, because Catalyst runs its compiler and linker as blocking subprocesses while Python holds the traced program",
+  "code_hash": "16ae68556ad1117ed23c0a314c8913b0e450de069af364fabc515f61a1676ea4",
+  "environment": {
+    "python": "3.12.7",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "pennylane": "0.46.0.dev151",
+    "pennylane_catalyst": "0.16.0.dev140",
+    "pennylane_lightning": "0.46.0.dev34",
+    "jax": "0.7.1",
+    "jaxlib": "0.7.1",
+    "numpy": "2.5.4",
+    "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+  },
+  "verdict": "pass"
+}
