@@ -120,7 +120,9 @@ Found while dry-running the Phase 0 plan (canaries L-24 and L-25 pin the first t
 - **The sandbox also forbids `ps` and setpriority()** (`nice`, `os.nice`; `nice` only warns and
   runs the command unchanged). `scripts/test.sh` and `dfthc.testing.watchdog` handle this: they
   lower the priority with `taskpolicy -c utility` and read memory through macOS `libproc`. Read a
-  niceness with `os.getpriority`, never `os.nice(0)`.
+  niceness with `os.getpriority`, never `os.nice(0)`. `pgrep` fails too ("Cannot get process
+  list"), so a lane cannot see another lane's compiles: the orchestrator orders runs that need a
+  quiet machine, and a brief never asks you to check for other processes.
 
 ### 3.3 Running Python and tests from a worktree lane
 
