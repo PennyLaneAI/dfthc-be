@@ -20,6 +20,8 @@ UNIT_TOLERANCE = 1e-10
 
 _ARRAYS = ("U", "W", "w_B", "w_plus", "u_plus", "w_minus", "u_minus", "h1", "h_sym", "h1_shifted")
 _SCALARS = ("beta_1", "lambda_h1", "lambda_h2", "e_upper")
+_NDIM = {"U": 3, "W": 3, "w_B": 2, "u_plus": 2, "u_minus": 2, "h1": 2, "h_sym": 2,
+         "h1_shifted": 2, "w_plus": 1, "w_minus": 1}
 
 
 @dataclass(frozen=True, eq=False)
@@ -89,9 +91,19 @@ class DFTHCFactors:
         return self.w_minus.shape[0]
 
     def validate(self) -> None:
-        """Check shapes, unit rows, ``N+ + N- = N`` and ``w+, w- >= 0``; raise ``ValueError``."""
-        if self.U.ndim != 3 or self.W.ndim != 3:
-            raise ValueError(f"U and W must be 3D; got {self.U.shape} and {self.W.shape}")
+        """Check the factors; raise ``ValueError`` naming the offending field.
+
+        In order: the dimensionality of every array (``U``, ``W`` 3D; ``w_B``, ``u_plus``,
+        ``u_minus``, ``h1``, ``h_sym``, ``h1_shifted`` 2D; ``w_plus``, ``w_minus`` 1D); the exact
+        shapes implied by ``N, R, B, C, N+, N-``; finite entries in every array and in
+        ``beta_1``, ``lambda_h1``, ``lambda_h2`` (``e_upper`` may be NaN, the marker of
+        :func:`random_factors` for "no reference energy", but not infinite); unit rows of ``U``,
+        ``u_plus`` and ``u_minus`` within :data:`UNIT_TOLERANCE`; ``N+ + N- = N``; and
+        ``w_plus, w_minus >= 0``.
+        """
+        for name, ndim in _NDIM.items():
+            if getattr(self, name).ndim != ndim:
+                raise ValueError(f"{name} must be {ndim}D; got shape {getattr(self, name).shape}")
         N, R, B, C, n_plus, n_minus = self.N, self.R, self.B, self.C, self.n_plus, self.n_minus
         expected = {"W": (R, B, C), "w_B": (R, C), "w_plus": (n_plus,), "u_plus": (n_plus, N),
                     "w_minus": (n_minus,), "u_minus": (n_minus, N), "h1": (N, N),
@@ -99,6 +111,16 @@ class DFTHCFactors:
         for name, shape in expected.items():
             if getattr(self, name).shape != shape:
                 raise ValueError(f"{name} has shape {getattr(self, name).shape}, expected {shape}")
+        for name in _ARRAYS:
+            if not np.all(np.isfinite(getattr(self, name))):
+                raise ValueError(f"{name} must be finite; it has NaN or infinite entries")
+        for name in _SCALARS:
+            value = getattr(self, name)
+            if name == "e_upper":
+                if np.isinf(value):
+                    raise ValueError(f"e_upper must not be infinite; got {value}")
+            elif not np.isfinite(value):
+                raise ValueError(f"{name} must be finite; got {value}")
         for name in ("U", "u_plus", "u_minus"):
             norms = np.linalg.norm(getattr(self, name), axis=-1)
             if norms.size and np.abs(norms - 1).max() > UNIT_TOLERANCE:

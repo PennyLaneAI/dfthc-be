@@ -72,11 +72,26 @@ def _broken(**changes):
         ({"u_plus": np.full((3, 4), 0.6)}, "rows of u_plus"),
         ({"w_plus": np.ones(2), "u_plus": np.eye(4)[:2]}, "N\\+ \\+ N- = N"),
         ({"w_minus": -np.ones(1)}, "w_minus must be >= 0"),
+        ({"w_plus": 1.0}, "w_plus must be 1D"),
+        ({"U": np.ones((2, 4))}, "U must be 3D"),
+        ({"u_minus": np.ones(4)}, "u_minus must be 2D"),
+        ({"U": np.full((2, 2, 4), np.nan)}, "U must be finite"),
+        ({"w_minus": np.array([np.nan])}, "w_minus must be finite"),
+        ({"h_sym": np.full((4, 4), np.inf)}, "h_sym must be finite"),
+        ({"lambda_h1": np.inf}, "lambda_h1 must be finite"),
+        ({"beta_1": np.nan}, "beta_1 must be finite"),
+        ({"e_upper": -np.inf}, "e_upper must not be infinite"),
     ],
 )
 def test_validate_rejects_bad_factors(changes, message):
     with pytest.raises(ValueError, match=message):
         _broken(**changes).validate()
+
+
+def test_a_nan_e_upper_marks_unknown_and_validates():
+    f = random_factors(4, 2, 3, 2, n_plus=2, seed=0)
+    assert np.isnan(f.e_upper)
+    f.validate()
 
 
 def test_random_factors_validate_at_femoco_shape():

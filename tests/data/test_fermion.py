@@ -30,6 +30,27 @@ def _on_qubit(gate, j, spin):
     return np.kron(one, np.eye(2**N)) if spin == 0 else np.kron(np.eye(2**N), one)
 
 
+def _expected_majorana(j, flavour, spin):
+    """Spec 6.2 written out with explicit Kronecker products, independent of ``majorana``.
+
+    ``gamma_{j,0} = Z_0 ... Z_{j-1} X_j`` and ``gamma_{j,1} = Z_0 ... Z_{j-1} Y_j`` on the
+    register of ``spin``, tensored with the identity on the other register (``psi_up`` first).
+    """
+    target = (X, Y)[flavour]
+    one_spin = {  # N = 3, qubit 0 first (most significant)
+        0: np.kron(np.kron(target, np.eye(2)), np.eye(2)),
+        1: np.kron(np.kron(Z, target), np.eye(2)),
+        2: np.kron(np.kron(Z, Z), target),
+    }[j]
+    identity = np.eye(2**N)
+    return np.kron(one_spin, identity) if spin == 0 else np.kron(identity, one_spin)
+
+
+def test_majorana_matches_the_explicit_jordan_wigner_construction():
+    for (j, f), s in itertools.product(MODES, (0, 1)):
+        assert np.array_equal(majorana(j, f, s, N), _expected_majorana(j, f, s))
+
+
 @pytest.mark.parametrize("spin", [0, 1])
 def test_majoranas_anticommute_within_one_spin_register(spin):
     for (j, f), (k, g) in itertools.product(MODES, repeat=2):
@@ -92,7 +113,7 @@ def test_occupation_index_matches_the_number_operators():
 def test_rotated_majorana_is_the_linear_combination():
     u = np.array([0.6, 0.0, 0.8])
     for f, s in itertools.product((0, 1), (0, 1)):
-        expected = 0.6 * majorana(0, f, s, N) + 0.8 * majorana(2, f, s, N)
+        expected = 0.6 * _expected_majorana(0, f, s) + 0.8 * _expected_majorana(2, f, s)
         assert np.allclose(rotated_majorana(u, f, s, N), expected)
         assert np.allclose(rotated_majorana(u, f, s, N) @ rotated_majorana(u, f, s, N), EYE)
 
