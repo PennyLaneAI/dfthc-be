@@ -164,7 +164,7 @@ directory named `venv` inside the workspace, so jedi (pulled in by IPython) cann
 `TMPDIR` must not point into a worktree while pytest runs. `.scratch/dfthcbe-ref` also serves
 scouts and reviewers as the read-only dfthcbe source.
 
-The fixture provenance records the commit and the Qualtran version. `.venv-ref/` is git-ignored.
+The fixture provenance records the commit, the codeload URL, the source and installed-package digests, the package versions (Qualtran 0.7.0) and a digest of every factor input; the lock names the codeload tarball, not the local copy. `.venv-ref/` is git-ignored.
 If it cannot be created, fixture tests skip with an explicit reason.
 
 ### 3.5 Machine limits and heavy processes

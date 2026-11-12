@@ -36,6 +36,12 @@ Additions that need no master-plan edit:
 - Task 1A.5 adds a third construction of the block: `(1 - P_fail(x_o)) sum_x p_x avg_sigma 2 A_x^dag A_x - I` built from the tables without `walk_integrals`. It covers a shape whose uniform preparation of `x_o` fails (`X_o = 5`).
 - Task 1A.4 adds the exhaustive sign check of spec 6.1: every `(l, m)` branch carries the sign of the index that survives the swap.
 
+Revision 2 (2026-11-12), from Task 1A.6's implementation and its GPT-5.6 review (`task-1A.6-review-1.md`, 0 Critical, 3 Important, all addressed in `a6ba624`). The merged files are authoritative; Task 1A.6's code blocks below predate these changes and are kept as the dry-run record.
+
+11. **A second encoded fixture, `encoded_x_o_fails.npz`**, at Task 1A.5's `X_O_FAILS` shape (`random_factors(2, 3, 1, 1, n_plus=1, seed=3)`, `X_o = 5`), where the uniform preparation of `x_o` fails (dfthcbe's failure probability 0.1507, `lambda_tilde` 10.1251). The encoded-block test loops over both fixtures, so the task still has 7 tests.
+12. **The FeMoco test pins dfthcbe's twelve per-block Toffolis** (`test_femoco_cost_by_block`: walk 9,641, controlled walk 9,642) and `controlled_block_encoding = block_encoding + 1`, besides the sums.
+13. **Provenance and lock are self-verifying and portable.** `provenance.json` records `dfthcbe_source_url` (the codeload tarball of the commit), `dfthcbe_source_sha256` (the digest the recipe verifies), `dfthcbe_installed_sha256` (computed from the imported package) and, per encoded fixture, the source and SHA-256 of the factor arrays handed to dfthcbe (`factor_digest`). The tests pin all of them, recompute the input digest from the arrays they feed to `encoded_block` (input drift fails with a regenerate message), and assert Qualtran 0.7.0 and the complete parameter and system mappings. Step 7 pipes `pip freeze` through `sed`, so the lock's dfthcbe line is the codeload URL instead of the lane-local copy.
+
 ## Global Constraints
 
 Every task's requirements implicitly include this section. Values are copied verbatim from the
@@ -3026,11 +3032,14 @@ rm -rf "$TMPDIR/dfthcbe-src"
 cp -R "$REF" "$TMPDIR/dfthcbe-src"
 "$VENV_REF/bin/pip" install --no-deps "$TMPDIR/dfthcbe-src"
 mkdir -p tests/fixtures/dfthcbe
-"$VENV_REF/bin/pip" freeze > tests/fixtures/dfthcbe/requirements-ref.lock
+# The lock names the immutable tarball instead of the local copy, so it is portable.
+"$VENV_REF/bin/pip" freeze \
+    | sed "s|^dfthcbe @ file://.*|dfthcbe @ https://codeload.github.com/Covestro-HPQC/dfthcbe/tar.gz/$PIN|" \
+    > tests/fixtures/dfthcbe/requirements-ref.lock
 MPLCONFIGDIR="$TMPDIR" "$VENV_REF/bin/python" scripts/make_dfthcbe_fixtures.py
 ```
 
-Expected: pip's install lines, then the five lines `wrote <lane>/tests/fixtures/dfthcbe/<name>` for `tables_h2_sto3g_test.json`, `tables_h2_631g_test.json`, `encoded_h2_sto3g_test.npz`, `femoco_block_toffolis.json` and `provenance.json`. The run takes about 30 s once the packages are installed. Its process tree stays far below the 4 GB "heavy" threshold, so it is not a heavy run. The lock lists `qualtran==0.7.0` and `dfthcbe @ file://` followed by the copy's path.
+Expected: pip's install lines, then the six lines `wrote <lane>/tests/fixtures/dfthcbe/<name>` for `tables_h2_sto3g_test.json`, `tables_h2_631g_test.json`, `encoded_h2_sto3g_test.npz`, `encoded_x_o_fails.npz`, `femoco_block_toffolis.json` and `provenance.json` (revision 2). The run takes about 30 s once the packages are installed. Its process tree stays far below the 4 GB "heavy" threshold, so it is not a heavy run. The lock lists `qualtran==0.7.0` and `dfthcbe @ https://codeload.github.com/Covestro-HPQC/dfthcbe/tar.gz/` followed by the commit (revision 2; pip freeze names the local copy, which `sed` replaces).
 
 Dry-run on 2026-11-12: the script ran exactly as shown, with `VENV_REF` pointing at a scratch environment, against `.scratch/dfthcbe-ref` (the orchestrator's extraction of the tarball). The five fixtures were identical to the ones the tests below were dry-run with: the JSON files byte for byte, the arrays exactly. The download branch, run separately into an empty directory, reproduced the same tree and passed the digest check. `femoco_block_toffolis.json` must read:
 
