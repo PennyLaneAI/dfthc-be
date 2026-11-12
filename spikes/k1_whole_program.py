@@ -42,12 +42,14 @@ take their table bits from a dynamic int64 array (ProtoTableReadR1), the erases 
 writes k1r1_<shape>.json, requires T, M and A equal to Task 0.9's (EXPECTED_TMA), kept bit loops
 and no prototype warning per program, stops at the first program that fails, starts a mid shape
 only after the smaller shapes passed for this code_hash(), and compiles no FeMoco shape.
+--project --remedy 1 writes k1r1_projection.json (REMEDY_PROJECTION_METHOD).
 """
 
 from __future__ import annotations
 
 import argparse
 import contextlib
+import functools
 import hashlib
 import importlib.metadata
 import json
@@ -1174,6 +1176,23 @@ PROJECTION_METHOD = (
     "and the watchdog's effective limit of its cap (7,680 MB of 8 GB), where execution would be "
     "killed"
 )
+REMEDY_PROJECTION_METHOD = (
+    "size measure: projection_size_gates(shape, program), from the baseline stand-in's resource "
+    "functions (no compile): every gate of the baseline program with all table words zero (the "
+    "skeleton that partial remedy 1 keeps unrolled), plus the conditional-Z leaves of the "
+    "unchanged erases with random_tables(shape, seed=54). It must reproduce the walk sizes of "
+    "PROBE_A_WALK_SIZES. A remedy compile's analyzed gates (analyzed_gates_upper_bound) count "
+    "every loaded bit and are recorded, not fitted. Fit points: a shape's program record in a "
+    "k1r1 file of this code_hash() with successful counts, within_budget true and a passed stop "
+    "gate; at least two per program (fit_shapes). Time: power law through the two largest fit "
+    "shapes, exponent at least 1. Memory: least-squares line through all fit shapes, slope at "
+    "least 0, for peak_mb (the gate metric) and rusage_sum_mb (the getrusage companion). "
+    "femoco_allowed as in Task 0.9: the walk and the controlled walk within the time limit of "
+    "LIMITS['femoco'] and the watchdog's effective limit of its cap (7,680 MB of 8 GB) by both "
+    "memory series. Task 0.9b compiles no FeMoco shape, whatever the projection says"
+)
+PROBE_A_WALK_SIZES = {"mid10": 20599, "mid14": 32822, "femoco": 193053}
+"""projection_size_gates of the walk, from the Opus probe A of Task 0.9's review."""
 RESULTS = Path(__file__).resolve().parent / "results"
 FEMOCO_LOCK = RESULTS / "k1_femoco.lock"
 TOKEN_VARIABLE = "DFTHC_K1_FEMOCO_TOKEN"
@@ -1210,11 +1229,11 @@ def code_hash() -> str:
     return digest.hexdigest()
 
 
-def build(shape_name: str, program: str, remedy: bool = False):
+def build(shape_name: str, program: str, remedy: bool = False, tables=None):
     s = SHAPES[shape_name]
     shape = tuple(getattr(s, f) for f in Shape.__dataclass_fields__)
     lay = Layout(s)
-    tables = random_tables(s)
+    tables = random_tables(s) if tables is None else tables
     wires = list(range(lay.num_wires))
     control = lay.num_wires
     walk = ProtoWalkR1 if remedy else ProtoWalk
@@ -1248,10 +1267,11 @@ def stand_in_gates(shape_name: str, program: str) -> int:
     return int(graph.solve().resource_estimate(op).num_gates)
 
 
-def declared_counts(shape_name: str, program: str, remedy: bool = False) -> Counter:
-    """Gate counts of a program from the resource functions alone (no compile). With the remedy,
-    "CNOT" is an upper bound (ProtoTableReadR1 counts every loaded bit)."""
-    qfunc, _ = build(shape_name, program, remedy)
+def declared_counts(shape_name: str, program: str, remedy: bool = False, tables=None) -> Counter:
+    """Gate counts of a program from the resource functions alone (no compile), by default with
+    random_tables(). With the remedy, "CNOT" is an upper bound (ProtoTableReadR1 counts every
+    loaded bit)."""
+    qfunc, _ = build(shape_name, program, remedy, tables)
     with qp.queuing.AnnotatedQueue() as queue:
         qfunc()
     graph = DecompositionGraph(operations=queue.queue, gate_set=GATE_SET,
@@ -1265,6 +1285,37 @@ def declared_counts(shape_name: str, program: str, remedy: bool = False) -> Coun
         for key, value in solution.resource_estimate(op).gate_counts.items():
             counts[getattr(key, "name", str(key))] += int(value)
     return counts
+
+
+def zero_word_tables(tables):
+    """``tables`` with every word zero (same addresses and word counts)."""
+    return tuple(tuple((address, tuple(0 for _ in words)) for address, words in table)
+                 for table in tables)
+
+
+@functools.cache
+def projection_size_parts(shape_name: str, program: str) -> dict:
+    """The size measure of the remedy projection and its parts, from the baseline resource
+    functions alone (no compile; REMEDY_PROJECTION_METHOD).
+
+    ``skeleton_gates``: the baseline program with every table word zero, the part remedy 1 keeps
+    unrolled (unary iteration, swaps, Givens ladders, comparators, ...). ``erase_conditional_z``:
+    the conditional-Z leaves of the unchanged erases with random_tables(shape, seed=54).
+    ``projection_size_gates`` is their sum; ``baseline_gates`` is the baseline program with
+    those tables (stand_in_gates for the walk). PhaseGradientStatePrep is not counted.
+    """
+    tables = random_tables(SHAPES[shape_name], seed=54)
+    full = declared_counts(shape_name, program, tables=tables)
+    zero = declared_counts(shape_name, program, tables=zero_word_tables(tables))
+    for counts in (full, zero):
+        counts.pop("PhaseGradientStatePrep", None)
+    skeleton, erase_z = sum(zero.values()), full["PauliZ"] - zero["PauliZ"]
+    return {"projection_size_gates": skeleton + erase_z, "skeleton_gates": skeleton,
+            "erase_conditional_z": erase_z, "baseline_gates": sum(full.values())}
+
+
+def projection_size_gates(shape_name: str, program: str) -> int:
+    return projection_size_parts(shape_name, program)["projection_size_gates"]
 
 
 @contextlib.contextmanager
@@ -1379,7 +1430,9 @@ def compile_one(shape_name: str, program: str, remedy: bool = False) -> dict:
               "cpu_seconds": round(own.ru_utime + own.ru_stime + children.ru_utime
                                    + children.ru_stime, 1),
               "rusage_sum_mb": round((own.ru_maxrss + children.ru_maxrss) * scale / 2**20, 1),
-              "compiled_gates": sum(resources.counts.values()),
+              # With the remedy, qp.analyze counts every loaded bit: not the emitted gates.
+              "analyzed_gates_upper_bound" if remedy else "compiled_gates":
+                  sum(resources.counts.values()),
               "toffoli": resources.toffoli, "measurements": resources.measurements,
               "measured_and_uncomputes": resources.measured_and_uncomputes,
               "counts": resources.counts,
@@ -1389,6 +1442,7 @@ def compile_one(shape_name: str, program: str, remedy: bool = False) -> dict:
     if remedy:
         record["table_word_dtype"] = np.dtype(WORD_DTYPE).name
         record["bit_loops"] = bit_loop_evidence(shape_name, program, log, resources.counts)
+        record["projection_size"] = projection_size_parts(shape_name, program)
     return record
 
 
@@ -1462,6 +1516,76 @@ def project(calibration: dict[str, dict]) -> dict:
                 reasons.append(f"{program}: {label} {value / 1024:.1f} GB > "
                                f"{memory_limit / 1024:.1f} GB")
     return {"method": PROJECTION_METHOD,
+            "limits": {"seconds": seconds_limit, "mb": memory_limit, "cap_mb": cap_mb},
+            "programs": programs, "femoco_allowed": not reasons,
+            "reason": "; ".join(reasons) or "within the limits", "code_hash": current,
+            "environment": environment()}
+
+
+def fit_point(saved: dict, program: str, current: str) -> tuple[dict | None, str]:
+    """A program's fit point from one k1r1_<shape>.json, or None and the reason it is missing."""
+    record = saved.get(program)
+    if saved.get("code_hash") != current:
+        return None, "no result file for this code_hash()"
+    if record is None:
+        return None, saved.get("skipped", {}).get(program, {}).get("reason", "not compiled")
+    if "error" in record or record.get("toffoli") is None:
+        return None, f"no counts: {record.get('error', '')[-200:]}"
+    if not record.get("within_budget"):
+        return None, "not within_budget"
+    if not record.get("gate", {"ok": True})["ok"]:
+        return None, f"stop gate: {record['gate']['problems']}"
+    return record, ""
+
+
+def project_remedy(calibration: dict[str, dict]) -> dict:
+    """Project the remedy-1 FeMoco walk and controlled walk (REMEDY_PROJECTION_METHOD).
+
+    ``calibration`` maps calibration shapes to their k1r1_<shape>.json content. Raises
+    ValueError if projection_size_gates misses a PROBE_A_WALK_SIZES value or a program has fewer
+    than two fit points.
+    """
+    for shape, expected in PROBE_A_WALK_SIZES.items():
+        got = projection_size_gates(shape, "walk")
+        if got != expected:
+            raise ValueError(f"projection_size_gates({shape!r}, 'walk') = {got}, not the "
+                             f"probe A value {expected} (difference {got - expected})")
+    current = code_hash()
+    seconds_limit, cap_mb = LIMITS["femoco"]
+    memory_limit = effective_limit_mb(cap_mb)
+    programs, reasons = {}, []
+    for program in SHAPE_PROGRAMS["femoco"]:
+        points, missing = {}, {}
+        for shape in CALIBRATION_SHAPES:
+            record, why = fit_point(calibration.get(shape, {}), program, current)
+            if record is None:
+                missing[shape] = why
+            else:
+                points[shape] = record
+        if len(points) < 2:
+            raise ValueError(f"{program}: fewer than two fit points ({missing})")
+        sizes = {s: projection_size_parts(s, program) for s in [*points, "femoco"]}
+        x = {s: part["projection_size_gates"] for s, part in sizes.items()}
+        seconds, exponent = _fit_time([(x[s], r["seconds"]) for s, r in points.items()],
+                                      x["femoco"])
+        peak, peak_slope = _fit_memory([(x[s], r["peak_mb"]) for s, r in points.items()],
+                                       x["femoco"])
+        companion, _ = _fit_memory([(x[s], r["rusage_sum_mb"]) for s, r in points.items()],
+                                   x["femoco"])
+        programs[program] = {
+            "fit_shapes": list(points), "missing_points": missing, "sizes": sizes,
+            "analyzed_gates_upper_bound": {s: r.get("analyzed_gates_upper_bound")
+                                           for s, r in points.items()},
+            "seconds": round(seconds), "time_exponent": round(exponent, 2),
+            "peak_mb": round(peak), "mb_per_1000_gates": round(1000 * peak_slope, 2),
+            "rusage_sum_mb_companion": round(companion)}
+        if seconds > seconds_limit:
+            reasons.append(f"{program}: {seconds / 60:.0f} min > {seconds_limit / 60:.0f} min")
+        for label, value in (("sampled peak", peak), ("getrusage companion", companion)):
+            if not within_effective_limit(value, cap_mb):
+                reasons.append(f"{program}: {label} {value / 1024:.1f} GB > "
+                               f"{memory_limit / 1024:.1f} GB")
+    return {"method": REMEDY_PROJECTION_METHOD,
             "limits": {"seconds": seconds_limit, "mb": memory_limit, "cap_mb": cap_mb},
             "programs": programs, "femoco_allowed": not reasons,
             "reason": "; ".join(reasons) or "within the limits", "code_hash": current,
@@ -1669,14 +1793,14 @@ def drive(shape_name: str, allow_retry: bool = False, remedy: bool = False) -> i
     return 0 if record["verdict"] == "pass" else 1
 
 
-def write_projection() -> int:
+def write_projection(remedy: bool = False) -> int:
     calibration = {}
     for shape in CALIBRATION_SHAPES:
-        path = RESULTS / f"k1_{shape}.json"
+        path = results_path(shape, remedy)
         if path.exists():
             calibration[shape] = json.loads(path.read_text())
-    projection = project(calibration)
-    (RESULTS / "k1_projection.json").write_text(json.dumps(projection, indent=2) + "\n")
+    projection = project_remedy(calibration) if remedy else project(calibration)
+    results_path("projection", remedy).write_text(json.dumps(projection, indent=2) + "\n")
     for program, values in projection["programs"].items():
         print(program, json.dumps(values), flush=True)
     print("femoco_allowed:", projection["femoco_allowed"], "-", projection["reason"])
@@ -1695,9 +1819,7 @@ def main():
     args = parser.parse_args()
     remedy = args.remedy == 1
     if args.project:
-        if remedy:
-            sys.exit("--project --remedy 1 is not implemented yet")
-        sys.exit(write_projection())
+        sys.exit(write_projection(remedy))
     if args.shape is None:
         parser.error("--shape is required unless --project is given")
     if args.all:
