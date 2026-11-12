@@ -23,7 +23,7 @@ from dfthc.params import (
     odd_part,
 )
 from dfthc.testing.resources import chosen_rules, verbose_program
-from dfthc.testing.sparse_sim import SparseSimulator
+from dfthc.testing.sparse_sim import ForcedPolicy, SparseSimulator
 from dfthc.testing.tape import decompose_for_simulation
 
 X_O_FAILS = WalkParams(N=2, R=3, B=1, C=1, n_plus=1, b_rot=6, b_k1=3, b_k2=2, s_u=3, k1=1, k2=1,
@@ -118,9 +118,13 @@ def test_prepared_state_is_the_alias_distribution(name):
     amplitude of the uniform preparation over sqrt(2**(b_k1 + 1)), its success phase and factor
     sqrt(1 - P_fail) included; every (x_0, m, sigma_1) occurs. The succ = 1 marginal is
     (1 - P_fail) alias_probabilities, and against the encoded model (spec 8.5) its total is
-    Lambda / Lambda~ and its one-body part (1 - P_fail) w~_pm / Lambda."""
+    Lambda / Lambda~ and its one-body part (1 - P_fail) w~_pm / Lambda. At x-o-5 ``phase_grad``
+    has two wires more than ``s_u``, as Phase 3 passes it, so the amplitudes pin which wires the
+    rotations add into. Then OuterUnprepare under the all-ones outcome schedule (every fix-up
+    applied) returns every register to |0> with amplitude 1 (the certificates prove every
+    outcome)."""
     p, factors, tables = case(name)
-    wires, num_wires = layout(p)
+    wires, num_wires = layout(p, extra_grad=2 if name == "x-o-5" else 0)
 
     def qfunc():
         qp.PhaseGradientStatePrep(wires=wires["phase_grad"])
@@ -162,6 +166,17 @@ def test_prepared_state_is_the_alias_distribution(name):
     assert np.allclose(marginal[p.RC:],
                        (1 - fail) * np.concatenate([enc.w_plus, enc.w_minus]) / lam,
                        rtol=0, atol=1e-12)
+
+    def round_trip():
+        qfunc()
+        OuterUnprepare(*outer_args(p, tables), **wires)
+
+    policy = ForcedPolicy([1] * (p.K1 * p.d1))
+    final = SparseSimulator(num_wires, policy=policy, strict=True).run(
+        decompose_for_simulation(round_trip).operations)
+    _, restored = terms_without_gradient(final, wires)
+    zero = (0,) * len(names)
+    assert list(restored) == [zero] and abs(restored[zero] - 1) < 1e-12
 
 
 def _lightning(num_wires, body, returns, seed=None):
@@ -338,6 +353,8 @@ def test_read_shape_and_table_by_hand():
         "phase_grad": 3, "work": 0}
     assert OuterUnprepare.required_wires(4, 2, 1, 1, 3) == OuterPrepare.required_wires(4, 2, 1, 1,
                                                                                        3)
+    # ke1 = 0: the erase's fix-up iterates both address bits, so its work need (1) is the largest
+    assert OuterPrepare.required_wires(4, 2, 1, 0, 3)["work"] == 1
 
 
 BASE = {"X_o": 5, "alt": (1, 0, 4, 2, 3), "keep": (7, 0, 5, 1, 2), "b_k1": 3, "k1": 1, "ke1": 1,

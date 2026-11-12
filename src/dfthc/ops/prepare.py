@@ -424,7 +424,8 @@ class OuterUnprepare(Operator2):
     **Paper and dfthcbe.** Steps 24 to 27 of dfthcbe's README circuit, the adjoint of its
     ``OuterPrepare`` with the measured erase; arXiv:2502.15882v1 App. B.7.2, steps 10 and 11,
     Eqs. (126) and (127) (Table 7). Our comparator adjoint costs no Toffoli (the paper's and
-    dfthcbe's ``b_k1`` term).
+    dfthcbe's ``b_k1`` term): the comparator's ``b_k1 - 1`` work wires stay dirty until here,
+    the saving the paper notes after Eq. (127).
 
     **Example.**
 
