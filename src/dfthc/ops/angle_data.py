@@ -11,9 +11,10 @@ writes, where ``G0 = 0``, the angles of ``(r, b)`` in ``[0, R) x [0, B)`` and ``
 Each is a :class:`~dfthc.ops.qroam.QROAMRead` without a swap network (``block_bits = 0``) whose
 entry is one big-endian integer over its target (``angles ‖ G0 ‖ G1``, ``angles ‖ b_neq_B``) and
 whose ``leaf_words`` the rule builds from the compilable angle table (spec 9.3). After both
-loads every branch holds one family's data: a tail row's on ``G0 = 1``, an SF entry's on
-``G0 = 0`` where ``(r, b)`` is in range, and zeros elsewhere (failed ``x_o``, ``b = B``,
-failed ``b``). :class:`AngleErase` (Task 2E.2) erases what they write.
+loads, tail rows hold tail data on ``G0 = 1``; every ``G0 = 0`` branch, failed ``x_o``
+included, holds the SF entry of ``(r, b)`` where it is in range, and zeros elsewhere
+(``b = B``, failed ``b``, unvisited ``r``). :class:`AngleErase` (Task 2E.2) erases what they
+write.
 """
 
 from __future__ import annotations
@@ -113,7 +114,8 @@ class TailAngleLoad(Operator2):
     but determines the structure (spec 7.4 rules 1 and 3).
 
     **Pre- and postconditions.** ``angles``, ``G0``, ``G1`` and ``work`` start in ``|0>``;
-    ``work`` ends in ``|0>``. :class:`AngleErase` erases ``angles``, ``G0`` and ``G1``.
+    ``work`` ends in ``|0>``. After both loads, :class:`AngleErase` erases the shared
+    ``angles``, ``b_neq_B``, ``G0`` and ``G1`` registers.
 
     **Decomposition.** One :class:`~dfthc.ops.qroam.QROAMRead` of :meth:`table` with address
     ``x_o`` over ``[RC, X_o)``, no swap network (``block_bits = 0``), no enable, and target
