@@ -26,15 +26,16 @@ from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE
 from dfthc.testing.resources import chosen_rules, classify_rule_warning, verbose_program
 
 
-def random_table(widths, live_ranges, width, seed=11):
-    """An entry of ``width`` random bits at every live address (one or two registers)."""
+def random_table(widths, live_ranges, width, seed=11, zero=()):
+    """An entry of ``width`` random bits at every live address (one or two registers), zero at
+    the addresses in ``zero`` (``range(2**k)``, the first block, gives zero masks)."""
     rng = np.random.default_rng(seed)
     (lo1, hi1), *rest = live_ranges
     addresses = ([(v << widths[1]) | u for v in range(lo1, hi1) for u in range(*rest[0])]
                  if rest else list(range(lo1, hi1)))
     table = []
     for address in addresses:
-        value = int(rng.integers(0, 2**width))
+        value = int(rng.integers(0, 2**width)) * (address not in zero)
         table.append((address, tuple((value >> (32 * w)) & (2**32 - 1)
                                      for w in range(-(-width // 32)))))
     return tuple(table)
@@ -150,10 +151,11 @@ def test_fixup_high_ranges_agree_with_the_cost_model():
 @pytest.mark.compiled
 def test_erase_is_not_a_second_read_and_its_conditionals_are_hinted(capfd):
     """T6: the chosen rule is the pinned measured erase, its T differs from a re-read, and its
-    conditional CZs count their hinted expectation (one per nonzero mask)."""
+    conditional CZs count their hinted expectation (one per nonzero mask; the first block is
+    zero, so its masks emit none)."""
     shape = SMALL[3]
     widths, live, width, k, ob = shape
-    table = random_table(widths, live, width)
+    table = random_table(widths, live, width, zero=range(2**k))
     wires, num_wires = layout(shape)
     resources = compiled_resources(lambda: make_erase(table, shape, None, wires),
                                    num_wires=num_wires)
@@ -162,7 +164,9 @@ def test_erase_is_not_a_second_read_and_its_conditionals_are_hinted(capfd):
     masks = QROAMRead.loaded_contents(table, QROAMRead.loaded_set(widths, live, k),
                                       address_widths=widths, live_ranges=live, width=width,
                                       block_bits=k)
-    assert resources.counts["CZ"] == math.ceil(sum(1 for m in masks if m) / 2)
+    nonzero = sum(1 for m in masks if m)
+    assert 0 < nonzero < len(masks)
+    assert resources.counts["CZ"] == math.ceil(nonzero / 2)
     qp.analyze(verbose_program(lambda: make_erase(table, shape, None, wires), num_wires),
                level="user")()
     captured = capfd.readouterr()
@@ -217,11 +221,11 @@ def _phased_prepare(wires):
 
 @pytest.mark.compiled
 def test_lightning_smoke_runs_with_five_seeds():
-    """Compiled read then erase (k = 2, one-hot bits 2) restores a phased address state and
-    clears every ancilla for five measurement seeds."""
+    """Compiled read then erase (k = 2, one-hot bits 2, first block zero) restores a phased
+    address state and clears every ancilla for five measurement seeds."""
     shape = ((3,), ((0, 5),), 2, 2, 2)
-    widths, live, width, _, _ = shape
-    table = random_table(widths, live, width)
+    widths, live, width, k, _ = shape
+    table = random_table(widths, live, width, zero=range(2**k))
     wires, num_wires = layout(shape)
     address = wires["address"]
 
@@ -250,9 +254,10 @@ def test_lightning_smoke_runs_with_five_seeds():
 
 
 def _inner_masks(p, seed=3):
-    """The inner erase's masks over its loaded set, for a random table of preset p's shape."""
+    """The inner erase's masks over its loaded set, for a random table of preset p's shape whose
+    first block is zero."""
     widths, live, width, k, _ = erase_shapes(p)[1]
-    table = random_table(widths, live, width, seed)
+    table = random_table(widths, live, width, seed, zero=range(2**k))
     masks = QROAMRead.loaded_contents(table, QROAMRead.loaded_set(widths, live, k),
                                       address_widths=widths, live_ranges=live, width=width,
                                       block_bits=k)
@@ -284,7 +289,8 @@ def test_mcm_parities_tape_mode_is_linear_at_a_test_inner_erase():
         record = {outcomes[i].measurements[0]: int(bits[i]) for i in range(num_outcomes)}
         return np.array([0 if p is False else int(p.concretize(record)) for p in parities])
 
-    assert all(p is False for p, m in zip(parities, masks, strict=True) if m == 0)
+    zero = [p for p, m in zip(parities, masks, strict=True) if m == 0]
+    assert zero and all(p is False for p in zero)
     rng = np.random.default_rng(13)
     assert not evaluate(np.zeros(num_outcomes, dtype=int)).any()
     for _ in range(100):
@@ -305,9 +311,10 @@ def test_no_dfthc_operator_survives_at_device_level():
 @pytest.mark.parametrize(("shape", "control_value"),
                          [(SMALL[0], None), (((3, 3), ((0, 2), (0, 6)), 3, 2, 3), 1)])
 def test_rule_is_valid_in_tape_mode(shape, control_value):
-    """T2 in tape mode: the measured outcomes and their parities are MeasurementValues."""
-    widths, live, width, _, _ = shape
-    table = random_table(widths, live, width)
+    """T2 in tape mode: the measured outcomes and their parities are MeasurementValues; the first
+    block is zero, so the counting twin's zero masks declare no conditional."""
+    widths, live, width, k, _ = shape
+    table = random_table(widths, live, width, zero=range(2**k))
     wires, _ = layout(shape, control_value)
     qp.testing.assert_valid_decomp_rule(make_erase(table, shape, control_value, wires),
                                         _qroam_erase, check_matrix=False)

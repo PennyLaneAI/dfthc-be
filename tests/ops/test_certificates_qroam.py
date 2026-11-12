@@ -28,12 +28,12 @@ from dfthc.testing.tape import decompose_for_simulation
 pytestmark = pytest.mark.slow
 
 
-def random_table(widths, live_ranges, width, seed=5):
+def random_table(widths, live_ranges, width, seed=5, zero=()):
     rng = np.random.default_rng(seed)
     (lo1, hi1), *rest = live_ranges
     addresses = ([(v << widths[1]) | u for v in range(lo1, hi1) for u in range(*rest[0])]
                  if rest else list(range(lo1, hi1)))
-    return tuple((a, (int(rng.integers(0, 2**width)),)) for a in addresses)
+    return tuple((a, (int(rng.integers(0, 2**width)) * (a not in zero),)) for a in addresses)
 
 
 def erase_shapes(p):
@@ -41,13 +41,17 @@ def erase_shapes(p):
             ((p.w_x, p.w_b), ((0, p.RC), (0, p.B + 1)), p.d2, p.k2, p.ke2 + p.w_b)]
 
 
-# The outer and inner shapes of both test presets (k = 1), and two k >= 2 shapes with dead
-# positions (X_o = 5 with k = 2; rows [0, 2) of 3 bits with (B + 1, k2) = (6, 2)), one enabled.
+# The outer and inner shapes of both test presets (k = 1); X_o = 5 with k = 2 (dead positions)
+# on the ob = 0 fallback; rows [0, 3) of 3 bits with (B + 1, k2) = (6, 2) (dead positions, row 1
+# zero so its masks are zero, the last fixup leaf partly covered), enabled with value 1 (ob = 4)
+# and with value 0 (ob = 5: a 32-wire one-hot, 12 of them extra_onehot).
+INNER_6_2 = ((3, 3), ((0, 3), (0, 6)), 5, 2)
 SHAPES = erase_shapes(H2_STO3G_TEST) + erase_shapes(H2_631G_TEST) + [
-    ((3,), ((0, 5),), 3, 2, 2), ((3, 3), ((0, 2), (0, 6)), 5, 2, 4)]
-CASES = [(shape, None) for shape in SHAPES] + [(SHAPES[-1], 0)]
-IDS = ["sto3g-outer", "sto3g-inner", "631g-outer", "631g-inner", "outer-k2", "inner-6-2",
-       "inner-6-2-enable0"]
+    ((3,), ((0, 5),), 3, 2, 0), (*INNER_6_2, 4), (*INNER_6_2, 5)]
+CASES = [(shape, None, ()) for shape in SHAPES[:5]] + [
+    (SHAPES[5], 1, range(8, 16)), (SHAPES[6], 0, range(8, 16))]
+IDS = ["sto3g-outer", "sto3g-inner", "631g-outer", "631g-inner", "outer-k2-ob0",
+       "inner-6-2-enable1", "inner-6-2-ob5-enable0"]
 
 
 def layout(shape, control_value):
@@ -80,10 +84,10 @@ def sorted_terms(state):
     return state.keys[order], state.amps[order]
 
 
-@pytest.mark.parametrize(("shape", "control_value"), CASES, ids=IDS)
-def test_read_erase_round_trip_certificate(shape, control_value):
+@pytest.mark.parametrize(("shape", "control_value", "zero"), CASES, ids=IDS)
+def test_read_erase_round_trip_certificate(shape, control_value, zero):
     widths, live, width, k, ob = shape
-    table = random_table(widths, live, width)
+    table = random_table(widths, live, width, zero=zero)
     wires, num_wires, read_work, erase_work = layout(shape, control_value)
     words = QROAMRead.leaf_words_from_table(table, address_widths=widths, live_ranges=live,
                                             width=width, block_bits=k)

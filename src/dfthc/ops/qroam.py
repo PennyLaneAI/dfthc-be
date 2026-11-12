@@ -13,8 +13,9 @@ integer is :meth:`QROAMRead.loaded_bits`. The read's dynamic ``leaf_words`` hold
 wire order instead: bit ``s`` of word ``w`` of block position ``p`` is the bit for wire
 ``32 w + s`` of that position's register, which is entry bit ``width - 1 - (32 w + s)``
 (:meth:`QROAMRead.leaf_words_from_table` converts a table).
-Bit ``i`` of ``loaded_bits`` is the wire ``M - 1 - i`` of ``target ‖ junk``, so the erase passes
-its outcomes to :func:`dfthc.compile.mcm_parities` in reverse wire order.
+With ``M = 2**block_bits * width``, the qubits of ``target ‖ junk`` that the erase measures, bit
+``i`` of ``loaded_bits`` is the wire ``M - 1 - i`` of ``target ‖ junk``, so the erase passes its
+outcomes to :func:`dfthc.compile.mcm_parities` in reverse wire order.
 """
 
 from __future__ import annotations
@@ -808,7 +809,10 @@ class QROAMErase(Operator2):
     M = 416.
 
     **Paper and dfthcbe.** Steps 21 and 26: the measured erase of Berry et al. (Quantum 3, 208,
-    App. C). dfthcbe: the erases inside its unprepares.
+    App. C). Its fixups are the phase-fixup terms of PRX Eqs. (B50) (inner) and (B53) (outer),
+    whose totals also undo the swaps and the inequality test; in arXiv:2502.15882v1 these are
+    Eqs. (123) and (126), and the inner fixup term alone is Eq. (122). dfthcbe: the erases inside
+    its unprepares.
 
     **Example.**
 
