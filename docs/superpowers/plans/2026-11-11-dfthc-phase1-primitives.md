@@ -16,6 +16,8 @@ This file holds Tasks 1C.1 to 1C.6 of the master plan (`docs/superpowers/plans/2
 
 **Revision 2 (2026-11-12, Task G0.1)** brings in the G0 decision "K-1 at G0" (ledger): Task 1C.3's `QROAMRead` loads each unary leaf with one `qp.for_loop` over a dynamic `int64` array of per-leaf words ("Appendix: per-leaf read loads"), with a compiled read check at K = 16 and width 40; Tasks 1C.4 and 1C.5 change only where their tests build a read; the Global Constraints' rules 3 to 7 follow the amended spec 7.4; the per-commit base is `main`'s 225 tests at G0. Revision 2 resynced the replica's `main`-owned files to `main` at `e0d3afb` (Task 0.2c's `compile.py` and canaries, the Task 0.9c to 0.9e spikes) and replayed Tasks 1C.3 to 1C.5, RED then GREEN, with the files of Tasks 1C.1, 1C.6 and 1C.2 present but their unchanged tests not re-run (`.scratch/plan-check/stages/g0-1/run_stages_g01.sh`, log `stages/g0-1/stages-g01.log`; one worker, under the watchdog, 277 s at a peak of 526 MB). Every Workstream C per-commit test then ran once on the resynced replica (log `stages/g0-1/ops-per-commit-rev2.log`). Review round 1 (GPT-5.6) added `rtol=0` to the 17 tolerance checks of the Workstream C tests, so every `np.allclose` states both tolerances (HANDOFF section 6, test tolerances), and made `test_compiled_read_on_lightning[3]` assert the flagless read's X bound; the eight affected test files then passed serially under the watchdog (194 per-commit tests in 284 s at a peak of 493 MB, and the 7 slow certificates; log `stages/g0-1/review1/rtol-rerun.log`).
 
+**Revision 3 (2026-11-12, Task G0.2)**: the certificates of Task 1C.5 assert, on the tape they certify, that it has fix-up conditionals and that `nonlinear_conditionals` (Task 1B.2's helper in `dfthc.testing.sparse_sim`) flags none of them, so every conditional is a `PauliZ` or `CZ` with a GF(2)-linear predicate, the premise of spec 12.5's conclusion; they start from a seeded random complex amplitude on every value of the address and control wires instead of `phased_prepare`'s four amplitudes, so any permutation or relative phase of the addresses is caught. The three planned `QROAMRead` docstrings (Tasks 1C.3 to 1C.5) say that the flagless leaf's loads are X gates (G0.1 re-check, Minor 1). The replica's `sparse_sim.py` was synced from `main` (Task 1B.2, `8758739`); the smallest certificate, `sto3g-outer`, passed with it (one worker, under the watchdog, 27 s at a peak of 372 MB; log `.scratch/plan-check/stages/g0-2/certificate-dry-run.log`), and a probe confirmed that its tape holds 4 conditional `CZ`s, none flagged, and that a conditional `PauliX` or a `CZ` on the AND of two outcomes is flagged (`stages/g0-2/certificate-premise-probe.log`). The orchestrator then ran all seven certificates (7 passed, serially under the watchdog, 2.6 s at a peak of 183 MB) and re-ran the mutation check against them, with the same failing cases as in revision 1 (log `stages/g0-2/1c-erase-mutants-rev3.log`). No test count changes.
+
 **Load.** The dry-run ran when lane-a signalled a quiet machine; the `slow` compiles of revision 1 ran alone, each under `dfthc.testing.watchdog.run_watched`. Timings are from the development laptop and vary with its load.
 
 ---
@@ -46,6 +48,7 @@ The exact old and new texts of revision 1 are in `phase1c-doc-edits.md` (written
    - **1C.4 and 1C.5** are unchanged except their expected read counts and the tests that build a read.
    - **Global Constraints** rules 3 to 7 follow the amended spec 7.4 (rule 4: loops in `QROAMRead` and `ControlledWalkPower` only, both never adjointed or controlled; rule 6: explicit adjoint and controlled classes; rule 7: every class's base rule is pinned). This file and the master plan include `templates/_global_constraints_g01.md`; the Phase 0 and Phase 1 A and B plans keep the shared fragment unchanged.
    - **1C.6** is unchanged: `C(ZeroReflection)` stays a tested primitive; Phase 3's `ControlledRefT2` and `ControlledRefAB` emit the multi-controlled Z with its helper instead of requesting `C(ZeroReflection)` (spec 7.4 rule 6).
+8. **Revision 3 (Task G0.2): the certificates' premise check** (master-plan edit G2M1, spec edit G2S2 in `g0-2-doc-edits.md`). **1C.5**'s certificates assert `not nonlinear_conditionals(operations)` and that the tape has conditionals, and start from a random-amplitude state of the address and control wires; their count is unchanged.
 
 ## Findings for other plans and documents
 
@@ -145,7 +148,7 @@ GATE_SET = {
 | `tests/ops/test_qroam_read.py` | 1C.3 | every computational address, the K = 16 compiled check, counts, the leaf-word contract, helpers |
 | `tests/ops/test_phase_fixup.py` | 1C.4 | phases on the covered set, hints, counts |
 | `tests/ops/test_qroam_erase.py` | 1C.5 | counts, rule selection, smoke runs, `mcm_parities` linearity |
-| `tests/ops/test_certificates_qroam.py` | 1C.5 | spec 12.5 certificates (`slow`) |
+| `tests/ops/test_certificates_qroam.py` | 1C.5 | spec 12.5 certificates and their premise check (`slow`) |
 | `src/dfthc/ops/reflections.py` | 1C.6 | `ZeroReflection` (Phase 3 adds `RefT2`, `RefAB`) |
 | `tests/ops/test_zero_reflection.py` | 1C.6 | exact matrices, controlled version, counts |
 
@@ -2321,10 +2324,11 @@ class QROAMRead(Operator2):
     **Cost.** :func:`dfthc.costs.qroam_read` with ``ranges = visited_ranges(...)``:
     :math:`T = U` (or :math:`U_2`) over the visited block ranges, controlled if there is an
     enable, plus :math:`(2^k - 1)` ``width``; ``M = 0``; ``A = U``. At FeMoco-54: outer
-    84 + 72 = 156, inner 543 + 390 = 933. The rule declares ``num_leaves K width`` load CNOTs
-    (every position and bit, padding included) and is registered with ``exact=False``: the CNOT
-    count is an upper bound, which ``qp.analyze`` reports as well, because it counts every
-    unhinted load conditional; T, M and A do not depend on the data and are exact.
+    84 + 72 = 156, inner 543 + 390 = 933. The rule declares ``num_leaves K width`` load CNOTs,
+    or X gates for the flagless leaf (every position and bit, padding included), and is
+    registered with ``exact=False``: the CNOT or X count is an upper bound, which ``qp.analyze``
+    reports as well, because it counts every unhinted load conditional; T, M and A do not depend
+    on the data and are exact.
 
     **Paper and dfthcbe.** Steps 2 and 6 (and the engine of 10 and 11); the QROAM of Berry et al.
     (Quantum 3, 208) with the junk kept until a measured erase. dfthcbe: the reads in
@@ -3170,10 +3174,11 @@ class QROAMRead(Operator2):
     **Cost.** :func:`dfthc.costs.qroam_read` with ``ranges = visited_ranges(...)``:
     :math:`T = U` (or :math:`U_2`) over the visited block ranges, controlled if there is an
     enable, plus :math:`(2^k - 1)` ``width``; ``M = 0``; ``A = U``. At FeMoco-54: outer
-    84 + 72 = 156, inner 543 + 390 = 933. The rule declares ``num_leaves K width`` load CNOTs
-    (every position and bit, padding included) and is registered with ``exact=False``: the CNOT
-    count is an upper bound, which ``qp.analyze`` reports as well, because it counts every
-    unhinted load conditional; T, M and A do not depend on the data and are exact.
+    84 + 72 = 156, inner 543 + 390 = 933. The rule declares ``num_leaves K width`` load CNOTs,
+    or X gates for the flagless leaf (every position and bit, padding included), and is
+    registered with ``exact=False``: the CNOT or X count is an upper bound, which ``qp.analyze``
+    reports as well, because it counts every unhinted load conditional; T, M and A do not depend
+    on the data and are exact.
 
     **Paper and dfthcbe.** Steps 2 and 6 (and the engine of 10 and 11); the QROAM of Berry et al.
     (Quantum 3, 208) with the junk kept until a measured erase. dfthcbe: the reads in
@@ -3599,7 +3604,7 @@ git commit -m "Add PhaseFixup and emit_phase_fixup"
 - Create: `tests/ops/test_qroam_erase.py`, `tests/ops/test_certificates_qroam.py` (marked `slow`)
 
 **Interfaces:**
-- Consumes: Task 1C.4's `qroam.py`; `dfthc.compile.mcm_parities`, `pack_masks`, `packed_parities` (Task 0.2; K-3 passed, so they stay mode-agnostic); `dfthc.costs.qroam_erase`, `qroam_read`, `outer_unprepare`, `inner_unprepare`, `flagged_uniform_unprep` (1A.7 with its revision 1); `dfthc.testing.resources.verbose_program`, `chosen_rules`, `classify_rule_warning` (0.2, 0.2b); `SparseSimulator`, `ForcedPolicy`, `decompose_for_simulation` (1B.2).
+- Consumes: Task 1C.4's `qroam.py`; `dfthc.compile.mcm_parities`, `pack_masks`, `packed_parities` (Task 0.2; K-3 passed, so they stay mode-agnostic); `dfthc.costs.qroam_erase`, `qroam_read`, `outer_unprepare`, `inner_unprepare`, `flagged_uniform_unprep` (1A.7 with its revision 1); `dfthc.testing.resources.verbose_program`, `chosen_rules`, `classify_rule_warning` (0.2, 0.2b); `SparseSimulator`, `ForcedPolicy`, `SparseState`, `nonlinear_conditionals`, `decompose_for_simulation` (1B.2).
 - Produces, in `dfthc.ops.qroam`:
   - `QROAMEmitter.measure_x(wire)` (`H`, then `qp.measure(wire, reset=True)`) and `parities(outcomes, masks)` (`mcm_parities`; counting: `False` exactly for zero masks);
   - `QROAMErase(table, address_widths, live_ranges, width, block_bits, control_value, onehot_bits, address, target, junk, work, control, extra_onehot)`: the read's compilable arguments plus `0 <= onehot_bits <= sum(address_widths)`;
@@ -3613,7 +3618,7 @@ git commit -m "Add PhaseFixup and emit_phase_fixup"
 - Lightning smoke runs: read then erase (k = 2, ob = 2) restore a phased address state for seeds 0 to 4; the read's `leaf_words` come from the erase's table (`QROAMRead.leaf_words_from_table`).
 - `mcm_parities` linearity: the capture core at the FeMoco-54 inner-erase shape (8,640 masks from a random FeMoco-shape inner table, 416 outcomes, 100 random pairs; classical, nothing compiled) and the tape implementation at the `H2_631G_TEST` inner erase (zero masks give `False`).
 - T5; T2 in tape mode at two sizes (one enabled); `required_wires` and two constructor violations.
-- Certificates (spec 12.5; `slow`, 7 tests, 3 to 7 s together): for the outer and inner erases of both test presets, an outer shape with k = 2 and `X_o = 5`, an inner shape with (B+1, k2) = (6, 2), and that shape enabled with control value 0, run read then erase on the sparse simulator in strict mode under the zero schedule and every unit schedule (M + 1 runs; M = 8 to 28). Each run must consume exactly M forced outcomes and return exactly the phased input state of address and control with every ancilla in `|0>`. Mutation check (`.scratch/plan-check/stages/mutate_erase_1c.py`, mutant sources in `stages/mutants/`, log `stages/1c-erase-mutants.log`, which names every failing case): outcomes passed in wire order instead of reversed fail 7 of 7 shapes; the fixup over the live instead of the loaded set fails the 5 shapes with dead positions (`sto3g-outer` and `631g-outer`, which have none, pass); the first conditional dropped fails 7 of 7.
+- Certificates (spec 12.5; `slow`, 7 tests, 3 to 7 s together): for the outer and inner erases of both test presets, an outer shape with k = 2 and `X_o = 5`, an inner shape with (B+1, k2) = (6, 2), and that shape enabled with control value 0, run read then erase on the sparse simulator in strict mode under the zero schedule and every unit schedule (M + 1 runs; M = 8 to 20). Each test first asserts, on the decomposed tape it certifies, that the tape has conditionals and that `nonlinear_conditionals(operations)` is empty: every fix-up conditional is a `PauliZ` or `CZ` with a GF(2)-linear predicate (spec 12.5, premise check). Each run starts from a seeded random complex amplitude on every value of the address and control wires (`random_input_state`), must consume exactly M forced outcomes and must return exactly that state with every ancilla in `|0>`. Mutation check (`.scratch/plan-check/stages/mutate_erase_1c.py`, mutant sources in `stages/mutants/`; logs `stages/1c-erase-mutants.log` for revision 1's phased input and `stages/g0-2/1c-erase-mutants-rev3.log` for the random input, with the same failing cases, each naming every failing case): outcomes passed in wire order instead of reversed fail 7 of 7 shapes; the fixup over the live instead of the loaded set fails the 5 shapes with dead positions (`sto3g-outer` and `631g-outer`, which have none, pass); the first conditional dropped fails 7 of 7.
 
 **Definition of done:** `19 passed` targeted (17 in the per-commit tier), and the certificates `7 passed` run targeted; the 1C.3 and 1C.4 tests still pass; the per-commit tier passes; `ruff check .` clean; one commit.
 
@@ -3958,19 +3963,26 @@ Create `tests/ops/test_certificates_qroam.py`:
 The phase an erase leaves on address ``a`` is ``(-1)^(xi . g(a))`` and its fixup applies
 ``(-1)^f_xi(a)``, both GF(2)-linear in the outcome vector ``xi`` (test_qroam_erase checks
 ``mcm_parities``). So the residual is linear, and exact restoration under the zero vector and
-under every unit vector, M + 1 forced runs, certifies all 2**M outcomes. Each run starts from a
-phased address state (non-uniform phases, so a permuted or sign-flipped address is caught) and
-must end in exactly that state with every ancilla in |0>; strict mode also asserts that every
-erase measurement has probability 1/2.
+under every unit vector, M + 1 forced runs, certifies all 2**M outcomes. That conclusion also
+needs every conditional of the certified tape to be diagonal with a GF(2)-linear predicate,
+which ``nonlinear_conditionals`` checks on the tape itself. Each run starts from a random
+complex amplitude on every value of the address and control wires (so any permutation or
+relative phase of the addresses is caught) and must end in exactly that state with every
+ancilla in |0>; strict mode also asserts that every erase measurement has probability 1/2.
 """
 
 import numpy as np
-import pennylane as qp
 import pytest
+from pennylane.ops import Conditional
 
 from dfthc.ops.qroam import QROAMErase, QROAMRead
 from dfthc.params import H2_631G_TEST, H2_STO3G_TEST
-from dfthc.testing.sparse_sim import ForcedPolicy, SparseSimulator
+from dfthc.testing.sparse_sim import (
+    ForcedPolicy,
+    SparseSimulator,
+    SparseState,
+    nonlinear_conditionals,
+)
 from dfthc.testing.tape import decompose_for_simulation
 
 pytestmark = pytest.mark.slow
@@ -4010,14 +4022,17 @@ def layout(shape, control_value):
     return wires, start, read["work"], erase["work"]
 
 
-def phased_prepare(wires):
-    for wire in wires:
-        qp.H(wire)
-    for position, wire in enumerate(wires):
-        if position % 2 == 0:
-            qp.S(wire)
-    for first, second in zip(wires[:-1], wires[1:], strict=True):
-        qp.CZ([first, second])
+def random_input_state(num_wires, inputs, seed=11):
+    """A random complex amplitude on every basis value of ``inputs``, every other wire |0>."""
+    rng = np.random.default_rng(seed)
+    size = 2 ** len(inputs)
+    amps = rng.normal(size=size) + 1j * rng.normal(size=size)
+    keys = []
+    for v in range(size):
+        value = sum(((v >> (len(inputs) - 1 - i)) & 1) << (num_wires - 1 - wire)
+                    for i, wire in enumerate(inputs))
+        keys.append(SparseState.basis(num_wires, value).keys[0])
+    return SparseState(num_wires, np.array(keys), amps / np.linalg.norm(amps))
 
 
 def sorted_terms(state):
@@ -4030,12 +4045,10 @@ def test_read_erase_round_trip_certificate(shape, control_value):
     widths, live, width, k, ob = shape
     table = random_table(widths, live, width)
     wires, num_wires, read_work, erase_work = layout(shape, control_value)
-    inputs = wires["address"] + wires["control"]
     words = QROAMRead.leaf_words_from_table(table, address_widths=widths, live_ranges=live,
                                             width=width, block_bits=k)
 
     def round_trip():
-        phased_prepare(inputs)
         QROAMRead(words, widths, live, width, k, control_value, wires["address"],
                   wires["target"], wires["junk"], wires["work"][:read_work], wires["control"])
         QROAMErase(table, widths, live, width, k, control_value, ob, wires["address"],
@@ -4043,15 +4056,16 @@ def test_read_erase_round_trip_certificate(shape, control_value):
                    wires["extra_onehot"])
 
     operations = decompose_for_simulation(round_trip).operations
-    reference = SparseSimulator(num_wires).run(
-        decompose_for_simulation(lambda: phased_prepare(inputs)).operations)
-    expected_keys, expected_amps = sorted_terms(reference)
+    assert any(isinstance(op, Conditional) for op in operations)
+    assert not nonlinear_conditionals(operations)
+    initial = random_input_state(num_wires, wires["address"] + wires["control"])
+    expected_keys, expected_amps = sorted_terms(initial)
     num_measured = 2**k * width
     schedules = [[0] * num_measured] + [
         [int(i == j) for j in range(num_measured)] for i in range(num_measured)]
     for schedule in schedules:
         simulator = SparseSimulator(num_wires, policy=ForcedPolicy(schedule), strict=True)
-        keys, amps = sorted_terms(simulator.run(operations))
+        keys, amps = sorted_terms(simulator.run(operations, initial_state=initial))
         assert simulator.policy.position == num_measured
         assert np.array_equal(keys, expected_keys), schedule
         assert np.allclose(amps, expected_amps, rtol=0, atol=1e-12), schedule
@@ -4431,10 +4445,11 @@ class QROAMRead(Operator2):
     **Cost.** :func:`dfthc.costs.qroam_read` with ``ranges = visited_ranges(...)``:
     :math:`T = U` (or :math:`U_2`) over the visited block ranges, controlled if there is an
     enable, plus :math:`(2^k - 1)` ``width``; ``M = 0``; ``A = U``. At FeMoco-54: outer
-    84 + 72 = 156, inner 543 + 390 = 933. The rule declares ``num_leaves K width`` load CNOTs
-    (every position and bit, padding included) and is registered with ``exact=False``: the CNOT
-    count is an upper bound, which ``qp.analyze`` reports as well, because it counts every
-    unhinted load conditional; T, M and A do not depend on the data and are exact.
+    84 + 72 = 156, inner 543 + 390 = 933. The rule declares ``num_leaves K width`` load CNOTs,
+    or X gates for the flagless leaf (every position and bit, padding included), and is
+    registered with ``exact=False``: the CNOT or X count is an upper bound, which ``qp.analyze``
+    reports as well, because it counts every unhinted load conditional; T, M and A do not depend
+    on the data and are exact.
 
     **Paper and dfthcbe.** Steps 2 and 6 (and the engine of 10 and 11); the QROAM of Berry et al.
     (Quantum 3, 208) with the junk kept until a measured erase. dfthcbe: the reads in

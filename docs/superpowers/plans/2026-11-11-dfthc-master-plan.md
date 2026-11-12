@@ -712,7 +712,7 @@ section 3, item 19); the code-level plan's revision 2 (Task G0.1) holds it.
   - T4: FeMoco outer T = 36, M = 96; inner T = 196, M = 416 (closed forms); both test presets' outer and inner erases compiled, an enabled erase with `extra_onehot`, and `MID_NAPHTHALENE` outer and inner (`slow`), each with T, M and A exact.
   - `fixup_high_ranges` is the oracle of `dfthc.costs`' erase ranges: `outer_unprepare` and `inner_unprepare` agree with it at the presets and on nonaligned shapes (`ke1 < k1`, `K1` not dividing `X_o`; section 3, item 17).
   - T6 signature: M = K width, A = T, T equals the erase closed form and differs from a re-read; the CZs count their hinted expectation; the verbose listing names `_qroam_erase`; `qp.adjoint` and `qp.ctrl` of the erase fail to compile with the expected warning (spec 7.4 rules 5 and 12).
-  - Spec 12.5 certificates (`slow`), sparse simulator in strict mode with forced schedules (zero and every unit vector): read → erase round trips in the outer and inner shapes of both test presets, plus a k = 2 outer shape, a (6, 2) inner shape and its enabled form; a phased address state is restored exactly and every ancilla is `|0>`.
+  - Spec 12.5 certificates (`slow`), sparse simulator in strict mode with forced schedules (zero and every unit vector): read → erase round trips in the outer and inner shapes of both test presets, plus a k = 2 outer shape, a (6, 2) inner shape and its enabled form; a state with a seeded random amplitude on every value of the address and control wires is restored exactly and every ancilla is `|0>`. Each certified tape has fix-up conditionals, and `nonlinear_conditionals` flags none of them (spec 12.5, premise check).
   - Lightning smoke run with five seeds (k = 2).
   - The linearity of `mcm_parities`: the capture core at the FeMoco-54 inner-erase shape (8,640 masks, 416 outcomes; classical) and the tape implementation at the `H2_631G_TEST` inner erase.
   - T2 in tape mode at two sizes; T5; validation.
@@ -742,7 +742,7 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
   - T4: prepare T = 210; unprepare T = 69 with M = 96 at FeMoco.
   - T3: the succ = 1 part carries √p̃(x) with p̃ from `alias_probabilities` (lightning at the H2 test shape).
   - T6 signature: M = d1 + (K1 − 1) d1 and A as expected.
-  - Certificate `OuterPrepare` → `OuterUnprepare`.
+  - Certificate `OuterPrepare` → `OuterUnprepare`, asserting `not nonlinear_conditionals(operations)` on the decomposed tape it certifies (spec 12.5): its only conditionals are the `QROAMErase` fix-ups, `PauliZ` and `CZ` on `mcm_parities` predicates; the measured uncomputes of the comparators and of `FlaggedUniformPrep` are `Adjoint(TemporaryAND)` gates, not conditionals.
 - **Definition of done:** tests green.
 
 #### Task 2D.2: `InnerPrepare`, `InnerUnprepare` and `InnerSigns`
@@ -753,7 +753,7 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
 - **Acceptance tests:**
   - T4 at FeMoco: 971 / 217 / M 416; `InnerSigns` costs 0.
   - Exhaustive failed-address tests items 2 and 3 (spec 12.1).
-  - Certificate `InnerPrepare` → `InnerUnprepare`.
+  - Certificate `InnerPrepare` → `InnerUnprepare`, asserting `not nonlinear_conditionals(operations)` on the decomposed tape it certifies (spec 12.5): its only conditionals are the `QROAMErase` fix-ups, `PauliZ` and `CZ` on `mcm_parities` predicates; the measured uncomputes of the comparators and of `FlaggedUniformPrep` are `Adjoint(TemporaryAND)` gates, not conditionals.
 - **Definition of done:** tests green.
 
 #### Task 2E.1: `TailAngleLoad`, `SFAngleLoad`
@@ -772,7 +772,7 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
 - **Interfaces produced:** `AngleErase(tail_angles, sf_angles, n_plus, N, R, B, C, b_rot, sf_onehot_bits, angles, b_neq_B, G0, G1, x_o, r, b, work)`, following the four-step order of spec 9.17.
 - **Acceptance tests:**
   - T4: T = 102, M = 798 at FeMoco; two small sizes.
-  - Certificate loads → `AngleErase` (spec 12.5); the conditionals are hinted.
+  - Certificate loads → `AngleErase` (spec 12.5); the conditionals are hinted. It asserts `not nonlinear_conditionals(operations)` on the decomposed tape it certifies: both fix-ups (SF and tail, spec 9.17) go through `emit_phase_fixup`, so every conditional is a `PauliZ` or `CZ` on an `mcm_parities` predicate of the outcomes (the tail's over the concatenated angle and `G0`, `G1` outcomes).
 - **Definition of done:** tests green.
 
 #### Task 2E.3: `SpinMux`, `SpinSwap`
@@ -891,7 +891,7 @@ Common to the operator classes of Phase 4: `ControlledToyWalk`, the one explicit
   - `energy_from_phase(phi, Lambda, shift=1.0) -> float` and `physical_energy(E_SA, e_sos_phys, core_energy=0.0) -> float`.
   - `ToyWalk(system, ancilla)`, `ControlledToyWalk(control, system, ancilla)` (control only the toy reflection; spec 11.4) and `ToyControlledWalkPower`, which loops over `ControlledToyWalk`.
 - **Acceptance tests:**
-  - At t = 3 with input |0⟩: the exact distribution φ ∈ {1/8, 7/8} with probability cos²(π/8) and {3/8, 5/8} with sin²(π/8) (sparse simulator `BranchPolicy`).
+  - At t = 3 with input |0⟩: the exact distribution φ ∈ {1/8, 7/8} with probability cos²(π/8) and {3/8, 5/8} with sin²(π/8) (sparse simulator `BranchPolicy`). Where the program has erasure measurements, they go to the policy's `otherwise` and the run is `run_branches` on a simulator with `strict=True`, so every erasure outcome has probability 1/2 and the unweighted `otherwise` leaves the branch probabilities exact. Do not combine `BranchPolicy` with `otherwise=SeededPolicy(...)` where independent samples per branch are wanted: every branch path replays the same seeded draws (`run_branches`' docstring).
   - The `lightning.qubit` smoke test with 2,000 shots agrees within five standard deviations.
   - `earlier_bits` has shape (t,) in every round, including round t − 1.
   - Energy helpers match spec 11.1.

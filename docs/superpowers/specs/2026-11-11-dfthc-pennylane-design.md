@@ -1283,7 +1283,7 @@ Supporting tests:
 | `TemporaryAND` | honour `control_values`; assert the target is 0 on every term, then XOR in the AND |
 | `Adjoint(TemporaryAND)` | honour `control_values`; assert the target equals the AND on every term, then clear it |
 | `PhaseGradientStatePrep` | assert the register is $\lvert 0\rangle$, then build its product state |
-| `MidMeasure` | compute $p$ for outcome 1. Choose the outcome by `postselect` if set (raise if its probability is below $10^{-12}$), else by the policy. Project, renormalize by $1/\sqrt{p_{\mathrm{outcome}}}$, record the outcome under the operator's identity, and if `reset=True` and the outcome is 1, flip the bit to 0. |
+| `MidMeasure` | compute $p$ for outcome 1. Choose the outcome by `postselect` if set (raise if its probability is below $10^{-12}$), else by the policy. Project, renormalize by the kept weight (to norm 1), record the outcome under the operator's identity, and if `reset=True` and the outcome is 1, flip the bit to 0. |
 | `Conditional` | evaluate `op.meas_val.concretize(record)` on the recorded outcomes. If true, dispatch `op.base` recursively, so nested conditionals work. |
 
 The `TemporaryAND` assertions turn every precondition into a check.
@@ -1329,6 +1329,7 @@ Correctness for every outcome of an erase block is proved with GF(2) linearity, 
   - the composite unprepares, each preceded by its prepare: `OuterPrepare` → `OuterUnprepare` and `InnerPrepare` → `InnerUnprepare`, including the comparators and swaps in between;
   - if Q-1 variant (b) is adopted, `OuterPrepare` → junk measurement → `OuterUnprepareFromOutcomes`, and likewise for the inner pair, with $\xi$ ranging over the concatenated target and junk outcomes.
 - **The $p = 1/2$ check** of strict mode stays as a precondition check only.
+- **Premise check.** The conclusion also requires every conditional of the certified block, that is every fix-up, to be diagonal (`PauliZ` or `CZ`) with a predicate that is GF(2)-linear in the outcomes. The certificates assert this on the decomposed tape they certify (`dfthc.testing.sparse_sim.nonlinear_conditionals`).
 - **End-to-end schedules are smoke tests:** S0 (every outcome 0), S1 (every outcome 1) and seeded random schedules, used per tier as in §12.6.
 
 ### 12.6 Organization, tiers and budgets
