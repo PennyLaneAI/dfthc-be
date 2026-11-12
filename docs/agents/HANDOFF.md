@@ -329,6 +329,7 @@ differs from the spec's original claim (observed 2026-11-11).
 | L-23 | List dynamic arguments not canonicalized | convert in `__init__` |
 | L-24 | Compilable ints limited to int64 | 32-bit word tuples |
 | L-25 | `qp.adjoint(Op)(*positional)` traces arguments | `qp.adjoint(Op(...))` |
+| L-26 | Unsigned dynamic arguments (`uint32`, MLIR `ui32`) get no decomposition rule | signed arrays; table words `int64` with 32 data bits |
 
 ## 8. Git rules
 

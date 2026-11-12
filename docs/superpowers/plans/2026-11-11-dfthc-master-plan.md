@@ -166,6 +166,7 @@ These shape the later tasks and are recorded in HANDOFF and in the Phase 0 canar
 11. **Resident memory undercounts under memory pressure.** With two test workers allocating at once, 300 MB of random data read as 190 to 220 MB resident, and a 400 MB process tree stayed below a 200 MB cap. The watchdog therefore sums the physical footprint, which equals the resident size while memory is free and keeps counting compressed and swapped-out pages.
 12. **`qp.density_matrix` is not supported under capture;** compiled state checks use `qp.state()`. Under capture, never `qp.apply` an operator you just constructed (it is queued twice).
 13. **Measuring adjoint rules under control (L-2):** the solver silently controls the unitary inverse of the base rule instead of failing. This is one more reason for spec 7.4 rule 5: never control a measuring operator.
+14. **Dynamic arrays must be signed (L-26, Task 0.9b).** Catalyst builds no decomposition rule for an operator with an unsigned dynamic argument. Tables passed as dynamic arrays use `int64` words holding 32 data bits each (ledger decision "Table words are `int64`").
 
 ---
 
