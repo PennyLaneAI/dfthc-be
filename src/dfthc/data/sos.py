@@ -6,7 +6,8 @@ conflated (spec 3.2.1):
 - the walk frame on the whole Fock space: ``H_walk = H_SA + E_SoS^walk``, with ``H_walk`` built
   from :func:`walk_integrals` and ``E_SoS^walk`` from the factors (:func:`e_sos_walk`);
 - the physical frame on the ``eta``-electron sector: ``H_phys = H_SA + E_SoS^phys``, with
-  ``E_SoS^phys`` the input datum ``summary.json["e_sos"]`` (:func:`e_sos_phys`).
+  ``E_SoS^phys`` the input datum ``summary.json["e_sos"]`` (:func:`e_sos_phys`). This holds
+  exactly for exactly factorized instances and up to the factorization error otherwise.
 
 They differ on the sector by the constant :func:`frame_shift`. The dense matrices act on the
 ``4**N`` Fock space of :mod:`dfthc.data.fermion` (``N <= 4``).
@@ -94,6 +95,7 @@ def h_sa_dense(factors: DFTHCFactors) -> np.ndarray:
 
     D1: ``sqrt(w_+) a_{u_+, sigma}``; Q1: ``sqrt(w_-) a_{u_-, sigma}^dag``; SF:
     ``(w_B + i/2 sum_{b, sigma} w_b gamma_{u_b sigma 0} gamma_{u_b sigma 1}) / sqrt(2)``.
+    Offset-free: the operator the block encoding encodes, in neither energy frame.
     """
     f, n = factors, factors.N
     a = np.array([[annihilation(p, spin, n) for spin in (0, 1)] for p in range(n)])
@@ -123,5 +125,10 @@ def h_walk_dense(factors: DFTHCFactors) -> np.ndarray:
 
 
 def h_phys_dense(integrals: dict) -> np.ndarray:
-    """``H_phys`` from ``integrals.npz`` (``h1e``, ``eri``), without ``core_energy``."""
+    """``H_phys`` from ``integrals.npz`` (``h1e``, ``eri``), without ``core_energy``.
+
+    The matrix spans the whole Fock space, but ``H_phys = H_SA + E_SoS^phys`` and
+    ``H_phys - H_walk = Delta_eta`` hold only on the ``eta``-electron sector: exactly for exactly
+    factorized instances, up to the factorization error otherwise.
+    """
     return _hamiltonian_matrix(integrals["h1e"], integrals["eri"])
