@@ -18,6 +18,8 @@ This file holds Tasks 1C.1 to 1C.6 of the master plan (`docs/superpowers/plans/2
 
 **Revision 3 (2026-11-12, Task G0.2)**: the certificates of Task 1C.5 assert, on the tape they certify, that it has fix-up conditionals and that `nonlinear_conditionals` (Task 1B.2's helper in `dfthc.testing.sparse_sim`) flags none of them, so every conditional is a `PauliZ` or `CZ` with a GF(2)-linear predicate, the premise of spec 12.5's conclusion; they start from a seeded random complex amplitude on every value of the address and control wires instead of `phased_prepare`'s four amplitudes, so any permutation or relative phase of the addresses is caught. The three planned `QROAMRead` docstrings (Tasks 1C.3 to 1C.5) say that the flagless leaf's loads are X gates (G0.1 re-check, Minor 1). The replica's `sparse_sim.py` was synced from `main` (Task 1B.2, `8758739`); the smallest certificate, `sto3g-outer`, passed with it (one worker, under the watchdog, 27 s at a peak of 372 MB; log `.scratch/plan-check/stages/g0-2/certificate-dry-run.log`), and a probe confirmed that its tape holds 4 conditional `CZ`s, none flagged, and that a conditional `PauliX` or a `CZ` on the AND of two outcomes is flagged (`stages/g0-2/certificate-premise-probe.log`). The orchestrator then ran all seven certificates (7 passed, serially under the watchdog, 2.6 s at a peak of 183 MB) and re-ran the mutation check against them, with the same failing cases as in revision 1 (log `stages/g0-2/1c-erase-mutants-rev3.log`). No test count changes.
 
+**Revision 4 (2026-11-12, after Task 1C.4's review)**: `emit_phase_fixup` in the `qroam.py` blocks of Tasks 1C.4 and 1C.5 rejects an `onehot_bits` outside `[0, sum(address_widths)]` (an out-of-range value sliced the address from a negative index and silently dropped phases) and lists `low` and `onehot` once (a traced one-hot array was indexed once per covered address; Phase 2's `AngleErase` calls the helper directly). These are the lines merged with Task 1C.4 (`be4b378`); the replica's two `qroam.py` sources carry them. The merged tests of Tasks 1C.2, 1C.3, 1C.4 and 1C.6 also hold their review fixes, which this plan's test blocks predate; the test counts are unchanged. Task 1C.5's block is otherwise unchanged.
+
 **Load.** The dry-run ran when lane-a signalled a quiet machine; the `slow` compiles of revision 1 ran alone, each under `dfthc.testing.watchdog.run_watched`. Timings are from the development laptop and vary with its load.
 
 ---
@@ -3510,6 +3512,8 @@ def emit_phase_fixup(parities, *, address, address_widths, covered, onehot, oneh
     """
     emit = QROAMEmitter() if emit is None else emit
     widths, covered = _check_address(address_widths, covered)
+    if not 0 <= onehot_bits <= sum(widths):
+        raise ValueError(f"onehot_bits must be in [0, {sum(widths)}], got {onehot_bits}")
     order = PhaseFixup.address_order(widths, covered)
     if len(parities) != len(order):
         raise ValueError(f"need one parity per covered address ({len(order)}), "
@@ -3518,7 +3522,8 @@ def emit_phase_fixup(parities, *, address, address_widths, covered, onehot, oneh
         raise ValueError(f"onehot needs {2**onehot_bits if onehot_bits else 0} wires, "
                          f"got {len(onehot)}")
     index = {a: i for i, a in enumerate(order)}
-    low = address[len(address) - onehot_bits:]
+    low = list(address[len(address) - onehot_bits:])
+    onehot = list(onehot)
     specs = _high_specs(widths, covered, onehot_bits)
     high_widths = [n for _, n, _, _ in specs]
 
@@ -4781,6 +4786,8 @@ def emit_phase_fixup(parities, *, address, address_widths, covered, onehot, oneh
     """
     emit = QROAMEmitter() if emit is None else emit
     widths, covered = _check_address(address_widths, covered)
+    if not 0 <= onehot_bits <= sum(widths):
+        raise ValueError(f"onehot_bits must be in [0, {sum(widths)}], got {onehot_bits}")
     order = PhaseFixup.address_order(widths, covered)
     if len(parities) != len(order):
         raise ValueError(f"need one parity per covered address ({len(order)}), "
@@ -4789,7 +4796,8 @@ def emit_phase_fixup(parities, *, address, address_widths, covered, onehot, oneh
         raise ValueError(f"onehot needs {2**onehot_bits if onehot_bits else 0} wires, "
                          f"got {len(onehot)}")
     index = {a: i for i, a in enumerate(order)}
-    low = address[len(address) - onehot_bits:]
+    low = list(address[len(address) - onehot_bits:])
+    onehot = list(onehot)
     specs = _high_specs(widths, covered, onehot_bits)
     high_widths = [n for _, n, _, _ in specs]
 
