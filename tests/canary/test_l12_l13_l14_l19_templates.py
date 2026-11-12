@@ -38,7 +38,7 @@ def test_select_swap_qrom_twice_is_not_identity():
 def test_select_swap_qrom_counts_are_symbolic():
     """L-12 and L-22: qp.analyze counts of the select-swap QROM are symbolic."""
 
-    @qp.qjit(capture=True)
+    @qp.qjit(capture=True, enable_aot_compilation=False)
     @qp.decompose(gate_set=GATE_SET)
     @qp.qnode(qp.device("null.qubit", wires=8))
     def circuit():
@@ -53,7 +53,7 @@ def test_select_with_shared_target_crashes():
     """L-13: Select whose operators share a target wire crashes the compiler."""
     result = run_snippet(
         """
-        @qp.qjit(capture=True)
+        @qp.qjit(capture=True, enable_aot_compilation=False)
         @qp.decompose(gate_set=GATE_SET)
         @qp.qnode(qp.device("null.qubit", wires=5))
         def circuit():
@@ -73,7 +73,7 @@ def test_mcx_without_work_wires_has_no_path():
     """L-14: MultiControlledX with four controls and no work wires has no path."""
     result = run_snippet(
         """
-        @qp.qjit(capture=True)
+        @qp.qjit(capture=True, enable_aot_compilation=False)
         @qp.decompose(gate_set=GATE_SET)
         @qp.qnode(qp.device("null.qubit", wires=5))
         def circuit():
@@ -105,7 +105,7 @@ def test_template_has_no_toffoli_level_path(label, statement):
     """
     result = run_snippet(
         f"""
-        @qp.qjit(capture=True)
+        @qp.qjit(capture=True, enable_aot_compilation=False)
         @qp.decompose(gate_set=GATE_SET)
         @qp.qnode(qp.device("null.qubit", wires=21))
         def circuit():

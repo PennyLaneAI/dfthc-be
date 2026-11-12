@@ -86,7 +86,7 @@ def test_pauli_measure_postselect_ignored():
 def test_device_pass_runs():
     """L-16 (catalyst#3275): executing on lightning.qubit decomposes again to device gates."""
 
-    @qp.qjit(capture=True)
+    @qp.qjit(capture=True, enable_aot_compilation=False)
     @qp.decompose(gate_set=GATE_SET)
     @qp.qnode(qp.device("lightning.qubit", wires=3))
     def circuit():

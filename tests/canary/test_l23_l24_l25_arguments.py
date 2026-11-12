@@ -37,7 +37,7 @@ def test_compilable_int_must_fit_int64():
         qp.add_decomps(L24Table, _l24_rule)
 
         def build(value):
-            @qp.qjit(capture=True)
+            @qp.qjit(capture=True, enable_aot_compilation=False)
             @qp.decompose(gate_set={"PauliX"})
             @qp.qnode(qp.device("null.qubit", wires=1))
             def circuit():
@@ -73,7 +73,7 @@ qp.add_decomps(L25Repeat, _l25_rule)
 
 
 def _adjoint_program(form):
-    @qp.qjit(capture=True)
+    @qp.qjit(capture=True, enable_aot_compilation=False)
     @qp.decompose(gate_set={"PauliX"})
     @qp.qnode(qp.device("null.qubit", wires=1))
     def circuit():

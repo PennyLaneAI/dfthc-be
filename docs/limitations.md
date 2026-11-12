@@ -131,9 +131,11 @@ file.
   test of every composite operator (T5).
 - **L-21, distinct tables add rule traces and compile cost grows with table size**
   (catalyst#3173). Canary: `test_each_distinct_table_is_a_separate_rule_compile` (per commit).
-  On 2026-11-11 each distinct table traces its rule exactly twice, and identical tables in one
-  program share those traces: compile time grows with table size, and each distinct table adds
-  its own rule traces.
+  On 2026-11-12 each distinct table traces its rule exactly once per compile, and identical
+  tables in one program share that trace: compile time grows with table size, and each distinct
+  table adds its own rule trace. (Task 0.4 read "twice" on 2026-11-11; the second trace was the
+  decoration-time compile of L-27. The canary now keeps that compile off and pins the doubled
+  count separately.)
   Benchmark: `test_compile_time_scaling` (nightly) compiles 1, 2 and 4 distinct 64-entry tables
   and single tables of 64, 1,024 and 8,640 entries, each in a fresh process under the watchdog.
   It fails at more than twice `tests/canary/compile_baseline.json` in CPU time (across the compile
@@ -141,8 +143,10 @@ file.
   sub-second cases are noise-dominated) or peak memory (`peak_mb`: the summed physical footprint
   of the process tree, as the watchdog measures it), or if the 8,640-entry case costs less than 5
   times the CPU time of the 64-entry case. Wall time is recorded for information.
-  On the development laptop (2026-11-12, under memory pressure) the ratio was 84, and one
-  8,640-entry table took 37 s wall, 36 s CPU and 1.5 GB. Mitigation: few distinct table operators
+  The benchmark programs disable the decoration-time compile (L-27). On the development laptop
+  (2026-11-12, after Task 0.2c) the ratio was 55, and one 8,640-entry table took 25 s wall, 25 s
+  CPU and 973 MB (Task 0.4, with the decoration-time compile and under memory pressure: ratio 84,
+  37 s wall, 36 s CPU, 1.5 GB). Mitigation: few distinct table operators
   per walk; the K-1 budget.
 - **L-22, unresolved loops give symbolic counts.** Shared with L-12 and L-17
   (`test_select_swap_qrom_counts_are_symbolic`, `test_dynamic_loop_counts_are_symbolic`).
