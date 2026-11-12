@@ -1,8 +1,10 @@
 """Prototype operators shared by the Phase 0 spikes K-1, K-3 and K-10.
 
 Spikes may use placeholder semantics (spec 16, K-1), but the table read and its measured erase
-here are exact, because K-3 checks them on lightning.qubit. They are not the production
-operators: Phase 1 (workstream C) writes those from the spec with full tests.
+here are exact, because K-3 checks them on lightning.qubit. The one-hot erases of the K-1 arms
+(ProtoTableEraseF and ProtoTableEraseFP, Task 0.9c) are exact too and checked by
+``k1_whole_program.py --fixup-check``. They are not the production operators: Phase 1
+(workstream C) writes those from the spec with full tests.
 
 Table entries are tuples of unsigned 32-bit words, least significant word first. Catalyst lowers
 compilable integers as signed 64-bit values, and larger values fail to compile (canary L-24).
@@ -10,9 +12,12 @@ compilable integers as signed 64-bit values, and larger values fail to compile (
 
 from __future__ import annotations
 
+import itertools
 from collections import Counter
 from collections.abc import Callable, Iterable, Sequence
 
+import jax.numpy as jnp
+import numpy as np
 import pennylane as qp
 from catalyst.decomposition.rule_lowering_warning import RuleLoweringWarning
 from pennylane.core import Operator2
@@ -43,6 +48,25 @@ def from_words(words: Sequence[int]) -> int:
 # ---------------------------------------------------------------------------------------------
 
 
+def _cz(control, target):
+    qp.CZ([control, target])
+
+
+def _z(wire):
+    qp.Z(wire)
+
+
+HINTED_CZ = qp.hint({"branch-prob": 0.5})(_cz)
+"""The conditional CZ of a one-hot fixup leaf (spec 9.4 step 2, hinted as spec 7.6 asks)."""
+HINTED_Z = qp.hint({"branch-prob": 0.5})(_z)
+"""The conditional Z of a fixup leaf without one-hot bits (spec 9.4 fallback)."""
+
+
+def indexable(values):
+    """``values`` as an array a traced loop index can address: a jax array under capture."""
+    return jnp.asarray(values) if qp.capture.enabled() else values
+
+
 class _Emit:
     """Emits gates. Negative controls are X-conjugated so every TemporaryAND key is the same."""
 
@@ -58,9 +82,27 @@ class _Emit:
     def cnot(self, control, target):
         qp.CNOT([control, target])
 
+    def cond_cz(self, parity, flag, wire):
+        qp.cond(parity, HINTED_CZ)(flag, wire)
+
+    def cond_z(self, parity, flag):
+        qp.cond(parity, HINTED_Z)(flag)
+
+    def leaf_loop(self, parities, base, positions, flag, onehot):
+        """The conditional CZs of one fixup leaf in one static-bound qp.for_loop: iteration t
+        uses ``parities[base + t]`` and ``onehot[positions[t]]``."""
+        onehot, position_array = indexable(onehot), indexable(positions)
+
+        @qp.for_loop(0, len(positions), 1)
+        def leaf(t):
+            qp.cond(parities[base + t], HINTED_CZ)(flag, onehot[position_array[t]])
+
+        leaf()
+
 
 class _Count(_Emit):
-    """Counts the gates :class:`_Emit` would emit, by resource-key name."""
+    """Counts the gates :class:`_Emit` would emit, by resource-key name (loop bodies as if
+    unrolled)."""
 
     def __init__(self):
         self.counts = Counter()
@@ -76,6 +118,15 @@ class _Count(_Emit):
 
     def cnot(self, control, target):
         self.counts["CNOT"] += 1
+
+    def cond_cz(self, parity, flag, wire):
+        self.counts["CZ"] += 1
+
+    def cond_z(self, parity, flag):
+        self.counts["PauliZ"] += 1
+
+    def leaf_loop(self, parities, base, positions, flag, onehot):
+        self.counts["CZ"] += len(positions)
 
 
 def unary_iterate(emit, address, lo, hi, work, leaf, control=None):
@@ -359,6 +410,212 @@ def _nested_toffolis(ranges) -> int:
         total += leaves * unary_toffolis(lo, hi, w, controlled=index > 0)
         leaves *= hi - lo
     return total
+
+
+# ---------------------------------------------------------------------------------------------
+# Phase fixup with one-hot bits (spec 9.4 rule, ob >= 1) and its measured table erase, for the
+# K-1 arms of Task 0.9c: F unrolls every conditional CZ, FP loops those of each high leaf.
+# ---------------------------------------------------------------------------------------------
+
+
+def parity_array(parities):
+    """One indexable array of the entries of :func:`dfthc.compile.mcm_parities`.
+
+    mcm_parities returns a list on purpose (Python ``False`` for a zero mask, so the plain fixup
+    can skip it); a looped fixup leaf needs one array instead. Under capture every entry, ``False``
+    included, becomes a ``jnp.bool_`` entry of one stacked array; in tape mode an object array keeps
+    the ``MeasurementValue``\\ s (and the ``False`` entries).
+    """
+    if qp.capture.enabled():
+        return jnp.stack([jnp.asarray(p, dtype=jnp.bool_) for p in parities])
+    array = np.empty(len(parities), dtype=object)
+    for i, parity in enumerate(parities):
+        array[i] = parity
+    return array
+
+
+def fixup_leaves(covered: Sequence[int], onehot_bits: int) -> list[tuple[int, tuple, int]]:
+    """``(h, positions, base)`` per high value ``h`` with a covered address, in canonical order.
+
+    A covered address is ``a = (h << onehot_bits) | j``. The canonical (dense) order is increasing
+    ``h``, then increasing low position ``j``, which is increasing ``a``; ``parities[i]`` and mask
+    ``i`` use it. ``positions`` holds the covered ``j`` of ``h`` in order, and ``base`` the number
+    of covered addresses in earlier leaves, so dense entry ``base + t`` is ``(h, positions[t])``.
+    Raises ``ValueError`` unless ``covered`` is strictly increasing and non-empty.
+    """
+    if not covered or any(b <= a for a, b in zip(covered, covered[1:], strict=False)):
+        raise ValueError("the covered addresses must be strictly increasing and non-empty")
+    leaves, base = [], 0
+    for h, group in itertools.groupby(covered, key=lambda a: a >> onehot_bits):
+        positions = tuple(a & (2**onehot_bits - 1) for a in group)
+        leaves.append((h, positions, base))
+        base += len(positions)
+    return leaves
+
+
+def onehot_tree(emit, low, onehot, uncompute=False):
+    """Spec 9.4 step 1 (step 3 with ``uncompute``): ``onehot[j] = [low == j]``.
+
+    ``low`` is big-endian with ob bits and ``onehot`` has ``2**ob`` zeroed wires. The first bit and
+    its negation are copied into two flags; on each further bit ``a`` every flag ``f`` splits into
+    ``f AND a`` (one TemporaryAND) and ``f AND NOT a`` (one CNOT), so the tree has
+    ``O(ob) = 2**ob - 2`` TemporaryANDs. The flag of a k-bit prefix ``p`` sits on
+    ``onehot[p << (ob - k)]``. The uncompute runs the steps in reverse with measured
+    ``Adjoint(TemporaryAND)``.
+    """
+    ob = len(low)
+    steps = [("cnot", low[0], onehot[2 ** (ob - 1)]), ("cnot", low[0], onehot[0]),
+             ("x", onehot[0])]
+    for k in range(1, ob):
+        stride = 2 ** (ob - k)
+        for p in range(2**k):
+            flag, split = onehot[p * stride], onehot[p * stride + stride // 2]
+            steps += [("and", flag, low[k], split), ("cnot", split, flag)]
+    for kind, *wires in reversed(steps) if uncompute else steps:
+        if kind == "x":
+            emit.x(*wires)
+        elif kind == "cnot":
+            emit.cnot(*wires)
+        elif uncompute:
+            emit.unand(*wires)
+        else:
+            emit.and_(*wires)
+
+
+def phase_fixup(emit, address, leaves, onehot_bits, onehot, work, parities, control=None,
+                looped=False):
+    """Spec 9.4 rule: ``(-1)**parities[i]`` on dense covered address ``i``, no phase elsewhere.
+
+    ``address`` is big-endian; ``leaves`` come from :func:`fixup_leaves` and their high values must
+    be contiguous. With ``onehot_bits = ob >= 1`` the low ob address bits are one-hot encoded on
+    ``onehot`` (``2**ob`` zeroed wires, returned zeroed) by :func:`onehot_tree`, exact unary
+    iteration (controlled by ``control`` if given) runs over the high values, and every covered
+    address gets one hinted conditional CZ on (leaf flag, ``onehot[j]``); the tree is then
+    uncomputed. With ``looped`` (arm FP) the CZs of a leaf run in one static-bound ``qp.for_loop``
+    (``emit.leaf_loop``). With ob = 0 (the fallback) each covered address gets one hinted
+    conditional Z on its leaf flag and ``onehot`` is empty. ``work`` needs ``len(address) - ob``
+    wires. T = U(high range, control) + O(ob); A = T. Raises ``ValueError`` for non-contiguous
+    high values, a wrong one-hot size, or an uncontrolled zero-width high part (no leaf flag).
+    """
+    ob, highs = onehot_bits, [h for h, _, _ in leaves]
+    if highs != list(range(highs[0], highs[-1] + 1)):
+        raise ValueError("the covered high values must be contiguous")
+    if len(onehot) != (2**ob if ob else 0):
+        raise ValueError(f"{len(onehot)} one-hot wires for onehot_bits {ob}")
+    high, low = address[: len(address) - ob], address[len(address) - ob:]
+    by_high = {h: (positions, base) for h, positions, base in leaves}
+
+    def leaf(flag, h):
+        if flag is None:
+            raise ValueError("an uncontrolled zero-width high part has no leaf flag")
+        positions, base = by_high[h]
+        if ob == 0:
+            emit.cond_z(parities[base], flag)
+        elif looped:
+            emit.leaf_loop(parities, base, positions, flag, onehot)
+        else:
+            for t, j in enumerate(positions):
+                emit.cond_cz(parities[base + t], flag, onehot[j])
+
+    if ob:
+        onehot_tree(emit, low, onehot)
+    unary_iterate(emit, high, highs[0], highs[-1] + 1, work, leaf, control)
+    if ob:
+        onehot_tree(emit, low, onehot, uncompute=True)
+
+
+class ProtoTableEraseF(Operator2):
+    """Measured erase of :class:`ProtoTableRead` with spec 9.4's one-hot fixup (K-1 arm F).
+
+    X-measures ``target ‖ junk``, then :func:`phase_fixup` over the read's loaded set (the covered
+    set, :func:`loaded_masks` order) with ``onehot_bits`` low address bits one-hot encoded on the
+    first ``2**onehot_bits`` reset wires of ``target ‖ junk``. Every covered address gets one
+    hinted conditional CZ, unrolled. Never adjointed or controlled. Prototype only.
+    """
+
+    compilable_argnames = ("table", "high_ranges", "block_bits", "width", "onehot_bits")
+    wire_argnames = ("high", "low", "target", "junk", "work")
+
+    def __init__(self, table, high_ranges, block_bits, width, onehot_bits, high, low, target, junk,
+                 work):
+        super().__init__(table, high_ranges, block_bits, width, onehot_bits, high, low, target,
+                         junk, work)
+
+
+class ProtoTableEraseFP(Operator2):
+    """:class:`ProtoTableEraseF` whose conditional CZs run in one static-bound ``qp.for_loop``
+    per high leaf (K-1 arm FP); the tree and the unary iteration stay unrolled."""
+
+    compilable_argnames = ("table", "high_ranges", "block_bits", "width", "onehot_bits")
+    wire_argnames = ("high", "low", "target", "junk", "work")
+
+    def __init__(self, table, high_ranges, block_bits, width, onehot_bits, high, low, target, junk,
+                 work):
+        super().__init__(table, high_ranges, block_bits, width, onehot_bits, high, low, target,
+                         junk, work)
+
+
+def onehot_erase_body(emit, table, high_ranges, block_bits, width, onehot_bits, high, low, target,
+                      junk, work, measure, parities, looped, masks_hook=None, parities_hook=None,
+                      leaves_hook=None):
+    """The gates of :class:`ProtoTableEraseF` (``looped=False``) or :class:`ProtoTableEraseFP`.
+
+    ``parities(outcomes, masks)`` maps the outcomes and the masks (dense covered order) to an
+    indexable parity array. The hooks (identity when ``None``) let a correctness harness inject
+    mutants into the masks, the parity array or the leaves; the rules never pass them. Raises
+    ``ValueError`` if the fixup needs ``extra_onehot`` wires (``2**onehot_bits > K * width``).
+    """
+    qubits = list(target) + list(junk)
+    if 2**onehot_bits > len(qubits):
+        raise ValueError(f"onehot_bits {onehot_bits} needs extra_onehot wires: "
+                         f"{2**onehot_bits} > {len(qubits)}")
+    outcomes = [measure(q) for q in qubits]
+    masks = loaded_masks(table, high_ranges, block_bits, width)
+    masks = masks_hook(masks) if masks_hook else masks
+    values = parities(outcomes, [m for _, m in masks])
+    values = parities_hook(values) if parities_hook else values
+    leaves = fixup_leaves([a for a, _ in masks], onehot_bits)
+    leaves = leaves_hook(leaves) if leaves_hook else leaves
+    phase_fixup(emit, list(high) + list(low), leaves, onehot_bits, qubits[: 2**onehot_bits], work,
+                values, looped=looped)
+
+
+def measured_parities(outcomes, masks):
+    """The rules' parity array: :func:`parity_array` of :func:`mcm_parities`."""
+    return parity_array(mcm_parities(outcomes, masks))
+
+
+def onehot_erase_counts(table, high_ranges, block_bits, width, onehot_bits) -> Counter:
+    """Gate counts of ProtoTableEraseF and of ProtoTableEraseFP (loop bodies as if unrolled)."""
+    counter = _Count()
+
+    def measure(qubit):
+        counter.counts.update({"Hadamard": 1, "MidMeasure": 1})
+
+    dummy = list(range(10_000))
+    onehot_erase_body(counter, table, high_ranges, block_bits, width, onehot_bits,
+                      dummy[: sum(w for w, _, _ in high_ranges)], dummy[:block_bits],
+                      dummy[:width], dummy[: (2**block_bits - 1) * width], dummy[:64], measure,
+                      lambda outcomes, masks: [None] * len(masks), looped=False)
+    return counter.counts
+
+
+def _onehot_erase_rule(name, looped):
+    def resources(table, high_ranges, block_bits, width, onehot_bits, high, low, target, junk,
+                  work):
+        return counts_to_resources(onehot_erase_counts(table, high_ranges, block_bits, width,
+                                                       onehot_bits))
+
+    def rule(table, high_ranges, block_bits, width, onehot_bits, high, low, target, junk, work):
+        onehot_erase_body(_Emit(), table, high_ranges, block_bits, width, onehot_bits, high, low,
+                          target, junk, work, _measure_x, measured_parities, looped)
+
+    rule.__name__ = name
+    return qp.register_resources(resources)(rule)
+
+
+register_rule(ProtoTableEraseF, _onehot_erase_rule("_proto_table_erase_f", looped=False))
+register_rule(ProtoTableEraseFP, _onehot_erase_rule("_proto_table_erase_fp", looped=True))
 
 
 # ---------------------------------------------------------------------------------------------
