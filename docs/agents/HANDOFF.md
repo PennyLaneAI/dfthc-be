@@ -128,18 +128,28 @@ is not the requested one, or the priority is not lowered, so never run plain `py
 
 ### 3.4 `.venv-ref` for dfthcbe reference fixtures (Q-2: approved)
 
-Only Task 1A.6 (and later refreshes) uses it, to run `scripts/make_dfthcbe_fixtures.py`:
+Only Task 1A.6 (and later refreshes) uses it, to run `scripts/make_dfthcbe_fixtures.py`. The
+orchestrator builds it; nothing is cloned and no step needs elevated permission. dfthcbe comes
+from the tarball of commit `930255020cec30172e0a7d17c0071d9476a687d1`, extracted into
+`.scratch/dfthcbe-ref` (git-ignored) and checked by a SHA-256 digest of its sources:
 
 ```bash
-python3.12 -m venv .venv-ref
-.venv-ref/bin/pip install --upgrade pip
-.venv-ref/bin/pip install "dfthcbe @ git+https://github.com/Covestro-HPQC/dfthcbe@930255020cec30172e0a7d17c0071d9476a687d1"
-.venv-ref/bin/pip freeze > tests/fixtures/dfthcbe/requirements-ref.lock
-.venv-ref/bin/python scripts/make_dfthcbe_fixtures.py
+mkdir -p .scratch/dfthcbe-ref && curl -sSfL \
+    https://codeload.github.com/Covestro-HPQC/dfthcbe/tar.gz/930255020cec30172e0a7d17c0071d9476a687d1 \
+    | tar -xz -C .scratch/dfthcbe-ref --strip-components=1
 ```
 
-dfthcbe requires `qualtran>=0.7`. The fixture provenance records the resolved Qualtran version.
-`.venv-ref/` is git-ignored. If it cannot be created, fixture tests skip with an explicit reason.
+The complete recipe is the script in `docs/superpowers/plans/2026-11-11-dfthc-phase1-data.md`,
+Task 1A.6, Step 7. It installs Qualtran 0.7.0 without its notebook dependencies and dfthcbe from a
+copy of `.scratch/dfthcbe-ref` into `.venv-ref`, writes `tests/fixtures/dfthcbe/requirements-ref.lock`
+and runs the fixture script in the lane. Two sandbox constraints shape it: pip verifies
+certificates only with the macOS keychain's certificates (`PIP_CERT`), and the sandbox refuses any
+directory named `venv` inside the workspace, so jedi (pulled in by IPython) cannot be installed and
+`TMPDIR` must not point into a worktree while pytest runs. `.scratch/dfthcbe-ref` also serves
+scouts and reviewers as the read-only dfthcbe source.
+
+The fixture provenance records the commit and the Qualtran version. `.venv-ref/` is git-ignored.
+If it cannot be created, fixture tests skip with an explicit reason.
 
 ### 3.5 Machine limits and heavy processes
 

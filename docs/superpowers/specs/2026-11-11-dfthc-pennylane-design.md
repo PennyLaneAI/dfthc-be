@@ -1272,9 +1272,9 @@ The `TemporaryAND` assertions turn every precondition into a check.
 **Measurement policies:**
 - *forced*: a per-measurement outcome schedule, used by the certificates of §12.5;
 - *seeded*: random outcomes from a seed;
-- *branch*: on listed wires only, used for QPE control bits.
+- *branch*: on listed wires only, used for QPE control bits. A later postselection drops the branches that cannot pass it, and the probabilities of the others are conditional on its success, as with deferred measurements.
 
-In strict mode the simulator also asserts $p = 1/2$ (absolute tolerance $10^{-12}$) for every measurement that is not on a branch wire. This is a precondition check: it verifies uniformly random X outcomes, but it is not a correctness certificate. Correctness for all outcomes comes from §12.5. Measured AND uncomputes stay primitive `Adjoint(TemporaryAND)` gates, which the precondition assertion certifies.
+In strict mode the simulator also asserts $p = 1/2$ (absolute tolerance $10^{-12}$) for every measurement that is neither on a branch wire nor postselected. A postselection is a test device, not an erase measurement. This is a precondition check: it verifies uniformly random X outcomes, but it is not a correctness certificate. Correctness for all outcomes comes from §12.5. Measured AND uncomputes stay primitive `Adjoint(TemporaryAND)` gates, which the precondition assertion certifies.
 
 **Differential tests.** Every handler is compared against PennyLane's `default.qubit` statevector on random states of at most 10 qubits. Measurements run there with deferred measurements, in analytic mode. The tests cover:
 - `Conditional` with composite expressions (`^`, sums mod 2);
