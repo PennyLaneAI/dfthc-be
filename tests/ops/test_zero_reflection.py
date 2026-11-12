@@ -45,33 +45,48 @@ def choi_matrix(num_system, apply, num_work):
     return state[:, :, 0] * np.sqrt(2**num_system)
 
 
-def reflection_diagonal(n_w, target_value):
-    pattern = 1 if target_value == 1 else 0  # the integer of the pattern, wire 0 most significant
+def reflection_diagonal(n_w, one):
+    """Diagonal of 2 Pi - I for the pattern with ones on the wires ``one`` (wire 0 is the most
+    significant bit of the pattern's integer): +1 at the pattern, -1 elsewhere."""
+    pattern = sum(2 ** (n_w - 1 - w) for w in one)
     return np.where(np.arange(2**n_w) == pattern, 1.0, -1.0)
 
 
+# (zero wires, one wires) over system wires 0 .. n_w - 1, for n_w = 1, 2, 3, 6. Most cases are
+# all zeros ("zeros") or all zeros with a one on the last wire, the MCZ target ("last-one");
+# "mixed-011" has a one-valued wire (1) among the MCZ controls next to a zero-valued control (0).
+PATTERN_CASES = [
+    pytest.param(1, [0], [], id="1-zeros"),
+    pytest.param(1, [], [0], id="1-last-one"),
+    pytest.param(2, [0, 1], [], id="2-zeros"),
+    pytest.param(2, [0], [1], id="2-last-one"),
+    pytest.param(3, [0, 1, 2], [], id="3-zeros"),
+    pytest.param(3, [0], [1, 2], id="3-mixed-011"),
+    pytest.param(6, [0, 1, 2, 3, 4, 5], [], id="6-zeros"),
+    pytest.param(6, [0, 1, 2, 3, 4], [5], id="6-last-one"),
+]
+
+
 @pytest.mark.compiled
-@pytest.mark.parametrize("target_value", [0, 1])
-@pytest.mark.parametrize("n_w", [1, 2, 3, 6])
-def test_exact_matrix_with_global_sign(n_w, target_value):
-    """T3: the compiled matrix equals 2 Pi - I exactly, global sign included."""
-    zero, one = split(n_w, target_value)
+@pytest.mark.parametrize(("n_w", "zero", "one"), PATTERN_CASES)
+def test_exact_matrix_with_global_sign(n_w, zero, one):
+    """T3: the compiled matrix equals 2 Pi - I exactly, global sign included, for patterns with
+    the target wire 0 or 1 and, at n_w = 3, a one-valued wire among the MCZ controls."""
     work = ZeroReflection.required_wires(len(zero), len(one))["work"]
 
     def apply(system, work_wires):
         ZeroReflection([system[w] for w in zero], [system[w] for w in one], work_wires)
 
     matrix = choi_matrix(n_w, apply, work)
-    assert np.allclose(matrix, np.diag(reflection_diagonal(n_w, target_value)), rtol=0, atol=1e-10)
+    assert np.allclose(matrix, np.diag(reflection_diagonal(n_w, one)), rtol=0, atol=1e-10)
 
 
 @pytest.mark.compiled
-@pytest.mark.parametrize("target_value", [0, 1])
-@pytest.mark.parametrize("n_w", [1, 2, 3, 6])
-def test_exact_controlled_matrix(n_w, target_value):
-    """T3: C(ZeroReflection) equals |0><0| (x) I + |1><1| (x) (2 Pi - I); a wrong global sign of
-    the uncontrolled reflection would show here as a relative phase."""
-    zero, one = split(n_w, target_value)
+@pytest.mark.parametrize(("n_w", "zero", "one"), PATTERN_CASES)
+def test_exact_controlled_matrix(n_w, zero, one):
+    """T3: C(ZeroReflection) equals |0><0| (x) I + |1><1| (x) (2 Pi - I) on the patterns of the
+    plain test; a wrong global sign of the uncontrolled reflection would show here as a relative
+    phase."""
     work = ZeroReflection.required_wires(len(zero), len(one), controlled=True)["work"]
 
     def apply(system, work_wires):
@@ -80,19 +95,19 @@ def test_exact_controlled_matrix(n_w, target_value):
                                work_wires), control=control)
 
     matrix = choi_matrix(n_w + 1, apply, work)
-    expected = np.concatenate([np.ones(2**n_w), reflection_diagonal(n_w, target_value)])
+    expected = np.concatenate([np.ones(2**n_w), reflection_diagonal(n_w, one)])
     assert np.allclose(matrix, np.diag(expected), rtol=0, atol=1e-10)
 
 
 @pytest.mark.compiled
 def test_adjoint_is_the_reflection_itself():
-    zero, one = split(3, 1)
+    zero, one = [0], [1, 2]  # the mixed pattern 011
 
     def apply(system, work_wires):
         qp.adjoint(ZeroReflection([system[w] for w in zero], [system[w] for w in one],
                                   work_wires))
 
-    assert np.allclose(choi_matrix(3, apply, 0), np.diag(reflection_diagonal(3, 1)), rtol=0,
+    assert np.allclose(choi_matrix(3, apply, 0), np.diag(reflection_diagonal(3, one)), rtol=0,
                        atol=1e-10)
 
 
