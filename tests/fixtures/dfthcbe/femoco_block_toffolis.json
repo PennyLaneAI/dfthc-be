@@ -1,0 +1,14 @@
+{
+  "outer_prepare": 212,
+  "outer_unprepare": 94,
+  "inner_prepare": 913,
+  "inner_unprepare": 220,
+  "inner_select": 3502,
+  "inner_select_adjoint": 3502,
+  "ref_t2": 20,
+  "ref_ab": 45,
+  "block_encoding": 9596,
+  "controlled_block_encoding": 9597,
+  "walk": 9641,
+  "controlled_walk": 9642
+}
