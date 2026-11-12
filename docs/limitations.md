@@ -127,10 +127,11 @@ file.
   compile time grows with table size, and each distinct table adds its own rule traces.
   Benchmark: `test_compile_time_scaling` (nightly) compiles 1, 2 and 4 distinct 64-entry tables
   and single tables of 64, 1,024 and 8,640 entries, each in a fresh process under the watchdog.
-  It fails above twice `tests/canary/compile_baseline.json` in CPU time (across the compile only:
-  the process plus the Catalyst compiler subprocess) or peak memory (`peak_mb`: the summed
-  physical footprint of the process tree, as the watchdog measures it), or if the 8,640-entry case
-  costs less than 5 times the CPU time of the 64-entry case. Wall time is recorded for information.
+  It fails at more than twice `tests/canary/compile_baseline.json` in CPU time (across the compile
+  only: the process plus the Catalyst compiler subprocess; and more than 2 s above it, because
+  sub-second cases are noise-dominated) or peak memory (`peak_mb`: the summed physical footprint
+  of the process tree, as the watchdog measures it), or if the 8,640-entry case costs less than 5
+  times the CPU time of the 64-entry case. Wall time is recorded for information.
   On the development laptop (2026-11-12, under memory pressure) the ratio was 84, and one
   8,640-entry table took 37 s wall, 36 s CPU and 1.5 GB. Mitigation: few distinct table operators
   per walk; the K-1 budget.

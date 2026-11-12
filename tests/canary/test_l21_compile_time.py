@@ -5,8 +5,9 @@ twice, and identical tables in one program share those traces. The nightly bench
 each case in a fresh process under the watchdog and records wall time (informational), CPU time
 (Python plus the Catalyst compiler subprocess, measured across the compile only: the difference of
 ``getrusage`` for the process and its finished children before and after ``qp.analyze``) and peak
-memory (the watchdog's summed physical footprint of the process tree). It fails if CPU time or
-peak memory exceeds twice the stored baseline, or if the compile cost no longer grows with table
+memory (the watchdog's summed physical footprint of the process tree). It fails if CPU time
+exceeds the stored baseline by more than a factor of two and more than ``CPU_SLACK_SECONDS``,
+if peak memory exceeds twice the baseline, or if the compile cost no longer grows with table
 size. Refresh the baseline at every nightly bump, serially:
 
     DFTHC_UPDATE_COMPILE_BASELINE=1 DFTHC_TEST_WORKERS=0 \
@@ -36,6 +37,8 @@ CASES = {
     "tables_1_size_1024": (1, 1024),
     "tables_1_size_8640": (1, 8640),
 }
+CPU_SLACK_SECONDS = 2.0
+"""Absolute CPU slack of the baseline check (sub-second cases are noise-dominated when loaded)."""
 SIZE_GROWTH_MIN = 5
 """Least CPU-time ratio of the 8,640-entry case to the 64-entry case (about 28 on 2026-11-11)."""
 
@@ -164,19 +167,66 @@ def _measure(count: int, size: int) -> dict:
     return values
 
 
+def _regressions(measured: dict, baseline: dict) -> list[str]:
+    """Describe every case that exceeds its baseline (an empty list means none does).
+
+    A case regresses if its CPU time is more than ``max(2 * ref, ref + CPU_SLACK_SECONDS)`` or
+    its peak memory is more than twice the baseline. A measured case that the baseline lacks is
+    reported too, with the command that refreshes the baseline: the check fails rather than
+    skipping a case silently.
+    """
+    problems = []
+    for case, values in measured.items():
+        if case not in baseline:
+            problems.append(
+                f"{case}: missing from {BASELINE.name}; "
+                "refresh it with DFTHC_UPDATE_COMPILE_BASELINE=1"
+            )
+            continue
+        ref = baseline[case]
+        cpu_limit = max(2 * ref["cpu_seconds"], ref["cpu_seconds"] + CPU_SLACK_SECONDS)
+        if values["cpu_seconds"] > cpu_limit:
+            problems.append(
+                f"{case}: cpu_seconds {values['cpu_seconds']} > {cpu_limit:.2f} "
+                f"(baseline {ref['cpu_seconds']})"
+            )
+        if values["peak_mb"] > 2 * ref["peak_mb"]:
+            problems.append(
+                f"{case}: peak_mb {values['peak_mb']} > {2 * ref['peak_mb']:.1f} "
+                f"(baseline {ref['peak_mb']})"
+            )
+    return problems
+
+
+def test_baseline_regression_rule():
+    """The baseline check: twice the baseline, with 2 s of CPU slack, and no silent skips."""
+
+    def check(cpu, peak, ref_cpu=0.43, ref_peak=200.0, case="case"):
+        measured = {case: {"cpu_seconds": cpu, "peak_mb": peak}}
+        return _regressions(measured, {"case": {"cpu_seconds": ref_cpu, "peak_mb": ref_peak}})
+
+    assert check(2.4, 200.0) == []
+    assert len(check(2.5, 200.0)) == 1
+    assert check(72.0, 200.0, ref_cpu=36.0) == []
+    assert len(check(72.1, 200.0, ref_cpu=36.0)) == 1
+    assert check(0.4, 400.0) == []
+    assert len(check(0.4, 400.1)) == 1
+    both = check(2.5, 400.1)
+    assert len(both) == 2 and "cpu_seconds" in both[0] and "peak_mb" in both[1]
+    missing = check(0.4, 200.0, case="other")
+    assert len(missing) == 1 and "missing from compile_baseline.json" in missing[0]
+
+
 @pytest.mark.subprocess
 @pytest.mark.slow
 def test_compile_time_scaling():
-    """Benchmark: every case within twice the baseline, and cost that grows with table size."""
+    """Benchmark: every case within the baseline rule, and cost that grows with table size."""
     measured = {case: _measure(*CASES[case]) for case in sorted(CASES)}
     if os.environ.get("DFTHC_UPDATE_COMPILE_BASELINE") == "1":
         BASELINE.write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n")
         return
-    baseline = json.loads(BASELINE.read_text())
-    for case, values in measured.items():
-        reference = baseline[case]
-        assert values["cpu_seconds"] <= 2 * reference["cpu_seconds"], (case, values, reference)
-        assert values["peak_mb"] <= 2 * reference["peak_mb"], (case, values, reference)
+    regressions = _regressions(measured, json.loads(BASELINE.read_text()))
+    assert not regressions, "\n".join(regressions)
     small, large = measured["tables_1_size_64"], measured["tables_1_size_8640"]
     growth = large["cpu_seconds"] / small["cpu_seconds"]
     assert growth >= SIZE_GROWTH_MIN, f"compile cost no longer grows with table size: {growth:.1f}x"
