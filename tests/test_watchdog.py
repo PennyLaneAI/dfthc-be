@@ -48,33 +48,42 @@ TREE = textwrap.dedent(
     """
 )
 
-# The root forks A, and A forks the escaped descendant B and exits at once. B waits until it was
-# adopted by launchd (A is gone), calls setsid(), publishes its pid in ``pid_file`` (written under a
-# temporary name and renamed, so the file is never seen half-written) and keeps the output pipes
-# open. The root reaps A and waits for the pid file before it prints the pid and exits, so B exists
-# and is out of the tree before the root's exit, however slow the machine is. Only the
-# microseconds between A's fork of B and A's exit can show B inside the tree to a sample.
+# The root forks A, and A forks the escaped descendant B and exits at once. B's first action is to
+# publish its own pid in ``cleanup_file``, before it leaves the session, so whenever B can outlive
+# the watchdog's group kill (only after setsid()), the test can still kill it from that file. Then
+# B waits until it was adopted by launchd (A is gone), calls setsid() and publishes ``ready_file``.
+# Both files are written under a temporary name and renamed, so neither is seen half-written. B
+# keeps the output pipes open. The root reaps A and waits for the readiness file before it prints
+# B's pid and exits, so B exists and is out of the tree before the root's exit, however slow the
+# machine is. Only the microseconds between A's fork of B and A's exit can show B inside the tree
+# to a sample (A must not do anything slow before it exits: a traced B is never released and the
+# run would end without the pipe error, as one 15-run loop showed with a file write in A).
 ESCAPE = textwrap.dedent(
     """
     import os, time
+
+    def publish(path, text):
+        with open(path + ".tmp", "w") as file:
+            file.write(text)
+        os.rename(path + ".tmp", path)
+
     a = os.fork()
     if a == 0:
         parent = os.getpid()
         if os.fork() == 0:
+            publish({cleanup_file!r}, str(os.getpid()))
             while os.getppid() == parent:
                 time.sleep(0.001)
             os.setsid()
-            with open({pid_file!r} + ".tmp", "w") as file:
-                file.write(str(os.getpid()))
-            os.rename({pid_file!r} + ".tmp", {pid_file!r})
+            publish({ready_file!r}, "ready")
             time.sleep({sleep})
             os._exit(0)
         os._exit(0)
     os.waitpid(a, 0)
     deadline = time.monotonic() + 30
-    while not os.path.exists({pid_file!r}) and time.monotonic() < deadline:
+    while not os.path.exists({ready_file!r}) and time.monotonic() < deadline:
         time.sleep(0.01)
-    with open({pid_file!r}) as file:
+    with open({cleanup_file!r}) as file:
         print(file.read(), flush=True)
     os._exit(0)
     """
@@ -317,28 +326,33 @@ def test_untraceable_descendant_holding_the_pipes_ends_the_run(
 ):
     """An escaped descendant that keeps the output pipes open cannot stall the run.
 
-    The command waits until the escaped descendant has published its pid before the root exits,
-    so the descendant exists before either path starts. With ``timeout_s=2`` (``kill_seconds=4``,
-    so the time limit comes first, with slack over Python's start-up under load) the time limit
-    ends the loop and both bounded final reads time out; with ``timeout_s=60`` the loop gives up
-    ``_KILL_SECONDS`` after the root exited with nothing left to sample. The escaped child sleeps
-    15 s, longer than either path takes (at most ``min(timeout_s, kill_seconds) + 2 *
-    kill_seconds`` after the start).
+    The command waits until the escaped descendant has left the session and published its
+    readiness before the root exits, so the descendant exists before either path starts. With
+    ``timeout_s=2`` (``kill_seconds=4``, so the time limit comes first, with slack over Python's
+    start-up under load) the time limit ends the loop and both bounded final reads time out; with
+    ``timeout_s=60`` the loop gives up ``_KILL_SECONDS`` after the root exited with nothing left
+    to sample. The escaped child sleeps 15 s, longer than either path takes (at most
+    ``min(timeout_s, kill_seconds) + 2 * kill_seconds`` after the start). It publishes its pid to a
+    cleanup file before it leaves the session, so the ``finally`` block kills it even when the run
+    ends before the readiness file appears.
     """
     monkeypatch.setattr(watchdog, "_KILL_SECONDS", kill_seconds)
-    pid_file = tmp_path / "escaped.pid"
-    command = [sys.executable, "-c", ESCAPE.format(sleep=15, pid_file=str(pid_file))]
+    cleanup_file, ready_file = tmp_path / "escaped.pid", tmp_path / "escaped.ready"
+    command = [
+        sys.executable, "-c",
+        ESCAPE.format(sleep=15, cleanup_file=str(cleanup_file), ready_file=str(ready_file)),
+    ]
     start = time.monotonic()
     try:
         run = run_watched(command, timeout_s=timeout_s)
         elapsed = time.monotonic() - start
     finally:
-        if pid_file.exists():
-            with contextlib.suppress(ProcessLookupError):
-                os.kill(int(pid_file.read_text()), signal.SIGKILL)
+        with contextlib.suppress(FileNotFoundError, ProcessLookupError, ValueError):
+            os.kill(int(cleanup_file.read_text()), signal.SIGKILL)
     assert run.killed == "watchdog error: an untraceable descendant holds the output pipes" + suffix
     assert elapsed < min(timeout_s, kill_seconds) + 2 * kill_seconds + 1
-    assert run.stdout.split() == [pid_file.read_text()]
+    assert run.stdout.split() == [cleanup_file.read_text()]
+    assert ready_file.exists()
 
 
 def test_command_runs_at_lowered_priority():
