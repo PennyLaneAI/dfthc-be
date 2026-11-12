@@ -61,7 +61,11 @@ from dfthc.compile import (  # noqa: E402
 
 
 def as_dynamic_array(values):
-    """Canonicalize a list of measurement values for a dynamic argument (L-23)."""
+    """Canonicalize a non-empty list of measurement outcomes for a dynamic argument (L-23).
+
+    Booleans from measurement lists only: under capture every entry is cast to bool, so tables
+    and other numeric data must not pass through here.
+    """
     if isinstance(values, AbstractArray):
         return values
     if qp.capture.enabled():
@@ -71,7 +75,6 @@ def as_dynamic_array(values):
 
 def _fixup_leaves(emit, registers, work, parity_of):
     """Plain fixup: a conditional Z on the flag of every address, in iteration order."""
-    widths = [len(w) for w, _, _ in registers]
     index = {"next": 0}
 
     def leaf(flag, values):
@@ -81,7 +84,6 @@ def _fixup_leaves(emit, registers, work, parity_of):
             emit.cond_z(parity, flag)
 
     nested_iterate(emit, registers, work, leaf)
-    del widths
 
 
 class _EmitCond(_Emit):
@@ -325,9 +327,13 @@ def shape_compile(part, shape):
     start = time.perf_counter()
     resources = compiled_resources(qfunc, num_wires=445)
     seconds = round(time.perf_counter() - start, 1)
+    conditional_z = resources.counts.get("PauliZ", 0)
+    declared_toffoli = _fixup_counts(ranges, 0 if part == 1 else len(target))["TemporaryAND"]
     return {"seconds": seconds, "measurements": resources.measurements,
-            "conditional_z_upper_bound": resources.counts.get("PauliZ", 0),
-            "num_addresses": num_addresses, "passed": resources.measurements == num_outcomes}
+            "conditional_z_upper_bound": conditional_z, "num_addresses": num_addresses,
+            "toffoli": resources.toffoli, "declared_toffoli": declared_toffoli,
+            "passed": (resources.measurements == num_outcomes and conditional_z == num_addresses
+                       and resources.toffoli == declared_toffoli)}
 
 
 def growth_exponents(results):
