@@ -10,8 +10,9 @@ compilable integers as signed 64-bit values, and larger values fail to compile (
 
 from __future__ import annotations
 
+import re
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 
 import pennylane as qp
 from catalyst.decomposition.rule_lowering_warning import RuleLoweringWarning
@@ -366,22 +367,42 @@ def _nested_toffolis(ranges) -> int:
 # ---------------------------------------------------------------------------------------------
 
 
-def classify_warnings(records, names) -> dict:
+_MEASURING_SKIP = re.compile(
+    r"^Skipped the \w+ decomposition rule for ((?:(?:Adjoint|C)\()+)(\w+)(\)+).*: it contains "
+    r"a mid-circuit measurement, which is not supported with adjoint or control regions\.?\Z",
+    re.DOTALL,
+)
+
+
+def _expected_measuring_skip(message: str, expected_measuring: Iterable[str]) -> bool:
+    match = _MEASURING_SKIP.match(message)
+    return bool(match) and match[2] in expected_measuring and (
+        len(match[3]) == match[1].count("("))
+
+
+def classify_warnings(records, names, *, expected_measuring: Iterable[str] = ()) -> dict:
     """Sort warnings recorded by ``warnings.catch_warnings(record=True)`` for a spike verdict.
 
-    Returns ``{"prototype": [...], "other": [...], "noise": count}``. A warning whose text names
-    an operator in ``names`` goes to ``"prototype"`` (a spike fails on any). A
-    ``RuleLoweringWarning`` matching PennyLane's known noise only increments ``"noise"``. Every
-    other text goes to ``"other"``, for example the ``qp.analyze`` warning "unable to determine
-    the branch". Classification uses :func:`dfthc.testing.resources.classify_rule_warning`.
+    Returns ``{"prototype": [...], "expected": [...], "other": [...], "noise": count}``. A warning
+    whose text names an operator in ``names`` goes to ``"prototype"`` (a spike fails on any),
+    except a ``RuleLoweringWarning`` "Skipped the <rule> decomposition rule for <op>...: it
+    contains a mid-circuit measurement, which is not supported with adjoint or control regions"
+    whose <op> wraps an operator of ``expected_measuring`` in one or more ``Adjoint(...)`` or
+    ``C(...)``: it goes to ``"expected"``. A ``RuleLoweringWarning`` matching PennyLane's known
+    noise only increments ``"noise"``. Every other text goes to ``"other"``, for example the
+    ``qp.analyze`` warning "unable to determine the branch". Classification uses
+    :func:`dfthc.testing.resources.classify_rule_warning`.
     """
-    result = {"prototype": [], "other": [], "noise": 0}
+    result = {"prototype": [], "expected": [], "other": [], "noise": 0}
     for record in records:
         message = str(record.message)
         kind = classify_rule_warning(message, names)
         if kind == "noise" and not issubclass(record.category, RuleLoweringWarning):
             kind = "other"
-        if kind == "dfthc":
+        if kind == "dfthc" and issubclass(record.category, RuleLoweringWarning) and (
+                _expected_measuring_skip(message, expected_measuring)):
+            result["expected"].append(message)
+        elif kind == "dfthc":
             result["prototype"].append(message)
         elif kind == "noise":
             result["noise"] += 1
