@@ -61,7 +61,17 @@ instead of the adjoint and controlled forms of the composites (CONVERSIONS); PX 
 --read-check runs P's compiled-path read check (four lightning.qubit compiles). --all --arm
 writes k1d_<arm>_<shape>.json for small, mid10, mid10k4 and mid14 with the capture inventory of
 capture_instrument and the stop gate of d_problems; --project --arm B writes k1d_projection.json
-for every arm (D_PROJECTION_METHOD). Task 0.9d compiles no FeMoco shape.
+for every arm (D_PROJECTION_METHOD). Task 0.9d compiles no FeMoco shape (d_refusal).
+
+--shape femoco --all --arm B|P|X|PX [--program controlled_walk|walk] [--dry-run] (Task 0.9e) is
+the one FeMoco confirmation path of the Task 0.9d arms (drive_femoco_d). It compiles exactly one
+program in one watched child under Task 0.9's FeMoco cap (8 GB, effective 7,680 MB) and time limit
+(LIMITS['femoco']), never retried, and writes k1d_<arm>_femoco_<program>.json with the prediction
+of k1d_projection.json and its comparison with the measurement. It refuses, before compiling, an
+arm whose femoco_allowed is not exactly true, a missing token in DFTHC_K1_FEMOCO_TOKEN, an existing
+lock (Task 0.9's, created with mode x, holding the token, removed at the end) and an existing
+result file. --dry-run runs every refusal check and prints the child command, the cap, the
+timeout and the prediction, without compiling or creating the lock.
 """
 
 from __future__ import annotations
@@ -79,6 +89,7 @@ import platform
 import re
 import resource
 import secrets
+import shlex
 import subprocess
 import sys
 import threading
@@ -138,6 +149,7 @@ from dfthc.compile import (  # noqa: E402
 from dfthc.testing.watchdog import (  # noqa: E402
     HEAVY_MEMORY_MB,
     MEMORY_CAP_MB,
+    WatchdogError,
     effective_limit_mb,
     run_watched,
     within_effective_limit,
@@ -4752,6 +4764,258 @@ def drive_d(shape_name: str, arm: str) -> int:
     return 0 if record["verdict"] == "pass" else 1
 
 
+# -------------------------------------------- FeMoco confirmation of the Task 0.9d arms (0.9e)
+
+FEMOCO_D_DEFAULT_PROGRAM = "controlled_walk"
+FEMOCO_D_NOTES = (
+    "Task 0.9e: the one FeMoco confirmation compile of a Task 0.9d arm, in one watched child "
+    "under Task 0.9's FeMoco cap and time limit, started only through drive_femoco_d (token and "
+    "lock of Task 0.9), never retried; no P read check is run for it",
+    "prediction: the arm's entries of k1d_projection.json as stored before the compile "
+    "(nested equations, best and range of peak_mb and rusage_sum_mb, indicative time); "
+    "comparison: the measurement against it. A killed run's peak is a lower bound",
+)
+
+
+def femoco_d_result_path(arm: str, program: str) -> Path:
+    return results_path(f"femoco_{program}", arm)
+
+
+def femoco_d_prediction(arm: str, program: str) -> tuple[str | None, dict | None]:
+    """The arm's FeMoco prediction for one program from k1d_projection.json, or why there is
+    none: the arm's femoco_allowed must be exactly true (unknown, indicative and false refuse).
+    The projection's code_hash is recorded, not required (a Task 0.9e edit makes it stale)."""
+    path = results_path("projection", "B")
+    if not path.exists():
+        return f"no {path.name}: run --project --arm B first", None
+    projection = json.loads(path.read_text())
+    out = projection.get("arms", {}).get(arm)
+    if out is None:
+        return f"{path.name} has no projection for arm {arm}", None
+    if out.get("femoco_allowed") is not True:
+        return (f"arm {arm}: femoco_allowed is {out.get('femoco_allowed')!r}, not true "
+                f"({out.get('reason')})"), None
+    equations, memory = out["equations"].get(program, {}), out["femoco"].get(program)
+    if "E_femoco" not in equations or not memory:
+        return f"{path.name} has no FeMoco prediction of arm {arm} for {program}", None
+    return None, {
+        "source": path.name, "projection_code_hash": projection.get("code_hash"),
+        "current_code_hash": code_hash(), "time": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "arm": arm, "program": program, "femoco_allowed": out["femoco_allowed"],
+        "reason": out["reason"], "limits": projection["limits"],
+        "equations": {"nested": equations["E_femoco"], "method": equations["E_femoco_method"],
+                      "validated": equations["validated"],
+                      "mid14_holdout_error": equations.get("mid14", {}).get("error"),
+                      "drivers": equations.get("femoco_drivers")},
+        "peak_mb": memory["peak_mb"], "rusage_sum_mb": memory["rusage_sum_mb"],
+        "model_comparison": memory.get("model_comparison"),
+        "time_s": {k: v for k, v in out["time"].get(program, {}).items() if k != "points"}}
+
+
+def femoco_d_refusal(arm: str, program: str) -> tuple[str | None, dict | None]:
+    """Every refusal of the FeMoco confirmation path, before anything compiles (nothing is
+    created): the program, the arm's femoco_allowed, an existing result file, a missing token,
+    an existing lock. Returns the refusal (or None) and the stored prediction."""
+    if program not in SHAPE_PROGRAMS["femoco"]:
+        return f"the FeMoco shape compiles only {', '.join(SHAPE_PROGRAMS['femoco'])}", None
+    refusal, prediction = femoco_d_prediction(arm, program)
+    if refusal:
+        return refusal, None
+    result = femoco_d_result_path(arm, program)
+    if result.exists():
+        return (f"{result.name} exists: this arm's FeMoco {program} was already attempted, and "
+                "no second run happens without the user's decision"), prediction
+    if not os.environ.get(TOKEN_VARIABLE):
+        return (f"{TOKEN_VARIABLE} is not set: the orchestrator sets the token of the run "
+                "(the driver writes it into the lock and the child checks it)"), prediction
+    if FEMOCO_LOCK.exists():
+        held = FEMOCO_LOCK.read_text() == os.environ[TOKEN_VARIABLE]
+        return (f"{FEMOCO_LOCK} exists (it {'holds' if held else 'does not hold'} this token): "
+                "another FeMoco driver runs, or one crashed (check, then delete the lock)"
+                ), prediction
+    return None, prediction
+
+
+def expected_femoco_d(program: str, arm: str) -> dict:
+    """expected_d at FeMoco (no compile) plus the independent T/M/A that independent_program_d
+    leaves out there: the baseline's resource functions plus the independent erase deltas."""
+    expected = expected_d("femoco", program, arm)
+    erases, multiplicity = independent_erase_counts("femoco"), ERASE_MULTIPLICITY[program]
+    base = _tma(declared_counts("femoco", program))
+    delta = sum(n * (erases[e]["T"] - erases[e]["plain_T"]) for e, n in multiplicity.items())
+    expected["tma_independent"] = [base[0] + delta, base[1], base[2] + delta]
+    return expected
+
+
+def _range_comparison(measured, best: float, bounds: list) -> dict:
+    if measured is None:
+        return {"measured_mb": None, "best_mb": best, "range_mb": bounds, "inside_range": None}
+    low, high = bounds
+    outside = measured - high if measured > high else measured - low if measured < low else 0.0
+    return {"measured_mb": measured, "best_mb": best, "range_mb": bounds,
+            "error_vs_best": round((measured - best) / best, 4),
+            "inside_range": low <= measured <= high, "outside_by_mb": round(outside, 1),
+            "outside_by_pct_of_bound": round(
+                100 * outside / (high if outside > 0 else low), 1) if outside else 0.0}
+
+
+def femoco_d_comparison(prediction: dict, record: dict, killed: str | None) -> dict:
+    """The measurement against the stored prediction: nested equations (signed relative error
+    against the equation tolerance), both memory series against best and range (inside or not,
+    by how much past the bound), and the wall seconds against the indicative time."""
+    measured = (record.get("inventory") or {}).get("total", {}).get("nested")
+    predicted = prediction["equations"]["nested"]
+    equations = {"measured": measured, "predicted": predicted,
+                 "tolerance": D_EQUATION_TOLERANCE}
+    if measured is not None:
+        error = (measured - predicted) / predicted
+        equations.update(error=round(error, 4), abs_error=round(abs(error), 4),
+                         within_tolerance=abs(error) <= D_EQUATION_TOLERANCE)
+    out = {"equations": equations, "peak_lower_bound_only": bool(killed)}
+    for metric in ("peak_mb", "rusage_sum_mb"):
+        row = prediction[metric]
+        out[metric] = _range_comparison(record.get(metric), row["best_mb"], row["range_mb"])
+    seconds, time_row = record.get("seconds"), prediction["time_s"]
+    out["seconds"] = {"measured": seconds, "indicative_best": time_row.get("indicative_best_s"),
+                      "indicative_upper": time_row.get("indicative_upper_s"),
+                      "within_indicative_upper": None if seconds is None
+                      or "indicative_upper_s" not in time_row
+                      else seconds <= time_row["indicative_upper_s"]}
+    return out
+
+
+def write_femoco_d_results(arm: str, program: str, record: dict | None, prediction: dict,
+                           comparison: dict | None, watchdog: dict | None, verdict: str,
+                           first: bool = False) -> dict:
+    """k1d_<arm>_femoco_<program>.json: the D record structure (the program's record, the class
+    check of X and PX, limits, notes, code_hash, environment, verdict) plus the prediction, the
+    comparison and the watchdog line. ``first`` creates the file with mode x (the pre-compile
+    stub, verdict "running"): a result file of any outcome blocks a second run."""
+    seconds_limit, cap_mb = LIMITS["femoco"]
+    out = {"shape": "femoco", "arm": arm, "program": program}
+    if record is not None:
+        out[program] = record
+        if arm in EXPLICIT_ARMS:
+            out["class_check"] = {program: record.get("class_check")}
+            out["class_check_hash"] = class_check_hash()
+    if arm in PER_LEAF_ARMS:
+        out["read_implementation_hash"] = read_implementation_hash()
+        out["read_check"] = "skipped: no compile at FeMoco for checks (Task 0.9e)"
+    out.update(prediction=prediction, comparison=comparison, watchdog=watchdog,
+               limits={"seconds": seconds_limit, "mb": effective_limit_mb(cap_mb),
+                       "cap_mb": cap_mb},
+               memory_method=MEMORY_METHOD,
+               notes=list(NOTES) + list(ARM_NOTES) + list(D_NOTES) + list(FEMOCO_D_NOTES),
+               code_hash=code_hash(), environment=environment(), verdict=verdict)
+    RESULTS.mkdir(exist_ok=True)
+    with open(femoco_d_result_path(arm, program), "x" if first else "w") as handle:
+        handle.write(json.dumps(out, indent=2, default=str) + "\n")
+    return out
+
+
+def drive_femoco_d(arm: str, program: str, dry_run: bool = False) -> int:
+    """The FeMoco confirmation compile of a Task 0.9d arm: one program, one watched child under
+    Task 0.9's cap and time limit, with Task 0.9's token and lock, never retried (a result file
+    of any outcome blocks a second run). Exit 0 for a pass, 2 for a refusal, 1 otherwise."""
+    refusal, prediction = femoco_d_refusal(arm, program)
+    if refusal:
+        print("refused:", refusal, flush=True)
+        return 2
+    seconds_limit, cap_mb = LIMITS["femoco"]
+    timeout_s = seconds_limit + 60
+    command = [sys.executable, __file__, "--shape", "femoco", "--program", program, "--arm", arm]
+    expected = expected_femoco_d(program, arm)
+    if dry_run:
+        print("dry run: nothing compiles, no lock is created", flush=True)
+        print("child command:", shlex.join(command),
+              f"(run under the watchdog with {TOKEN_VARIABLE} in its environment)", flush=True)
+        print(f"cap: {cap_mb} MB, effective limit {effective_limit_mb(cap_mb):.0f} MB; timeout: "
+              f"{timeout_s} s (time limit {seconds_limit} s + 60 s)", flush=True)
+        print("result file:", femoco_d_result_path(arm, program), flush=True)
+        print("expected:", json.dumps({k: expected[k] for k in (
+            "tma_resource_functions", "tma_independent", "tma_B", "conditional_sites", "loops",
+            "cnot_upper_bound", "cnot_set_bits") if k in expected}), flush=True)
+        print("prediction:", json.dumps(prediction), flush=True)
+        return 0
+    env = dict(os.environ)
+    RESULTS.mkdir(exist_ok=True)
+    try:
+        with open(FEMOCO_LOCK, "x") as lock:
+            lock.write(env[TOKEN_VARIABLE])
+    except FileExistsError:
+        print(f"refused: {FEMOCO_LOCK} exists: another FeMoco driver runs, or one crashed "
+              "(check, then delete the lock)", flush=True)
+        return 2
+    try:
+        if not _driver_token_valid():
+            print("refused: the lock does not hold this token", flush=True)
+            return 2
+        try:
+            write_femoco_d_results(arm, program, None, prediction, None, None, "running",
+                                   first=True)
+        except FileExistsError:
+            print(f"refused: {femoco_d_result_path(arm, program).name} exists", flush=True)
+            return 2
+        print(f"{arm} {program}: prediction stored in {femoco_d_result_path(arm, program).name}; "
+              f"compiling the FeMoco shape once, cap {cap_mb} MB, timeout {timeout_s} s",
+              flush=True)
+        before = compressor_mb()
+        try:
+            run = run_watched(command, cap_mb=cap_mb, timeout_s=timeout_s, env=env)
+        except WatchdogError as exc:
+            print("verdict: fail (the watchdog could not start the child; nothing compiled)",
+                  flush=True)
+            write_femoco_d_results(arm, program, {"error": f"watchdog did not start: {exc}"},
+                                   prediction, None, None, "fail")
+            return 1
+        after = compressor_mb()
+        load = {"watched_seconds": round(run.seconds, 1), "compressor_mb_before": before,
+                "compressor_mb_after": after,
+                "compressor_mb_delta": (None if None in (before, after)
+                                        else round(after - before, 1))}
+        lines = [line for line in run.stdout.splitlines() if line.startswith("{")]
+        record, malformed = (d_child_record(lines[-1], "femoco", program, arm) if lines
+                             else (None, "no line starting with '{'"))
+        if run.killed or run.survivors or run.returncode != 0 or malformed:
+            if run.killed:
+                reason = f"killed: {run.killed}"
+            elif run.survivors or run.returncode != 0:
+                reason = run.stderr[-3000:]
+            else:
+                reason = f"malformed output: {malformed}; stdout tail: {run.stdout[-300:]!r}"
+            result = {"error": reason, **run.summary(), **load}
+        else:
+            record["peak_mb"] = round(run.peak_mb, 1)
+            record["within_budget"] = (record["seconds"] <= seconds_limit
+                                       and within_effective_limit(run.peak_mb, cap_mb))
+            result = {**record, **load}
+        result["expected"] = expected
+        try:
+            problems = d_problems("femoco", program, result, expected, arm)
+            comparison = femoco_d_comparison(prediction, result, run.killed)
+        except Exception as exc:  # the compile's result is never lost to an evaluation error
+            result["gate"] = {"ok": False, "problems": [f"evaluation error: {exc!r}"]}
+            write_femoco_d_results(arm, program, result, prediction, None, run.summary(),
+                                   "killed" if run.killed else "fail")
+            raise
+        result["gate"] = {"ok": not problems, "problems": problems}
+        verdict = ("killed" if run.killed else "pass" if not problems else "fail")
+        print(program, json.dumps({k: result.get(k) for k in (
+            "toffoli", "measurements", "measured_and_uncomputes", "seconds", "cpu_seconds",
+            "watched_seconds", "peak_mb", "rusage_sum_mb", "compressor_mb_delta", "error")}
+            | {"nested": result.get("inventory", {}).get("total", {}).get("nested"),
+               "gate": result["gate"]}), flush=True)
+        print("comparison", json.dumps(comparison), flush=True)
+        if run.killed:
+            print("WATCHDOG", json.dumps(run.summary()), flush=True)
+        write_femoco_d_results(arm, program, result, prediction, comparison, run.summary(),
+                               verdict)
+        print("verdict:", verdict, flush=True)
+        return 0 if verdict == "pass" else 1
+    finally:
+        FEMOCO_LOCK.unlink(missing_ok=True)
+
+
 # ----------------------------------------------------------------- projection (requirement 6)
 
 D_DRIVERS = {
@@ -5154,8 +5418,20 @@ def main():
     parser.add_argument("--read-check", action="store_true",
                         help="arm P's compiled-path read check into k1d_P_small.json")
     parser.add_argument("--read-check-child", choices=READ_ROLES, help=argparse.SUPPRESS)
+    parser.add_argument("--dry-run", action="store_true",
+                        help="with --shape femoco --all --arm B|P|X|PX: every refusal check, then "
+                             "print the child command, cap, timeout and prediction; compile "
+                             "nothing, create no lock")
     args = parser.parse_args()
     remedy = args.arm or args.remedy == 1
+    femoco_d = args.shape == "femoco" and args.all and args.arm in D_ARMS
+    if args.dry_run and not femoco_d:
+        parser.error("--dry-run applies only to --shape femoco --all --arm B|P|X|PX")
+    if femoco_d and args.allow_retry:
+        parser.error("the FeMoco confirmation of a Task 0.9d arm is never retried")
+    if femoco_d:
+        sys.exit(drive_femoco_d(args.arm, args.program or FEMOCO_D_DEFAULT_PROGRAM,
+                                dry_run=args.dry_run))
     if args.fixup_check_child:
         print(json.dumps(fixup_check(), default=str), flush=True)
         return
