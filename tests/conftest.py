@@ -23,7 +23,8 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture(autouse=True)
 def _rule_lowering_warning_policy():
-    """Fail on any RuleLoweringWarning that names a dfthc operator (spec 7.4, rule 12)."""
+    """Fail on any RuleLoweringWarning that names a dfthc operator, except the expected
+    measuring-rule skip; drop that one and the PennyLane noise (spec 7.4, rule 12)."""
     with warnings.catch_warnings(record=True) as records:
         install_warning_filters()
         yield
@@ -34,7 +35,7 @@ def _rule_lowering_warning_policy():
             if kind == "dfthc":
                 offending.append(str(record.message))
                 continue
-            if kind == "noise":
+            if kind in ("noise", "expected"):
                 continue
         warnings.warn_explicit(record.message, record.category, record.filename, record.lineno)
     if offending:
