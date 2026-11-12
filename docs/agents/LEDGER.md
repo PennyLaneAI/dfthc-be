@@ -43,14 +43,14 @@ marked `merged` is never re-dispatched after a loss of context.
 
 | Id | Title | Tier | Status | Branch | Merge commit | Test evidence | Reviews (GPT-5.6 / Opus) | Open issues |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1A.1 | `WalkParams`, presets and `WalkLayout` | B | in progress | `phase1/1A.1` | | | / n/a | dispatched from `b2b8c95`, lane-a; per-commit base 225 (plan: 181, so +44) |
+| 1A.1 | `WalkParams`, presets and `WalkLayout` | B | in progress | `phase1/1A.1` | | | / n/a | dispatched from `e0d3afb`, lane-a; per-commit base 225 (plan: 181, so +44) |
 | 1A.2 | `DFTHCFactors`, loaders, `random_factors`; fermion matrices | B | not started | `phase1/1A.2` | | | / n/a | |
 | 1A.3 | Sum-of-squares quantities, both offset frames, spec 8.6 checks 1 to 3 | A | not started | `phase1/1A.3` | | | / | |
 | 1A.4 | Alias tables, Givens angles, `WalkTables` | B | not started | `phase1/1A.4` | | | / n/a | after 1A.3 (uses `outer_weights`, `inner_weights`); wave 1-c |
 | 1A.5 | Encoded-Hamiltonian model and failure signs | A | not started | `phase1/1A.5` | | | / | |
 | 1A.6 | dfthcbe reference fixtures (`.venv-ref`) | B | not started | `phase1/1A.6` | | | / n/a | two commits: code first (5 fixture tests skip), then the fixtures, which the orchestrator generates in the lane (plan Step 7, from `.scratch/dfthcbe-ref`) |
 | 1A.7 | `dfthc.costs`: closed forms of spec 9.24 | B | not started | `phase1/1A.7` | | | / n/a | |
-| 1B.1 | Sparse simulator core and differential tests | A | in progress | `phase1/1B.1` | | | / | dispatched from `b2b8c95`, lane-b; per-commit base 225 (plan: 181, so +44) |
+| 1B.1 | Sparse simulator core and differential tests | A | in review | `phase1/1B.1` | | `3dcfd00`: 23 targeted passed (2.2-2.6 s), per-commit 248 passed (112 s), ruff clean; simulator byte-identical to the plan; two test-line fixes (a vacuous regex `|`, a docstring wire range) | / | dispatched from `e0d3afb`, lane-b; per-commit base 225 (plan: 181, so +44) |
 | G0.1 | K-1 design change: per-leaf read loads (P) and explicit adjoint and controlled classes (X) in spec, master plan, C plan, HANDOFF; upstream issue drafts | A | in progress | (scratch, `.scratch/plan-check`) | | | / n/a | brief `.superpowers/sdd/task-G0.1-brief.md`; decision "K-1 at G0"; gates Tasks 1C.3-1C.5 and the Phase 2 plan |
 | 1B.2 | Measurements, conditionals, policies, tape front end | A | not started | `phase1/1B.2` | | | / | |
 | 1B.3 | Simulator benchmark gate | B | not started | `phase1/1B.3` | | | / n/a | re-dispatch to Tier A (with an Opus review) if a spec 12.6 mitigation is needed; needs Task 0.9's `_angle_erase_resources` counting fix; the 16-input schedule was not dry-run (2 inputs: 11.9 s, 173 MB) |
