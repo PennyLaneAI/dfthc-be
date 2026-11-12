@@ -1082,7 +1082,7 @@ Every formula below is implemented verbatim in `dfthc.costs` and asserted by T4.
 $$U(lo, hi, n, c) = \sum_{m=1}^{n}\Big(\big\lfloor (hi - 1)/2^m \big\rfloor - \big\lfloor lo/2^m \big\rfloor + 1\Big) - [c = 0], \qquad U(lo, hi, 0, c) = 0 .$$
 
 - *Why.* Each term counts the visited internal nodes at height $m$. Every visited internal node costs one `TemporaryAND`: with two visited children, one AND plus a CNOT to switch children; with one visited child, one AND with the appropriate control value. Each AND is uncomputed by `Adjoint(TemporaryAND)`. An uncontrolled root needs no AND.
-- *Nested iteration* (outer register over $[lo_1, hi_1)$, inner register iterated under every outer leaf): $U_2 = U(lo_1, hi_1, n_1, c) + (hi_1 - lo_1)\, U(lo_2, hi_2, n_2, 1)$.
+- *Nested iteration* (outer register over $[lo_1, hi_1)$, inner register iterated under every outer leaf): $U_2 = U(lo_1, hi_1, n_1, c) + (hi_1 - lo_1)\, U(lo_2, hi_2, n_2, c_2)$ with $c_2 = [n_1 \ge 1 \lor c = 1]$: the inner root carries the outer leaf's flag, which exists unless the outer register has zero width and no control.
 - *Truncated iteration*, for comparison only (Qualtran and dfthcbe; §4.4 item 8): $\max(L + c - 2, 0)$ for $[0, L)$ with $L \ge 1$. A single leaf needs no AND: the root control, if any, is its flag.
 
 **One-hot register over ob bits** (§9.4): $O(\mathrm{ob}) = 2^{\mathrm{ob}} - 2$ for $\mathrm{ob} \ge 1$, and $O(0) = 0$.
@@ -1198,7 +1198,7 @@ Rounds run for $j = t-1, \dots, 0$, with $t$ = `num_bits`. Round $j$ is one `Ope
 
 1. `H(control)`.
 2. `ControlledWalkPower(2**j, control, ...)`, or the toy walk's equivalent (§11.4).
-3. Phase corrections from the bits already measured. For each earlier bit $l > j$, with $d = l - j + 1$, apply `qp.cond(earlier_bits[l], PhaseGradientRotation)(k=2**d - 1, m=d, ...)` on `control`, against `qpe_grad`. That is the phase $e^{2\pi i (2^d - 1)/2^d} = e^{-2\pi i/2^d}$ on $\lvert 1\rangle$ (§9.1).
+3. Phase corrections from the bits already measured. For each earlier bit $l > j$, with $d = l - j + 1$, apply `PhaseGradientRotation(k=2**d - 1, m=d, ...)` on `control`, against `qpe_grad`, conditioned on `earlier_bits[l]`. That is the phase $e^{2\pi i (2^d - 1)/2^d} = e^{-2\pi i/2^d}$ on $\lvert 1\rangle$ (§9.1). Under capture the condition takes a branch function that builds the operator and returns nothing, `qp.cond(earlier_bits[l], correction)()`: passing the class, `qp.cond(bit, PhaseGradientRotation)(k=...)`, fails because `k` must be a compile-time constant, and a branch may not return an `Operator2` instance (Task 1C.1 Opus review, `cond_probe.py`).
 4. `H(control)`.
 
 `earlier_bits` is a dynamic boolean array of shape $(t,)$, indexed by bit position. Entry $l$ holds $m_l$ for $l > j$ and `False` for $l \le j$. The rule reads only `earlier_bits[l]` for $l > j$. The driver starts from an all-`False` array and sets entry $j$ after measuring $m_j$. Every round therefore gets an array of the same shape, so all rounds share one argument signature, including round $j = t-1$, in which no entry is set yet.
