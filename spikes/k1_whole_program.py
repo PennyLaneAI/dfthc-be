@@ -942,13 +942,17 @@ def _word_array(words):
     """Canonicalize table words once for the dynamic ``words`` argument (L-23).
 
     Abstract arrays (resource keys) and tracers (operators rebuilt by Catalyst) pass unchanged.
-    Raises ``ValueError`` for a word outside [0, 2**32).
+    Raises ``ValueError`` for a word that is not an integer in [0, 2**32), checked on the Python
+    integers before the WORD_DTYPE cast (which would overflow first for words beyond int64).
     """
     if isinstance(words, AbstractArray) or qp.math.is_tracer(words):
         return words
-    array = np.asarray(words, dtype=WORD_DTYPE)
-    if not ((array >= 0) & (array < 2**WORD)).all():
-        raise ValueError(f"table words must lie in [0, 2**{WORD}): {array}")
+    values = np.asarray(words, dtype=object)
+    bad = [w for w in values.flat
+           if isinstance(w, bool) or not isinstance(w, (int, np.integer)) or not 0 <= w < 2**WORD]
+    if bad:
+        raise ValueError(f"table words must be integers in [0, 2**{WORD}), got {bad[0]!r}")
+    array = values.astype(WORD_DTYPE)
     return jnp.asarray(array) if qp.capture.enabled() else array
 
 
@@ -1707,6 +1711,40 @@ def compressor_mb() -> float | None:
     return round(pages * page / 2**20, 1)
 
 
+_NUMBER = (int, float)
+CHILD_FIELDS = {"program": str, "shape": str, "seconds": _NUMBER, "cpu_seconds": _NUMBER,
+                "rusage_sum_mb": _NUMBER, "toffoli": int, "measurements": int,
+                "measured_and_uncomputes": int, "counts": dict, "diagnostics": dict,
+                "warnings": dict}
+"""Fields (and types) every child record needs before the driver uses it."""
+REMEDY_CHILD_FIELDS = {"table_word_dtype": str, "bit_loops": dict, "projection_size": dict}
+"""Further fields of a remedy-1 child record."""
+
+
+def child_record(line: str, shape_name: str, program: str, remedy) -> tuple[dict | None, str]:
+    """Parse and validate a child's JSON line: the record, or None and why it is malformed
+    (Task 0.9b review I1). A malformed record becomes an ``error`` record in drive()."""
+    try:
+        record = json.loads(line)
+    except json.JSONDecodeError as exc:
+        return None, f"not JSON ({exc})"
+    if not isinstance(record, dict):
+        return None, f"a JSON {type(record).__name__}, not an object"
+    fields = {**CHILD_FIELDS, **(REMEDY_CHILD_FIELDS if remedy else {})}
+    for name, kind in fields.items():
+        if name not in record:
+            return None, f"missing field {name!r}"
+        if isinstance(record[name], bool) or not isinstance(record[name], kind):
+            return None, f"field {name!r} has type {type(record[name]).__name__}"
+    if (record["shape"], record["program"]) != (shape_name, program):
+        return None, f"record of {record['shape']}/{record['program']}, not {shape_name}/{program}"
+    if not isinstance(record["warnings"].get("prototype"), list):
+        return None, "warnings['prototype'] is not a list"
+    if remedy and not isinstance(record["bit_loops"].get("retained"), bool):
+        return None, "bit_loops['retained'] is not a bool"
+    return record, ""
+
+
 def drive(shape_name: str, allow_retry: bool = False, remedy: bool = False) -> int:
     seconds_limit, cap_mb = LIMITS[shape_name]
     results, programs, env = {}, list(SHAPE_PROGRAMS[shape_name]), dict(os.environ)
@@ -1763,11 +1801,17 @@ def drive(shape_name: str, allow_retry: bool = False, remedy: bool = False) -> i
                     "compressor_mb_delta": (None if None in (before, after)
                                             else round(after - before, 1))}
             lines = [line for line in run.stdout.splitlines() if line.startswith("{")]
-            if run.killed or run.survivors or run.returncode != 0 or not lines:
-                reason = f"killed: {run.killed}" if run.killed else run.stderr[-3000:]
+            record, malformed = (child_record(lines[-1], shape_name, program, remedy) if lines
+                                 else (None, "no line starting with '{'"))
+            if run.killed or run.survivors or run.returncode != 0 or malformed:
+                if run.killed:
+                    reason = f"killed: {run.killed}"
+                elif run.survivors or run.returncode != 0:
+                    reason = run.stderr[-3000:]
+                else:
+                    reason = f"malformed output: {malformed}; stdout tail: {run.stdout[-300:]!r}"
                 results[program] = {"error": reason, **run.summary(), **load}
             else:
-                record = json.loads(lines[-1])
                 record["peak_mb"] = round(run.peak_mb, 1)
                 record["within_budget"] = (record["seconds"] <= seconds_limit
                                            and within_effective_limit(run.peak_mb, cap_mb))
