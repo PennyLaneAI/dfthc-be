@@ -685,6 +685,8 @@ def emit_phase_fixup(parities, *, address, address_widths, covered, onehot, oneh
     """
     emit = QROAMEmitter() if emit is None else emit
     widths, covered = _check_address(address_widths, covered)
+    if not 0 <= onehot_bits <= sum(widths):
+        raise ValueError(f"onehot_bits must be in [0, {sum(widths)}], got {onehot_bits}")
     order = PhaseFixup.address_order(widths, covered)
     if len(parities) != len(order):
         raise ValueError(f"need one parity per covered address ({len(order)}), "
@@ -693,7 +695,8 @@ def emit_phase_fixup(parities, *, address, address_widths, covered, onehot, oneh
         raise ValueError(f"onehot needs {2**onehot_bits if onehot_bits else 0} wires, "
                          f"got {len(onehot)}")
     index = {a: i for i, a in enumerate(order)}
-    low = address[len(address) - onehot_bits:]
+    low = list(address[len(address) - onehot_bits:])
+    onehot = list(onehot)
     specs = _high_specs(widths, covered, onehot_bits)
     high_widths = [n for _, n, _, _ in specs]
 

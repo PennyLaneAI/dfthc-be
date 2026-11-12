@@ -9,7 +9,7 @@ import pytest
 
 from dfthc import costs
 from dfthc.compile import FIXED_DECOMPS, GATE_SET, compiled_resources
-from dfthc.ops.qroam import PhaseFixup, QROAMRead, _phase_fixup
+from dfthc.ops.qroam import PhaseFixup, QROAMRead, _phase_fixup, emit_phase_fixup
 from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE
 from dfthc.testing.sparse_sim import ForcedPolicy, SparseSimulator
 from dfthc.testing.tape import decompose_for_simulation
@@ -98,29 +98,44 @@ def test_fixup_applies_exactly_the_parity_table(shape, ob, control_value):
 
 def test_tape_path_with_measured_parities():
     """The tape path (sparse simulator): parities from deterministic measurements m0 = 1, m1 = 0,
-    so the covered addresses at even positions of address_order get the sign."""
-    widths, covered = INNER
-    ob, size = 3, len(PhaseFixup.address_order(*INNER))
-    wires, num_wires = layout(widths, covered, ob, None)
-    source = [num_wires, num_wires + 1]
+    on the covered set x in [1, 3), b in [1, 4) (nonzero lower bounds, partly covered leaves).
+    Three fixups on one address: ob = 3 signs the even positions of address_order; the whole
+    address low (ob = 5) without an enable, whose leaf has no flag (a conditional Z on the one-hot
+    wire), signs the positions with i % 4 == 1; the same with an enable of value 0, whose leaf
+    flag is the control, signs the positions with i % 4 == 3 where the control is 0. A direct
+    call of emit_phase_fixup with ob = 6, one bit beyond the address, raises."""
+    widths, covered = (3, 2), ((1, 3), (1, 4))
+    size = len(PhaseFixup.address_order(widths, covered))
+    wires, num_wires = layout(widths, covered, 5, 0)
+    work, source = [num_wires], [num_wires + 1, num_wires + 2]
+    assert PhaseFixup.required_wires(widths, covered, 3, None)["work"] == 1 and not wires["work"]
 
     def qfunc():
-        for wire in wires["address"]:
+        for wire in wires["address"] + wires["control"]:
             qp.H(wire)
         qp.X(source[0])
         measured = [qp.measure(source[0]), qp.measure(source[1])]
-        make_fixup([measured[i % 2] for i in range(size)], widths, covered, ob, None, wires)
+        make_fixup([measured[i % 2] for i in range(size)], widths, covered, 3, None,
+                   dict(wires, onehot=wires["onehot"][:8], work=work, control=[]))
+        make_fixup([measured[int(i % 4 != 1)] for i in range(size)], widths, covered, 5, None,
+                   dict(wires, control=[]))
+        make_fixup([measured[int(i % 4 != 3)] for i in range(size)], widths, covered, 5, 0, wires)
 
     tape = decompose_for_simulation(qfunc)
-    simulator = SparseSimulator(num_wires + 2, policy=ForcedPolicy([1, 0]), strict=False)
+    simulator = SparseSimulator(num_wires + 3, policy=ForcedPolicy([1, 0]), strict=False)
     state = simulator.run(tape.operations)
-    order = PhaseFixup.address_order(widths, covered)
-    sign = {a: -1 if i % 2 == 0 else 1 for i, a in enumerate(order)}
-    assert len(state.amps) == 2 ** sum(widths)
+    position = {a: i for i, a in enumerate(PhaseFixup.address_order(widths, covered))}
+    assert len(state.amps) == 2 ** (sum(widths) + 1)
     for row, amp in enumerate(state.amps):
         a = sum(int(state.bits(w)[row]) << (4 - i) for i, w in enumerate(wires["address"]))
-        assert abs(amp - sign.get(a, 1) / np.sqrt(32)) < 1e-12, a
-        assert not any(state.bits(w)[row] for w in wires["onehot"] + wires["work"])
+        c = int(state.bits(wires["control"][0])[row])
+        i = position.get(a)
+        flips = 0 if i is None else (i % 2 == 0) + (i % 4 == 1) + (i % 4 == 3 and c == 0)
+        assert abs(amp - (-1) ** flips / np.sqrt(64)) < 1e-12, (a, c)
+        assert not any(state.bits(w)[row] for w in wires["onehot"] + work)
+    with pytest.raises(ValueError, match="onehot_bits must be in"):
+        emit_phase_fixup([True] * size, address=wires["address"], address_widths=widths,
+                         covered=covered, onehot=list(range(100, 164)), onehot_bits=6, work=work)
 
 
 def erase_shapes(p):
