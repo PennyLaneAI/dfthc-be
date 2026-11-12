@@ -13,8 +13,17 @@ import subprocess
 import sys
 import textwrap
 from pathlib import Path
+from typing import Protocol
 
 SRC = Path(__file__).resolve().parents[2]
+
+
+class _HasOutput(Protocol):
+    """A finished run with text output: ``CompletedProcess`` or ``WatchedRun``."""
+
+    stdout: str
+    stderr: str
+
 
 PRELUDE = textwrap.dedent(
     """
@@ -44,26 +53,46 @@ PRELUDE = textwrap.dedent(
 )
 
 
+_REMOVED_VARIABLES = ("PYTHONWARNINGS", "PYTHONDEVMODE", "XLA_FLAGS")
+
+
+def snippet_command(
+    body: str, *, export_warning_variable: bool = True
+) -> tuple[list[str], dict[str, str]]:
+    """The command line and the environment that run ``PRELUDE + body`` in a new interpreter.
+
+    The environment is the parent's without the variables that change warning handling or the
+    JAX and Catalyst configuration (``PYTHONWARNINGS``, ``PYTHONDEVMODE``, ``XLA_FLAGS``, every
+    ``JAX_*`` and ``CATALYST_*``), so that a canary sees the same defaults whatever the caller
+    exports. It then sets ``PYTHONPATH``, and the L-18 variable to ``0`` unless
+    ``export_warning_variable`` is false. Neither ``scripts/test.sh``, ``tests/conftest.py`` nor
+    ``pyproject.toml`` sets any removed variable for the canaries except the L-18 one.
+    """
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key not in _REMOVED_VARIABLES and not key.startswith(("JAX_", "CATALYST_"))
+    }
+    env["PYTHONPATH"] = str(SRC)
+    if export_warning_variable:
+        env["CATALYST_SILENCE_RULE_LOWERING_WARNINGS"] = "0"
+    return [sys.executable, "-c", PRELUDE + textwrap.dedent(body)], env
+
+
 def run_snippet(
     body: str, *, export_warning_variable: bool = True, timeout: float = 900.0
 ) -> subprocess.CompletedProcess[str]:
     """Run ``PRELUDE + body`` in a new interpreter and return the completed process.
 
-    ``export_warning_variable=False`` unsets CATALYST_SILENCE_RULE_LOWERING_WARNINGS (L-18).
+    ``export_warning_variable=False`` leaves CATALYST_SILENCE_RULE_LOWERING_WARNINGS unset (L-18).
     """
-    env = dict(os.environ, PYTHONPATH=str(SRC))
-    if export_warning_variable:
-        env["CATALYST_SILENCE_RULE_LOWERING_WARNINGS"] = "0"
-    else:
-        env.pop("CATALYST_SILENCE_RULE_LOWERING_WARNINGS", None)
-    code = PRELUDE + textwrap.dedent(body)
+    command, env = snippet_command(body, export_warning_variable=export_warning_variable)
     return subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=timeout,
-        check=False,
+        command, capture_output=True, text=True, env=env, timeout=timeout, check=False
     )
 
 
-def outcome(result: subprocess.CompletedProcess[str], label: str) -> str:
+def outcome(result: _HasOutput, label: str) -> str:
     """The text after ``<label> `` on the snippet's report line, e.g. ``OK {...}``."""
     for line in result.stdout.splitlines():
         if line.startswith(label + " "):

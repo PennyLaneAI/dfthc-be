@@ -1,0 +1,27 @@
+{
+  "tables_1_size_1024": {
+    "cpu_seconds": 1.92,
+    "peak_mb": 355.8,
+    "seconds": 1.95
+  },
+  "tables_1_size_64": {
+    "cpu_seconds": 0.43,
+    "peak_mb": 221.4,
+    "seconds": 0.45
+  },
+  "tables_1_size_8640": {
+    "cpu_seconds": 35.95,
+    "peak_mb": 1474.1,
+    "seconds": 36.93
+  },
+  "tables_2_size_64": {
+    "cpu_seconds": 0.67,
+    "peak_mb": 232.1,
+    "seconds": 0.68
+  },
+  "tables_4_size_64": {
+    "cpu_seconds": 0.85,
+    "peak_mb": 247.9,
+    "seconds": 0.87
+  }
+}

@@ -1,8 +1,10 @@
 """Tests for dfthc.testing.canary, the subprocess runner of the canary suite (plan Task 0.2)."""
 
+import sys
+
 import pytest
 
-from dfthc.testing.canary import outcome, run_snippet
+from dfthc.testing.canary import SRC, outcome, run_snippet, snippet_command
 
 pytestmark = pytest.mark.subprocess
 
@@ -33,3 +35,29 @@ def test_outcome_explains_a_missing_report_line():
     result = run_snippet('print("nothing to see")')
     with pytest.raises(AssertionError, match="no report line for 'MISSING'"):
         outcome(result, "MISSING")
+
+
+def test_snippet_command_drops_hostile_parent_variables(monkeypatch):
+    for name, value in {
+        "PYTHONWARNINGS": "error",
+        "PYTHONDEVMODE": "1",
+        "JAX_ENABLE_X64": "0",
+        "JAX_PLATFORMS": "bogus",
+        "XLA_FLAGS": "--bogus",
+        "CATALYST_SILENCE_RULE_LOWERING_WARNINGS": "1",
+        "CATALYST_FOO": "1",
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("DFTHC_KEEP_ME", "yes")
+
+    command, env = snippet_command("pass", export_warning_variable=False)
+    assert command[:2] == [sys.executable, "-c"]
+    removed = ("PYTHONWARNINGS", "PYTHONDEVMODE", "JAX_ENABLE_X64", "JAX_PLATFORMS", "XLA_FLAGS",
+               "CATALYST_SILENCE_RULE_LOWERING_WARNINGS", "CATALYST_FOO")
+    assert [name for name in removed if name in env] == []
+    assert env["DFTHC_KEEP_ME"] == "yes"
+    assert env["PYTHONPATH"] == str(SRC)
+
+    _, exported = snippet_command("pass", export_warning_variable=True)
+    assert exported["CATALYST_SILENCE_RULE_LOWERING_WARNINGS"] == "0"
+    assert not [name for name in exported if name.startswith("JAX_") or name == "CATALYST_FOO"]
