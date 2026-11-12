@@ -1,0 +1,106 @@
+{
+  "method": "size measure: projection_size_gates(shape, program), from the baseline stand-in's resource functions (no compile): every gate of the baseline program with all table words zero (the skeleton that partial remedy 1 keeps unrolled), plus the conditional-Z leaves of the unchanged erases with random_tables(shape, seed=54). It must reproduce the walk sizes of PROBE_A_WALK_SIZES. A remedy compile's analyzed gates (analyzed_gates_upper_bound) count every loaded bit and are recorded, not fitted. Fit points: a shape's program record in a k1r1 file of this code_hash() with successful counts, within_budget true and a passed stop gate; at least two per program (fit_shapes). Time: power law through the two largest fit shapes, exponent at least 1. Memory: least-squares line through all fit shapes, slope at least 0, for peak_mb (the gate metric) and rusage_sum_mb (the getrusage companion). femoco_allowed as in Task 0.9: the walk and the controlled walk within the time limit of LIMITS['femoco'] and the watchdog's effective limit of its cap (7,680 MB of 8 GB) by both memory series. Task 0.9b compiles no FeMoco shape, whatever the projection says",
+  "limits": {
+    "seconds": 3600,
+    "mb": 7680.0,
+    "cap_mb": 8192
+  },
+  "programs": {
+    "walk": {
+      "fit_shapes": [
+        "small",
+        "mid10",
+        "mid14"
+      ],
+      "missing_points": {},
+      "sizes": {
+        "small": {
+          "projection_size_gates": 1982,
+          "skeleton_gates": 1926,
+          "erase_conditional_z": 56,
+          "baseline_gates": 2161
+        },
+        "mid10": {
+          "projection_size_gates": 20599,
+          "skeleton_gates": 19791,
+          "erase_conditional_z": 808,
+          "baseline_gates": 34827
+        },
+        "mid14": {
+          "projection_size_gates": 32822,
+          "skeleton_gates": 31038,
+          "erase_conditional_z": 1784,
+          "baseline_gates": 65997
+        },
+        "femoco": {
+          "projection_size_gates": 193053,
+          "skeleton_gates": 174801,
+          "erase_conditional_z": 18252,
+          "baseline_gates": 627557
+        }
+      },
+      "analyzed_gates_upper_bound": {
+        "small": 2446,
+        "mid10": 50697,
+        "mid14": 103002
+      },
+      "seconds": 1144,
+      "time_exponent": 1.43,
+      "peak_mb": 11163,
+      "mb_per_1000_gates": 55.75,
+      "rusage_sum_mb_companion": 12639
+    },
+    "controlled_walk": {
+      "fit_shapes": [
+        "small",
+        "mid10"
+      ],
+      "missing_points": {
+        "mid14": "1.8 x the mid14 walk's peak is 4002 MB, not below 3500 MB (Task 0.9b, requirement 2)"
+      },
+      "sizes": {
+        "small": {
+          "projection_size_gates": 1988,
+          "skeleton_gates": 1932,
+          "erase_conditional_z": 56,
+          "baseline_gates": 2167
+        },
+        "mid10": {
+          "projection_size_gates": 20605,
+          "skeleton_gates": 19797,
+          "erase_conditional_z": 808,
+          "baseline_gates": 34833
+        },
+        "femoco": {
+          "projection_size_gates": 193059,
+          "skeleton_gates": 174807,
+          "erase_conditional_z": 18252,
+          "baseline_gates": 627563
+        }
+      },
+      "analyzed_gates_upper_bound": {
+        "small": 2454,
+        "mid10": 50705
+      },
+      "seconds": 1043,
+      "time_exponent": 1.0,
+      "peak_mb": 19620,
+      "mb_per_1000_gates": 98.38,
+      "rusage_sum_mb_companion": 17990
+    }
+  },
+  "femoco_allowed": false,
+  "reason": "walk: sampled peak 10.9 GB > 7.5 GB; walk: getrusage companion 12.3 GB > 7.5 GB; controlled_walk: sampled peak 19.2 GB > 7.5 GB; controlled_walk: getrusage companion 17.6 GB > 7.5 GB",
+  "code_hash": "f82222862e99abca4a82636dcc3eb79883bf9964d0d66344b07c6f9e251b796c",
+  "environment": {
+    "python": "3.12.7",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "pennylane": "0.46.0.dev151",
+    "pennylane_catalyst": "0.16.0.dev140",
+    "pennylane_lightning": "0.46.0.dev34",
+    "jax": "0.7.1",
+    "jaxlib": "0.7.1",
+    "numpy": "2.5.4",
+    "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+  }
+}
