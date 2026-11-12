@@ -186,7 +186,7 @@ $$\mathrm{BE}\Big[\frac{H_{\mathrm{SA}}}{\Lambda} - I\Big] = U^\dagger\, \mathrm
 
 Spectrum and cost:
 - $W$ has eigenphases $\pm\arccos(E_j/\Lambda - 1)$ for the eigenvalues $E_j$ of $H_{\mathrm{SA}}$.
-- The gap $E_{\mathrm{gap}}$ is the lowest eigenvalue of $H_{\mathrm{SA}}$ on the $\eta$-electron sector. It is frame-independent: $E_{\mathrm{gap}} = E_{\mathrm{gs}}^{\mathrm{phys}} - E_{\mathrm{SoS}}^{\mathrm{phys}}$, with $E_{\mathrm{gs}}^{\mathrm{phys}}$ the physical ground energy (`e_upper`).
+- The gap $E_{\mathrm{gap}}$ is the lowest eigenvalue of $H_{\mathrm{SA}}$ on the $\eta$-electron sector. It is frame-independent: $E_{\mathrm{gap}} = E_{\mathrm{gs}}^{\mathrm{phys}} - E_{\mathrm{SoS}}^{\mathrm{phys}}$, with $E_{\mathrm{gs}}^{\mathrm{phys}}$ the physical ground energy (`e_upper`). The two sides agree exactly for exactly factorized instances and up to the factorization error otherwise ($2.1 \cdot 10^{-2}$ for `h2_631g_R2_B2_C2`); `summary.json`'s `e_gap` is the right-hand side. Walk eigenphases and QPE outputs at inexact instances are therefore compared with eigenvalues of the encoded $\tilde H_{\mathrm{SA}}$ (§8.5), never with `e_gap`.
 - Resolving energies near the gap to $\delta E$ takes about $\lambda_{\mathrm{eff}}/\delta E$ walk steps, with $\lambda_{\mathrm{eff}} = \sqrt{E_{\mathrm{gap}}(2\Lambda - E_{\mathrm{gap}})}$.
 
 On states whose ancillas start in $\lvert 0\rangle$ we have $U^\dagger U = I$. So the controlled walk controls only the two reflections:
