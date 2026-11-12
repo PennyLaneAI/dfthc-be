@@ -121,10 +121,11 @@ file.
   longer reaches runtime as a bare named gate. Canary:
   `test_undecomposed_operator_op_reaches_runtime`. Mitigation kept: the `level="device"` closure
   test of every composite operator (T5).
-- **L-21, compile cost grows with distinct tables and table size** (catalyst#3173). Canary:
-  `test_each_distinct_table_is_a_separate_rule_compile` (per commit). On 2026-11-11 each distinct
-  table traces its rule exactly twice, and identical tables in one program share those traces:
-  compile time grows with table size, and each distinct table adds its own rule traces.
+- **L-21, distinct tables add rule traces and compile cost grows with table size**
+  (catalyst#3173). Canary: `test_each_distinct_table_is_a_separate_rule_compile` (per commit).
+  On 2026-11-11 each distinct table traces its rule exactly twice, and identical tables in one
+  program share those traces: compile time grows with table size, and each distinct table adds
+  its own rule traces.
   Benchmark: `test_compile_time_scaling` (nightly) compiles 1, 2 and 4 distinct 64-entry tables
   and single tables of 64, 1,024 and 8,640 entries, each in a fresh process under the watchdog.
   It fails at more than twice `tests/canary/compile_baseline.json` in CPU time (across the compile

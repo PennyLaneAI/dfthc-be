@@ -40,7 +40,7 @@ CASES = {
 CPU_SLACK_SECONDS = 2.0
 """Absolute CPU slack of the baseline check (sub-second cases are noise-dominated when loaded)."""
 SIZE_GROWTH_MIN = 5
-"""Least CPU-time ratio of the 8,640-entry case to the 64-entry case (about 28 on 2026-11-11)."""
+"""Least compile CPU-time ratio of the 8,640- to the 64-entry case (about 84 on 2026-11-12)."""
 
 _RULE_TRACES: list[tuple[int, ...]] = []
 
@@ -161,7 +161,9 @@ def _measure(count: int, size: int) -> dict:
     command, env = snippet_command(f"COUNT = {count}\nSIZE = {size}\n" + _SNIPPET)
     run = run_watched(command, cap_mb=HEAVY_MEMORY_MB, timeout_s=3600, env=env)
     tail = "\n".join(run.stderr.splitlines()[-20:])
-    assert run.killed is None and run.returncode == 0, (run.killed, run.returncode, tail)
+    assert run.killed is None and run.returncode == 0 and not run.survivors, (
+        run.killed, run.returncode, run.survivors, tail
+    )
     values = json.loads(outcome(run, "MEASURE").removeprefix("OK "))
     values["peak_mb"] = round(run.peak_mb, 1)
     return values
