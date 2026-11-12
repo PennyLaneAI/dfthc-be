@@ -113,8 +113,8 @@ def compiled_resources(
     pins = FIXED_DECOMPS if fixed_decomps is None else fixed_decomps
     dev = qp.device(device, wires=num_wires)
 
-    # A function without parameters counts as fully annotated, so qjit would compile it to a binary
-    # at decoration, and qp.analyze would then compile it again (L-27): switch the first one off.
+    # A function without parameters is vacuously fully annotated, so qjit would compile it to a
+    # binary at decoration, and qp.analyze would then compile it again (L-27): switch that off.
     @qp.qjit(capture=True, enable_aot_compilation=False)
     @qp.decompose(gate_set=GATE_SET, fixed_decomps=dict(pins) or None)
     @qp.qnode(dev)

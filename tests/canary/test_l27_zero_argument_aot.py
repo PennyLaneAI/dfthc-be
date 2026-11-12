@@ -1,15 +1,17 @@
-"""Canary L-27: `qp.qjit` compiles a zero-argument function ahead of time at decoration.
+"""Canary L-27: `qp.qjit` compiles a fully annotated function ahead of time at decoration.
 
 L-27 was found by the Opus review of Task 0.9c on 2026-11-12. Catalyst's `params_are_annotated`
-(`catalyst/tracing/type_signatures.py`) treats a function without parameters as fully annotated,
-and `enable_aot_compilation` defaults to `True` (`catalyst/jit.py`), so the `QJIT.__init__` AOT
-branch compiles the program to a linked binary at decoration. `qp.analyze` builds its own `QJIT`
-with AOT disabled and compiles the program again, so an analyze-only program is compiled twice
-(`dfthc.compile.compiled_resources` therefore sets `enable_aot_compilation=False`).
+(`catalyst/tracing/type_signatures.py`) is true when every parameter has a Catalyst-supported
+type annotation; a function without parameters satisfies it vacuously. With
+`enable_aot_compilation=True`, the default (`catalyst/jit.py`), the `QJIT.__init__` AOT branch then
+compiles the program to a linked binary at decoration. `qp.analyze` builds its own `QJIT` with AOT
+disabled and compiles the program again, so an analyze-only program is compiled twice.
+`dfthc.compile.compiled_resources` runs a zero-argument circuit, the case it hits, and therefore
+sets `enable_aot_compilation=False`; a fully annotated program is the general rule.
 
 The observable is `QJIT.aot_compile`, which the decorator calls once in the AOT branch, plus the
 state it leaves behind (`compiled_function`, `mlir_module`). The canary flips if Catalyst changes
-the default or the zero-argument rule.
+the default or the annotation rule.
 """
 
 import pennylane as qp
@@ -64,8 +66,35 @@ def test_zero_argument_qjit_compiles_at_decoration(monkeypatch):
     assert calls == ["mlir_opt"]
 
 
+def test_fully_annotated_qjit_compiles_at_decoration(monkeypatch):
+    """L-27: a fully annotated one-parameter function is AOT-compiled at decoration too.
+
+    The rule is the annotations, not the missing parameters: zero parameters are the vacuous case.
+    """
+    calls = _spy_on_aot_compile(monkeypatch)
+
+    def decorate(**options):
+        @qp.qjit(capture=True, **options)
+        @qp.qnode(qp.device("null.qubit", wires=1))
+        def circuit(theta: float):
+            qp.RX(theta, 0)
+            return qp.probs(wires=[0])
+
+        return circuit
+
+    circuit = decorate()
+    assert calls == ["binary"], "Catalyst no longer AOT-compiles a fully annotated function"
+    assert circuit.compiled_function is not None and circuit.mlir_module is not None
+
+    calls.clear()
+    circuit = decorate(enable_aot_compilation=False)
+    assert calls == []
+    assert circuit.compiled_function is None and circuit.mlir_module is None
+
+
 def test_unannotated_parameter_is_not_compiled_at_decoration(monkeypatch):
-    """L-27: the trigger is the missing parameters; an unannotated parameter compiles on call."""
+    """L-27: all Catalyst-supported parameter annotations enable AOT; zero parameters qualify
+    vacuously, while an unannotated parameter does not (it compiles on the first call)."""
     calls = _spy_on_aot_compile(monkeypatch)
 
     @qp.qjit(capture=True)

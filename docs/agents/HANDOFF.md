@@ -333,7 +333,7 @@ differs from the spec's original claim (observed 2026-11-11).
 | L-24 | Compilable ints limited to int64 | 32-bit word tuples |
 | L-25 | `qp.adjoint(Op)(*positional)` traces arguments | `qp.adjoint(Op(...))` |
 | L-26 | Unsigned dynamic arguments (`uint32`, MLIR `ui32`) get no decomposition rule | signed arrays; table words `int64` with 32 data bits |
-| L-27 | `qp.qjit` compiles a zero-argument function ahead of time at decoration; `qp.analyze` then compiles again (two compiles, first capture kept in memory) | `enable_aot_compilation=False` for analyze-only programs (`compiled_resources` does) |
+| L-27 | `qp.qjit` AOT-compiles fully annotated functions at decoration (zero arguments qualify vacuously); `qp.analyze` compiles again | `enable_aot_compilation=False` for analyze-only programs (`compiled_resources` does) |
 
 ## 8. Git rules
 

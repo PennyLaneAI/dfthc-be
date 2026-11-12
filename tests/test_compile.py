@@ -134,9 +134,10 @@ def test_pinned_measured_adjoint_is_selected():
 def test_compiled_resources_compiles_the_program_once(monkeypatch):
     """Task 0.2c: one ``QJIT.aot_compile`` per resource count, the one inside ``qp.analyze``.
 
-    A zero-argument ``qp.qjit`` function is AOT-compiled to a linked binary at decoration (L-27),
-    and ``qp.analyze`` then compiles the program again; the binary is never used. Counted on
-    ``main`` (before the fix): two calls, one from the decorator and one from ``qp.analyze``.
+    A fully annotated ``qp.qjit`` function, such as this zero-argument one, is AOT-compiled to a
+    linked binary at decoration (L-27), and ``qp.analyze`` then compiles the program again; the
+    binary is never used. Counted on ``main`` (before the fix): two calls, one from the decorator
+    and one from ``qp.analyze``.
     """
     calls = []
     original = QJIT.aot_compile

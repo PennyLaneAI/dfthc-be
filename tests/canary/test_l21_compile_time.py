@@ -41,7 +41,7 @@ CASES = {
 CPU_SLACK_SECONDS = 2.0
 """Absolute CPU slack of the baseline check (sub-second cases are noise-dominated when loaded)."""
 SIZE_GROWTH_MIN = 5
-"""Least compile CPU-time ratio of the 8,640- to the 64-entry case (about 84 on 2026-11-12)."""
+"""Least compile CPU-time ratio of the 8,640- to the 64-entry case (about 55 on 2026-11-12)."""
 
 _RULE_TRACES: list[tuple[int, ...]] = []
 
@@ -73,12 +73,14 @@ qp.add_decomps(L21Probe, _l21_probe_rule)
 def _rule_traces(tables, *, aot=False) -> Counter:
     """How often the probe's rule is traced, per table, compiling one program over ``tables``.
 
-    ``aot=True`` keeps Catalyst's default, which compiles the zero-argument program at decoration
-    as well (L-27), so every rule is traced once per compile: twice in total.
+    ``aot=True`` passes no AOT option, so Catalyst's default decorator applies; it compiles the
+    zero-argument program at decoration as well (L-27), so every rule is traced once per compile:
+    twice in total.
     """
     _RULE_TRACES.clear()
+    options = {} if aot else {"enable_aot_compilation": False}
 
-    @qp.qjit(capture=True, enable_aot_compilation=aot)
+    @qp.qjit(capture=True, **options)
     @qp.decompose(gate_set=GATE_SET)
     @qp.qnode(qp.device("null.qubit", wires=3))
     def circuit():
