@@ -1,4 +1,4 @@
-"""The paper's QROAM read and the erase phase fixup (spec 9.3 and 9.4).
+"""The paper's QROAM read, the erase phase fixup and the measured erase (spec 9.3 to 9.5).
 
 **Address model** (spec 9.3). The address is one or two big-endian registers (spec 6.7),
 ``address_widths = (w_1,)`` or ``(w_1, w_2)``, concatenated with the first register most
@@ -13,6 +13,8 @@ integer is :meth:`QROAMRead.loaded_bits`. The read's dynamic ``leaf_words`` hold
 wire order instead: bit ``s`` of word ``w`` of block position ``p`` is the bit for wire
 ``32 w + s`` of that position's register, which is entry bit ``width - 1 - (32 w + s)``
 (:meth:`QROAMRead.leaf_words_from_table` converts a table).
+Bit ``i`` of ``loaded_bits`` is the wire ``M - 1 - i`` of ``target ‖ junk``, so the erase passes
+its outcomes to :func:`dfthc.compile.mcm_parities` in reverse wire order.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ from pennylane.core import Operator2
 from pennylane.ops import MeasurementValue
 from pennylane.typing import AbstractArray
 
-from dfthc.compile import register_rule
+from dfthc.compile import mcm_parities, register_rule
 from dfthc.ops._validate import canonical_ints, check_int, check_wires
 from dfthc.ops.unary import Emitter, as_resources, iterate_nested, work_required
 
@@ -39,7 +41,7 @@ unsigned dynamic argument (L-26); 32 data bits per word keep every word non-nega
 
 
 class QROAMEmitter(Emitter):
-    """:class:`~dfthc.ops.unary.Emitter` with the gates of the read and the fixup."""
+    """:class:`~dfthc.ops.unary.Emitter` with the gates of the read, the fixup and the erase."""
 
     def cswap(self, control, a, b):
         self.gate("CSWAP", lambda: qp.CSWAP([control, a, b]))
@@ -88,6 +90,17 @@ class QROAMEmitter(Emitter):
             qp.Z(wire)
 
         self.gate("PauliZ", lambda: qp.cond(parity, qp.hint({"branch-prob": 0.5})(branch))())
+
+    def measure_x(self, wire):
+        """``H`` then ``qp.measure(wire, reset=True)``; returns the outcome (``None`` counting)."""
+        self.gate("Hadamard", lambda: qp.H(wire))
+        return self.gate("MidMeasure", lambda: qp.measure(wire, reset=True))
+
+    def parities(self, outcomes, masks):
+        """:func:`dfthc.compile.mcm_parities`; counting, ``False`` exactly for the zero masks."""
+        if self.counts is None:
+            return mcm_parities(outcomes, masks)
+        return [False if mask == 0 else True for mask in masks]
 
 
 # --------------------------------------------------------------------------- address helpers
@@ -746,3 +759,140 @@ def _phase_fixup(parities, address_widths, covered, onehot_bits, control_value, 
 
 
 register_rule(PhaseFixup, _phase_fixup)
+
+
+# --------------------------------------------------------------------------- QROAMErase
+
+
+class QROAMErase(Operator2):
+    r"""Erase what the matching :class:`QROAMRead` loaded, by X measurement and a phase fixup.
+
+    **Action.** Returns ``target``, ``junk`` and ``work`` to :math:`|0\rangle` and leaves the
+    address state exactly as it was before the read, for every measurement outcome.
+
+    **Registers.**
+
+    ================ =========================================== ============= ==============
+    name             width                                       input         output
+    ================ =========================================== ============= ==============
+    ``address``      ``sum(address_widths)``                     any           unchanged
+    ``target``       ``width``                                   the read's    ``|0>``
+    ``junk``         ``(K - 1) width``                           the read's    ``|0>``
+    ``work``         unary-iteration ancillas of the fixup        ``|0>``       ``|0>``
+    ``control``      0 wires, or 1 (the read's enable)           any           unchanged
+    ``extra_onehot`` ``max(2**onehot_bits - K width, 0)``        ``|0>``       ``|0>``
+    ================ =========================================== ============= ==============
+
+    **Compilable arguments.** The matching read's ``table``, ``address_widths``,
+    ``live_ranges``, ``width``, ``block_bits`` and ``control_value``, plus the fixup's
+    ``onehot_bits`` (``0 <= ob <= sum(address_widths)``).
+
+    **Pre- and postconditions.** ``target ‖ junk`` hold exactly what the matching read produced
+    for the current address (operations in between may act on the address only in ways that
+    preserve this). Afterwards ``target``, ``junk``, ``work`` and ``extra_onehot`` are
+    :math:`|0\rangle`, and the address state equals its pre-read state exactly.
+
+    **Decomposition** (spec 9.5). (1) ``H`` and ``qp.measure(q, reset=True)`` on every qubit of
+    ``target ‖ junk``, giving the outcomes :math:`\xi`. (2) The parities
+    :math:`f(a) = \xi \cdot g(a) \bmod 2`, with :math:`g(a) =` :meth:`QROAMRead.loaded_bits`, by
+    :func:`dfthc.compile.mcm_parities` from masks built here from the compilable table, for every
+    address of the read's loaded set (dead positions included: their junk is not zero). (3)
+    :func:`emit_phase_fixup` over the loaded set with the freshly reset ``target ‖ junk`` (and
+    ``extra_onehot``) as its one-hot register; a zero mask emits no conditional.
+
+    **Adjoint and control.** Never: its rule measures (spec 7.4, rule 5).
+
+    **Cost.** :func:`dfthc.costs.qroam_erase` with the fixup's ``PhaseFixup.high_ranges`` of
+    ``QROAMRead.loaded_ranges``: :math:`T` = the fixup's, :math:`M = 2^k` ``width``. At
+    FeMoco-54: outer (ob = 4) T = 22 + 14 = 36, M = 96; inner (ob = 7) T = 70 + 126 = 196,
+    M = 416.
+
+    **Paper and dfthcbe.** Steps 21 and 26: the measured erase of Berry et al. (Quantum 3, 208,
+    App. C). dfthcbe: the erases inside its unprepares.
+
+    **Example.**
+
+    .. code-block:: python
+
+        from dfthc.compile import compiled_resources
+        from dfthc.ops.qroam import QROAMErase
+
+        table = tuple((a, (v,)) for a, v in enumerate([1, 2, 3, 1, 2]))
+        program = lambda: QROAMErase(table, (3,), ((0, 5),), 2, 1, None, 1, address=[0, 1, 2],
+                                     target=[3, 4], junk=[5, 6], work=[7], control=[],
+                                     extra_onehot=[])
+        compiled_resources(program, num_wires=8).measurements  # 4
+    """
+
+    compilable_argnames = ("table", "address_widths", "live_ranges", "width", "block_bits",
+                           "control_value", "onehot_bits")
+    wire_argnames = ("address", "target", "junk", "work", "control", "extra_onehot")
+
+    def __init__(self, table, address_widths, live_ranges, width, block_bits, control_value,
+                 onehot_bits, address, target, junk, work, control, extra_onehot):
+        address_widths, live_ranges = _check_address(address_widths, live_ranges)
+        width = check_int("width", width, low=1)
+        block_bits = check_int("block_bits", block_bits, low=0, high=address_widths[-1])
+        control_value = _check_control_value(control_value)
+        onehot_bits = check_int("onehot_bits", onehot_bits, low=0, high=sum(address_widths))
+        table = _check_table(table, address_widths, live_ranges, width)
+        check_wires("QROAMErase",
+                    {"address": address, "target": target, "junk": junk, "work": work,
+                     "control": control, "extra_onehot": extra_onehot},
+                    self.required_wires(table, address_widths, live_ranges, width, block_bits,
+                                        control_value, onehot_bits))
+        super().__init__(table, address_widths, live_ranges, width, block_bits, control_value,
+                         onehot_bits, address, target, junk, work, control, extra_onehot)
+
+    @staticmethod
+    def required_wires(table, address_widths, live_ranges, width, block_bits, control_value,
+                       onehot_bits) -> dict[str, int]:
+        """Exact register sizes."""
+        covered = QROAMRead.loaded_ranges(address_widths, live_ranges, block_bits)
+        fixup = PhaseFixup.required_wires(address_widths, covered, onehot_bits, control_value)
+        return {"address": sum(address_widths), "target": width,
+                "junk": (2**block_bits - 1) * width, "work": fixup["work"],
+                "control": int(control_value is not None),
+                "extra_onehot": max(fixup["onehot"] - 2**block_bits * width, 0)}
+
+    @staticmethod
+    def fixup_high_ranges(address_widths, live_ranges, block_bits,
+                          onehot_bits) -> list[tuple[int, int, int]]:
+        """The fixup's iterated ranges: the ``ranges`` of :func:`dfthc.costs.qroam_erase`."""
+        covered = QROAMRead.loaded_ranges(address_widths, live_ranges, block_bits)
+        return PhaseFixup.high_ranges(address_widths, covered, onehot_bits)
+
+
+def _erase_body(emit, table, address_widths, live_ranges, width, block_bits, control_value,
+                onehot_bits, address, target, junk, work, control, extra_onehot):
+    qubits = list(target) + list(junk)
+    outcomes = [emit.measure_x(qubit) for qubit in qubits]
+    covered = QROAMRead.loaded_ranges(address_widths, live_ranges, block_bits)
+    order = PhaseFixup.address_order(address_widths, covered)
+    masks = _loaded_contents(_entries(table), address_widths, live_ranges, width, block_bits,
+                             order)
+    parities = emit.parities(outcomes[::-1], masks)
+    onehot = (qubits + list(extra_onehot))[:2**onehot_bits] if onehot_bits else []
+    emit_phase_fixup(parities, address=address, address_widths=address_widths, covered=covered,
+                     onehot=onehot, onehot_bits=onehot_bits, work=work, emit=emit,
+                     **_control(control, control_value))
+
+
+def _qroam_erase_resources(table, address_widths, live_ranges, width, block_bits, control_value,
+                           onehot_bits, address, target, junk, work, control, extra_onehot):
+    counter = QROAMEmitter(counting=True)
+    wires = _dummy(QROAMErase.required_wires(table, address_widths, live_ranges, width,
+                                             block_bits, control_value, onehot_bits))
+    _erase_body(counter, table, address_widths, live_ranges, width, block_bits, control_value,
+                onehot_bits, **wires)
+    return as_resources(counter.counts)
+
+
+@qp.register_resources(_qroam_erase_resources)
+def _qroam_erase(table, address_widths, live_ranges, width, block_bits, control_value,
+                 onehot_bits, address, target, junk, work, control, extra_onehot):
+    _erase_body(QROAMEmitter(), table, address_widths, live_ranges, width, block_bits,
+                control_value, onehot_bits, address, target, junk, work, control, extra_onehot)
+
+
+register_rule(QROAMErase, _qroam_erase)
