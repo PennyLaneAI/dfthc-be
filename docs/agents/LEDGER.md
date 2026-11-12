@@ -43,8 +43,8 @@ marked `merged` is never re-dispatched after a loss of context.
 
 | Id | Title | Tier | Status | Branch | Merge commit | Test evidence | Reviews (GPT-5.6 / Opus) | Open issues |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1A.1 | `WalkParams`, presets and `WalkLayout` | B | in review | `phase1/1A.1` | | `60a0e29`: 41 targeted passed, per-commit 266 passed (second run; the first had one load-sensitive watchdog failure), ruff clean; code verbatim from the plan | / n/a | dispatched from `e0d3afb`, lane-a; per-commit base 225 (plan: 181, so +44) |
-| 1A.2 | `DFTHCFactors`, loaders, `random_factors`; fermion matrices | B | not started | `phase1/1A.2` | | | / n/a | |
+| 1A.1 | `WalkParams`, presets and `WalkLayout` | B | merged | `phase1/1A.1` | `834316d` | `60a0e29`: 41 targeted passed, per-commit 266 passed (second run; the first had one load-sensitive watchdog failure, recorded under Minor findings), ruff clean; code verbatim from the plan | GPT-5.6 Approved, no findings (`task-1A.1-review-1.md`) / n/a | dispatched from `e0d3afb`, lane-a |
+| 1A.2 | `DFTHCFactors`, loaders, `random_factors`; fermion matrices | B | in progress | `phase1/1A.2` | | | / n/a | dispatched from `834316d` (after 1A.1), lane-a; per-commit expectation 225 + 41 + 31 = 297 |
 | 1A.3 | Sum-of-squares quantities, both offset frames, spec 8.6 checks 1 to 3 | A | not started | `phase1/1A.3` | | | / | |
 | 1A.4 | Alias tables, Givens angles, `WalkTables` | B | not started | `phase1/1A.4` | | | / n/a | after 1A.3 (uses `outer_weights`, `inner_weights`); wave 1-c |
 | 1A.5 | Encoded-Hamiltonian model and failure signs | A | not started | `phase1/1A.5` | | | / | |
