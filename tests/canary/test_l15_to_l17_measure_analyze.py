@@ -80,7 +80,7 @@ def test_pauli_measure_postselect_ignored():
         return qp.sample(wires=[0])
 
     mean = float(np.mean(np.asarray(circuit())))
-    assert mean < 0.75  # an honoured postselection would give 1.0
+    assert abs(mean - 0.5) < 0.125  # an honoured postselection would give 1.0
 
 
 def test_device_pass_runs():

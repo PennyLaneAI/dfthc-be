@@ -2,10 +2,12 @@
 
 The per-commit canary counts rule traces: on 2026-11-11 every distinct table traces its rule
 twice, and identical tables in one program share those traces. The nightly benchmark compiles
-each case in a fresh process and records wall time, CPU time (Python plus the Catalyst compiler
-subprocess) and peak memory (the process plus its finished children, an upper bound on the peak
-total). It fails if CPU time or memory exceeds twice the stored baseline, or if the compile cost
-no longer grows with table size. Refresh the baseline at every nightly bump, serially:
+each case in a fresh process under the watchdog and records wall time (informational), CPU time
+(Python plus the Catalyst compiler subprocess, measured across the compile only: the difference of
+``getrusage`` for the process and its finished children before and after ``qp.analyze``) and peak
+memory (the watchdog's summed physical footprint of the process tree). It fails if CPU time or
+peak memory exceeds twice the stored baseline, or if the compile cost no longer grows with table
+size. Refresh the baseline at every nightly bump, serially:
 
     DFTHC_UPDATE_COMPILE_BASELINE=1 DFTHC_TEST_WORKERS=0 \
         scripts/test.sh tests/canary/test_l21_compile_time.py
@@ -13,6 +15,7 @@ no longer grows with table size. Refresh the baseline at every nightly bump, ser
 
 import json
 import os
+from collections import Counter
 from pathlib import Path
 
 import pennylane as qp
@@ -20,7 +23,8 @@ import pytest
 from pennylane.core import Operator2
 
 from dfthc.compile import GATE_SET
-from dfthc.testing.canary import outcome, run_snippet
+from dfthc.testing.canary import outcome, snippet_command
+from dfthc.testing.watchdog import HEAVY_MEMORY_MB, run_watched
 
 pytestmark = [pytest.mark.canary, pytest.mark.compiled]
 
@@ -62,8 +66,8 @@ def _l21_probe_rule(table, wires):
 qp.add_decomps(L21Probe, _l21_probe_rule)
 
 
-def _rule_traces(tables) -> int:
-    """Number of times the probe's rule is traced while compiling one program over ``tables``."""
+def _rule_traces(tables) -> Counter:
+    """How often the probe's rule is traced, per table, compiling one program over ``tables``."""
     _RULE_TRACES.clear()
 
     @qp.qjit(capture=True)
@@ -75,21 +79,25 @@ def _rule_traces(tables) -> int:
         return qp.probs(wires=[0])
 
     qp.analyze(circuit, level="user")()
-    return len(_RULE_TRACES)
+    return Counter(_RULE_TRACES)
 
 
 def test_each_distinct_table_is_a_separate_rule_compile():
-    """L-21 (catalyst#3173): rule compiles grow with the number of distinct tables."""
+    """L-21 (catalyst#3173): every distinct table traces the rule, identical tables share it.
+
+    On 2026-11-11 each distinct table traces its rule exactly twice. A different count is a
+    change of Catalyst's behaviour: update the L-21 entries of docs/limitations.md and spec
+    section 14 before adjusting these numbers.
+    """
     first, second = (1, 2, 3), (3, 1, 2)
-    single = _rule_traces([first])
-    assert single >= 1
-    assert _rule_traces([first, second]) == 2 * single
-    assert _rule_traces([first, first]) == single
+    note = "Catalyst's rule tracing changed: update the L-21 docs (limitations.md, spec section 14)"
+    assert _rule_traces([first]) == {first: 2}, note
+    assert _rule_traces([first, second]) == {first: 2, second: 2}, note
+    assert _rule_traces([first, first]) == {first: 2}, note
 
 
 _SNIPPET = """
 import resource
-import sys
 import time
 
 
@@ -127,19 +135,18 @@ def circuit():
     return qp.probs(wires=[0])
 
 
+def cpu_seconds():
+    own = resource.getrusage(resource.RUSAGE_SELF)
+    children = resource.getrusage(resource.RUSAGE_CHILDREN)
+    return own.ru_utime + own.ru_stime + children.ru_utime + children.ru_stime
+
+
 def measure():
+    cpu_before = cpu_seconds()
     start = time.perf_counter()
     qp.analyze(circuit, level="user")()
     wall = time.perf_counter() - start
-    own = resource.getrusage(resource.RUSAGE_SELF)
-    children = resource.getrusage(resource.RUSAGE_CHILDREN)
-    scale = 1 if sys.platform == "darwin" else 1024
-    cpu = own.ru_utime + own.ru_stime + children.ru_utime + children.ru_stime
-    return {
-        "seconds": round(wall, 2),
-        "cpu_seconds": round(cpu, 2),
-        "max_rss_mb": round((own.ru_maxrss + children.ru_maxrss) * scale / 2**20, 1),
-    }
+    return {"seconds": round(wall, 2), "cpu_seconds": round(cpu_seconds() - cpu_before, 2)}
 
 
 report("MEASURE", measure)
@@ -147,8 +154,14 @@ report("MEASURE", measure)
 
 
 def _measure(count: int, size: int) -> dict:
-    result = run_snippet(f"COUNT = {count}\nSIZE = {size}\n" + _SNIPPET, timeout=3600)
-    return json.loads(outcome(result, "MEASURE").removeprefix("OK "))
+    """Compile one case in a fresh process under the watchdog; CPU delta and tree peak memory."""
+    command, env = snippet_command(f"COUNT = {count}\nSIZE = {size}\n" + _SNIPPET)
+    run = run_watched(command, cap_mb=HEAVY_MEMORY_MB, timeout_s=3600, env=env)
+    tail = "\n".join(run.stderr.splitlines()[-20:])
+    assert run.killed is None and run.returncode == 0, (run.killed, run.returncode, tail)
+    values = json.loads(outcome(run, "MEASURE").removeprefix("OK "))
+    values["peak_mb"] = round(run.peak_mb, 1)
+    return values
 
 
 @pytest.mark.subprocess
@@ -163,7 +176,7 @@ def test_compile_time_scaling():
     for case, values in measured.items():
         reference = baseline[case]
         assert values["cpu_seconds"] <= 2 * reference["cpu_seconds"], (case, values, reference)
-        assert values["max_rss_mb"] <= 2 * reference["max_rss_mb"], (case, values, reference)
+        assert values["peak_mb"] <= 2 * reference["peak_mb"], (case, values, reference)
     small, large = measured["tables_1_size_64"], measured["tables_1_size_8640"]
     growth = large["cpu_seconds"] / small["cpu_seconds"]
     assert growth >= SIZE_GROWTH_MIN, f"compile cost no longer grows with table size: {growth:.1f}x"

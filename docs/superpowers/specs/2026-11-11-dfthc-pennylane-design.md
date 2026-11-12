@@ -1466,7 +1466,7 @@ The report never adjusts measured numbers.
     - *Canary:* `test_mcx_without_work_wires_has_no_path` (subprocess).
 15. **L-15: Measurement-related bugs.**
     - Hardware-like one-shot postselection is rejected under capture with a `CompileError` (observed 2026-11-11; [pennylane#8379](https://github.com/PennyLaneAI/pennylane/issues/8379)).
-    - Measurements nested in `cond` are missed by one-shot execution ([catalyst#2382](https://github.com/PennyLaneAI/catalyst/issues/2382)). The canary's reproducer was not affected on 2026-11-11.
+    - Measurements nested in `cond` are missed by one-shot execution ([catalyst#2382](https://github.com/PennyLaneAI/catalyst/issues/2382)). The canary's reproducer was not affected on 2026-11-11. This is a regression sentinel: it fails if the bug returns, but because the reproducer is not affected it cannot detect a fix.
     - `qp.pauli_measure(postselect=...)` is ignored ([catalyst#3338](https://github.com/PennyLaneAI/catalyst/issues/3338)).
     - *Mitigation:* §12.2.
     - *Canaries:* `test_hw_like_postselection_wrong_under_capture`, `test_mcm_inside_cond_missed`, `test_pauli_measure_postselect_ignored`.
@@ -1491,13 +1491,13 @@ The report never adjusts measured numbers.
       - `test_unreachable_op_reports_missing_rule` (subprocess).
 19. **L-19: `UniformPrep` and `AliasSampling` need arbitrary rotations.** For a non-power-of-two size neither has a path to the Toffoli-level gate set; for a power-of-two size `AliasSampling` compiles (observed 2026-11-11).
     - *Mitigation:* `FlaggedUniformPrep`.
-    - *Canaries:* `test_uniform_prep_has_no_toffoli_level_path` and `test_alias_sampling_has_no_toffoli_level_path` (both subprocess).
-20. **L-20: An undecomposed `OperatorOp` runs as a bare named gate.** On 2026-11-11 such an `Operator2` is decomposed by the device pass if it has a rule, and fails to compile for execution if it has none; it no longer reaches runtime as a bare named gate ([catalyst#3430](https://github.com/PennyLaneAI/catalyst/pull/3430)).
+    - *Canary:* `test_template_has_no_toffoli_level_path` (subprocess; parameterized for `UniformPrep` and `AliasSampling`).
+20. **L-20: An undecomposed `Operator2` is decomposed by the device pass or rejected.** On 2026-11-11 such an `Operator2` is decomposed by the device pass if it has a rule, and fails to compile for execution if it has none; it no longer reaches runtime as a bare named gate ([catalyst#3430](https://github.com/PennyLaneAI/catalyst/pull/3430)).
     - *Mitigation:* the `level="device"` closure test of every composite operator (T5) asserts that no `OperatorOp` survives.
-    - *Canary:* `test_undecomposed_operator_op_reaches_runtime`: an `Operator2` listed in the gate set reaches the device program as a named operation.
-21. **L-21: Each distinct compilable table is a distinct graph node and rule compile.** On 2026-11-11 each distinct table traces its rule twice, identical tables in one program share those traces, and compile time grows with table size and count ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173)).
+    - *Canary:* `test_undecomposed_operator_op_reaches_runtime`: at `level="user"` an `Operator2` listed in the gate set remains named; with a rule the device pass decomposes it, and without a rule compiling for execution fails.
+21. **L-21: Each distinct compilable table is a distinct graph node and rule compile.** On 2026-11-11 each distinct table traces its rule exactly twice, identical tables in one program share those traces, compile time grows with table size, and each distinct table adds its own rule traces ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173)).
     - *Mitigation:* few distinct table operators per walk (§9); the K-1 budget.
-    - *Canary:* `test_each_distinct_table_is_a_separate_rule_compile`. *Benchmark:* `test_compile_time_scaling` records compile time and peak memory for 1, 2 and 4 distinct tables, and for one table at sizes 64, 1,024 and 8,640 entries. It fails if a measurement exceeds twice the baseline stored in `tests/canary/compile_baseline.json`, or if the 8,640-entry compile costs less than five times the 64-entry one; refresh the baseline at each nightly bump.
+    - *Canary:* `test_each_distinct_table_is_a_separate_rule_compile`. *Benchmark:* `test_compile_time_scaling` records the CPU time of the compile and the peak memory (the summed physical footprint of the process tree, as the watchdog measures it) for 1, 2 and 4 distinct tables, and for one table at sizes 64, 1,024 and 8,640 entries. It fails if a measurement exceeds twice the baseline stored in `tests/canary/compile_baseline.json`, or if the 8,640-entry compile costs less than five times the 64-entry one; refresh the baseline at each nightly bump.
 22. **L-22: Unresolved loops produce symbolic counts.** Loops whose bounds are not concrete, including the inner loops of PennyLane's select-swap `QROM`, give symbolic `qp.analyze` counts.
     - *Mitigation:* loops unrolled in Python or with static bounds; T4 asserts `is_symbolic == False`.
     - *Canary:* shared with L-12 and L-17 (`test_select_swap_qrom_counts_are_symbolic`, `test_dynamic_loop_counts_are_symbolic`).

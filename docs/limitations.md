@@ -90,13 +90,15 @@ file.
     `test_hw_like_postselection_wrong_under_capture`.
   - Measurements nested in `qp.cond` (catalyst#2382), **changed**: under one-shot execution the
     canary's nested measurement runs on every shot (mean 0.5 within five standard deviations);
-    the bug was not reproduced. Canary: `test_mcm_inside_cond_missed`.
+    the bug was not reproduced. This is a regression sentinel: it fails if the bug returns, but
+    because the reproducer is not affected it cannot detect a fix. Canary:
+    `test_mcm_inside_cond_missed`.
   - `qp.pauli_measure(postselect=...)` is ignored (catalyst#3338): the postselected outcome
     appears on about half the shots. Canary: `test_pauli_measure_postselect_ignored`.
   - Mitigation for all three: spec 12.2 (no hardware-like postselection, no measurements inside
     `qp.cond`, no `pauli_measure` postselection).
 - **L-16, execution decomposes again to the device gate set** (catalyst#3275). At
-  `level="device"` a `TemporaryAND` becomes a Toffoli and PauliX gates; a decomposed `Operator2`
+  `level="device"` a `TemporaryAND` becomes a Toffoli; a decomposed `Operator2`
   leaves no named operation. Canaries: `test_device_pass_runs`,
   `test_device_level_has_no_operator_op`. Mitigation: counts at `level="user"`; closure at
   `level="device"` (`compiled_resources(level="device")`).
@@ -121,13 +123,17 @@ file.
   test of every composite operator (T5).
 - **L-21, compile cost grows with distinct tables and table size** (catalyst#3173). Canary:
   `test_each_distinct_table_is_a_separate_rule_compile` (per commit). On 2026-11-11 each distinct
-  table traces its rule twice, and identical tables in one program share those traces.
+  table traces its rule exactly twice, and identical tables in one program share those traces:
+  compile time grows with table size, and each distinct table adds its own rule traces.
   Benchmark: `test_compile_time_scaling` (nightly) compiles 1, 2 and 4 distinct 64-entry tables
-  and single tables of 64, 1,024 and 8,640 entries. It fails above twice
-  `tests/canary/compile_baseline.json` in CPU time or peak memory (the process plus its finished
-  children), or if the 8,640-entry case costs less than 5 times the CPU time of the 64-entry
-  case. On the development laptop the ratio was 27, and one 8,640-entry table took 22 s wall,
-  60 s CPU and 1.6 GB. Mitigation: few distinct table operators per walk; the K-1 budget.
+  and single tables of 64, 1,024 and 8,640 entries, each in a fresh process under the watchdog.
+  It fails above twice `tests/canary/compile_baseline.json` in CPU time (across the compile only:
+  the process plus the Catalyst compiler subprocess) or peak memory (`peak_mb`: the summed
+  physical footprint of the process tree, as the watchdog measures it), or if the 8,640-entry case
+  costs less than 5 times the CPU time of the 64-entry case. Wall time is recorded for information.
+  On the development laptop (2026-11-12, under memory pressure) the ratio was 84, and one
+  8,640-entry table took 37 s wall, 36 s CPU and 1.5 GB. Mitigation: few distinct table operators
+  per walk; the K-1 budget.
 - **L-22, unresolved loops give symbolic counts.** Shared with L-12 and L-17
   (`test_select_swap_qrom_counts_are_symbolic`, `test_dynamic_loop_counts_are_symbolic`).
   Mitigation: loops unrolled in Python or with static bounds; T4 asserts `is_symbolic == False`.
