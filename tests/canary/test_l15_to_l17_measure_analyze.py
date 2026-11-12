@@ -128,7 +128,7 @@ def test_device_level_has_no_operator_op():
 
     device = dict(qp.analyze(circuit, level="device")().resources.counts)
     assert "L16Op" not in device
-    assert np.allclose(np.asarray(circuit()), [0.0, 1.0])
+    assert np.allclose(np.asarray(circuit()), [0.0, 1.0], rtol=0, atol=1e-12)
 
 
 def test_analyze_requires_qjit():

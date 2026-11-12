@@ -360,7 +360,7 @@ def test_mcm_parities_in_compiled_circuit():
     probs = np.asarray(circuit())
     expected = np.zeros(16)
     expected[0b1010] = 1.0  # parities (1, 0, 1, 0) on wires 3..6, big-endian
-    assert np.allclose(probs, expected)
+    assert np.allclose(probs, expected, rtol=0, atol=1e-12)
 
 
 @pytest.mark.compiled
@@ -388,7 +388,7 @@ def test_mcm_parities_in_compiled_circuit_across_two_words():
     probs = np.asarray(circuit())
     expected = np.zeros(2 ** len(masks))
     expected[0b10001] = 1.0  # parities (1, 0, 0, 0, 1) on wires 1..5, big-endian
-    assert np.allclose(probs, expected)
+    assert np.allclose(probs, expected, rtol=0, atol=1e-12)
 
 
 def test_noise_shaped_warning_naming_a_dfthc_operator_is_recorded():
@@ -617,7 +617,7 @@ def test_mcm_parities_tape_mode_keeps_the_processing_function_of_each_outcome():
     for a, b in itertools.product([0, 1], repeat=2):
         expected = np.zeros(2)
         expected[(1 - a) ^ b] = 1.0
-        assert np.allclose(circuit(a, b), expected), (a, b)
+        assert np.allclose(circuit(a, b), expected, rtol=0, atol=1e-12), (a, b)
 
 
 def test_mcm_parities_tape_mode_sample_works_under_one_shot():
