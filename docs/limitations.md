@@ -81,6 +81,14 @@ file.
   constant"); keyword arguments, `qp.adjoint(Op(...))` and `qp.adjoint(lambda: Op(...))()` work.
   Canary: `test_adjoint_of_class_traces_positional_arguments`. Mitigation: always use the
   instance form `qp.adjoint(Op(...))`.
+- **L-26, unsigned dynamic arguments get no decomposition rule** (new, found by Task 0.9b).
+  Catalyst's `_MLIR_DTYPES_TO_PY_DTYPES` (`catalyst/decomposition/type_utils.py`) maps only `i1`,
+  `i8`, `i16`, `i32` and `i64` (and floats and complex numbers). On 2026-11-12 an `Operator2` whose
+  dynamic argument is a `uint32` array warns "Failed to synthesize the distributed decomposition
+  rules for <Op>: 'ui32'" and then fails with `CompileError` "Decomposition rule not found for
+  operator '<Op>'"; the same operator with `int32` or `int64` data compiles. Canary:
+  `test_unsigned_dynamic_argument_has_no_rule`. Mitigation: compilable table words are `int64`
+  holding 32 data bits each (ledger decision "Table words are `int64`").
 
 ## Measurements, analysis, device level, warnings and compile time
 
