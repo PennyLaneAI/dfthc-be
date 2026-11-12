@@ -72,12 +72,12 @@ def test_left_quantum_comparator_and_adjoint(comparator):
     probs = np.asarray(forward()).reshape(4, 4, 2)
     for a, b in itertools.product(range(4), repeat=2):
         expected = int(a <= b) if comparator == "<=" else int(a < b)
-        assert np.isclose(probs[a, b, expected], 1 / 16), (a, b)
+        assert np.isclose(probs[a, b, expected], 1 / 16, rtol=0, atol=1e-10), (a, b)
 
     round_trip = _program(
         6, lambda: (_phased_prepare(x + y), compare(), qp.adjoint(compare())), qp.state
     )
-    assert np.allclose(np.asarray(round_trip()), _phased_state(6, x + y), atol=1e-10)
+    assert np.allclose(np.asarray(round_trip()), _phased_state(6, x + y), rtol=0, atol=1e-10)
 
 
 @pytest.mark.parametrize("value", [1, 2, 3])
@@ -95,12 +95,12 @@ def test_left_classical_comparator_and_adjoint(value):
     forward = _program(6, lambda: (prepare(), compare()), lambda: qp.probs(wires=x + target))
     probs = np.asarray(forward()).reshape(8, 2)
     for a in range(8):
-        assert np.isclose(probs[a, int(a < value)], 1 / 8), a
+        assert np.isclose(probs[a, int(a < value)], 1 / 8, rtol=0, atol=1e-10), a
 
     round_trip = _program(
         6, lambda: (_phased_prepare(x), compare(), qp.adjoint(compare())), qp.state
     )
-    assert np.allclose(np.asarray(round_trip()), _phased_state(6, x), atol=1e-10)
+    assert np.allclose(np.asarray(round_trip()), _phased_state(6, x), rtol=0, atol=1e-10)
 
 
 def test_semiadder_and_adjoint():
@@ -116,11 +116,11 @@ def test_semiadder_and_adjoint():
     forward = _program(8, lambda: (prepare(), add()), lambda: qp.probs(wires=x + y))
     probs = np.asarray(forward()).reshape(8, 8)
     for a, b in itertools.product(range(8), repeat=2):
-        assert np.isclose(probs[a, (a + b) % 8], 1 / 64), (a, b)
+        assert np.isclose(probs[a, (a + b) % 8], 1 / 64, rtol=0, atol=1e-10), (a, b)
 
     # Guard against a vacuous round trip: the adder alone must change the phased input state.
     forward_only = _program(8, lambda: (_phased_prepare(x + y), add()), qp.state)
-    assert not np.allclose(np.asarray(forward_only()), _phased_state(8, x + y), atol=1e-10)
+    assert not np.allclose(np.asarray(forward_only()), _phased_state(8, x + y), rtol=0, atol=1e-10)
 
     round_trip = _program(8, lambda: (_phased_prepare(x + y), add(), qp.adjoint(add())), qp.state)
-    assert np.allclose(np.asarray(round_trip()), _phased_state(8, x + y), atol=1e-10)
+    assert np.allclose(np.asarray(round_trip()), _phased_state(8, x + y), rtol=0, atol=1e-10)

@@ -46,7 +46,7 @@ def test_load_integrals():
     ints = load_integrals("h2_631g_R2_B2_C2")
     assert set(ints) == {"h1e", "eri", "core_energy"}
     assert ints["h1e"].shape == (4, 4) and ints["eri"].shape == (4, 4, 4, 4)
-    assert ints["core_energy"] == pytest.approx(0.7151043390810812, abs=1e-15)
+    assert ints["core_energy"] == pytest.approx(0.7151043390810812, rel=0, abs=1e-15)
     with pytest.raises(FileNotFoundError):
         load_integrals("fe2s2")  # the large systems ship no integrals (spec 8.1)
 
@@ -99,8 +99,8 @@ def test_random_factors_validate_at_femoco_shape():
     f.validate()
     assert (f.N, f.R, f.B, f.C, f.n_plus, f.n_minus) == (54, 10, 27, 27, 27, 27)
     split = f.u_plus.T @ np.diag(f.w_plus) @ f.u_plus - f.u_minus.T @ np.diag(f.w_minus) @ f.u_minus
-    assert np.allclose(split, f.h1_shifted, atol=1e-12)
-    assert f.lambda_h1 == pytest.approx(f.w_plus.sum() + f.w_minus.sum(), rel=1e-12)
+    assert np.allclose(split, f.h1_shifted, rtol=0, atol=1e-12)
+    assert f.lambda_h1 == pytest.approx(f.w_plus.sum() + f.w_minus.sum(), rel=1e-12, abs=0)
 
 
 def test_random_factors_are_reproducible_and_respect_n_plus():

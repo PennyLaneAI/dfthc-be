@@ -48,19 +48,34 @@ TREE = textwrap.dedent(
     """
 )
 
-# The root forks a child that calls setsid() and keeps the output pipes open; the fork and the
-# root's exit are microseconds apart, so no sample sees the child inside the tree.
+# The root forks A, and A forks the escaped descendant B and exits at once. B waits until it was
+# adopted by launchd (A is gone), calls setsid(), publishes its pid in ``pid_file`` (written under a
+# temporary name and renamed, so the file is never seen half-written) and keeps the output pipes
+# open. The root reaps A and waits for the pid file before it prints the pid and exits, so B exists
+# and is out of the tree before the root's exit, however slow the machine is. Only the
+# microseconds between A's fork of B and A's exit can show B inside the tree to a sample.
 ESCAPE = textwrap.dedent(
     """
     import os, time
-    pid = os.fork()
-    if pid == 0:
-        os.setsid()
-        time.sleep({sleep})
+    a = os.fork()
+    if a == 0:
+        parent = os.getpid()
+        if os.fork() == 0:
+            while os.getppid() == parent:
+                time.sleep(0.001)
+            os.setsid()
+            with open({pid_file!r} + ".tmp", "w") as file:
+                file.write(str(os.getpid()))
+            os.rename({pid_file!r} + ".tmp", {pid_file!r})
+            time.sleep({sleep})
+            os._exit(0)
         os._exit(0)
-    with open({pid_file!r}, "w") as file:
-        file.write(str(pid))
-    print(pid, flush=True)
+    os.waitpid(a, 0)
+    deadline = time.monotonic() + 30
+    while not os.path.exists({pid_file!r}) and time.monotonic() < deadline:
+        time.sleep(0.01)
+    with open({pid_file!r}) as file:
+        print(file.read(), flush=True)
     os._exit(0)
     """
 )
@@ -295,20 +310,24 @@ def test_cleanup_falls_back_when_a_signal_is_refused(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    "timeout_s, kill_seconds, suffix", [(1, 2.0, " (after time)"), (60, 1.0, "")]
+    "timeout_s, kill_seconds, suffix", [(2, 4.0, " (after time)"), (60, 1.0, "")]
 )
 def test_untraceable_descendant_holding_the_pipes_ends_the_run(
     monkeypatch, tmp_path, timeout_s, kill_seconds, suffix
 ):
     """An escaped descendant that keeps the output pipes open cannot stall the run.
 
-    With ``timeout_s=1`` the time limit ends the loop and both bounded final reads time out; with
-    ``timeout_s=60`` the loop gives up ``_KILL_SECONDS`` after the root exited with nothing left to
-    sample. The escaped child sleeps 8 s, longer than either path takes.
+    The command waits until the escaped descendant has published its pid before the root exits,
+    so the descendant exists before either path starts. With ``timeout_s=2`` (``kill_seconds=4``,
+    so the time limit comes first, with slack over Python's start-up under load) the time limit
+    ends the loop and both bounded final reads time out; with ``timeout_s=60`` the loop gives up
+    ``_KILL_SECONDS`` after the root exited with nothing left to sample. The escaped child sleeps
+    15 s, longer than either path takes (at most ``min(timeout_s, kill_seconds) + 2 *
+    kill_seconds`` after the start).
     """
     monkeypatch.setattr(watchdog, "_KILL_SECONDS", kill_seconds)
     pid_file = tmp_path / "escaped.pid"
-    command = [sys.executable, "-c", ESCAPE.format(sleep=8, pid_file=str(pid_file))]
+    command = [sys.executable, "-c", ESCAPE.format(sleep=15, pid_file=str(pid_file))]
     start = time.monotonic()
     try:
         run = run_watched(command, timeout_s=timeout_s)

@@ -56,49 +56,52 @@ def test_majoranas_anticommute_within_one_spin_register(spin):
     for (j, f), (k, g) in itertools.product(MODES, repeat=2):
         a, b = majorana(j, f, spin, N), majorana(k, g, spin, N)
         expected = 2 * EYE if (j, f) == (k, g) else 0 * EYE
-        assert np.allclose(a @ b + b @ a, expected, atol=1e-12)
+        assert np.allclose(a @ b + b @ a, expected, rtol=0, atol=1e-12)
 
 
 def test_majoranas_on_different_spins_commute():
     """Each spin register has its own Jordan-Wigner string, so odd operators commute across."""
     for (j, f), (k, g) in itertools.product(MODES, repeat=2):
         a, b = majorana(j, f, 0, N), majorana(k, g, 1, N)
-        assert np.allclose(a @ b, b @ a, atol=1e-12)
+        assert np.allclose(a @ b, b @ a, rtol=0, atol=1e-12)
 
 
 @pytest.mark.parametrize("spin", [0, 1])
 def test_the_even_identities_the_walk_relies_on(spin):
     for j in range(N):
         z = _on_qubit(Z, j, spin)
-        assert np.allclose(1j * majorana(j, 0, spin, N) @ majorana(j, 1, spin, N), -z)
+        product = 1j * majorana(j, 0, spin, N) @ majorana(j, 1, spin, N)
+        assert np.allclose(product, -z, rtol=0, atol=1e-12)
         a = annihilation(j, spin, N)
-        assert np.allclose(a.conj().T @ a, number(j, spin, N))
-        assert np.allclose(number(j, spin, N), (EYE - z) / 2)
+        assert np.allclose(a.conj().T @ a, number(j, spin, N), rtol=0, atol=1e-12)
+        assert np.allclose(number(j, spin, N), (EYE - z) / 2, rtol=0, atol=1e-12)
 
 
 @pytest.mark.parametrize("spin", [0, 1])
 def test_qubit_zero_carries_no_string(spin):
     """The Majorana-gate target psi_dn[0]: gamma_0 = X, gamma_1 = Y, a = (X + iY)/2."""
-    assert np.allclose(majorana(0, 0, spin, N), _on_qubit(X, 0, spin))
-    assert np.allclose(majorana(0, 1, spin, N), _on_qubit(Y, 0, spin))
-    assert np.allclose(annihilation(0, spin, N), _on_qubit((X + 1j * Y) / 2, 0, spin))
+    assert np.allclose(majorana(0, 0, spin, N), _on_qubit(X, 0, spin), rtol=0, atol=1e-12)
+    assert np.allclose(majorana(0, 1, spin, N), _on_qubit(Y, 0, spin), rtol=0, atol=1e-12)
+    expected = _on_qubit((X + 1j * Y) / 2, 0, spin)
+    assert np.allclose(annihilation(0, spin, N), expected, rtol=0, atol=1e-12)
 
 
 def test_annihilation_lowers_the_particle_number_by_one():
     total = sum(number(j, s, N) for j in range(N) for s in (0, 1))
     for j, s in itertools.product(range(N), (0, 1)):
         a = annihilation(j, s, N)
-        assert np.allclose(total @ a - a @ total, -a)
+        assert np.allclose(total @ a - a @ total, -a, rtol=0, atol=1e-12)
         assert np.linalg.norm(a) > 1
 
 
 def test_sector_projector_commutes_with_same_spin_bilinears():
     for eta in range(2 * N + 1):
         p = sector_projector(N, eta)
-        assert np.allclose(p @ p, p) and round(np.trace(p).real) == comb(2 * N, eta)
+        assert np.allclose(p @ p, p, rtol=0, atol=1e-12)
+        assert round(np.trace(p).real) == comb(2 * N, eta)
         for j, k, s in itertools.product(range(N), range(N), (0, 1)):
             hop = annihilation(j, s, N).conj().T @ annihilation(k, s, N)
-            assert np.allclose(p @ hop, hop @ p)
+            assert np.allclose(p @ hop, hop @ p, rtol=0, atol=1e-12)
 
 
 def test_occupation_index_matches_the_number_operators():
@@ -114,8 +117,9 @@ def test_rotated_majorana_is_the_linear_combination():
     u = np.array([0.6, 0.0, 0.8])
     for f, s in itertools.product((0, 1), (0, 1)):
         expected = 0.6 * _expected_majorana(0, f, s) + 0.8 * _expected_majorana(2, f, s)
-        assert np.allclose(rotated_majorana(u, f, s, N), expected)
-        assert np.allclose(rotated_majorana(u, f, s, N) @ rotated_majorana(u, f, s, N), EYE)
+        assert np.allclose(rotated_majorana(u, f, s, N), expected, rtol=0, atol=1e-12)
+        squared = rotated_majorana(u, f, s, N) @ rotated_majorana(u, f, s, N)
+        assert np.allclose(squared, EYE, rtol=0, atol=1e-12)
 
 
 def test_inputs_are_checked():

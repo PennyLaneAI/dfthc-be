@@ -317,7 +317,10 @@ The canonical minimal example of an operator with a pinned measured adjoint rule
   explicit `rtol` (`rel`) with `atol=0` (`abs=0`) where a relative bound is meant. NumPy's default
   `rtol=1e-5` silently loosens a 1e-12 check to about 1e-5 near amplitudes of order one, and
   `pytest.approx(x, rel=...)` keeps a default `abs=1e-12`. Plan code written before this rule often omits `rtol`; fix it
-  when you copy the code and list it under deviations.
+  when you copy the code and list it under deviations. `tests/test_tolerance_hygiene.py` enforces
+  the rule on every call under `tests/` and `src/dfthc/testing/` (both keywords named in the call,
+  `math.isclose` with `rel_tol` and `abs_tol`; no `**kwargs` forwarding), so a new comparison
+  without both tolerances fails the per-commit tier.
 
 ## 7. Known limitations (spec 14, condensed)
 
