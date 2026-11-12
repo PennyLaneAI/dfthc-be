@@ -299,11 +299,12 @@ The canonical minimal example of an operator with a pinned measured adjoint rule
   dfthcbe (Global Constraints). Composite operators take grouped wires (`outer`, `inner`,
   `select`, `system`, `phase_grad`, `work`) and split them only through
   `WalkLayout.split_group`.
-- **Test tolerances.** Every `np.allclose`, `np.isclose` and `np.testing.assert_allclose` states
-  both tolerances: `rtol=0` with the contract's absolute `atol` (1e-12 for dense and simulator
-  comparisons unless the brief names another), or an explicit `rtol` with `atol=0` where a
-  relative bound is meant. NumPy's default `rtol=1e-5` silently loosens a 1e-12 check to about
-  1e-5 near amplitudes of order one. Plan code written before this rule often omits `rtol`; fix it
+- **Test tolerances.** Every `np.allclose`, `np.isclose`, `np.testing.assert_allclose` and
+  `pytest.approx` states both tolerances: `rtol=0` (`rel=0`) with the contract's absolute `atol`
+  (`abs`; 1e-12 for dense and simulator comparisons unless the brief names another), or an
+  explicit `rtol` (`rel`) with `atol=0` (`abs=0`) where a relative bound is meant. NumPy's default
+  `rtol=1e-5` silently loosens a 1e-12 check to about 1e-5 near amplitudes of order one, and
+  `pytest.approx(x, rel=...)` keeps a default `abs=1e-12`. Plan code written before this rule often omits `rtol`; fix it
   when you copy the code and list it under deviations.
 
 ## 7. Known limitations (spec 14, condensed)
