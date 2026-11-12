@@ -1,0 +1,1390 @@
+{
+  "method": "x: structural_size(shape, program, arm)['static_size'], the static size (every emitted gate-set primitive outside a qp.for_loop, by recursive expansion of the arm's resource graph with program multiplicities; neither loop operations nor loop bodies count; PhaseGradientStatePrep not counted); the same counter reproduces PROBE_A_WALK_SIZES on partial remedy 1. Estimate (a), Task 0.9b's formulas on the arm's fit points (k1c files of this code_hash() with counts, within_budget and a passed stop gate): time a power law through the two largest fit shapes, exponent at least 1; memory a least-squares line, slope at least 0, for peak_mb and rusage_sum_mb. femoco_allowed uses estimate (a) only, as in Task 0.9b. Estimate (b), sensitivity evidence: with P, S, W the static sizes of inner_prepare, inner_select and walk and R = W - 2P - 2S, per memory metric y: H = 300 MB, cP = max(yP14 - H, 0)/P14, cS = max(yS14 - H, 0)/S14, cR = estimate (a)'s walk slope, alpha = (yW14 - H)/(2 cP P14 + 2 cS S14 + cR R14), prediction H + alpha (2 cP P + 2 cS S + cR R) at FeMoco (size-scaled, the best value); the address-scaled variant replaces P_femoco by P14 times the inner erase's covered-address growth. Time: H = 0 and cR = yW14/W14. The walk's range is the hull of estimate (a) and both variants. The controlled walk multiplies each component endpoint by the observed mid10 controlled/walk ratio of the same metric (the best value uses the size-scaled endpoint), widened by the small-shape ratio and the controlled walk's estimate (a); it is not an independently calibrated component model. Task 0.9c compiles no FeMoco shape",
+  "limits": {
+    "seconds": 3600,
+    "mb": 7680.0,
+    "cap_mb": 8192
+  },
+  "arms": {
+    "F": {
+      "estimate_a": {
+        "walk": {
+          "fit_shapes": [
+            "small",
+            "mid10",
+            "mid14"
+          ],
+          "missing_points": {},
+          "static_size": {
+            "small": 1860,
+            "mid10": 17086,
+            "mid14": 24644,
+            "femoco": 104288
+          },
+          "points": {
+            "small": {
+              "seconds": 24.0,
+              "peak_mb": 506.5,
+              "rusage_sum_mb": 605.2
+            },
+            "mid10": {
+              "seconds": 74.3,
+              "peak_mb": 1545.8,
+              "rusage_sum_mb": 1644.0
+            },
+            "mid14": {
+              "seconds": 82.5,
+              "peak_mb": 2091.0,
+              "rusage_sum_mb": 2389.8
+            }
+          },
+          "seconds": 349,
+          "time_exponent": 1.0,
+          "peak_mb": 7607,
+          "mb_per_gate": 0.06935858469501326,
+          "rusage_sum_mb_companion": 8446,
+          "companion_mb_per_gate": 0.07686738594139204
+        },
+        "controlled_walk": {
+          "fit_shapes": [
+            "small",
+            "mid10"
+          ],
+          "missing_points": {
+            "mid14": "control_ratio 1.800 x the mid14 walk's peak is 3764 MB, not below 3500 MB (Task 0.9c, requirement 4)"
+          },
+          "static_size": {
+            "small": 1866,
+            "mid10": 17092,
+            "femoco": 104294
+          },
+          "points": {
+            "small": {
+              "seconds": 54.7,
+              "peak_mb": 820.6,
+              "rusage_sum_mb": 872.9
+            },
+            "mid10": {
+              "seconds": 151.7,
+              "peak_mb": 2633.0,
+              "rusage_sum_mb": 2297.0
+            }
+          },
+          "seconds": 926,
+          "time_exponent": 1.0,
+          "peak_mb": 13013,
+          "mb_per_gate": 0.1190332326283988,
+          "rusage_sum_mb_companion": 10453,
+          "companion_mb_per_gate": 0.09353080257454355
+        }
+      },
+      "estimate_b": {
+        "static_sizes": {
+          "mid14": {
+            "walk": 24644,
+            "inner_prepare": 2620,
+            "inner_select": 9199
+          },
+          "femoco": {
+            "walk": 104288,
+            "inner_prepare": 14480,
+            "inner_select": 36751
+          }
+        },
+        "rest": {
+          "mid14": 1006,
+          "femoco": 1826
+        },
+        "inner_address_growth": 11.25,
+        "walk": {
+          "peak_mb": {
+            "H": 300,
+            "cP": 0.3270610687022901,
+            "cS": 0.04217849766278944,
+            "cR": 0.06935858469501326,
+            "alpha": 0.6997256124885534,
+            "best": 9185,
+            "endpoints": {
+              "estimate_a": 7607,
+              "size_scaled": 9185,
+              "address_scaled": 16049
+            },
+            "range": [
+              7607,
+              16049
+            ]
+          },
+          "rusage_sum_mb": {
+            "H": 300,
+            "cP": 0.4536259541984733,
+            "cS": 0.07267094249374932,
+            "cR": 0.07686738594139204,
+            "alpha": 0.551205191069529,
+            "best": 10563,
+            "endpoints": {
+              "estimate_a": 8446,
+              "size_scaled": 10563,
+              "address_scaled": 18062
+            },
+            "range": [
+              8446,
+              18062
+            ]
+          },
+          "seconds": {
+            "H": 0,
+            "cP": 0.015687022900763358,
+            "cS": 0.0020437004022176323,
+            "cR": 0.0033476708326570363,
+            "alpha": 0.6698181578101371,
+            "best": 409,
+            "endpoints": {
+              "estimate_a": 349,
+              "size_scaled": 409,
+              "address_scaled": 724
+            },
+            "range": [
+              349,
+              724
+            ]
+          }
+        },
+        "controlled_walk": {
+          "peak_mb": {
+            "ratio_mid10": 1.703,
+            "ratio_small": 1.62,
+            "best": 15646,
+            "endpoints": {
+              "estimate_a": 13013,
+              "size_scaled_x_mid10": 15646,
+              "address_scaled_x_mid10": 27336,
+              "size_scaled_x_small": 14882,
+              "address_scaled_x_small": 26001
+            },
+            "range": [
+              13013,
+              27336
+            ]
+          },
+          "rusage_sum_mb": {
+            "ratio_mid10": 1.397,
+            "ratio_small": 1.442,
+            "best": 14758,
+            "endpoints": {
+              "estimate_a": 10453,
+              "size_scaled_x_mid10": 14758,
+              "address_scaled_x_mid10": 25236,
+              "size_scaled_x_small": 15235,
+              "address_scaled_x_small": 26051
+            },
+            "range": [
+              10453,
+              26051
+            ]
+          },
+          "seconds": {
+            "ratio_mid10": 2.042,
+            "ratio_small": 2.279,
+            "best": 835,
+            "endpoints": {
+              "estimate_a": 926,
+              "size_scaled_x_mid10": 835,
+              "address_scaled_x_mid10": 1478,
+              "size_scaled_x_small": 932,
+              "address_scaled_x_small": 1650
+            },
+            "range": [
+              835,
+              1650
+            ]
+          }
+        }
+      },
+      "sizes": {
+        "small": {
+          "walk": {
+            "static_size": 1860,
+            "projection_loop_sites": {
+              "read_bit": 48,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 56
+          },
+          "controlled_walk": {
+            "static_size": 1866,
+            "projection_loop_sites": {
+              "read_bit": 48,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 56
+          },
+          "inner_prepare": {
+            "static_size": 177,
+            "projection_loop_sites": {
+              "read_bit": 12,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 16
+          },
+          "inner_select": {
+            "static_size": 663,
+            "projection_loop_sites": {
+              "read_bit": 8,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 8
+          }
+        },
+        "mid10": {
+          "walk": {
+            "static_size": 17086,
+            "projection_loop_sites": {
+              "read_bit": 726,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 808
+          },
+          "controlled_walk": {
+            "static_size": 17092,
+            "projection_loop_sites": {
+              "read_bit": 726,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 808
+          },
+          "inner_prepare": {
+            "static_size": 1685,
+            "projection_loop_sites": {
+              "read_bit": 280,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 320
+          },
+          "inner_select": {
+            "static_size": 6365,
+            "projection_loop_sites": {
+              "read_bit": 58,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 58
+          }
+        },
+        "mid14": {
+          "walk": {
+            "static_size": 24644,
+            "projection_loop_sites": {
+              "read_bit": 1590,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 1784
+          },
+          "controlled_walk": {
+            "static_size": 24650,
+            "projection_loop_sites": {
+              "read_bit": 1590,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 1784
+          },
+          "inner_prepare": {
+            "static_size": 2620,
+            "projection_loop_sites": {
+              "read_bit": 672,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 768
+          },
+          "inner_select": {
+            "static_size": 9199,
+            "projection_loop_sites": {
+              "read_bit": 92,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 92
+          }
+        },
+        "femoco": {
+          "walk": {
+            "static_size": 104288,
+            "projection_loop_sites": {
+              "read_bit": 16092,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 18252
+          },
+          "controlled_walk": {
+            "static_size": 104294,
+            "projection_loop_sites": {
+              "read_bit": 16092,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 18252
+          },
+          "inner_prepare": {
+            "static_size": 14480,
+            "projection_loop_sites": {
+              "read_bit": 7560,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 8640
+          },
+          "inner_select": {
+            "static_size": 36751,
+            "projection_loop_sites": {
+              "read_bit": 324,
+              "fixup_leaf": 0,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 324
+          }
+        }
+      },
+      "femoco_allowed": false,
+      "reason": "walk: getrusage companion 8.2 GB > 7.5 GB; controlled_walk: sampled peak 12.7 GB > 7.5 GB; controlled_walk: getrusage companion 10.2 GB > 7.5 GB",
+      "r1_counter_check": {
+        "mid10": 20599,
+        "mid14": 32822,
+        "femoco": 193053
+      }
+    },
+    "FP": {
+      "estimate_a": {
+        "walk": {
+          "fit_shapes": [
+            "small",
+            "mid10",
+            "mid14"
+          ],
+          "missing_points": {},
+          "static_size": {
+            "small": 1812,
+            "mid10": 16298,
+            "mid14": 22888,
+            "femoco": 86144
+          },
+          "points": {
+            "small": {
+              "seconds": 8.7,
+              "peak_mb": 492.7,
+              "rusage_sum_mb": 692.3
+            },
+            "mid10": {
+              "seconds": 64.4,
+              "peak_mb": 1519.7,
+              "rusage_sum_mb": 1541.5
+            },
+            "mid14": {
+              "seconds": 141.0,
+              "peak_mb": 2073.9,
+              "rusage_sum_mb": 2158.9
+            }
+          },
+          "seconds": 3003,
+          "time_exponent": 2.31,
+          "peak_mb": 6751,
+          "mb_per_gate": 0.0743468046611755,
+          "rusage_sum_mb_companion": 6377,
+          "companion_mb_per_gate": 0.0677881972260453
+        },
+        "controlled_walk": {
+          "fit_shapes": [
+            "small",
+            "mid10"
+          ],
+          "missing_points": {
+            "mid14": "control_ratio 1.800 x the mid14 walk's peak is 3733 MB, not below 3500 MB (Task 0.9c, requirement 4)"
+          },
+          "static_size": {
+            "small": 1818,
+            "mid10": 16304,
+            "femoco": 86150
+          },
+          "points": {
+            "small": {
+              "seconds": 24.3,
+              "peak_mb": 797.0,
+              "rusage_sum_mb": 936.7
+            },
+            "mid10": {
+              "seconds": 166.0,
+              "peak_mb": 2626.4,
+              "rusage_sum_mb": 2466.5
+            }
+          },
+          "seconds": 877,
+          "time_exponent": 1.0,
+          "peak_mb": 11447,
+          "mb_per_gate": 0.12628744995167748,
+          "rusage_sum_mb_companion": 9843,
+          "companion_mb_per_gate": 0.10560541212204885
+        }
+      },
+      "estimate_b": {
+        "static_sizes": {
+          "mid14": {
+            "walk": 22888,
+            "inner_prepare": 1852,
+            "inner_select": 9121
+          },
+          "femoco": {
+            "walk": 86144,
+            "inner_prepare": 5840,
+            "inner_select": 36481
+          }
+        },
+        "rest": {
+          "mid14": 942,
+          "femoco": 1502
+        },
+        "inner_address_growth": 11.25,
+        "walk": {
+          "peak_mb": {
+            "H": 300,
+            "cP": 0.44681425485961124,
+            "cS": 0.04201293717794102,
+            "cR": 0.0743468046611755,
+            "alpha": 0.7119993982288699,
+            "best": 6278,
+            "endpoints": {
+              "estimate_a": 6751,
+              "size_scaled": 6278,
+              "address_scaled": 15819
+            },
+            "range": [
+              6278,
+              15819
+            ]
+          },
+          "rusage_sum_mb": {
+            "H": 300,
+            "cP": 0.5685745140388769,
+            "cS": 0.07273325293279245,
+            "cR": 0.0677881972260453,
+            "alpha": 0.531622139515983,
+            "best": 6706,
+            "endpoints": {
+              "estimate_a": 6377,
+              "size_scaled": 6706,
+              "address_scaled": 15771
+            },
+            "range": [
+              6377,
+              15771
+            ]
+          },
+          "seconds": {
+            "H": 0,
+            "cP": 0.04033477321814255,
+            "cS": 0.0033000767459708366,
+            "cR": 0.006160433414889898,
+            "alpha": 0.6545865936486921,
+            "best": 472,
+            "endpoints": {
+              "estimate_a": 3003,
+              "size_scaled": 472,
+              "address_scaled": 1264
+            },
+            "range": [
+              472,
+              3003
+            ]
+          }
+        },
+        "controlled_walk": {
+          "peak_mb": {
+            "ratio_mid10": 1.728,
+            "ratio_small": 1.618,
+            "best": 10850,
+            "endpoints": {
+              "estimate_a": 11447,
+              "size_scaled_x_mid10": 10850,
+              "address_scaled_x_mid10": 27338,
+              "size_scaled_x_small": 10155,
+              "address_scaled_x_small": 25588
+            },
+            "range": [
+              10155,
+              27338
+            ]
+          },
+          "rusage_sum_mb": {
+            "ratio_mid10": 1.6,
+            "ratio_small": 1.353,
+            "best": 10730,
+            "endpoints": {
+              "estimate_a": 9843,
+              "size_scaled_x_mid10": 10730,
+              "address_scaled_x_mid10": 25234,
+              "size_scaled_x_small": 9073,
+              "address_scaled_x_small": 21338
+            },
+            "range": [
+              9073,
+              25234
+            ]
+          },
+          "seconds": {
+            "ratio_mid10": 2.578,
+            "ratio_small": 2.793,
+            "best": 1217,
+            "endpoints": {
+              "estimate_a": 877,
+              "size_scaled_x_mid10": 1217,
+              "address_scaled_x_mid10": 3258,
+              "size_scaled_x_small": 1318,
+              "address_scaled_x_small": 3530
+            },
+            "range": [
+              877,
+              3530
+            ]
+          }
+        }
+      },
+      "sizes": {
+        "small": {
+          "walk": {
+            "static_size": 1812,
+            "projection_loop_sites": {
+              "read_bit": 48,
+              "fixup_leaf": 16,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 56
+          },
+          "controlled_walk": {
+            "static_size": 1818,
+            "projection_loop_sites": {
+              "read_bit": 48,
+              "fixup_leaf": 16,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 56
+          },
+          "inner_prepare": {
+            "static_size": 161,
+            "projection_loop_sites": {
+              "read_bit": 12,
+              "fixup_leaf": 4,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 16
+          },
+          "inner_select": {
+            "static_size": 659,
+            "projection_loop_sites": {
+              "read_bit": 8,
+              "fixup_leaf": 2,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 8
+          }
+        },
+        "mid10": {
+          "walk": {
+            "static_size": 16298,
+            "projection_loop_sites": {
+              "read_bit": 726,
+              "fixup_leaf": 63,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 808
+          },
+          "controlled_walk": {
+            "static_size": 16304,
+            "projection_loop_sites": {
+              "read_bit": 726,
+              "fixup_leaf": 63,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 808
+          },
+          "inner_prepare": {
+            "static_size": 1365,
+            "projection_loop_sites": {
+              "read_bit": 280,
+              "fixup_leaf": 20,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 320
+          },
+          "inner_select": {
+            "static_size": 6317,
+            "projection_loop_sites": {
+              "read_bit": 58,
+              "fixup_leaf": 8,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 58
+          }
+        },
+        "mid14": {
+          "walk": {
+            "static_size": 22888,
+            "projection_loop_sites": {
+              "read_bit": 1590,
+              "fixup_leaf": 68,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 1784
+          },
+          "controlled_walk": {
+            "static_size": 22894,
+            "projection_loop_sites": {
+              "read_bit": 1590,
+              "fixup_leaf": 68,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 1784
+          },
+          "inner_prepare": {
+            "static_size": 1852,
+            "projection_loop_sites": {
+              "read_bit": 672,
+              "fixup_leaf": 24,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 768
+          },
+          "inner_select": {
+            "static_size": 9121,
+            "projection_loop_sites": {
+              "read_bit": 92,
+              "fixup_leaf": 6,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 92
+          }
+        },
+        "femoco": {
+          "walk": {
+            "static_size": 86144,
+            "projection_loop_sites": {
+              "read_bit": 16092,
+              "fixup_leaf": 177,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 18252
+          },
+          "controlled_walk": {
+            "static_size": 86150,
+            "projection_loop_sites": {
+              "read_bit": 16092,
+              "fixup_leaf": 177,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 18252
+          },
+          "inner_prepare": {
+            "static_size": 5840,
+            "projection_loop_sites": {
+              "read_bit": 7560,
+              "fixup_leaf": 68,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 8640
+          },
+          "inner_select": {
+            "static_size": 36481,
+            "projection_loop_sites": {
+              "read_bit": 324,
+              "fixup_leaf": 10,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 324
+          }
+        }
+      },
+      "femoco_allowed": false,
+      "reason": "controlled_walk: sampled peak 11.2 GB > 7.5 GB; controlled_walk: getrusage companion 9.6 GB > 7.5 GB",
+      "r1_counter_check": {
+        "mid10": 20599,
+        "mid14": 32822,
+        "femoco": 193053
+      }
+    },
+    "FPG": {
+      "estimate_a": {
+        "walk": {
+          "fit_shapes": [
+            "small",
+            "mid10",
+            "mid14"
+          ],
+          "missing_points": {},
+          "static_size": {
+            "small": 804,
+            "mid10": 5354,
+            "mid14": 7080,
+            "femoco": 21696
+          },
+          "points": {
+            "small": {
+              "seconds": 17.1,
+              "peak_mb": 507.2,
+              "rusage_sum_mb": 641.5
+            },
+            "mid10": {
+              "seconds": 232.0,
+              "peak_mb": 1481.6,
+              "rusage_sum_mb": 1442.3
+            },
+            "mid14": {
+              "seconds": 172.4,
+              "peak_mb": 2029.1,
+              "rusage_sum_mb": 2308.3
+            }
+          },
+          "seconds": 528,
+          "time_exponent": 1.0,
+          "peak_mb": 5431,
+          "mb_per_gate": 0.23672123207334,
+          "rusage_sum_mb_companion": 5739,
+          "companion_mb_per_gate": 0.24733239477459806
+        },
+        "controlled_walk": {
+          "fit_shapes": [
+            "small",
+            "mid10"
+          ],
+          "missing_points": {
+            "mid14": "control_ratio 1.800 x the mid14 walk's peak is 3652 MB, not below 3500 MB (Task 0.9c, requirement 4)"
+          },
+          "static_size": {
+            "small": 810,
+            "mid10": 5360,
+            "femoco": 21702
+          },
+          "points": {
+            "small": {
+              "seconds": 42.8,
+              "peak_mb": 817.5,
+              "rusage_sum_mb": 938.0
+            },
+            "mid10": {
+              "seconds": 271.1,
+              "peak_mb": 2559.1,
+              "rusage_sum_mb": 2381.5
+            }
+          },
+          "seconds": 1098,
+          "time_exponent": 1.0,
+          "peak_mb": 8814,
+          "mb_per_gate": 0.3827692307692308,
+          "rusage_sum_mb_companion": 7566,
+          "companion_mb_per_gate": 0.31725274725274716
+        }
+      },
+      "estimate_b": {
+        "static_sizes": {
+          "mid14": {
+            "walk": 7080,
+            "inner_prepare": 1852,
+            "inner_select": 1217
+          },
+          "femoco": {
+            "walk": 21696,
+            "inner_prepare": 5840,
+            "inner_select": 4257
+          }
+        },
+        "rest": {
+          "mid14": 942,
+          "femoco": 1502
+        },
+        "inner_address_growth": 11.25,
+        "walk": {
+          "peak_mb": {
+            "H": 300,
+            "cP": 0.44724622030237576,
+            "cS": 0.2677896466721446,
+            "cR": 0.23672123207334,
+            "alpha": 0.6830630773183569,
+            "best": 5668,
+            "endpoints": {
+              "estimate_a": 5431,
+              "size_scaled": 5668,
+              "address_scaled": 14830
+            },
+            "range": [
+              5431,
+              14830
+            ]
+          },
+          "rusage_sum_mb": {
+            "H": 300,
+            "cP": 0.6094492440604752,
+            "cS": 0.5011503697617091,
+            "cR": 0.24733239477459806,
+            "alpha": 0.5412934542857746,
+            "best": 6664,
+            "endpoints": {
+              "estimate_a": 5739,
+              "size_scaled": 6664,
+              "address_scaled": 16557
+            },
+            "range": [
+              5739,
+              16557
+            ]
+          },
+          "seconds": {
+            "H": 0,
+            "cP": 0.03963282937365011,
+            "cS": 0.01495480690221857,
+            "cR": 0.02435028248587571,
+            "alpha": 0.8363330795402782,
+            "best": 524,
+            "endpoints": {
+              "estimate_a": 528,
+              "size_scaled": 524,
+              "address_scaled": 1518
+            },
+            "range": [
+              524,
+              1518
+            ]
+          }
+        },
+        "controlled_walk": {
+          "peak_mb": {
+            "ratio_mid10": 1.727,
+            "ratio_small": 1.612,
+            "best": 9791,
+            "endpoints": {
+              "estimate_a": 8814,
+              "size_scaled_x_mid10": 9791,
+              "address_scaled_x_mid10": 25616,
+              "size_scaled_x_small": 9136,
+              "address_scaled_x_small": 23903
+            },
+            "range": [
+              8814,
+              25616
+            ]
+          },
+          "rusage_sum_mb": {
+            "ratio_mid10": 1.651,
+            "ratio_small": 1.462,
+            "best": 11003,
+            "endpoints": {
+              "estimate_a": 7566,
+              "size_scaled_x_mid10": 11003,
+              "address_scaled_x_mid10": 27339,
+              "size_scaled_x_small": 9744,
+              "address_scaled_x_small": 24210
+            },
+            "range": [
+              7566,
+              27339
+            ]
+          },
+          "seconds": {
+            "ratio_mid10": 1.169,
+            "ratio_small": 2.503,
+            "best": 613,
+            "endpoints": {
+              "estimate_a": 1098,
+              "size_scaled_x_mid10": 613,
+              "address_scaled_x_mid10": 1774,
+              "size_scaled_x_small": 1312,
+              "address_scaled_x_small": 3800
+            },
+            "range": [
+              613,
+              3800
+            ]
+          }
+        }
+      },
+      "sizes": {
+        "small": {
+          "walk": {
+            "static_size": 804,
+            "projection_loop_sites": {
+              "read_bit": 48,
+              "fixup_leaf": 16,
+              "givens_base": 2,
+              "givens_adjoint": 2
+            },
+            "conditional_sites": 56
+          },
+          "controlled_walk": {
+            "static_size": 810,
+            "projection_loop_sites": {
+              "read_bit": 48,
+              "fixup_leaf": 16,
+              "givens_base": 2,
+              "givens_adjoint": 2
+            },
+            "conditional_sites": 56
+          },
+          "inner_prepare": {
+            "static_size": 161,
+            "projection_loop_sites": {
+              "read_bit": 12,
+              "fixup_leaf": 4,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 16
+          },
+          "inner_select": {
+            "static_size": 155,
+            "projection_loop_sites": {
+              "read_bit": 8,
+              "fixup_leaf": 2,
+              "givens_base": 1,
+              "givens_adjoint": 1
+            },
+            "conditional_sites": 8
+          }
+        },
+        "mid10": {
+          "walk": {
+            "static_size": 5354,
+            "projection_loop_sites": {
+              "read_bit": 726,
+              "fixup_leaf": 63,
+              "givens_base": 2,
+              "givens_adjoint": 2
+            },
+            "conditional_sites": 808
+          },
+          "controlled_walk": {
+            "static_size": 5360,
+            "projection_loop_sites": {
+              "read_bit": 726,
+              "fixup_leaf": 63,
+              "givens_base": 2,
+              "givens_adjoint": 2
+            },
+            "conditional_sites": 808
+          },
+          "inner_prepare": {
+            "static_size": 1365,
+            "projection_loop_sites": {
+              "read_bit": 280,
+              "fixup_leaf": 20,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 320
+          },
+          "inner_select": {
+            "static_size": 845,
+            "projection_loop_sites": {
+              "read_bit": 58,
+              "fixup_leaf": 8,
+              "givens_base": 1,
+              "givens_adjoint": 1
+            },
+            "conditional_sites": 58
+          }
+        },
+        "mid14": {
+          "walk": {
+            "static_size": 7080,
+            "projection_loop_sites": {
+              "read_bit": 1590,
+              "fixup_leaf": 68,
+              "givens_base": 2,
+              "givens_adjoint": 2
+            },
+            "conditional_sites": 1784
+          },
+          "controlled_walk": {
+            "static_size": 7086,
+            "projection_loop_sites": {
+              "read_bit": 1590,
+              "fixup_leaf": 68,
+              "givens_base": 2,
+              "givens_adjoint": 2
+            },
+            "conditional_sites": 1784
+          },
+          "inner_prepare": {
+            "static_size": 1852,
+            "projection_loop_sites": {
+              "read_bit": 672,
+              "fixup_leaf": 24,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 768
+          },
+          "inner_select": {
+            "static_size": 1217,
+            "projection_loop_sites": {
+              "read_bit": 92,
+              "fixup_leaf": 6,
+              "givens_base": 1,
+              "givens_adjoint": 1
+            },
+            "conditional_sites": 92
+          }
+        },
+        "femoco": {
+          "walk": {
+            "static_size": 21696,
+            "projection_loop_sites": {
+              "read_bit": 16092,
+              "fixup_leaf": 177,
+              "givens_base": 2,
+              "givens_adjoint": 2
+            },
+            "conditional_sites": 18252
+          },
+          "controlled_walk": {
+            "static_size": 21702,
+            "projection_loop_sites": {
+              "read_bit": 16092,
+              "fixup_leaf": 177,
+              "givens_base": 2,
+              "givens_adjoint": 2
+            },
+            "conditional_sites": 18252
+          },
+          "inner_prepare": {
+            "static_size": 5840,
+            "projection_loop_sites": {
+              "read_bit": 7560,
+              "fixup_leaf": 68,
+              "givens_base": 0,
+              "givens_adjoint": 0
+            },
+            "conditional_sites": 8640
+          },
+          "inner_select": {
+            "static_size": 4257,
+            "projection_loop_sites": {
+              "read_bit": 324,
+              "fixup_leaf": 10,
+              "givens_base": 1,
+              "givens_adjoint": 1
+            },
+            "conditional_sites": 324
+          }
+        }
+      },
+      "femoco_allowed": false,
+      "reason": "controlled_walk: sampled peak 8.6 GB > 7.5 GB",
+      "r1_counter_check": {
+        "mid10": 20599,
+        "mid14": 32822,
+        "femoco": 193053
+      }
+    }
+  },
+  "erase_geometry": {
+    "femoco": {
+      "outer": 4,
+      "inner": 7,
+      "sf": 5,
+      "tail": 0
+    },
+    "mid14": {
+      "outer": 3,
+      "inner": 5,
+      "sf": 4,
+      "tail": 0
+    },
+    "mid10": {
+      "outer": 3,
+      "inner": 4,
+      "sf": 3,
+      "tail": 0
+    },
+    "small": {
+      "outer": 1,
+      "inner": 2,
+      "sf": 2,
+      "tail": 0
+    }
+  },
+  "independent_count_check": {
+    "small": {
+      "outer": {
+        "independent": [
+          2,
+          10,
+          2
+        ],
+        "resource_functions": [
+          2,
+          10,
+          2
+        ],
+        "sites": 8,
+        "resource_function_sites": 8,
+        "onehot_bits": 1,
+        "plain_T": 6
+      },
+      "inner": {
+        "independent": [
+          5,
+          14,
+          5
+        ],
+        "resource_functions": [
+          5,
+          14,
+          5
+        ],
+        "sites": 16,
+        "resource_function_sites": 16,
+        "onehot_bits": 2,
+        "plain_T": 15
+      },
+      "angle": {
+        "independent": [
+          6,
+          15,
+          6
+        ],
+        "resource_functions": [
+          6,
+          15,
+          6
+        ],
+        "sites": 8,
+        "resource_function_sites": 8,
+        "onehot_bits": 2,
+        "plain_T": 8
+      }
+    },
+    "mid10": {
+      "outer": {
+        "independent": [
+          12,
+          84,
+          12
+        ],
+        "resource_functions": [
+          12,
+          84,
+          12
+        ],
+        "sites": 52,
+        "resource_function_sites": 52,
+        "onehot_bits": 3,
+        "plain_T": 52
+      },
+      "inner": {
+        "independent": [
+          34,
+          46,
+          34
+        ],
+        "resource_functions": [
+          34,
+          46,
+          34
+        ],
+        "sites": 320,
+        "resource_function_sites": 320,
+        "onehot_bits": 4,
+        "plain_T": 320
+      },
+      "angle": {
+        "independent": [
+          26,
+          138,
+          26
+        ],
+        "resource_functions": [
+          26,
+          138,
+          26
+        ],
+        "sites": 58,
+        "resource_function_sites": 58,
+        "onehot_bits": 3,
+        "plain_T": 68
+      }
+    },
+    "mid14": {
+      "outer": {
+        "independent": [
+          12,
+          84,
+          12
+        ],
+        "resource_functions": [
+          12,
+          84,
+          12
+        ],
+        "sites": 64,
+        "resource_function_sites": 64,
+        "onehot_bits": 3,
+        "plain_T": 62
+      },
+      "inner": {
+        "independent": [
+          53,
+          96,
+          53
+        ],
+        "resource_functions": [
+          53,
+          96,
+          53
+        ],
+        "sites": 768,
+        "resource_function_sites": 768,
+        "onehot_bits": 5,
+        "plain_T": 767
+      },
+      "angle": {
+        "independent": [
+          35,
+          198,
+          35
+        ],
+        "resource_functions": [
+          35,
+          198,
+          35
+        ],
+        "sites": 92,
+        "resource_function_sites": 92,
+        "onehot_bits": 4,
+        "plain_T": 105
+      }
+    },
+    "femoco": {
+      "outer": {
+        "independent": [
+          36,
+          96,
+          36
+        ],
+        "resource_functions": [
+          36,
+          96,
+          36
+        ],
+        "sites": 324,
+        "resource_function_sites": 324,
+        "onehot_bits": 4,
+        "plain_T": 327
+      },
+      "inner": {
+        "independent": [
+          196,
+          416,
+          196
+        ],
+        "resource_functions": [
+          196,
+          416,
+          196
+        ],
+        "sites": 8640,
+        "resource_function_sites": 8640,
+        "onehot_bits": 7,
+        "plain_T": 8643
+      },
+      "angle": {
+        "independent": [
+          102,
+          798,
+          102
+        ],
+        "resource_functions": [
+          102,
+          798,
+          102
+        ],
+        "sites": 324,
+        "resource_function_sites": 324,
+        "onehot_bits": 5,
+        "plain_T": 352
+      }
+    },
+    "femoco_targets": {
+      "outer": true,
+      "inner": true,
+      "angle": true,
+      "sites": true
+    },
+    "ok": true
+  },
+  "femoco_counts": {
+    "R1": [
+      27354,
+      2524,
+      26236
+    ],
+    "F": [
+      9669,
+      2524,
+      8551
+    ]
+  },
+  "notes": [
+    "Arm F follows one spike-local ob rule at every shape (erase_geometry). At mid10 the spec's MID_NAPHTHALENE parameters (k_e1 = 2, k_e2 = 1) would give the outer erase ob 2 (T 15) instead of this rule's 3 (T 12); the inner ob 4 agrees",
+    "All arms remain stand-ins: erase masks and tables are compilable constants (no dynamic-mask erase path), and the SF angle load keeps its enable placeholder",
+    "Erase conditionals carry qp.hint({'branch-prob': 0.5}): analyzed CZ and Z counts are expected values; T, M and A are exact"
+  ],
+  "code_hash": "60a29677bedd1b4fcac81030e8bc4516c8aa0174b4a9dca2c68e380621d2210a",
+  "environment": {
+    "python": "3.12.7",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "pennylane": "0.46.0.dev151",
+    "pennylane_catalyst": "0.16.0.dev140",
+    "pennylane_lightning": "0.46.0.dev34",
+    "jax": "0.7.1",
+    "jaxlib": "0.7.1",
+    "numpy": "2.5.4",
+    "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+  }
+}

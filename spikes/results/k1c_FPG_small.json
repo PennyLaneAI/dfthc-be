@@ -1,0 +1,1051 @@
+{
+  "walk": {
+    "program": "walk",
+    "shape": "small",
+    "remedy": 1,
+    "num_wires": 83,
+    "seconds": 17.1,
+    "cpu_seconds": 18.9,
+    "rusage_sum_mb": 641.5,
+    "analyzed_gates_upper_bound": 2296,
+    "toffoli": 208,
+    "measurements": 68,
+    "measured_and_uncomputes": 147,
+    "counts": {
+      "Adjoint(S)": 36,
+      "Adjoint(TemporaryAND)": 147,
+      "CNOT": 1230,
+      "CZ": 28,
+      "GlobalPhase": 2,
+      "Hadamard": 232,
+      "MidCircuitMeasure": 68,
+      "PauliX": 302,
+      "PauliZ": 6,
+      "PhaseGradientStatePrep": 1,
+      "S": 36,
+      "TemporaryAND": 147,
+      "Toffoli": 61
+    },
+    "diagnostics": {
+      "compile_seconds": 17.1,
+      "rule_capture_seconds": 7.32,
+      "rule_targets": 422,
+      "rule_equations": 26946,
+      "modified_target_lowerings": 230,
+      "modified_target_seconds": 3.18,
+      "modified_target_equations": 4794,
+      "modified_target_signatures": 65,
+      "modified_target_ids": [
+        "Adjoint(CNOT)",
+        "Adjoint(CSWAP)",
+        "Adjoint(CZ)",
+        "Adjoint(ControlledPhaseShift)",
+        "Adjoint(GlobalPhase)",
+        "Adjoint(Hadamard)",
+        "Adjoint(LeftQuantumComparator)",
+        "Adjoint(MultiRZ)",
+        "Adjoint(PPR_2)",
+        "Adjoint(PPR_4)",
+        "Adjoint(PPR_8)",
+        "Adjoint(PauliRot)",
+        "Adjoint(PauliX)",
+        "Adjoint(PauliZ)",
+        "Adjoint(PhaseShift)",
+        "Adjoint(ProtoAngleEraseFP)",
+        "Adjoint(ProtoGivensLadderLoop)",
+        "Adjoint(ProtoGivensRotation)",
+        "Adjoint(ProtoInnerPrepareFPG)",
+        "Adjoint(ProtoInnerSelectFPG)",
+        "Adjoint(ProtoMajorana)",
+        "Adjoint(ProtoOuterPrepareFPG)",
+        "Adjoint(ProtoSFAngleLoadR1)",
+        "Adjoint(ProtoSpinMux)",
+        "Adjoint(ProtoSpinSwap)",
+        "Adjoint(ProtoTableReadR1)",
+        "Adjoint(ProtoTailAngleLoadR1)",
+        "Adjoint(ProtoUniformPrep)",
+        "Adjoint(RX)",
+        "Adjoint(RY)",
+        "Adjoint(RZ)",
+        "Adjoint(Rot)",
+        "Adjoint(S)",
+        "Adjoint(SemiAdder)",
+        "Adjoint(T)",
+        "Adjoint(TemporaryAND)",
+        "Adjoint(Toffoli)"
+      ],
+      "modified_target_lowerings_by_id": {
+        "Adjoint(CNOT)": 4,
+        "Adjoint(CSWAP)": 4,
+        "Adjoint(CZ)": 4,
+        "Adjoint(ControlledPhaseShift)": 4,
+        "Adjoint(GlobalPhase)": 4,
+        "Adjoint(Hadamard)": 4,
+        "Adjoint(LeftQuantumComparator)": 2,
+        "Adjoint(MultiRZ)": 8,
+        "Adjoint(PPR_2)": 8,
+        "Adjoint(PPR_4)": 28,
+        "Adjoint(PPR_8)": 56,
+        "Adjoint(PauliRot)": 16,
+        "Adjoint(PauliX)": 4,
+        "Adjoint(PauliZ)": 4,
+        "Adjoint(PhaseShift)": 4,
+        "Adjoint(ProtoAngleEraseFP)": 2,
+        "Adjoint(ProtoGivensLadderLoop)": 4,
+        "Adjoint(ProtoGivensRotation)": 2,
+        "Adjoint(ProtoInnerPrepareFPG)": 4,
+        "Adjoint(ProtoInnerSelectFPG)": 4,
+        "Adjoint(ProtoMajorana)": 2,
+        "Adjoint(ProtoOuterPrepareFPG)": 4,
+        "Adjoint(ProtoSFAngleLoadR1)": 2,
+        "Adjoint(ProtoSpinMux)": 4,
+        "Adjoint(ProtoSpinSwap)": 4,
+        "Adjoint(ProtoTableReadR1)": 8,
+        "Adjoint(ProtoTailAngleLoadR1)": 2,
+        "Adjoint(ProtoUniformPrep)": 4,
+        "Adjoint(RX)": 4,
+        "Adjoint(RY)": 4,
+        "Adjoint(RZ)": 4,
+        "Adjoint(Rot)": 4,
+        "Adjoint(S)": 2,
+        "Adjoint(SemiAdder)": 2,
+        "Adjoint(T)": 2,
+        "Adjoint(TemporaryAND)": 4,
+        "Adjoint(Toffoli)": 4
+      }
+    },
+    "warnings": {
+      "prototype": [],
+      "expected": [
+        "Skipped the _proto_angle_erase_fp decomposition rule for Adjoint(ProtoAngleEraseFP): it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_angle_erase_fp decomposition rule for Adjoint(ProtoAngleEraseFP): it contains a mid-circuit measurement, which is not supported with adjoint or control regions."
+      ],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 22
+    },
+    "table_word_dtype": "int64",
+    "bit_loops": {
+      "for_loops_captured": 28,
+      "for_loops_expected": 28,
+      "cnot_analyzed": 1230,
+      "cnot_declared_upper_bound": 1230,
+      "cnot_set_bits": 985,
+      "retained": true
+    },
+    "arm": "FPG",
+    "loops": {
+      "captured": {
+        "read_bit": [
+          4,
+          4,
+          8,
+          12
+        ],
+        "fixup_leaf": [
+          2,
+          4,
+          4
+        ],
+        "givens_base": [
+          1
+        ],
+        "givens_adjoint": [
+          1
+        ]
+      },
+      "targets": {
+        "read_bit": 4,
+        "fixup_leaf": 3,
+        "givens_base": 1,
+        "givens_adjoint": 1
+      }
+    },
+    "projection_size": {
+      "static_size": 804,
+      "static_gates": {
+        "Adjoint(TemporaryAND)": 75,
+        "CNOT": 230,
+        "CZ": 4,
+        "GlobalPhase": 2,
+        "Hadamard": 112,
+        "MidMeasure": 68,
+        "PauliX": 167,
+        "PauliZ": 10,
+        "TemporaryAND": 75,
+        "Toffoli": 61
+      },
+      "projection_loop_sites": {
+        "read_bit": 48,
+        "fixup_leaf": 16,
+        "givens_base": 2,
+        "givens_adjoint": 2
+      },
+      "conditional_sites": 56
+    },
+    "peak_mb": 507.2,
+    "within_budget": true,
+    "watched_seconds": 21.3,
+    "compressor_mb_before": 10660.2,
+    "compressor_mb_after": 11220.9,
+    "compressor_mb_delta": 560.7,
+    "expected": {
+      "tma_resource_functions": [
+        208,
+        68,
+        147
+      ],
+      "tma_independent": [
+        208,
+        68,
+        147
+      ],
+      "conditional_sites": 56,
+      "loops": {
+        "read_bit": [
+          4,
+          4,
+          8,
+          12
+        ],
+        "fixup_leaf": [
+          2,
+          4,
+          4
+        ],
+        "givens_base": [
+          1
+        ],
+        "givens_adjoint": [
+          1
+        ]
+      },
+      "tma_F": [
+        208,
+        68,
+        147
+      ]
+    },
+    "gate": {
+      "ok": true,
+      "problems": []
+    }
+  },
+  "controlled_walk": {
+    "program": "controlled_walk",
+    "shape": "small",
+    "remedy": 1,
+    "num_wires": 83,
+    "seconds": 42.8,
+    "cpu_seconds": 42.9,
+    "rusage_sum_mb": 938.0,
+    "analyzed_gates_upper_bound": 2304,
+    "toffoli": 210,
+    "measurements": 68,
+    "measured_and_uncomputes": 149,
+    "counts": {
+      "Adjoint(S)": 36,
+      "Adjoint(TemporaryAND)": 149,
+      "CNOT": 1230,
+      "CZ": 28,
+      "Hadamard": 232,
+      "MidCircuitMeasure": 68,
+      "PauliX": 306,
+      "PauliZ": 8,
+      "PhaseGradientStatePrep": 1,
+      "S": 36,
+      "TemporaryAND": 149,
+      "Toffoli": 61
+    },
+    "diagnostics": {
+      "compile_seconds": 42.8,
+      "rule_capture_seconds": 16.65,
+      "rule_targets": 1044,
+      "rule_equations": 35286,
+      "modified_target_lowerings": 686,
+      "modified_target_seconds": 11.07,
+      "modified_target_equations": 15854,
+      "modified_target_signatures": 223,
+      "modified_target_ids": [
+        "Adjoint(CNOT)",
+        "Adjoint(CSWAP)",
+        "Adjoint(CZ)",
+        "Adjoint(ControlledPhaseShift)",
+        "Adjoint(GlobalPhase)",
+        "Adjoint(Hadamard)",
+        "Adjoint(LeftQuantumComparator)",
+        "Adjoint(MultiRZ)",
+        "Adjoint(PPR_2)",
+        "Adjoint(PPR_4)",
+        "Adjoint(PPR_8)",
+        "Adjoint(PauliRot)",
+        "Adjoint(PauliX)",
+        "Adjoint(PauliZ)",
+        "Adjoint(PhaseShift)",
+        "Adjoint(ProtoAngleEraseFP)",
+        "Adjoint(ProtoGivensLadderLoop)",
+        "Adjoint(ProtoGivensRotation)",
+        "Adjoint(ProtoInnerPrepareFPG)",
+        "Adjoint(ProtoInnerSelectFPG)",
+        "Adjoint(ProtoMajorana)",
+        "Adjoint(ProtoOuterPrepareFPG)",
+        "Adjoint(ProtoSFAngleLoadR1)",
+        "Adjoint(ProtoSpinMux)",
+        "Adjoint(ProtoSpinSwap)",
+        "Adjoint(ProtoTableReadR1)",
+        "Adjoint(ProtoTailAngleLoadR1)",
+        "Adjoint(ProtoUniformPrep)",
+        "Adjoint(QubitUnitary)",
+        "Adjoint(RX)",
+        "Adjoint(RY)",
+        "Adjoint(RZ)",
+        "Adjoint(Rot)",
+        "Adjoint(S)",
+        "Adjoint(SemiAdder)",
+        "Adjoint(T)",
+        "Adjoint(TemporaryAND)",
+        "Adjoint(Toffoli)",
+        "C(Adjoint(CNOT))",
+        "C(Adjoint(CSWAP))",
+        "C(Adjoint(CZ))",
+        "C(Adjoint(ControlledPhaseShift))",
+        "C(Adjoint(GlobalPhase))",
+        "C(Adjoint(Hadamard))",
+        "C(Adjoint(LeftQuantumComparator))",
+        "C(Adjoint(MultiRZ))",
+        "C(Adjoint(PPR_2))",
+        "C(Adjoint(PPR_4))",
+        "C(Adjoint(PPR_8))",
+        "C(Adjoint(PauliRot))",
+        "C(Adjoint(PauliX))",
+        "C(Adjoint(PauliZ))",
+        "C(Adjoint(PhaseShift))",
+        "C(Adjoint(ProtoAngleEraseFP))",
+        "C(Adjoint(ProtoGivensLadderLoop))",
+        "C(Adjoint(ProtoGivensRotation))",
+        "C(Adjoint(ProtoInnerPrepareFPG))",
+        "C(Adjoint(ProtoInnerSelectFPG))",
+        "C(Adjoint(ProtoMajorana))",
+        "C(Adjoint(ProtoOuterPrepareFPG))",
+        "C(Adjoint(ProtoSFAngleLoadR1))",
+        "C(Adjoint(ProtoSpinMux))",
+        "C(Adjoint(ProtoSpinSwap))",
+        "C(Adjoint(ProtoTableReadR1))",
+        "C(Adjoint(ProtoTailAngleLoadR1))",
+        "C(Adjoint(ProtoUniformPrep))",
+        "C(Adjoint(RX))",
+        "C(Adjoint(RY))",
+        "C(Adjoint(RZ))",
+        "C(Adjoint(Rot))",
+        "C(Adjoint(S))",
+        "C(Adjoint(SemiAdder))",
+        "C(Adjoint(T))",
+        "C(Adjoint(TemporaryAND))",
+        "C(Adjoint(Toffoli))",
+        "C(CNOT)",
+        "C(CSWAP)",
+        "C(CZ)",
+        "C(ControlledPhaseShift)",
+        "C(GlobalPhase)",
+        "C(Hadamard)",
+        "C(LeftQuantumComparator)",
+        "C(MultiControlledX)",
+        "C(MultiRZ)",
+        "C(PPR_2)",
+        "C(PPR_4)",
+        "C(PPR_8)",
+        "C(PauliRot)",
+        "C(PauliX)",
+        "C(PauliZ)",
+        "C(PhaseShift)",
+        "C(ProtoAngleEraseFP)",
+        "C(ProtoBlockEncodingFPG)",
+        "C(ProtoGivensLadderLoop)",
+        "C(ProtoGivensRotation)",
+        "C(ProtoInnerPrepareFPG)",
+        "C(ProtoInnerSelectFPG)",
+        "C(ProtoInnerSigns)",
+        "C(ProtoMajorana)",
+        "C(ProtoOuterPrepareFPG)",
+        "C(ProtoSFAngleLoadR1)",
+        "C(ProtoSpinMux)",
+        "C(ProtoSpinSwap)",
+        "C(ProtoTableEraseFP)",
+        "C(ProtoTableReadR1)",
+        "C(ProtoTailAngleLoadR1)",
+        "C(ProtoUniformPrep)",
+        "C(ProtoWalkFPG)",
+        "C(ProtoZeroReflection)",
+        "C(RX)",
+        "C(RY)",
+        "C(RZ)",
+        "C(Rot)",
+        "C(S)",
+        "C(SemiAdder)",
+        "C(T)",
+        "C(TemporaryAND)",
+        "C(Toffoli)"
+      ],
+      "modified_target_lowerings_by_id": {
+        "Adjoint(CNOT)": 4,
+        "Adjoint(CSWAP)": 4,
+        "Adjoint(CZ)": 4,
+        "Adjoint(ControlledPhaseShift)": 4,
+        "Adjoint(GlobalPhase)": 4,
+        "Adjoint(Hadamard)": 4,
+        "Adjoint(LeftQuantumComparator)": 2,
+        "Adjoint(MultiRZ)": 8,
+        "Adjoint(PPR_2)": 8,
+        "Adjoint(PPR_4)": 28,
+        "Adjoint(PPR_8)": 56,
+        "Adjoint(PauliRot)": 16,
+        "Adjoint(PauliX)": 4,
+        "Adjoint(PauliZ)": 4,
+        "Adjoint(PhaseShift)": 4,
+        "Adjoint(ProtoAngleEraseFP)": 2,
+        "Adjoint(ProtoGivensLadderLoop)": 4,
+        "Adjoint(ProtoGivensRotation)": 2,
+        "Adjoint(ProtoInnerPrepareFPG)": 4,
+        "Adjoint(ProtoInnerSelectFPG)": 4,
+        "Adjoint(ProtoMajorana)": 2,
+        "Adjoint(ProtoOuterPrepareFPG)": 4,
+        "Adjoint(ProtoSFAngleLoadR1)": 2,
+        "Adjoint(ProtoSpinMux)": 4,
+        "Adjoint(ProtoSpinSwap)": 4,
+        "Adjoint(ProtoTableReadR1)": 8,
+        "Adjoint(ProtoTailAngleLoadR1)": 2,
+        "Adjoint(ProtoUniformPrep)": 4,
+        "Adjoint(QubitUnitary)": 4,
+        "Adjoint(RX)": 4,
+        "Adjoint(RY)": 4,
+        "Adjoint(RZ)": 4,
+        "Adjoint(Rot)": 4,
+        "Adjoint(S)": 2,
+        "Adjoint(SemiAdder)": 2,
+        "Adjoint(T)": 2,
+        "Adjoint(TemporaryAND)": 4,
+        "Adjoint(Toffoli)": 4,
+        "C(Adjoint(CNOT))": 4,
+        "C(Adjoint(CSWAP))": 4,
+        "C(Adjoint(CZ))": 4,
+        "C(Adjoint(ControlledPhaseShift))": 4,
+        "C(Adjoint(GlobalPhase))": 4,
+        "C(Adjoint(Hadamard))": 4,
+        "C(Adjoint(LeftQuantumComparator))": 2,
+        "C(Adjoint(MultiRZ))": 8,
+        "C(Adjoint(PPR_2))": 8,
+        "C(Adjoint(PPR_4))": 28,
+        "C(Adjoint(PPR_8))": 56,
+        "C(Adjoint(PauliRot))": 16,
+        "C(Adjoint(PauliX))": 4,
+        "C(Adjoint(PauliZ))": 4,
+        "C(Adjoint(PhaseShift))": 4,
+        "C(Adjoint(ProtoAngleEraseFP))": 2,
+        "C(Adjoint(ProtoGivensLadderLoop))": 4,
+        "C(Adjoint(ProtoGivensRotation))": 2,
+        "C(Adjoint(ProtoInnerPrepareFPG))": 4,
+        "C(Adjoint(ProtoInnerSelectFPG))": 4,
+        "C(Adjoint(ProtoMajorana))": 2,
+        "C(Adjoint(ProtoOuterPrepareFPG))": 4,
+        "C(Adjoint(ProtoSFAngleLoadR1))": 2,
+        "C(Adjoint(ProtoSpinMux))": 4,
+        "C(Adjoint(ProtoSpinSwap))": 4,
+        "C(Adjoint(ProtoTableReadR1))": 8,
+        "C(Adjoint(ProtoTailAngleLoadR1))": 2,
+        "C(Adjoint(ProtoUniformPrep))": 4,
+        "C(Adjoint(RX))": 4,
+        "C(Adjoint(RY))": 4,
+        "C(Adjoint(RZ))": 4,
+        "C(Adjoint(Rot))": 4,
+        "C(Adjoint(S))": 2,
+        "C(Adjoint(SemiAdder))": 2,
+        "C(Adjoint(T))": 2,
+        "C(Adjoint(TemporaryAND))": 4,
+        "C(Adjoint(Toffoli))": 4,
+        "C(CNOT)": 4,
+        "C(CSWAP)": 2,
+        "C(CZ)": 2,
+        "C(ControlledPhaseShift)": 2,
+        "C(GlobalPhase)": 4,
+        "C(Hadamard)": 4,
+        "C(LeftQuantumComparator)": 2,
+        "C(MultiControlledX)": 12,
+        "C(MultiRZ)": 4,
+        "C(PPR_2)": 8,
+        "C(PPR_4)": 20,
+        "C(PPR_8)": 52,
+        "C(PauliRot)": 8,
+        "C(PauliX)": 4,
+        "C(PauliZ)": 4,
+        "C(PhaseShift)": 4,
+        "C(ProtoAngleEraseFP)": 2,
+        "C(ProtoBlockEncodingFPG)": 4,
+        "C(ProtoGivensLadderLoop)": 2,
+        "C(ProtoGivensRotation)": 2,
+        "C(ProtoInnerPrepareFPG)": 2,
+        "C(ProtoInnerSelectFPG)": 2,
+        "C(ProtoInnerSigns)": 2,
+        "C(ProtoMajorana)": 2,
+        "C(ProtoOuterPrepareFPG)": 2,
+        "C(ProtoSFAngleLoadR1)": 2,
+        "C(ProtoSpinMux)": 2,
+        "C(ProtoSpinSwap)": 2,
+        "C(ProtoTableEraseFP)": 4,
+        "C(ProtoTableReadR1)": 8,
+        "C(ProtoTailAngleLoadR1)": 2,
+        "C(ProtoUniformPrep)": 4,
+        "C(ProtoWalkFPG)": 4,
+        "C(ProtoZeroReflection)": 8,
+        "C(RX)": 4,
+        "C(RY)": 4,
+        "C(RZ)": 4,
+        "C(Rot)": 4,
+        "C(S)": 2,
+        "C(SemiAdder)": 4,
+        "C(T)": 2,
+        "C(TemporaryAND)": 2,
+        "C(Toffoli)": 4
+      }
+    },
+    "warnings": {
+      "prototype": [],
+      "expected": [
+        "Skipped the _proto_angle_erase_fp decomposition rule for Adjoint(ProtoAngleEraseFP): it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_table_erase_fp decomposition rule for C(ProtoTableEraseFP): it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_table_erase_fp decomposition rule for C(ProtoTableEraseFP): it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_angle_erase_fp decomposition rule for C(ProtoAngleEraseFP): it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_angle_erase_fp decomposition rule for C(Adjoint(ProtoAngleEraseFP)): it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_angle_erase_fp decomposition rule for Adjoint(ProtoAngleEraseFP): it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_table_erase_fp decomposition rule for C(ProtoTableEraseFP): it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_table_erase_fp decomposition rule for C(ProtoTableEraseFP): it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_angle_erase_fp decomposition rule for C(ProtoAngleEraseFP): it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_angle_erase_fp decomposition rule for C(Adjoint(ProtoAngleEraseFP)): it contains a mid-circuit measurement, which is not supported with adjoint or control regions."
+      ],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 60
+    },
+    "table_word_dtype": "int64",
+    "bit_loops": {
+      "for_loops_captured": 28,
+      "for_loops_expected": 28,
+      "cnot_analyzed": 1230,
+      "cnot_declared_upper_bound": 1230,
+      "cnot_set_bits": 985,
+      "retained": true
+    },
+    "arm": "FPG",
+    "loops": {
+      "captured": {
+        "read_bit": [
+          4,
+          4,
+          8,
+          12
+        ],
+        "fixup_leaf": [
+          2,
+          4,
+          4
+        ],
+        "givens_base": [
+          1
+        ],
+        "givens_adjoint": [
+          1
+        ]
+      },
+      "targets": {
+        "read_bit": 4,
+        "fixup_leaf": 3,
+        "givens_base": 1,
+        "givens_adjoint": 1
+      }
+    },
+    "projection_size": {
+      "static_size": 810,
+      "static_gates": {
+        "Adjoint(TemporaryAND)": 77,
+        "CNOT": 230,
+        "CZ": 4,
+        "Hadamard": 112,
+        "MidMeasure": 68,
+        "PauliX": 169,
+        "PauliZ": 12,
+        "TemporaryAND": 77,
+        "Toffoli": 61
+      },
+      "projection_loop_sites": {
+        "read_bit": 48,
+        "fixup_leaf": 16,
+        "givens_base": 2,
+        "givens_adjoint": 2
+      },
+      "conditional_sites": 56
+    },
+    "peak_mb": 817.5,
+    "within_budget": true,
+    "watched_seconds": 48.4,
+    "compressor_mb_before": 11179.2,
+    "compressor_mb_after": 12508.1,
+    "compressor_mb_delta": 1328.9,
+    "expected": {
+      "tma_resource_functions": [
+        210,
+        68,
+        149
+      ],
+      "tma_independent": [
+        210,
+        68,
+        149
+      ],
+      "conditional_sites": 56,
+      "loops": {
+        "read_bit": [
+          4,
+          4,
+          8,
+          12
+        ],
+        "fixup_leaf": [
+          2,
+          4,
+          4
+        ],
+        "givens_base": [
+          1
+        ],
+        "givens_adjoint": [
+          1
+        ]
+      },
+      "tma_F": [
+        210,
+        68,
+        149
+      ]
+    },
+    "gate": {
+      "ok": true,
+      "problems": []
+    }
+  },
+  "inner_prepare": {
+    "program": "inner_prepare",
+    "shape": "small",
+    "remedy": 1,
+    "num_wires": 83,
+    "seconds": 8.4,
+    "cpu_seconds": 8.6,
+    "rusage_sum_mb": 455.0,
+    "analyzed_gates_upper_bound": 268,
+    "toffoli": 25,
+    "measurements": 14,
+    "measured_and_uncomputes": 14,
+    "counts": {
+      "Adjoint(TemporaryAND)": 14,
+      "CNOT": 138,
+      "CZ": 8,
+      "Hadamard": 24,
+      "MidCircuitMeasure": 14,
+      "PauliX": 44,
+      "PhaseGradientStatePrep": 1,
+      "TemporaryAND": 14,
+      "Toffoli": 11
+    },
+    "diagnostics": {
+      "compile_seconds": 8.4,
+      "rule_capture_seconds": 3.46,
+      "rule_targets": 334,
+      "rule_equations": 8936,
+      "modified_target_lowerings": 190,
+      "modified_target_seconds": 1.82,
+      "modified_target_equations": 2078,
+      "modified_target_signatures": 50,
+      "modified_target_ids": [
+        "Adjoint(CNOT)",
+        "Adjoint(CSWAP)",
+        "Adjoint(CZ)",
+        "Adjoint(ControlledPhaseShift)",
+        "Adjoint(GlobalPhase)",
+        "Adjoint(Hadamard)",
+        "Adjoint(LeftQuantumComparator)",
+        "Adjoint(MultiRZ)",
+        "Adjoint(PPR_2)",
+        "Adjoint(PPR_4)",
+        "Adjoint(PPR_8)",
+        "Adjoint(PauliRot)",
+        "Adjoint(PauliX)",
+        "Adjoint(PauliZ)",
+        "Adjoint(PhaseShift)",
+        "Adjoint(ProtoInnerPrepareFPG)",
+        "Adjoint(ProtoTableReadR1)",
+        "Adjoint(ProtoUniformPrep)",
+        "Adjoint(RX)",
+        "Adjoint(RY)",
+        "Adjoint(RZ)",
+        "Adjoint(Rot)",
+        "Adjoint(S)",
+        "Adjoint(T)",
+        "Adjoint(TemporaryAND)",
+        "Adjoint(Toffoli)"
+      ],
+      "modified_target_lowerings_by_id": {
+        "Adjoint(CNOT)": 4,
+        "Adjoint(CSWAP)": 4,
+        "Adjoint(CZ)": 4,
+        "Adjoint(ControlledPhaseShift)": 4,
+        "Adjoint(GlobalPhase)": 4,
+        "Adjoint(Hadamard)": 4,
+        "Adjoint(LeftQuantumComparator)": 2,
+        "Adjoint(MultiRZ)": 8,
+        "Adjoint(PPR_2)": 8,
+        "Adjoint(PPR_4)": 28,
+        "Adjoint(PPR_8)": 56,
+        "Adjoint(PauliRot)": 16,
+        "Adjoint(PauliX)": 4,
+        "Adjoint(PauliZ)": 4,
+        "Adjoint(PhaseShift)": 4,
+        "Adjoint(ProtoInnerPrepareFPG)": 4,
+        "Adjoint(ProtoTableReadR1)": 2,
+        "Adjoint(ProtoUniformPrep)": 2,
+        "Adjoint(RX)": 4,
+        "Adjoint(RY)": 4,
+        "Adjoint(RZ)": 4,
+        "Adjoint(Rot)": 4,
+        "Adjoint(S)": 2,
+        "Adjoint(T)": 2,
+        "Adjoint(TemporaryAND)": 4,
+        "Adjoint(Toffoli)": 4
+      }
+    },
+    "warnings": {
+      "prototype": [],
+      "expected": [],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 20
+    },
+    "table_word_dtype": "int64",
+    "bit_loops": {
+      "for_loops_captured": 12,
+      "for_loops_expected": 12,
+      "cnot_analyzed": 138,
+      "cnot_declared_upper_bound": 138,
+      "cnot_set_bits": 96,
+      "retained": true
+    },
+    "arm": "FPG",
+    "loops": {
+      "captured": {
+        "read_bit": [
+          12
+        ],
+        "fixup_leaf": [
+          4
+        ],
+        "givens_base": [],
+        "givens_adjoint": []
+      },
+      "targets": {
+        "read_bit": 1,
+        "fixup_leaf": 1,
+        "givens_base": 0,
+        "givens_adjoint": 0
+      }
+    },
+    "projection_size": {
+      "static_size": 161,
+      "static_gates": {
+        "Adjoint(TemporaryAND)": 14,
+        "CNOT": 54,
+        "Hadamard": 24,
+        "MidMeasure": 14,
+        "PauliX": 30,
+        "TemporaryAND": 14,
+        "Toffoli": 11
+      },
+      "projection_loop_sites": {
+        "read_bit": 12,
+        "fixup_leaf": 4,
+        "givens_base": 0,
+        "givens_adjoint": 0
+      },
+      "conditional_sites": 16
+    },
+    "peak_mb": 327.3,
+    "within_budget": true,
+    "watched_seconds": 13.3,
+    "compressor_mb_before": 12352.0,
+    "compressor_mb_after": 12130.8,
+    "compressor_mb_delta": -221.2,
+    "expected": {
+      "tma_resource_functions": [
+        25,
+        14,
+        14
+      ],
+      "tma_independent": [
+        25,
+        14,
+        14
+      ],
+      "conditional_sites": 16,
+      "loops": {
+        "read_bit": [
+          12
+        ],
+        "fixup_leaf": [
+          4
+        ],
+        "givens_base": [],
+        "givens_adjoint": []
+      },
+      "tma_F": [
+        25,
+        14,
+        14
+      ]
+    },
+    "gate": {
+      "ok": true,
+      "problems": []
+    }
+  },
+  "inner_select": {
+    "program": "inner_select",
+    "shape": "small",
+    "remedy": 1,
+    "num_wires": 83,
+    "seconds": 9.2,
+    "cpu_seconds": 9.1,
+    "rusage_sum_mb": 490.9,
+    "analyzed_gates_upper_bound": 759,
+    "toffoli": 64,
+    "measurements": 15,
+    "measured_and_uncomputes": 51,
+    "counts": {
+      "Adjoint(S)": 18,
+      "Adjoint(TemporaryAND)": 51,
+      "CNOT": 435,
+      "CZ": 3,
+      "Hadamard": 79,
+      "MidCircuitMeasure": 15,
+      "PauliX": 73,
+      "PauliZ": 2,
+      "PhaseGradientStatePrep": 1,
+      "S": 18,
+      "TemporaryAND": 51,
+      "Toffoli": 13
+    },
+    "diagnostics": {
+      "compile_seconds": 9.2,
+      "rule_capture_seconds": 3.59,
+      "rule_targets": 308,
+      "rule_equations": 11906,
+      "modified_target_lowerings": 160,
+      "modified_target_seconds": 1.41,
+      "modified_target_equations": 1380,
+      "modified_target_signatures": 42,
+      "modified_target_ids": [
+        "Adjoint(CNOT)",
+        "Adjoint(CZ)",
+        "Adjoint(ControlledPhaseShift)",
+        "Adjoint(GlobalPhase)",
+        "Adjoint(Hadamard)",
+        "Adjoint(MultiRZ)",
+        "Adjoint(PPR_2)",
+        "Adjoint(PPR_4)",
+        "Adjoint(PPR_8)",
+        "Adjoint(PauliRot)",
+        "Adjoint(PauliX)",
+        "Adjoint(PauliZ)",
+        "Adjoint(PhaseShift)",
+        "Adjoint(ProtoGivensLadderLoop)",
+        "Adjoint(ProtoGivensRotation)",
+        "Adjoint(RX)",
+        "Adjoint(RY)",
+        "Adjoint(RZ)",
+        "Adjoint(Rot)",
+        "Adjoint(S)",
+        "Adjoint(SemiAdder)",
+        "Adjoint(T)",
+        "Adjoint(TemporaryAND)",
+        "Adjoint(Toffoli)"
+      ],
+      "modified_target_lowerings_by_id": {
+        "Adjoint(CNOT)": 4,
+        "Adjoint(CZ)": 4,
+        "Adjoint(ControlledPhaseShift)": 4,
+        "Adjoint(GlobalPhase)": 4,
+        "Adjoint(Hadamard)": 4,
+        "Adjoint(MultiRZ)": 8,
+        "Adjoint(PPR_2)": 8,
+        "Adjoint(PPR_4)": 28,
+        "Adjoint(PPR_8)": 32,
+        "Adjoint(PauliRot)": 16,
+        "Adjoint(PauliX)": 4,
+        "Adjoint(PauliZ)": 4,
+        "Adjoint(PhaseShift)": 4,
+        "Adjoint(ProtoGivensLadderLoop)": 4,
+        "Adjoint(ProtoGivensRotation)": 2,
+        "Adjoint(RX)": 4,
+        "Adjoint(RY)": 4,
+        "Adjoint(RZ)": 4,
+        "Adjoint(Rot)": 4,
+        "Adjoint(S)": 2,
+        "Adjoint(SemiAdder)": 2,
+        "Adjoint(T)": 2,
+        "Adjoint(TemporaryAND)": 4,
+        "Adjoint(Toffoli)": 4
+      }
+    },
+    "warnings": {
+      "prototype": [],
+      "expected": [],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 20
+    },
+    "table_word_dtype": "int64",
+    "bit_loops": {
+      "for_loops_captured": 8,
+      "for_loops_expected": 8,
+      "cnot_analyzed": 435,
+      "cnot_declared_upper_bound": 435,
+      "cnot_set_bits": 367,
+      "retained": true
+    },
+    "arm": "FPG",
+    "loops": {
+      "captured": {
+        "read_bit": [
+          4,
+          4
+        ],
+        "fixup_leaf": [
+          2
+        ],
+        "givens_base": [
+          1
+        ],
+        "givens_adjoint": [
+          1
+        ]
+      },
+      "targets": {
+        "read_bit": 2,
+        "fixup_leaf": 1,
+        "givens_base": 1,
+        "givens_adjoint": 1
+      }
+    },
+    "projection_size": {
+      "static_size": 155,
+      "static_gates": {
+        "Adjoint(TemporaryAND)": 15,
+        "CNOT": 39,
+        "CZ": 1,
+        "Hadamard": 19,
+        "MidMeasure": 15,
+        "PauliX": 34,
+        "PauliZ": 4,
+        "TemporaryAND": 15,
+        "Toffoli": 13
+      },
+      "projection_loop_sites": {
+        "read_bit": 8,
+        "fixup_leaf": 2,
+        "givens_base": 1,
+        "givens_adjoint": 1
+      },
+      "conditional_sites": 8
+    },
+    "peak_mb": 341.7,
+    "within_budget": true,
+    "watched_seconds": 15.5,
+    "compressor_mb_before": 12099.3,
+    "compressor_mb_after": 12124.0,
+    "compressor_mb_delta": 24.7,
+    "expected": {
+      "tma_resource_functions": [
+        64,
+        15,
+        51
+      ],
+      "tma_independent": [
+        64,
+        15,
+        51
+      ],
+      "conditional_sites": 8,
+      "loops": {
+        "read_bit": [
+          4,
+          4
+        ],
+        "fixup_leaf": [
+          2
+        ],
+        "givens_base": [
+          1
+        ],
+        "givens_adjoint": [
+          1
+        ]
+      },
+      "tma_F": [
+        64,
+        15,
+        51
+      ]
+    },
+    "gate": {
+      "ok": true,
+      "problems": []
+    }
+  },
+  "controlled_walk_check": {
+    "ok": true,
+    "deltas": {
+      "toffoli": 2,
+      "measured_and_uncomputes": 2,
+      "measurements": 0
+    },
+    "expected": {
+      "toffoli": 2,
+      "measured_and_uncomputes": 2,
+      "measurements": 0
+    }
+  },
+  "notes": [
+    "Table words are int64 holding 32 data bits each: with uint32 words, Catalyst builds no rule for ProtoTableReadR1 ('Failed to synthesize the distributed decomposition rules ...: ui32') and the compile fails; reproducer: .scratch/task-0.9b/dtype_repro.py (not committed)",
+    "Arm F follows one spike-local ob rule at every shape (erase_geometry). At mid10 the spec's MID_NAPHTHALENE parameters (k_e1 = 2, k_e2 = 1) would give the outer erase ob 2 (T 15) instead of this rule's 3 (T 12); the inner ob 4 agrees",
+    "All arms remain stand-ins: erase masks and tables are compilable constants (no dynamic-mask erase path), and the SF angle load keeps its enable placeholder",
+    "Erase conditionals carry qp.hint({'branch-prob': 0.5}): analyzed CZ and Z counts are expected values; T, M and A are exact"
+  ],
+  "limits": {
+    "seconds": 300,
+    "mb": 3840.0,
+    "cap_mb": 4096
+  },
+  "memory_method": "peak_mb: sampled peak of the summed physical footprint of the compile's process tree (dfthc.testing.watchdog), the gate metric; the watchdog kills the tree above the limit. rusage_sum_mb: the getrusage companion, ru_maxrss of the compile process plus ru_maxrss of its finished children. It is not an upper bound: under memory pressure the resident size drops compressed pages that the footprint keeps counting, so it can fall below peak_mb",
+  "code_hash": "60a29677bedd1b4fcac81030e8bc4516c8aa0174b4a9dca2c68e380621d2210a",
+  "environment": {
+    "python": "3.12.7",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "pennylane": "0.46.0.dev151",
+    "pennylane_catalyst": "0.16.0.dev140",
+    "pennylane_lightning": "0.46.0.dev34",
+    "jax": "0.7.1",
+    "jaxlib": "0.7.1",
+    "numpy": "2.5.4",
+    "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+  },
+  "verdict": "pass"
+}
