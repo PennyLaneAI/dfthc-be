@@ -20,6 +20,8 @@ This file holds Tasks 1C.1 to 1C.6 of the master plan (`docs/superpowers/plans/2
 
 **Revision 4 (2026-11-12, after Task 1C.4's review)**: `emit_phase_fixup` in the `qroam.py` blocks of Tasks 1C.4 and 1C.5 rejects an `onehot_bits` outside `[0, sum(address_widths)]` (an out-of-range value sliced the address from a negative index and silently dropped phases) and lists `low` and `onehot` once (a traced one-hot array was indexed once per covered address; Phase 2's `AngleErase` calls the helper directly). These are the lines merged with Task 1C.4 (`be4b378`); the replica's two `qroam.py` sources carry them. The merged tests of Tasks 1C.2, 1C.3, 1C.4 and 1C.6 also hold their review fixes, which this plan's test blocks predate; the test counts are unchanged. Task 1C.5's block is otherwise unchanged.
 
+**Revision 5 (2026-11-12, after Task 1C.5's reviews)**: the merged tests of Task 1C.5 (`debffc3`) hold the reviews' count-neutral changes, which this plan's test blocks predate: a zeroed block in T2, T6, the lightning smoke run and both linearity tables (the zero-mask path of the counting twin and the rule), and three certificate cases replaced by `outer-k2-ob0`, `inner-6-2-enable1` and `inner-6-2-ob5-enable0` (still 19 and 7 tests); `stages/mutate_erase_1c.py` needs these ids if re-run. The merged `qroam.py` docstrings define `M` and name the paper's equations (PRX (B50), (B53); arXiv:2502.15882v1 (123), (126)).
+
 **Load.** The dry-run ran when lane-a signalled a quiet machine; the `slow` compiles of revision 1 ran alone, each under `dfthc.testing.watchdog.run_watched`. Timings are from the development laptop and vary with its load.
 
 ---
