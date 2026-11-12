@@ -76,10 +76,13 @@ From spec 7.1:
     multiple registers yet` (for `_ppm`, `_*_ppm`, `_toffoli_elbow`, `_cphase_to_single_phase`,
     `use_allocation(...)` and the MCX `*_worker(s)` rules);
   - `Skipped the _adjoint_temporary_and(_ppm) decomposition rule for C(Adjoint(TemporaryAND)){...}: it contains a mid-circuit measurement, which cannot be placed in a control region.`;
-  - the `qp.analyze` UserWarning "unable to determine the branch". PennyLane's own `SemiAdder`
-    triggers it, and so does our measured erase's fixup (`qp.cond` on measurement parities).
-    `qp.analyze` then counts the larger branch, so a conditional Toffoli would be counted without
-    a visible signal; exact T4 counts are the backstop.
+  - the `qp.analyze` UserWarning "unable to determine the branch". It is one flag per compiled
+    module: observed with the pinned toolchain on 2026-11-12, a program warns whose only
+    branching source is one `TemporaryAND` with its measured uncompute, or one
+    `qp.measure(..., reset=True)`, so nearly every program shows it. `qp.analyze` counts every
+    unhinted conditional at its larger branch, so a conditional Toffoli would be counted without
+    a visible signal; exact T4 counts are the backstop. Our conditionals carry hints, which exact
+    expected counts check (Task 1C.4).
 - **One expected warning that names a dfthc operator** (`classify_rule_warning` returns
   `"expected"`; tests record and drop it): `Skipped the <rule> decomposition rule for
   <Adjoint/C of a dfthc operator>{...}: it contains a mid-circuit measurement, which is not

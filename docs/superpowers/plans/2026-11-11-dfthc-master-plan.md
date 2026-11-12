@@ -95,7 +95,7 @@ GATE_SET = {
 
 ## 1. How to use this plan
 
-This is a **rolling-wave** plan. It lists every task of Phases 0 to 5 with its id, files, interfaces, acceptance tests, tier, reviewers, dependencies and definition of done. Code-level steps exist now for Phase 0 and for Phase 1 workstreams A and B:
+This is a **rolling-wave** plan. It lists every task of Phases 0 to 5 with its id, files, interfaces, acceptance tests, tier, reviewers, dependencies and definition of done. Code-level steps exist now for Phase 0 and for Phase 1:
 
 | File | Content |
 | --- | --- |
@@ -105,13 +105,14 @@ This is a **rolling-wave** plan. It lists every task of Phases 0 to 5 with its i
 | `docs/superpowers/plans/2026-11-11-dfthc-phase0-spikes.md` | Tasks 0.6 to 0.9 |
 | `docs/superpowers/plans/2026-11-11-dfthc-phase1-data.md` | Tasks 1A.1 to 1A.7 |
 | `docs/superpowers/plans/2026-11-11-dfthc-phase1-simulator.md` | Tasks 1B.1 to 1B.3 |
+| `docs/superpowers/plans/2026-11-11-dfthc-phase1-primitives.md` | Tasks 1C.1 to 1C.6 |
 | `docs/superpowers/plans/2026-11-11-dfthc-phase<N>-<topic>.md` | written at gate G(N-1) per section 12.7 |
 | `docs/agents/HANDOFF.md` | the shared context every agent reads first |
 | `docs/agents/LEDGER.md` | durable task, spike, decision and gate record |
 
 **Task ids** are `<phase>.<n>` or `<phase><workstream>.<n>` (`0.3`, `1A.4`, `2E.2`). Each code-level task heading reads `### Task <id>: <title>`, so the superpowers `task-brief` script extracts it: `task-brief <plan file> <id>`. The branch is `phase<N>/<id>`; each task runs in one of two fixed worktree lanes, `.worktrees/lane-a` and `.worktrees/lane-b` (section 12.2).
 
-**Code provenance:** every code block in the Phase 0 files was executed on 2026-11-11 in a scratch replica of this repository and passed as stated. Section 3 lists what those dry-runs taught. The Phase 1 A and B files were executed the same way on 2026-11-12, against the merged Task 0.2; each file's preamble lists its changes to this plan, all applied below.
+**Code provenance:** every code block in the Phase 0 files was executed on 2026-11-11 in a scratch replica of this repository and passed as stated. Section 3 lists what those dry-runs taught. The Phase 1 A and B files were executed the same way on 2026-11-12, against the merged Task 0.2; each file's preamble lists its changes to this plan, all applied below. The Phase 1 C file was executed the same way on 2026-11-12, against `main` at `f770ca2` and then `aeb417e`, with the Phase 1 A and B code it imports; its preamble lists its changes to this plan.
 
 ---
 
@@ -167,6 +168,9 @@ These shape the later tasks and are recorded in HANDOFF and in the Phase 0 canar
 12. **`qp.density_matrix` is not supported under capture;** compiled state checks use `qp.state()`. Under capture, never `qp.apply` an operator you just constructed (it is queued twice).
 13. **Measuring adjoint rules under control (L-2):** the solver silently controls the unitary inverse of the base rule instead of failing. This is one more reason for spec 7.4 rule 5: never control a measuring operator.
 14. **Dynamic arrays must be signed (L-26, Task 0.9b).** Catalyst builds no decomposition rule for an operator with an unsigned dynamic argument. Tables passed as dynamic arrays use `int64` words holding 32 data bits each (ledger decision "Table words are `int64`").
+15. **The "unable to determine the branch" warning is one flag per compiled module** (Phase 1 C dry-run; observed with the pinned toolchain (PennyLane `0.46.0.dev151`, Catalyst `0.16.0.dev140`) on 2026-11-12). `qp.analyze` warns once per compile if any function of the compiled module has an unhinted branch. In isolated probes a program warns whose only branching source is one `TemporaryAND` with its measured uncompute, and one whose only source is one `qp.measure(..., reset=True)`, and one with an unhinted `qp.cond`; a CNOT, a plain `qp.measure` and a hinted `qp.cond` give no warning, and two ANDs with two resets give one. So the warning cannot show whether a given conditional is hinted. Task 1C.4 checks the hints by exact expected counts: n hinted conditionals count n / 2 (n even), one unhinted conditional among them would count n / 2 + 1.
+16. **Controlled compiles cost two to four times their uncontrolled ones at the same size** (Phase 1 C dry-run): `C(ZeroReflection)` on 46 wires compiles in 7.8 s against 2.4 s, on 6 wires in 6.1 s against 1.9 s. This matches Task 0.9b's diagnostic that Catalyst traces the generic adjoint and controlled candidates of every pinned target.
+17. **The outer erase covers the outer read's loaded set** (Phase 1 C plan review, I4). Its fixup must reach dead positions beyond `X_o` in the read's last block, so its high range is `[0, ceil(ceil(X_o / K1) K1 / 2**ke1))`; spec 9.24 had `ceil(X_o / 2**ke1)`, which undercounts when `ke1 < k1` and `K1` does not divide `X_o` (counterexample `X_o = 5`, `k1 = 2`, `ke1 = 0`). No preset is affected. Task 1A.7 implements the corrected range and minimizes `(k1, ke1)` jointly; Task 1C.5's `QROAMErase.fixup_high_ranges` is the oracle a test compares it with.
 
 ---
 
@@ -196,9 +200,9 @@ Tier A uses `inherit` (the orchestrator's own model), Tier B uses `claude-sonnet
 | 1B.1 | Sparse simulator core and differential tests | A | G0 | phase1-simulator |
 | 1B.2 | Measurements, conditionals, policies, tape front end | A | 1B.1 | phase1-simulator |
 | 1B.3 | Simulator benchmark gate | B | 1B.2 | phase1-simulator |
-| 1C.1 | Unary iteration helper and `PhaseGradientRotation` | A | 1A.7 | phase1-primitives |
-| 1C.2 | `FlaggedUniformPrep` | A | 1C.1 | phase1-primitives |
-| 1C.3 | `QROAMRead` | A | 1C.1 | phase1-primitives |
+| 1C.1 | Unary iteration helper and `PhaseGradientRotation` | A | 1A.7, 1B.1 | phase1-primitives |
+| 1C.2 | `FlaggedUniformPrep` | A | 1C.1, 1A.5, 1B.2 | phase1-primitives |
+| 1C.3 | `QROAMRead` | A | 1C.1, 1B.2 | phase1-primitives |
 | 1C.4 | `PhaseFixup` and `emit_phase_fixup` | A | 1C.3 | phase1-primitives |
 | 1C.5 | `QROAMErase` and round-trip certificates | A | 1C.4, 1B.2 | phase1-primitives |
 | 1C.6 | `ZeroReflection` | B | 1C.1 | phase1-primitives |
@@ -249,8 +253,10 @@ flowchart LR
     A4 & A5 --> A6[1A.6]
     A1 --> A7[1A.7]
     B1 --> B2[1B.2] --> B3[1B.3]
-    A7 --> C1[1C.1]
+    A7 & B1 --> C1[1C.1]
     C1 --> C2[1C.2] & C3[1C.3] & C6[1C.6]
+    A5 & B2 --> C2
+    B2 --> C3
     C3 --> C4[1C.4]
     C4 & B2 --> C5[1C.5]
   end
@@ -291,8 +297,8 @@ flowchart LR
 | 1-a | 1A.1, 1A.2, 1B.1 | Phase 1 C plan written once K-3 and K-7 are recorded |
 | 1-b | 1A.3, 1A.7, 1B.2 | |
 | 1-c | 1A.4, 1B.3, 1C.1 | 1A.4 uses 1A.3's weights |
-| 1-d | 1A.5, 1C.2, 1C.3, 1C.6 | |
-| 1-e | 1A.6, 1C.4 | 1A.6's fixtures are generated by the orchestrator (phase1-data, Task 1A.6, Step 7) |
+| 1-d | 1A.5, 1C.3, 1C.6 | |
+| 1-e | 1A.6, 1C.2, 1C.4 | 1C.4 first (critical path); 1C.2 needs 1A.5 and may slip to wave 1-f. 1A.6's fixtures are generated by the orchestrator (phase1-data, Task 1A.6, Step 7) |
 | 1-f | 1C.5 | |
 | 2-a | 2D.1, 2E.1, 2E.3, 2E.4, 2E.5 | two implementers at a time; start 2D.1 and 2E.1 first (both head two-task chains) |
 | 2-b | 2D.2, 2E.2 | |
@@ -440,7 +446,7 @@ All Phase 1 tasks consume the Phase 0 interfaces (`dfthc.compile`, `dfthc.testin
     - `FEMOCO54 = WalkParams(N=54, R=10, B=27, C=27, n_plus=27, b_rot=15, b_k1=15, b_k2=15, s_u=7, k1=2, k2=4, ke1=4, ke2=2)`;
     - `H2_STO3G_TEST = WalkParams(N=2, R=2, B=2, C=1, n_plus=1, b_rot=4, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1, ke1=1, ke2=1)`;
     - `H2_631G_TEST = WalkParams(N=4, R=2, B=2, C=2, n_plus=3, b_rot=4, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1, ke1=1, ke2=1)`;
-    - `MID_NAPHTHALENE = WalkParams(N=10, R=8, B=6, C=5, n_plus=5, b_rot=15, b_k1=15, b_k2=15, s_u=7, k1=2, k2=1, ke1=2, ke2=1)`, the mid size for compiled T4 (the `naphthalene` factors; the K-1 stand-in compiled its walk at this shape in about 1 minute and 1.6 GB).
+    - `MID_NAPHTHALENE = WalkParams(N=10, R=8, B=6, C=5, n_plus=5, b_rot=15, b_k1=15, b_k2=15, s_u=7, k1=1, k2=2, ke1=3, ke2=1)`, the mid size for compiled T4 (the `naphthalene` factors with the block bits dfthcbe's naphthalene example chooses, which `dfthc.costs.cheapest_block_bits` also returns; the K-1 stand-in compiled its walk at these sizes, with `k1 = 2` and `k2 = 1`, in about 1 minute and 1.6 GB).
   - `dfthc.registers.GROUPS: dict[str, tuple[str, ...]]`, the groups and their registers in layout order.
   - `dfthc.registers.WalkLayout`:
     - `WalkLayout.from_params(params, qpe_bits=0) -> WalkLayout`;
@@ -560,7 +566,7 @@ All Phase 1 tasks consume the Phase 0 interfaces (`dfthc.compile`, `dfthc.testin
   - L1 primitives: `phase_gradient_rotation(k, m)`, `flagged_uniform_prep(L, s)`, `flagged_uniform_unprep(L, s)`, `qroam_read(ranges, block_bits, width, controlled)`, `phase_fixup(high_ranges, onehot_bits, controlled)`, `qroam_erase(ranges, block_bits, width, onehot_bits, controlled)`, `zero_reflection(n_w, controlled)`;
   - L2 and L3 blocks: `outer_prepare(p)`, `outer_unprepare(p)`, `inner_prepare(p)`, `inner_unprepare(p)`, `tail_angle_load(p)`, `sf_angle_load(p)`, `spin_mux()`, `spin_swap(p)`, `givens_rotation(p)`, `givens_ladder(p)`, `majorana_gate()`, `angle_erase(p)`, `inner_select(p)`, `ref_t2(p, controlled)`, `ref_ab(p, controlled)`, `block_encoding(p, controlled)`, `walk(p, controlled)`;
   - L4 and totals: `controlled_walk_power(p, power)`, `qpe_round(p, j, t)`, `iterative_qpe(p, t)`, `toffoli_only(p) -> int` (T_Toffoli), `measured_and_uncomputes(p, controlled) -> int` (A);
-  - `cheapest_block_bits(p) -> tuple[int, int, int, int]` (k1, k2, ke1, ke2), smallest on ties; it returns `FEMOCO54`'s `(2, 4, 4, 2)`.
+  - `cheapest_block_bits(p) -> tuple[int, int, int, int]` (k1, k2, ke1, ke2), smallest on ties, with `(k1, ke1)` minimized jointly because the outer erase covers the outer read's loaded set (section 3, item 17); it returns `FEMOCO54`'s `(2, 4, 4, 2)` and `MID_NAPHTHALENE`'s `(1, 2, 3, 1)`.
 - **Acceptance tests** (every row of the spec 9.24 evaluation table at FEMOCO54, exactly):
   - unary: outer read 84, inner read 543; erase high parts 22 and 70; tail 61; SF 291;
   - uniform preparation: F(X_o) and F†(X_o) are 30 and 24; F(B+1) and F†(B+1) are 18 and 16;
@@ -570,7 +576,7 @@ All Phase 1 tasks consume the Phase 0 interfaces (`dfthc.compile`, `dfthc.testin
   - reflections: `RefT2` 20 / 21, `RefAB` 44 / 45;
   - totals: block encoding 9,749 (M 2,524); walk 9,793; controlled walk 9,795; T_Toffoli 1,118; A 8,675 / 8,677; M + A 11,199 / 11,201.
 
-  Also: `truncated_unary` matches spec 9.24; `unary` equals `spikes/prototypes.unary_toffolis` on a 200-case grid; `cheapest_block_bits` returns a brute-force minimizer of `walk(p).toffoli`.
+  Also: `truncated_unary` matches spec 9.24; `unary` equals `spikes/prototypes.unary_toffolis` on a 200-case grid; `cheapest_block_bits` returns a brute-force minimizer of `walk(p).toffoli`, also at shapes whose `X_o` is not a multiple of `K1`; the outer erase covers the read's loaded set (`(X_o, k1, ke1) = (5, 2, 0)` gives the high range `[0, 8)`, T = 17).
 - **Definition of done:** tests green; the docstring of every function cites its spec 9.24 row.
 
 ### Workstream B: the sparse-state simulator
@@ -629,88 +635,91 @@ All Phase 1 tasks consume the Phase 0 interfaces (`dfthc.compile`, `dfthc.testin
   The stand-in has the walk's structure and sizes, so it is the Phase 1 proxy. Task 3.5 re-measures on the real walk.
 - **Definition of done:** the measurements are in the report and the ledger. If over budget, apply the spec 12.6 mitigations in order (batch inputs, vectorize hot handlers, a k1 = k2 = 0 preset for the per-commit and nightly tiers). If still over budget, escalate (section 12.6).
 
-### Workstream C: L1 primitives (code-level plan written after the K-3 and K-7 results)
+### Workstream C: L1 primitives
+
+Code-level steps: `2026-11-11-dfthc-phase1-primitives.md`. Every rule emits its gates through
+`dfthc.ops.unary.Emitter`, whose counting mode is the rule's resource function; registers and table
+entries are big-endian (spec 6.7); constructors validate through `dfthc.ops._validate` (spec 9.0).
 
 #### Task 1C.1: Unary iteration helper and `PhaseGradientRotation`
-- **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1A.7. **Branch:** `phase1/1C.1`.
-- **Files:** `src/dfthc/ops/{__init__,unary,phase_gradient}.py`, `tests/ops/test_unary.py`, `tests/ops/test_phase_gradient.py`.
+- **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1A.7, 1B.1. **Branch:** `phase1/1C.1`.
+- **Files:** `src/dfthc/ops/{__init__,_validate,unary,phase_gradient}.py`, `tests/ops/test_unary.py`, `tests/ops/test_phase_gradient.py`.
 - **Interfaces produced:**
-  - `dfthc.ops.unary.iterate(address, lo, hi, work, leaf, control=None, control_value=1) -> None`, where `leaf(flag_wire, value)` is called for every value in [lo, hi) with a flag that is 1 exactly when the address equals value. It is exact, with negative controls through `control_values` or X conjugation (the choice is documented).
-  - `iterate_nested(registers, work, leaf, control=None, control_value=1)`, where `registers` is a sequence of `(wires, lo, hi)`.
-  - `work_required(widths, controlled) -> int`.
-  - `PhaseGradientRotation(k, m, target, phase_grad, scratch, work)` with `required_wires(k, m)`.
-- **Acceptance tests:**
-  - T4: the iteration Toffolis equal `dfthc.costs.unary` on a grid of (lo, hi, n, c) with n ≤ 6, and nested iteration equals `unary_nested`.
-  - T3: every basis address at n ≤ 4 raises exactly the right flag (`lightning.qubit`).
-  - `PhaseGradientRotation` applies e^{2πikt/2^m} exactly for k = 1, 2^m − 1 and m = 1..5, with the sign pinned against spec 6.5.
-  - T2 `assert_valid_decomp_rule` at two sizes; T5 closure; the adjoint is auto-derived (subtraction).
+  - `dfthc.ops.unary.Emitter(counting=False)` (`gate(name, build)`, `x`, `cnot`, `and_`, `unand`, attribute `counts`) and `as_resources(counts) -> dict`;
+  - `iterate(address, lo, hi, work, leaf, control=None, control_value=1, *, emit=None) -> None`: `leaf(flag, value)` for every value in [lo, hi), in increasing order, with a flag wire that is 1 exactly when the big-endian address equals value and the control holds `control_value`; `flag` is `None` only for a zero-width uncontrolled address. Exact. Negative controls use `TemporaryAND` control values (a dynamic argument, one resource key); X conjugation only at an uncontrolled root and for `control_value=0`;
+  - `iterate_nested(registers, work, leaf, control=None, control_value=1, *, emit=None)`, `registers` a sequence of `(wires, lo, hi)`, `leaf(flag, values)`;
+  - `work_required(widths, controlled) -> int`;
+  - `dfthc.ops._validate.check_int`, `check_wires`, `canonical_ints`;
+  - `PhaseGradientRotation(k, m, target, phase_grad, scratch, work)` with `required_wires(k, m)`; `phase_grad` has at least `m` wires.
+- **Acceptance tests** (36):
+  - T3: every range and address with n <= 4, uncontrolled and with control values 0 and 1, raises exactly its flag (sparse simulator, exhaustive); three cases compile on `lightning.qubit` to the exact state.
+  - T4: the ANDs equal `dfthc.costs.unary` on every range with n <= 6, controlled and not, and `unary_nested` on 300 random nested cases (counted without compiling); three compiled cases equal the closed forms with A = T.
+  - `PhaseGradientRotation` applies e^{2πikt/2^m} exactly for k = 1, 2^m − 1 and m = 1..5, and its adjoint the conjugate phase; `SemiAdder` adding 1 kicks back e^{+2πi/2^b} (spec 6.5); T = (m − 1)[k != 0] for the rotation and its adjoint.
+  - T2 at two sizes; T5 at `level="device"`; constructor validation.
 - **Definition of done:** tests green; spec 9.0 docstring.
 
 #### Task 1C.2: `FlaggedUniformPrep`
-- **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1C.1. **Branch:** `phase1/1C.2`.
+- **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1C.1, 1A.5, 1B.2. **Branch:** `phase1/1C.2`.
 - **Files:** `src/dfthc/ops/uniform.py`, `tests/ops/test_uniform.py`.
-- **Interfaces produced:** `FlaggedUniformPrep(L, s, target, succ, succ_work, phase_grad, work)` with `required_wires(L, s)`, and `amplitude_angles(L, s) -> tuple[int, int]` (k1, k2), following dfthcbe's `UniformViaPhaseGradient`.
-- **Acceptance tests:**
-  - T4: T = 3n + 2s − 5 for the prepare and 2n + 2s − 4 for the adjoint when l > 1, and 0 when l = 1. At FeMoco: X_o = 324 gives 30 / 24, and B + 1 = 28 gives 18 / 16. Also L = 5, 7, 12 and the power of two L = 8.
-  - T3 for L ∈ {3, 5, 6, 7} and s ∈ {3, 7}: the succ = 1 part is exactly uniform over [0, L), the succ = 0 part is supported on t ≥ L, and the failure probability equals `uniform_failure_probability` (1e-12).
-  - The adjoint round-trips; T2, T5.
+- **Interfaces produced:** `FlaggedUniformPrep(L, s, target, succ, succ_work, phase_grad, work)` with `required_wires(L, s)` (`phase_grad` a minimum, `work = n + 2s - 1`), and `amplitude_angles(L, s) -> tuple[int, int]`, `(k, k)` with dfthcbe's angle truncated to `s` bits (`(0, 0)` for odd part 1).
+- **Acceptance tests** (40):
+  - T4: T = 3n + 2s − 5 for the prepare and 2n + 2s − 4 for the adjoint when l > 1, and 0 when l = 1, compiled at L = 324 and 28 (FeMoco widths, table-free: 30 / 24 and 18 / 16), 5, 7, 12 and 8; a prepare/unprepare pair has A = T.
+  - T3 for L ∈ {3, 5, 6, 7} and s ∈ {3, 7} (sparse simulator): the succ = 1 part is exactly uniform over [0, L) (equal amplitudes), the succ = 0 part is supported on t >= L, and the failure weight equals `uniform_failure_probability` (1e-12); two compiled lightning cases.
+  - The adjoint round-trips (sparse simulator, 5 cases; compiled once); T2 at three sizes; T5.
 - **Definition of done:** tests green.
 
 #### Task 1C.3: `QROAMRead`
-- **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1C.1. **Branch:** `phase1/1C.3`.
+- **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1C.1, 1B.2. **Branch:** `phase1/1C.3`.
 - **Files:** `src/dfthc/ops/qroam.py` (`QROAMRead` part), `tests/ops/test_qroam_read.py`.
 - **Interfaces produced:**
-  - `QROAMRead(table, address_widths, live_ranges, width, block_bits, control_value, address, target, junk, work, control)`, where `table` is a tuple of `(address, words)` pairs (entries of `width` bits as 32-bit words, L-24);
-  - static `loaded_bits(table, address, *, address_widths, live_ranges, width, block_bits) -> int`;
-  - static `junk_layout(block_bits, low) -> list[int]`;
-  - static `loaded_set(...) -> list[int]`;
-  - `required_wires(...)`.
-- **Acceptance tests:**
-  - T3, exhaustive failed-address tests item 1 (spec 12.1) for (B+1, k2) ∈ {(3,1), (5,1), (6,2), (7,0), (28,4)}: for every computational address, the loaded target ‖ junk equals `loaded_bits`, including failed x_o ≥ X_o, failed b ≥ B+1, one-body rows and dead positions.
-  - T4: T = U(visited blocks) + (2^k − 1) width at 3 or more sizes, including the FeMoco outer read (156) and inner read (933).
-  - The read adds no phase.
-  - T2, T5; the auto adjoint equals a re-read (test reference).
+  - `QROAMRead(table, address_widths, live_ranges, width, block_bits, control_value, address, target, junk, work, control)`, where `table` is a tuple of `(address, words)` pairs (entries of `width` bits as 32-bit words, least significant first, L-24; every address live), `address_widths` one or two widths (a two-register address has a nonempty first register), `control_value` `None` (0-wire `control`) or 0/1;
+  - static `required_wires(...)`, `visited_ranges(address_widths, live_ranges, block_bits)` (the `ranges` of `costs.qroam_read`), `loaded_ranges(...)` (the loaded set as one `(lo, hi)` per register), `loaded_set(address_widths, live_ranges, block_bits) -> list[int]`, `junk_layout(block_bits, low) -> list[int]`, `loaded_bits(table, address, *, address_widths, live_ranges, width, block_bits) -> int` (big-endian `target ‖ junk`) and `loaded_contents(table, addresses, *, ...) -> list[int]`;
+  - `QROAMEmitter`, the emitter of `qroam.py`.
+- **Acceptance tests** (35 per commit, 2 slow):
+  - T3, exhaustive failed-address tests item 1 (spec 12.1) for (B+1, k2) ∈ {(3,1), (5,1), (6,2), (7,0), (28,4)} and outer reads with k = 0..3 (sparse simulator): for every computational address, `target ‖ junk` equals `loaded_bits`, `work` is `|0>` and the amplitude is +1/sqrt N (the read adds no phase), including failed x_o >= X_o, failed b >= B+1, one-body rows and dead positions; an enable in `|+>` loads only on its value; two compiled lightning cases (exact state).
+  - T4: T = U(visited blocks) + (2^k − 1) width and A = U at both test presets (outer and inner), with an enable, and at `MID_NAPHTHALENE` (slow); the FeMoco outer read (156) and inner read (933) on the closed forms.
+  - The auto adjoint undoes the read on lightning and costs the read's T (test reference).
+  - `junk_layout`, `loaded_bits` and the range helpers by hand; T2 at two sizes; T5; constructor validation.
 - **Definition of done:** tests green.
 
 #### Task 1C.4: `PhaseFixup` and `emit_phase_fixup`
-- **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1C.3 (same module, `qroam.py`; the fixup tests use `QROAMRead.loaded_set` for realistic covered sets). **Branch:** `phase1/1C.4`.
+- **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1C.3 (same module, `qroam.py`; the fixup tests use `QROAMRead.loaded_ranges` for realistic covered sets). **Branch:** `phase1/1C.4`.
 - **Files:** `src/dfthc/ops/qroam.py` (fixup part), `tests/ops/test_phase_fixup.py`.
 - **Interfaces produced:**
-  - `PhaseFixup(parities, address_widths, covered, onehot_bits, control_value, address, onehot, work, control)`. `parities` is dynamic and converted to an array in `__init__` (L-23).
-  - static `address_order(address_widths, covered) -> list[int]`.
-  - `emit_phase_fixup(parities, *, address, address_widths, covered, onehot, onehot_bits, work, control=None, control_value=1) -> None`. Every conditional carries `qp.hint({"branch-prob": 0.5})`.
-- **Acceptance tests:**
-  - T3 (risk K-2): on uniform superpositions, random, all-ones and single-bit parity tables give exactly (−1)^{f(a)} on the covered set and nothing elsewhere.
-  - The `onehot_bits = 0` fallback is equivalent.
-  - T4: T = U(covered high ranges) + O(ob) at FeMoco outer (22 + 14) and inner (70 + 126), plus 2 small sizes.
-  - `test_erase_conditionals_are_hinted`: compiling a `PhaseFixup` emits no "unable to determine the branch" warning (check with `warnings.simplefilter("always")`).
-  - T2 in tape mode.
+  - `PhaseFixup(parities, address_widths, covered, onehot_bits, control_value, address, onehot, work, control)`. `parities` is dynamic and canonicalized in `__init__` (L-23): a bool array under capture; in tape mode every entry must be a `MeasurementValue`, so both modes emit one conditional per covered address (K-10).
+  - static `address_order(address_widths, covered) -> list[int]` (increasing), `high_ranges(address_widths, covered, onehot_bits)` (the `high_ranges` of `costs.phase_fixup`), `required_wires(...)`.
+  - `emit_phase_fixup(parities, *, address, address_widths, covered, onehot, onehot_bits, work, control=None, control_value=1, emit=None) -> None`; a Python `False` entry emits no conditional. Every conditional carries `qp.hint({"branch-prob": 0.5})`.
+- **Acceptance tests** (25 per commit, 2 slow):
+  - T3 (risk K-2): on uniform superpositions, random, all-ones and single-bit parity tables give exactly (−1)^{f(a)} on the covered set and nothing elsewhere (lightning, parities as a runtime argument), for outer and inner covered sets, ob ∈ {0, 1, 2, 3} and with enables of both values; the ob = 0 fallback gives the same states. The tape path with measured parities on the sparse simulator.
+  - T4: T = U(covered high ranges, c) + O(ob), M = 0 and A = T at both test presets' erase shapes, with an enable, and at `MID_NAPHTHALENE` outer and inner (`slow`); FeMoco outer (22 + 14) and inner (70 + 126) on the closed forms.
+  - `test_erase_conditionals_are_hinted`: n hinted conditionals count exactly n / 2 (n even; spec 7.6, L-17); a fixup without any AND compiles without the "unable to determine the branch" warning, which is one flag per compiled module (section 3, item 15).
+  - T2 in tape mode at three sizes; tape mode rejects parities that are not `MeasurementValue`s; T5; helpers and validation.
 - **Definition of done:** tests green.
 
 #### Task 1C.5: `QROAMErase` and round-trip certificates
 - **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1C.4 (and through it 1C.3), 1B.2. **Branch:** `phase1/1C.5`.
 - **Files:** `src/dfthc/ops/qroam.py` (erase part), `tests/ops/test_qroam_erase.py`, `tests/ops/test_certificates_qroam.py` (marked `slow`).
-- **Interfaces produced:** `QROAMErase(<QROAMRead's compilable arguments>, onehot_bits, address, target, junk, work, control, extra_onehot)`.
-  - The rule X-measures target ‖ junk with reset, computes the parities with `mcm_parities` from masks built inside the rule, and calls `emit_phase_fixup` with the reset wires as its one-hot register.
-  - It is never adjointed or controlled.
-  - If K-3 failed, `mcm_parities` gains the mode-specific fallback here.
-- **Acceptance tests:**
-  - T4: FeMoco outer T = 36, M = 96; inner T = 196, M = 416; two small sizes.
-  - T6 signature: M = K · width, A equals the expected count, and T equals the erase closed form.
-  - Spec 12.5 certificates, sparse simulator with forced schedules (zero and every unit vector): standalone read → erase round trips in the outer and inner shapes of both test presets, with the address restored exactly and all ancillas |0>.
-  - Lightning smoke runs with five seeds.
-  - The linearity test of `mcm_parities` at the inner-erase shape.
+- **Interfaces produced:** `QROAMErase(table, address_widths, live_ranges, width, block_bits, control_value, onehot_bits, address, target, junk, work, control, extra_onehot)` with `required_wires(...)` (`extra_onehot = max(2**ob - K width, 0)` wires) and static `fixup_high_ranges(address_widths, live_ranges, block_bits, onehot_bits)` (the `ranges` of `costs.qroam_erase`).
+  - The rule X-measures `target ‖ junk` with reset, computes the parities with `mcm_parities` (outcomes in reverse wire order, masks `loaded_bits` built inside the rule from the compilable table, every address of the loaded set), and calls `emit_phase_fixup` with the reset wires (and `extra_onehot`) as its one-hot register; a zero mask emits no conditional.
+  - It is never adjointed or controlled. K-3 passed, so `mcm_parities` keeps one mode-agnostic implementation.
+- **Acceptance tests** (17 per commit, 9 slow):
+  - T4: FeMoco outer T = 36, M = 96; inner T = 196, M = 416 (closed forms); both test presets' outer and inner erases compiled, an enabled erase with `extra_onehot`, and `MID_NAPHTHALENE` outer and inner (`slow`), each with T, M and A exact.
+  - `fixup_high_ranges` is the oracle of `dfthc.costs`' erase ranges: `outer_unprepare` and `inner_unprepare` agree with it at the presets and on nonaligned shapes (`ke1 < k1`, `K1` not dividing `X_o`; section 3, item 17).
+  - T6 signature: M = K width, A = T, T equals the erase closed form and differs from a re-read; the CZs count their hinted expectation; the verbose listing names `_qroam_erase`; `qp.adjoint` and `qp.ctrl` of the erase fail to compile with the expected warning (spec 7.4 rules 5 and 12).
+  - Spec 12.5 certificates (`slow`), sparse simulator in strict mode with forced schedules (zero and every unit vector): read → erase round trips in the outer and inner shapes of both test presets, plus a k = 2 outer shape, a (6, 2) inner shape and its enabled form; a phased address state is restored exactly and every ancilla is `|0>`.
+  - Lightning smoke run with five seeds (k = 2).
+  - The linearity of `mcm_parities`: the capture core at the FeMoco-54 inner-erase shape (8,640 masks, 416 outcomes; classical) and the tape implementation at the `H2_631G_TEST` inner erase.
+  - T2 in tape mode at two sizes; T5; validation.
 - **Definition of done:** tests green; certificates in the nightly tier.
 
 #### Task 1C.6: `ZeroReflection`
-- **Tier:** B. **Reviewers:** GPT-5.6. **Depends on:** 1C.1 (which creates `src/dfthc/ops/__init__.py`; `dfthc.costs` from 1A.7 comes with it). **Branch:** `phase1/1C.6`.
+- **Tier:** B. **Reviewers:** GPT-5.6. **Depends on:** 1C.1 (which creates `src/dfthc/ops/__init__.py` and `_validate.py`; `dfthc.costs` from 1A.7 comes with it). **Branch:** `phase1/1C.6`.
 - **Files:** `src/dfthc/ops/reflections.py` (`ZeroReflection` part), `tests/ops/test_zero_reflection.py`.
-- **Interfaces produced:** `ZeroReflection(zero_wires, one_wires, work)` with pinned `Adjoint(ZeroReflection)` (self) and `C(ZeroReflection)`, and `required_wires(n_zero, n_one, controlled=False)`.
-- **Acceptance tests:**
-  - n_w = 1, 2, 3, 6 and 46 (FeMoco `RefAB`), each for both pattern values of the target wire, uncontrolled and controlled.
-  - The exact matrix 2Π − I, including the global sign, for n_w ≤ 6; the controlled matrix is |0⟩⟨0| ⊗ I + |1⟩⟨1| ⊗ (2Π − I).
-  - T = max(n_w − 2, 0), controlled n_w − 1.
-  - `ValueError` for n_w = 0.
+- **Interfaces produced:** `ZeroReflection(zero_wires, one_wires, work)` with pinned `Adjoint(ZeroReflection)` (self) and `C(ZeroReflection)` (one control wire, control value 1), and `required_wires(n_zero, n_one, controlled=False)`; `work` has at least the uncontrolled size, and the controlled rule raises `ValueError` if it is shorter than `max(n_w - 2, 0)`.
+- **Acceptance tests** (32 per commit, 1 slow):
+  - The exact matrix 2Π − I, including the global sign, for n_w = 1, 2, 3, 6, both pattern values of the target wire; the controlled matrix |0⟩⟨0| ⊗ I + |1⟩⟨1| ⊗ (2Π − I); the adjoint (one compiled run each, reference-register construction).
+  - T = max(n_w − 2, 0), controlled n_w − 1, at n_w = 1, 2, 3, 6 and 46 (FeMoco `RefAB`), both pattern values; the controlled 46-wire compile (8 to 18 s) is `slow`.
+  - T2 for all three rules; the controlled rule's work check; T5 plain and controlled; `ValueError` for n_w = 0.
 - **Definition of done:** tests green.
 
 ---
@@ -832,7 +841,7 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
   - The walk and controlled walk compile each as one program on `null.qubit` at the test presets and at `MID_NAPHTHALENE`. T, M and A equal the closed forms exactly, and `is_symbolic == False`.
   - At FeMoco-54 the closed forms give T = 9,793 and 9,795, M = 2,524, A = 8,675 and 8,677, asserted without compiling. The FeMoco compile is Task 4.5's (D-3).
   - T5 at `level="device"` for the H2 walk: no dfthc name survives.
-  - Compile time and memory at `MID_NAPHTHALENE` (through `run_watched`) are recorded and compared with the Task 0.9 stand-in at `mid10`, the same shape.
+  - Compile time and memory at `MID_NAPHTHALENE` (through `run_watched`) are recorded and compared with the Task 0.9 stand-in at `mid10`, the same sizes (the stand-in's block bits are `k1 = 2`, `k2 = 1`; the preset's are `k1 = 1`, `k2 = 2`).
 - **Definition of done:** tests green, the slow `MID_NAPHTHALENE` cases included (run targeted; each a few minutes and below 3.75 GB); the numbers in the ledger.
 
 #### Task 3.5: End-to-end checks E-1 to E-4 and tier budgets

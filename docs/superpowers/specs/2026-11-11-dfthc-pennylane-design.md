@@ -622,10 +622,11 @@ Each rule exists because of a confirmed limitation (§14).
 ### 7.6 Resource accounting
 
 - **Toffoli count** $T$: number of `Toffoli` plus number of `TemporaryAND`. `Adjoint(TemporaryAND)` is reported separately as "measured uncompute" and costs no Toffoli.
-- **Measurements:** $M$ is the number of `MidCircuitMeasure`, the explicit erase measurements. Each `qp.measure(..., reset=True)` also adds one conditional `PauliX`. The total number of physical measurements is $M + A$, where $A$ counts the measured uncomputes, `Adjoint(TemporaryAND)` (§9.24).
+- **Measurements:** $M$ is the number of `MidCircuitMeasure`, the explicit erase measurements. Each `qp.measure(..., reset=True)` also adds one conditional `PauliX`; it is PennyLane's and unhinted, so `qp.analyze` counts it at its maximum branch and the `PauliX` counts of erases are upper bounds (observed with the pinned toolchain (PennyLane `0.46.0.dev151`, Catalyst `0.16.0.dev140`) on 2026-11-12). The total number of physical measurements is $M + A$, where $A$ counts the measured uncomputes, `Adjoint(TemporaryAND)` (§9.24).
 - **Cliffords:** `PauliX`, `PauliY`, `PauliZ`, `Hadamard`, `S`, `Adjoint(S)`, `CNOT`, `CZ`, `SWAP`, `GlobalPhase`.
   - Without hints, `qp.analyze` counts a conditional at its maximum branch, so these counts are upper bounds.
   - Erase conditionals carry `qp.hint({"branch-prob": 0.5})`, so the report shows expected counts ([pennylane#10230](https://github.com/PennyLaneAI/pennylane/pull/10230)). The report states which kind each number is.
+  - `qp.analyze`'s "unable to determine the branch" warning is one flag per compiled module: observed with the pinned toolchain (PennyLane `0.46.0.dev151`, Catalyst `0.16.0.dev140`) on 2026-11-12, one `TemporaryAND` with its measured uncompute or one `reset=True` measurement raises it on its own. It therefore cannot show whether the erase conditionals are hinted; exact expected counts do (master plan Task 1C.4).
 - **One-time cost:** `PhaseGradientStatePrep` on $b_{\mathrm{grad}}$ wires, outside the walk.
 - **Qubits:** the wire count of `WalkLayout` (§10). `qp.analyze` totals sum allocations rather than track the peak.
 - **What tests assert:** Toffoli and measurement counts are exact and asserted against `dfthc.costs` closed forms. Clifford counts are reported, not asserted.
@@ -690,7 +691,7 @@ Presets:
 | `FEMOCO54` | $N=54$, $R=10$, $B=27$, $C=27$, $b_{\mathrm{rot}}=15$, $b_{k1}=b_{k2}=15$, $s_u=7$, $k_1=2$, $k_2=4$, $k_{e1}=4$, $k_{e2}=2$; $N_+$ from the random factors |
 | `H2_STO3G_TEST` | the `h2_sto3g_R2_B2_C1` factors, $b_{\mathrm{rot}}=4$, $b_{k1}=b_{k2}=2$, $s_u=3$, $k_1=k_2=1$, $k_{e1}=k_{e2}=1$ |
 | `H2_631G_TEST` | the `h2_631g_R2_B2_C2` factors with the same precisions |
-| `MID_NAPHTHALENE` | the `naphthalene` factors ($N=10$, $R=8$, $B=6$, $C=5$, $N_+=5$), $b_{\mathrm{rot}}=15$, $b_{k1}=b_{k2}=15$, $s_u=7$, $k_1=2$, $k_2=1$, $k_{e1}=2$, $k_{e2}=1$: the mid size at which compiled counts are checked without a FeMoco-54 compile (§12.1 T4) |
+| `MID_NAPHTHALENE` | the `naphthalene` factors ($N=10$, $R=8$, $B=6$, $C=5$, $N_+=5$), $b_{\mathrm{rot}}=15$, $b_{k1}=b_{k2}=15$, $s_u=7$, $k_1=1$, $k_2=2$, $k_{e1}=3$, $k_{e2}=1$ (the block bits dfthcbe's naphthalene example chooses, and the minimizers of our closed form): the mid size at which compiled counts are checked without a FeMoco-54 compile (§12.1 T4) |
 
 ### 8.4 Tables
 
@@ -797,7 +798,7 @@ Steps 1 and 5; the adjoint appears in steps 22 and 27.
 | Action | From $\lvert 0\rangle_t\lvert 0\rangle_{\mathrm{succ}}$, prepare a state whose $\mathrm{succ}=1$ part is exactly uniform over $[0, L)$ and whose $\mathrm{succ}=0$ part is supported on $t \ge L$ |
 | Wires | `target` ($\lg L$), `succ` (1), `succ_work` ($n - 1$ wires; dirty from prepare to unprepare), `phase_grad` ($b_{\mathrm{grad}}$), `work` (per `required_wires`; clean on exit) |
 | Compilable | `L` (int $\ge 1$), `s` (int, $3 \le s \le b_{\mathrm{grad}}$) |
-| Rule | Write $L = 2^\eta l$ with $l$ odd, and $n = \lg l$ for the top $n$ qubits of `target`. If $l = 1$: Hadamards on all qubits and `X(succ)`. Otherwise, in this order (the construction of dfthcbe's `UniformViaPhaseGradient`, with PennyLane primitives):<br>1. Hadamards on all `target` qubits.<br>2. `LeftClassicalComparator(top n, value=l, "<")` into an ancilla.<br>3. `PhaseGradientRotation(k_1, s)` on the ancilla.<br>4. Adjoint of the comparator (step 2).<br>5. Hadamards on the top $n$.<br>6. A `TemporaryAND` ladder computing "top $n$ all zero" into an ancilla.<br>7. `PhaseGradientRotation(k_2, s)` on that ancilla.<br>8. Measured uncompute of the ladder.<br>9. Hadamards on the top $n$.<br>10. `LeftClassicalComparator(top n, value=l, "<")` into `succ`, its work wires being `succ_work`, which stay dirty until the adjoint.<br>Here $k_1, k_2$ are the $s$-bit discretizations of dfthcbe's amplitude-amplification angle $\arccos(1 - 2^{\lfloor\log_2 l\rfloor}/l)$, and the failure probability follows dfthcbe's `failure_probability`. |
+| Rule | Write $L = 2^\eta l$ with $l$ odd, and $n = \lg l$ for the top $n$ qubits of `target`. If $l = 1$: Hadamards on all qubits and `X(succ)`. Otherwise, in this order (the construction of dfthcbe's `UniformViaPhaseGradient`, with PennyLane primitives):<br>1. Hadamards on all `target` qubits.<br>2. `LeftClassicalComparator(top n, value=l, "<")` into an ancilla.<br>3. `PhaseGradientRotation(k_1, s)` on the ancilla.<br>4. Adjoint of the comparator (step 2).<br>5. Hadamards on the top $n$.<br>6. A `TemporaryAND` ladder computing "top $n$ all zero" into an ancilla.<br>7. `PhaseGradientRotation(k_2, s)` on that ancilla.<br>8. Measured uncompute of the ladder.<br>9. Hadamards on the top $n$.<br>10. `LeftClassicalComparator(top n, value=l, "<")` into `succ`, its work wires being `succ_work`, which stay dirty until the adjoint.<br>Here $k_1 = k_2$ is the $s$-bit discretization of dfthcbe's amplitude-amplification angle $\arccos(1 - 2^{\lfloor\log_2 l\rfloor}/l)$, truncated as Qualtran's `QFxp(s, s)` does; dfthcbe applies the same rotation twice, and `amplitude_angles(L, s)` returns `(k, k)`. The failure probability follows dfthcbe's `failure_probability`. |
 | Adjoint | Auto-derived; the body is unrolled in Python, and the comparator adjoints compile (K-7, probed on 2026-11-11). |
 | Cost | For $l > 1$: prepare $T = 3n + 2s - 5$, adjoint $T = 2n + 2s - 4$ (§9.24). For $l = 1$: 0. $M = 0$. At FeMoco-54, $x_o$ ($l = 81$, $n = 7$) gives 30 and 24; $b$ ($l = 7$, $n = 3$) gives 18 and 16. |
 
@@ -857,7 +858,7 @@ Passing measurement values as dynamic `Operator2` arguments is itself possible. 
 | --- | --- |
 | Action | Multiplies each basis state $\lvert a\rangle$ of the *covered set* by $(-1)^{f(a)}$, applies no other phase, and does nothing outside the covered set. For erase use, the covered set is the read's loaded set (§9.3). |
 | Wires | `address`, `onehot` ($2^{\mathrm{ob}}$ wires), `work`, `control` (0 or 1) |
-| Arguments | Compilable: `address_widths`, `covered` (the covered set as nested ranges), `onehot_bits` (ob), `control_value`. Dynamic: `parities`, a boolean array with one entry per covered address in the canonical order of `PhaseFixup.address_order`. |
+| Arguments | Compilable: `address_widths`, `covered` (the covered set as nested ranges), `onehot_bits` (ob), `control_value`. Dynamic: `parities`, a boolean array with one entry per covered address in the canonical order of `PhaseFixup.address_order`. In tape mode every entry must be a `MeasurementValue`, so that both modes emit one conditional per covered address (K-10). |
 | Pre | `onehot` and `work` are $\lvert 0\rangle$ |
 | Post | `onehot` and `work` are $\lvert 0\rangle$; the address register carries the phases |
 | Rule | 1. Build the one-hot encoding of the low ob address bits with a `TemporaryAND` tree: copy bit 0 and its negation into two flags, then for each further bit $j$ split every existing flag $f$ into $f \wedge a_j$ (one `TemporaryAND`) and $f \wedge \neg a_j$ (one CNOT). 2. Run exact unary iteration (§9.3) over the high part, visiting only high values with a covered address. At leaf $h$, for each one-hot position $j$ whose address $a = (h, j)$ is covered, apply `qp.cond(parities[a], qp.CZ)(leaf_flag, onehot[j])` with `qp.hint({"branch-prob": 0.5})`. 3. Uncompute the tree with `Adjoint(TemporaryAND)` (measured, free). |
@@ -873,7 +874,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 
 | | |
 | --- | --- |
-| Wires | Those of the matching read (`address`, `target`, `junk`, `control`), plus `work`, plus `extra_onehot` only when $K\cdot$`width` $< 2^{\mathrm{ob}}$ |
+| Wires | Those of the matching read (`address`, `target`, `junk`, `control`), plus `work`, plus `extra_onehot` ($\max(2^{\mathrm{ob}} - K\cdot$`width`$, 0)$ wires; 0 in every walk instance) |
 | Compilable | The read's arguments, plus the fixup's `onehot_bits` |
 | Pre | `target ‖ junk` hold exactly what the matching read produced for the current address. Operations between read and erase may act on the address and other registers, provided they preserve this. In the walk, they act on the address only as controls or as permutations that are undone before the erase. |
 | Post | `target`, `junk` and `work` are $\lvert 0\rangle$. The address state equals its pre-read state exactly, for every measurement outcome. |
@@ -1099,7 +1100,7 @@ $$U(lo, hi, n, c) = \sum_{m=1}^{n}\Big(\big\lfloor (hi - 1)/2^m \big\rfloor - \b
 The read and erase ranges are instantiated as in §9.3–9.5:
 - outer read: $[0, \lceil X_o/K_1\rceil)$ on $w_x - k_1$ bits, uncontrolled;
 - inner read: rows $[0, RC)$ on $w_x$ bits, then blocks $[0, \lceil (B+1)/K_2\rceil)$ on $w_b - k_2$ bits;
-- outer erase: high part $[0, \lceil X_o/2^{k_{e1}}\rceil)$ on $w_x - k_{e1}$ bits;
+- outer erase: high part $[0, \lceil\lceil X_o/K_1\rceil K_1/2^{k_{e1}}\rceil)$ on $w_x - k_{e1}$ bits, which covers the outer read's loaded set, dead positions of its last block included (§9.5); it equals $\lceil X_o/2^{k_{e1}}\rceil$ when $k_{e1} \ge k_1$ or $K_1$ divides $X_o$, as at every preset;
 - inner erase: high part $[0, \lceil RC/2^{k_{e2}}\rceil)$ on $w_x - k_{e2}$ bits.
 
 The QPE correction term counts every conditional at its maximum branch. With the branch hints of §7.6 its expected value is half of it.
@@ -1223,7 +1224,7 @@ With $t = 3$ and input $\lvert 0\rangle$, QPE returns $\varphi \in \{1/8, 7/8\}$
 | Code | Kind | What it establishes |
 | --- | --- | --- |
 | T1 | Classical data | Tables, $\Lambda$, both offset frames ($E_{\mathrm{SoS}}^{\mathrm{walk}}$, $E_{\mathrm{SoS}}^{\mathrm{phys}}$, $\Delta_\eta$), $\lambda_{\mathrm{eff}}$, the encoded model, and agreement with dfthcbe (§8.6) |
-| T2 | Rule validity | `qp.testing.assert_valid_decomp_rule(op, rule, check_matrix=...)` for every registered rule of every operator at two or more small sizes: declared resources equal emitted operators. `check_matrix=True` for measurement-free operators on 10 wires or fewer. |
+| T2 | Rule validity | `qp.testing.assert_valid_decomp_rule(op, rule, check_matrix=...)` for every registered rule of every operator at two or more small sizes: declared resources equal emitted operators. `check_matrix=True` compares matrices only for operators with a matrix representation; dfthc operators define none, so the tests pass `check_matrix=False`, and their T3 tests check the action exactly. |
 | T3 | Semantics | The action against NumPy references: compiled on `lightning.qubit` up to 25 wires, or with the sparse simulator beyond that. Classical (permutation) operators are checked on every basis input of small instances. Phase operators are checked on uniform superpositions; this is the `PhaseFixup` validation, run for random, all-ones and single-bit parity tables. Erase blocks get the outcome certificate of §12.5. **Exhaustive failed-address tests** run for $(B+1, k_2) \in \{(3,1), (5,1), (6,2), (7,0), (28,4)\}$, the last one only for the read itself.<br>1. For every computational address of the outer and inner reads, including failed $x_o \ge X_o$, failed $b \ge B+1$, one-body rows and dead block positions, the loaded `target ‖ junk` equals `loaded_bits` (§9.3).<br>2. For every basis input $(x_o, b, m_b)$ with $\mathrm{succ}_b = [b \le B]$, the read, keep test, alias swap and `InnerSigns` give the sign of the selected weight for a valid $b$, and $+1$ for a failed $b$ (§8.5).<br>3. Our failure signs equal the ported `dfthcbe_failure_signs` whenever $2^{w_b} \le \lceil (B+1)/2^{k_2}\rceil 2^{k_2}$. Otherwise, as at $(5, 1)$ and $(7, 0)$, the test asserts the documented difference instead. |
 | T4 | Exact resources | `compiled_resources` Toffoli counts $T$ and measurement counts $M$ and $A$ equal the §9.24 formulas, as implemented in `dfthc.costs`, at three or more sizes per operator: `H2_STO3G_TEST` and `H2_631G_TEST` (per commit) and `MID_NAPHTHALENE` (nightly). FeMoco-54 values are asserted on the closed forms without compiling; the complete FeMoco-54 walk and controlled walk are compiled once, by the resource report (§13.3, §15). `is_symbolic` is false. Separate tests pin the PennyLane primitive costs that §9.24 assumes. |
 | T5 | Gate-set closure | The operators in `qp.analyze` output are a subset of `GATE_SET` ∪ {`MidCircuitMeasure`}. At `level="device"`, no undecomposed operator remains. |
