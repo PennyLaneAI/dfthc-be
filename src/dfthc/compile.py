@@ -6,8 +6,6 @@ Spec sections 7.2 (pipeline), 7.3 (gate set), 7.4 (rules for operators), 7.5 (pi
 
 from __future__ import annotations
 
-import functools
-import operator
 import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass
@@ -49,7 +47,7 @@ def register_rule(op: type | str, rule: Callable) -> None:
     FIXED_DECOMPS[key] = rule
 
 
-def resource_key(build: Callable[[], qp.operation.Operator]):
+def resource_key(build: Callable[[], qp.operation.Operator]) -> qp.operation.Operator:
     """Build a resource-function key with program capture paused (spec section 7.4, rule 2; L-11).
 
     Example: ``resource_key(lambda: qp.adjoint(qp.TemporaryAND(Wire[3])))``.
@@ -60,22 +58,35 @@ def resource_key(build: Callable[[], qp.operation.Operator]):
 
 @dataclass(frozen=True)
 class CompiledResources:
-    """Counts of one compiled program (spec section 7.6)."""
+    """Counts of one compiled program (spec section 7.6).
 
-    toffoli: int
-    """T: number of Toffoli plus number of TemporaryAND."""
-    measurements: int
-    """M: number of MidCircuitMeasure, the explicit erase measurements."""
-    measured_and_uncomputes: int
-    """A: number of Adjoint(TemporaryAND), the measured AND uncomputes."""
+    T, M and A are defined at ``level="user"`` only. At other levels the device pass rewrites
+    both ``TemporaryAND`` and ``Adjoint(TemporaryAND)`` into ``Toffoli``, so the three are
+    ``None`` there, and only ``counts``, ``num_wires`` and the closure check are meaningful.
+    """
+
+    toffoli: int | None
+    """T: number of Toffoli plus number of TemporaryAND (``None`` unless ``level="user"``)."""
+    measurements: int | None
+    """M: number of MidCircuitMeasure, the explicit erase measurements (``None`` unless
+    ``level="user"``)."""
+    measured_and_uncomputes: int | None
+    """A: number of Adjoint(TemporaryAND), the measured AND uncomputes (``None`` unless
+    ``level="user"``)."""
     counts: dict[str, int]
     """All gate counts reported by qp.analyze."""
     num_wires: int
     """Wire count reported by qp.analyze."""
+    level: str = "user"
+    """The ``qp.analyze`` level the counts were taken at."""
 
     @property
     def physical_measurements(self) -> int:
         """M + A: every explicit measurement and every measured AND uncompute."""
+        if self.level != "user":
+            raise ValueError(
+                f"physical_measurements needs a level='user' record, got level={self.level!r}"
+            )
         return self.measurements + self.measured_and_uncomputes
 
 
@@ -89,11 +100,14 @@ def compiled_resources(
 ) -> CompiledResources:
     """Compile ``qfunc`` with the stack of spec section 7.2 and return exact counts.
 
-    ``qfunc`` takes no arguments and queues operations. ``fixed_decomps`` defaults to
-    :data:`FIXED_DECOMPS`. Raises ``AssertionError`` if the counts are symbolic or, at
-    ``level="user"``, if an operation outside the gate set remains (T5). At
-    ``level="device"`` it instead asserts that no dfthc operator survives, bare or under
-    ``C(...)`` and ``Adjoint(...)`` (L-20; :func:`surviving_dfthc_operators`).
+    ``qfunc`` takes no arguments and queues operations. ``fixed_decomps`` replaces
+    :data:`FIXED_DECOMPS` (pass ``{**FIXED_DECOMPS, ...}`` to add pins); an empty dict disables
+    pinning. Raises ``AssertionError`` if the counts are symbolic or, at ``level="user"``, if an
+    operation outside the gate set remains (T5). At ``level="device"`` it instead asserts that no
+    dfthc operator survives, bare or under ``C(...)`` and ``Adjoint(...)`` (L-20;
+    :func:`surviving_dfthc_operators`); the record then holds only ``counts`` and ``num_wires``,
+    with T, M and A set to ``None``, because the device pass rewrites ``TemporaryAND`` and
+    ``Adjoint(TemporaryAND)`` into ``Toffoli``.
     """
     pins = FIXED_DECOMPS if fixed_decomps is None else fixed_decomps
     dev = qp.device(device, wires=num_wires)
@@ -117,12 +131,14 @@ def compiled_resources(
         surviving = surviving_dfthc_operators(counts, set(FIXED_DECOMPS) | set(pins))
         if surviving:
             raise AssertionError(f"dfthc operators reached level={level!r}: {surviving}")
+    user = level == "user"
     return CompiledResources(
-        toffoli=counts.get("Toffoli", 0) + counts.get("TemporaryAND", 0),
-        measurements=counts.get("MidCircuitMeasure", 0),
-        measured_and_uncomputes=counts.get("Adjoint(TemporaryAND)", 0),
+        toffoli=counts.get("Toffoli", 0) + counts.get("TemporaryAND", 0) if user else None,
+        measurements=counts.get("MidCircuitMeasure", 0) if user else None,
+        measured_and_uncomputes=counts.get("Adjoint(TemporaryAND)", 0) if user else None,
         counts=counts,
         num_wires=int(resources.num_wires),
+        level=level,
     )
 
 
@@ -156,24 +172,28 @@ def mcm_parities(outcomes: Sequence, masks: Sequence[int]) -> list:
     ``outcomes[i]`` is the result of ``qp.measure`` for outcome bit ``i``: a ``MeasurementValue``
     in tape mode, a traced scalar under capture. ``masks[a]`` is the integer whose bit ``i`` is
     ``g(a)_i``. Returns one entry per mask: ``False`` (a Python bool) when the mask is 0, so callers
-    emit no conditional; otherwise a predicate usable in ``qp.cond``. Tape mode XORs
-    ``MeasurementValue``s; capture mode computes a packed-bit matrix-vector product with
-    ``jax.numpy`` (spec section 7.4, rule 9). The map is GF(2)-linear in the outcomes in both modes.
+    emit no conditional; otherwise a predicate usable in ``qp.cond``. If every mask is 0, including
+    the case of no outcomes, every entry is ``False`` in both modes. Tape mode builds one flat
+    ``MeasurementValue`` per mask, the sum of its outcome bits mod 2; capture mode computes a
+    packed-bit matrix-vector product with ``jax.numpy`` (spec section 7.4, rule 9). The map is
+    GF(2)-linear in the outcomes in both modes.
     """
     num_outcomes = len(outcomes)
     for mask in masks:
         if mask < 0 or mask >> num_outcomes:
             raise ValueError(f"mask {mask} has bits beyond the {num_outcomes} outcomes")
+    if not any(masks):
+        return [False] * len(masks)
     if qp.capture.enabled():
         return _capture_parities(outcomes, masks)
     return [_tape_parity(outcomes, mask) for mask in masks]
 
 
 def _tape_parity(outcomes: Sequence, mask: int):
-    bits = [outcomes[i] for i in range(len(outcomes)) if (mask >> i) & 1]
-    if not bits:
+    chosen = [outcomes[i].measurements[0] for i in range(len(outcomes)) if (mask >> i) & 1]
+    if not chosen:
         return False
-    return functools.reduce(operator.xor, bits)
+    return qp.ops.MeasurementValue(chosen, lambda *bits: sum(map(int, bits)) % 2)
 
 
 def pack_masks(masks: Sequence[int], num_outcomes: int) -> np.ndarray:

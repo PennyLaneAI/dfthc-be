@@ -16,7 +16,8 @@ from catalyst.passes import graph_decomposition
 from dfthc.compile import FIXED_DECOMPS, GATE_SET, CompiledResources, dfthc_operator_names
 
 _EXCLUDED_RULE = (
-    r"(?:_\w*_ppm|_toffoli_elbow|_cphase_to_single_phase|\w*_workers?\w*|use_allocation\(\w+\))"
+    r"(?:_(?:\w*_)?ppm|_toffoli_elbow|_cphase_to_single_phase|\w*_workers?\w*"
+    r"|use_allocation\(\w+\))"
 )
 NOISE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
@@ -48,11 +49,9 @@ def classify_rule_warning(message: str, names: Iterable[str] | None = None) -> s
 
 
 def install_warning_filters() -> None:
-    """Show every RuleLoweringWarning except the known PennyLane noise."""
+    """Show every RuleLoweringWarning; the test fixture drops the known PennyLane noise after
+    classification."""
     warnings.filterwarnings("always", category=RuleLoweringWarning)
-    for pattern in NOISE_PATTERNS:
-        warnings.filterwarnings("ignore", message=pattern.pattern.lstrip("^"),
-                                category=RuleLoweringWarning)
     warnings.filterwarnings("ignore", message=UNRESOLVED_BRANCH_MESSAGE, category=UserWarning)
 
 
@@ -84,7 +83,14 @@ def assert_resources(
     resources: CompiledResources, *, toffoli: int, measurements: int,
     measured_and_uncomputes: int | None = None,
 ) -> None:
-    """Assert exact T, M and optionally A, with every mismatch in one message."""
+    """Assert exact T, M and optionally A, with every mismatch in one message.
+
+    T, M and A exist only in a ``level="user"`` record; any other record fails the assertion.
+    """
+    if resources.level != "user":
+        raise AssertionError(
+            f"assert_resources needs a level='user' record, got level={resources.level!r}"
+        )
     expected = {"toffoli": toffoli, "measurements": measurements}
     if measured_and_uncomputes is not None:
         expected["measured_and_uncomputes"] = measured_and_uncomputes

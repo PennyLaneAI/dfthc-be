@@ -16,12 +16,17 @@ sandbox forbids ``ps``, and ``psutil`` is not installed. The footprint equals th
 while memory is free; under memory pressure it keeps counting compressed and swapped-out pages,
 which the resident size drops.
 
-The watchdog fails closed. It refuses to start anything unless libproc can read this process.
-Every libproc error other than ESRCH (the process is gone) ends the run as a watchdog failure,
-and the tree is killed. Processes are tracked by pid and start time, so a descendant that leaves
-the tree (its parent exited) or the process group (``setsid``) is still measured and killed,
-and a reused pid is never touched. The one gap: a descendant that leaves both the tree and the
-process group within one polling interval of being created cannot be traced.
+The watchdog fails closed. It refuses to start anything unless libproc can read this process and
+the priority can be lowered. Every libproc error other than ESRCH (the process is gone) ends the
+run as a watchdog failure, and the tree is killed; if libproc fails or a signal is refused during
+the kill, the process group and every tracked pid get SIGKILL without verification. Processes are
+tracked by pid and start time, so a descendant that leaves the tree (its parent exited) or the
+process group (``setsid``) is still measured and killed; the start-time check confines the risk
+of signalling a reused pid to the few milliseconds between a scan and a signal. The one gap: a
+descendant that leaves both the tree and the process group within one polling interval of being
+created cannot be traced. If such a descendant keeps the output pipes open, the run ends as a
+watchdog error 5 s after nothing traceable is left, and every final read of the output is bounded,
+so the descendant cannot stall the watchdog.
 
 Command line, for heavy runs whose peak and wall time go into the ledger::
 
@@ -34,6 +39,7 @@ the command's status, or with 3 if the watchdog killed it or could not clean up 
 from __future__ import annotations
 
 import argparse
+import contextlib
 import ctypes
 import errno
 import json
@@ -67,6 +73,7 @@ KILLED_EXIT_STATUS = 3
 
 _RUSAGE_INFO_V2 = 2
 _KILL_SECONDS = 5.0
+_PIPES_HELD = "watchdog error: an untraceable descendant holds the output pipes"
 
 
 class WatchdogError(RuntimeError):
@@ -184,18 +191,24 @@ class _Tree:
                 _signal(pid, signal.SIGKILL)
             time.sleep(0.01)
 
-    def kill_without_libproc(self) -> None:
-        """Fallback when libproc fails: kill the process group and every tracked pid."""
+    def kill_without_libproc(self) -> list[int]:
+        """Fallback when libproc fails or a signal is refused: SIGKILL the process group and every
+        tracked pid, and return the pids signalled. Nothing verifies that they are gone."""
         _signal_group(self.root, signal.SIGKILL)
         for pid in self.known:
-            _signal(pid, signal.SIGKILL)
+            with contextlib.suppress(WatchdogError):
+                _signal(pid, signal.SIGKILL)
+        return sorted({self.root, *self.known})
 
 
 def _signal(pid: int, sig: int) -> None:
+    """Signal one process: a vanished process is ignored, a refused signal is a WatchdogError."""
     try:
         os.kill(pid, sig)
     except ProcessLookupError:
         pass
+    except PermissionError as exc:
+        raise WatchdogError(f"cannot signal {pid}: {exc.strerror}") from exc
 
 
 def _signal_group(pgid: int, sig: int) -> None:
@@ -231,6 +244,8 @@ def lowered_priority_prefix() -> list[str]:
 
     The agent sandbox forbids setpriority(); ``nice`` then only warns and runs the command
     unchanged. ``taskpolicy -c utility`` works there, and child processes inherit its clamp.
+    Raises :class:`WatchdogError` if neither works: like ``scripts/test.sh``, the watchdog never
+    runs a command at normal priority.
     """
     for prefix in (["nice", "-n", "10"], ["taskpolicy", "-c", "utility"]):
         try:
@@ -239,15 +254,23 @@ def lowered_priority_prefix() -> list[str]:
             continue
         if probe.returncode == 0 and not probe.stderr:
             return prefix
-    return []
+    raise WatchdogError("cannot lower the priority: neither nice -n 10 nor taskpolicy -c utility "
+                        "works, so nothing was started")
 
 
 @dataclass
 class WatchedRun:
     """Outcome of :func:`run_watched`.
 
-    ``killed`` is ``"memory"``, ``"time"``, ``"watchdog error: ..."`` or ``None``. ``survivors``
-    lists processes of the tree still running after the kill; it is empty unless cleanup failed.
+    ``killed`` is ``"memory"``, ``"time"``, ``"watchdog error: ..."`` or ``None``. When a
+    descendant the watchdog could not trace kept the output pipes open, it is
+    ``"watchdog error: an untraceable descendant holds the output pipes"``, followed by
+    ``" (after <earlier reason>)"`` if the run had already been stopped for another reason.
+
+    ``survivors`` lists the processes of the tree still running after a verified kill. If libproc
+    failed or a signal was refused during the kill, the fallback sends SIGKILL to the process group
+    and every tracked pid, and ``survivors`` lists those pids unverified: some may already be gone.
+    Either way the cleanup is confirmed only when ``survivors`` is empty.
     """
 
     command: list[str]
@@ -281,11 +304,12 @@ def run_watched(command: list[str], *, cap_mb: float = MEMORY_CAP_MB, timeout_s:
                 env=None) -> WatchedRun:
     """Run ``command`` at lowered priority in a new session, under the watchdog.
 
-    Raises :class:`WatchdogError` before starting anything if libproc is unusable. The tree is
-    sampled at once and then every ``poll_s`` seconds; it is killed at the first sample above
-    ``effective_limit_mb(cap_mb)``, when the run passes ``timeout_s``, or when libproc fails. Any
-    process of the tree still running when the command ends is killed too, however the run ends.
-    With ``capture=False`` the output goes to this process's streams.
+    Raises :class:`WatchdogError` before starting anything if libproc is unusable or the priority
+    cannot be lowered. The tree is sampled at once and then every ``poll_s`` seconds; it is killed
+    at the first sample above ``effective_limit_mb(cap_mb)``, when the run passes ``timeout_s``,
+    when libproc fails, or 5 s after the command exited while its output pipes stay open with no
+    traceable process left. Any process of the tree still running when the command ends is killed
+    too, however the run ends. With ``capture=False`` the output goes to this process's streams.
     """
     check_backend()
     prefix = lowered_priority_prefix()
@@ -294,14 +318,16 @@ def run_watched(command: list[str], *, cap_mb: float = MEMORY_CAP_MB, timeout_s:
                             env=env, start_new_session=True)
     tree = _Tree(proc.pid)
     start, peak, samples, killed, out, err = time.monotonic(), 0.0, 0, None, None, None
+    untraced_since = None
     try:
         while True:
             try:
-                peak = max(peak, sum(tree.scan().values()))
+                running = tree.scan()
                 samples += 1
             except WatchdogError as exc:
                 killed = f"watchdog error: {exc}"
                 break
+            peak = max(peak, sum(running.values()))
             if not within_effective_limit(peak, cap_mb):
                 killed = "memory"
                 break
@@ -313,24 +339,56 @@ def run_watched(command: list[str], *, cap_mb: float = MEMORY_CAP_MB, timeout_s:
                 break
             except subprocess.TimeoutExpired:
                 pass
+            if proc.poll() is None or running:
+                untraced_since = None
+            elif untraced_since is None:
+                untraced_since = time.monotonic()
+            elif time.monotonic() - untraced_since > _KILL_SECONDS:
+                killed = _PIPES_HELD
+                break
     finally:
         try:
             survivors = tree.kill()
         except WatchdogError as exc:
-            tree.kill_without_libproc()
-            survivors = []
+            survivors = tree.kill_without_libproc()
             killed = killed or f"watchdog error: {exc}"
         if out is None:
-            try:
-                out, err = proc.communicate(timeout=_KILL_SECONDS)
-            except subprocess.TimeoutExpired:
-                proc.kill()
-                out, err = proc.communicate()
+            out, err, pipes_held = _final_output(proc)
+            if pipes_held and killed != _PIPES_HELD:
+                killed = _PIPES_HELD + (f" (after {killed})" if killed else "")
     return WatchedRun(command=list(command), pid=proc.pid, returncode=proc.returncode,
                       seconds=time.monotonic() - start, peak_mb=peak, samples=samples,
                       killed=killed, survivors=survivors, cap_mb=cap_mb, timeout_s=timeout_s,
-                      priority=" ".join(prefix) or "unchanged", stdout=out or "",
-                      stderr=err or "")
+                      priority=" ".join(prefix), stdout=out or "", stderr=err or "")
+
+
+def _final_output(proc: subprocess.Popen) -> tuple[str, str, bool]:
+    """The rest of the output, read with bounded waits, and whether the pipes stayed open.
+
+    If the pipes are still open after two waits of ``_KILL_SECONDS``, they are closed, and the
+    output read so far is returned.
+    """
+    try:
+        out, err = proc.communicate(timeout=_KILL_SECONDS)
+        return out, err, False
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    try:
+        out, err = proc.communicate(timeout=_KILL_SECONDS)
+        return out, err, False
+    except subprocess.TimeoutExpired as exc:
+        partial = exc
+    pipes = [stream for stream in (proc.stdout, proc.stderr) if stream is not None]
+    for stream in pipes:
+        stream.close()
+    proc.poll()
+    return _decoded(partial.output), _decoded(partial.stderr), bool(pipes)
+
+
+def _decoded(data: bytes | str | None) -> str:
+    if isinstance(data, bytes):
+        return data.decode(errors="replace")
+    return data or ""
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -342,8 +400,14 @@ def main(argv: list[str] | None = None) -> int:
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
     if not command:
         parser.error("no command given")
-    run = run_watched(command, cap_mb=args.cap_mb, timeout_s=args.timeout_min * 60,
-                      capture=False)
+    timeout_s = args.timeout_min * 60
+    try:
+        run = run_watched(command, cap_mb=args.cap_mb, timeout_s=timeout_s, capture=False)
+    except WatchdogError as exc:
+        record = {"command": command, "killed": f"watchdog error: {exc}", "cap_mb": args.cap_mb,
+                  "timeout_s": timeout_s}
+        print("WATCHDOG", json.dumps(record), flush=True)
+        return KILLED_EXIT_STATUS
     print("WATCHDOG", json.dumps(run.summary()), flush=True)
     if run.killed or run.survivors:
         return KILLED_EXIT_STATUS

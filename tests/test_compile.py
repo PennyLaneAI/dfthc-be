@@ -1,12 +1,15 @@
 """Tests for dfthc.compile and dfthc.testing.resources (plan Task 0.2)."""
 
 import itertools
+import time
+import warnings
 from types import SimpleNamespace
 
 import jax.numpy as jnp
 import numpy as np
 import pennylane as qp
 import pytest
+from catalyst.decomposition.rule_lowering_warning import RuleLoweringWarning
 from pennylane.core import Operator2
 from pennylane.typing import Wire
 
@@ -16,6 +19,7 @@ from dfthc.compile import (
     GATE_SET,
     CompiledResources,
     compiled_resources,
+    dfthc_operator_names,
     mcm_parities,
     pack_masks,
     packed_parities,
@@ -24,9 +28,11 @@ from dfthc.compile import (
     surviving_dfthc_operators,
 )
 from dfthc.testing.resources import (
+    NOISE_PATTERNS,
     assert_resources,
     chosen_rules,
     classify_rule_warning,
+    install_warning_filters,
     verbose_program,
 )
 
@@ -119,6 +125,7 @@ def test_compiled_resources_counts_toffoli_classes():
         lambda: qp.SemiAdder(x_wires=[0, 1, 2], y_wires=[3, 4, 5], work_wires=[6, 7]), num_wires=8
     )
     assert isinstance(resources, CompiledResources)
+    assert resources.level == "user"
     assert (resources.toffoli, resources.measured_and_uncomputes) == (2, 2)
 
 
@@ -180,6 +187,25 @@ def test_device_level_closure_of_decomposed_program():
     }
 
 
+@pytest.mark.compiled
+def test_device_level_record_has_no_toffoli_or_measurement_counts():
+    """The device pass rewrites TemporaryAND and its measured adjoint, so T, M and A are unset."""
+
+    def qfunc():
+        qp.TemporaryAND([0, 1, 2])
+        qp.adjoint(qp.TemporaryAND([0, 1, 2]))
+
+    resources = compiled_resources(qfunc, num_wires=3, level="device")
+    assert resources.level == "device"
+    assert (resources.toffoli, resources.measurements, resources.measured_and_uncomputes) == (
+        None, None, None,
+    )
+    with pytest.raises(AssertionError, match="needs a level='user' record, got level='device'"):
+        assert_resources(resources, toffoli=1, measurements=0)
+    with pytest.raises(ValueError, match="needs a level='user' record"):
+        _ = resources.physical_measurements
+
+
 def test_resource_key_pauses_capture():
     qp.capture.enable()
     try:
@@ -197,6 +223,15 @@ def test_pack_masks_layout():
 def test_mask_beyond_outcomes_is_rejected():
     with pytest.raises(ValueError, match="beyond the 3 outcomes"):
         mcm_parities([0, 1, 0], [8])
+
+
+def test_mcm_parities_zero_masks_need_no_outcomes_under_capture():
+    qp.capture.enable()
+    try:
+        parities = mcm_parities([], [0, 0])
+    finally:
+        qp.capture.disable()
+    assert len(parities) == 2 and all(parity is False for parity in parities)
 
 
 def _reference(masks, outcome_bits):
@@ -217,6 +252,25 @@ def test_mcm_parities_tape_mode_exhaustive():
         assert got == _reference(masks, bits), bits
 
 
+def test_mcm_parities_tape_mode_wide_masks_are_fast():
+    """300 outcomes with an all-ones mask: one flat MeasurementValue, not a 300-deep XOR chain."""
+    rng = np.random.default_rng(300)
+    num_outcomes = 300
+    masks = [(1 << num_outcomes) - 1] + [
+        sum(int(bit) << i for i, bit in enumerate(rng.integers(0, 2, num_outcomes)))
+        for _ in range(2)
+    ]
+    start = time.perf_counter()
+    with qp.queuing.AnnotatedQueue():
+        outcomes = [qp.measure(wire) for wire in range(num_outcomes)]
+        parities = mcm_parities(outcomes, masks)
+    for _ in range(3):
+        bits = rng.integers(0, 2, size=num_outcomes)
+        record = {outcomes[i].measurements[0]: int(bits[i]) for i in range(num_outcomes)}
+        assert [int(p.concretize(record)) for p in parities] == _reference(masks, bits)
+    assert time.perf_counter() - start < 1.0
+
+
 def test_mcm_parities_capture_core_is_linear():
     rng = np.random.default_rng(1234)
     num_outcomes = 70
@@ -235,7 +289,10 @@ def test_mcm_parities_capture_core_is_linear():
 
 @pytest.mark.compiled
 def test_mcm_parities_in_compiled_circuit():
-    """Deterministic outcomes (1, 0, 1) drive conditional X gates through capture-mode parities."""
+    """Deterministic outcomes (1, 1, 0) drive conditional X gates through capture-mode parities.
+
+    The outcomes are not a palindrome, so reading mask bits in reverse order gives (0, 1, 1, 0).
+    """
     dev = qp.device("lightning.qubit", wires=7)
     masks = [0b001, 0b011, 0b101, 0b000]
 
@@ -244,7 +301,7 @@ def test_mcm_parities_in_compiled_circuit():
     @qp.qnode(dev)
     def circuit():
         qp.X(0)
-        qp.X(2)
+        qp.X(1)
         outcomes = [qp.measure(wire, reset=True) for wire in range(3)]
         for target, parity in zip(range(3, 7), mcm_parities(outcomes, masks), strict=True):
             if parity is not False:
@@ -253,13 +310,57 @@ def test_mcm_parities_in_compiled_circuit():
 
     probs = np.asarray(circuit())
     expected = np.zeros(16)
-    expected[0b1100] = 1.0  # parities (1, 1, 0, 0) on wires 3..6, big-endian
+    expected[0b1010] = 1.0  # parities (1, 0, 1, 0) on wires 3..6, big-endian
     assert np.allclose(probs, expected)
 
 
-def test_classify_rule_warning():
+@pytest.mark.compiled
+def test_mcm_parities_in_compiled_circuit_across_two_words():
+    """40 outcomes measured on one reused wire span two 32-bit words; only bits 0, 33, 39 are 1.
+
+    Reading mask bits in reverse order would give (0, 0, 0, 0, 1).
+    """
+    num_outcomes, ones = 40, {0, 33, 39}
+    masks = [1 << 33, 1 << 34, (1 << 39) | 1, (1 << 1) | (1 << 38), 1 << 39]
+
+    @qp.qjit(capture=True)
+    @qp.decompose(gate_set=GATE_SET)
+    @qp.qnode(qp.device("lightning.qubit", wires=1 + len(masks)))
+    def circuit():
+        outcomes = []
+        for i in range(num_outcomes):
+            if i in ones:
+                qp.X(0)
+            outcomes.append(qp.measure(0, reset=True))
+        for target, parity in enumerate(mcm_parities(outcomes, masks), start=1):
+            qp.cond(parity, qp.X)(target)
+        return qp.probs(wires=list(range(1, 1 + len(masks))))
+
+    probs = np.asarray(circuit())
+    expected = np.zeros(2 ** len(masks))
+    expected[0b10001] = 1.0  # parities (1, 0, 0, 0, 1) on wires 1..5, big-endian
+    assert np.allclose(probs, expected)
+
+
+def test_noise_shaped_warning_naming_a_dfthc_operator_is_recorded():
+    """The filters keep noise-shaped messages, so the fixture classifies them before dropping."""
+    assert "CompileTestLoad" in dfthc_operator_names()
+    named = ("Excluded the _x_workers decomposition rule for CompileTestLoad since "
+             "--decompose-lowering cannot work with multiple registers yet")
+    plain = named.replace("CompileTestLoad", "Toffoli")
+    assert NOISE_PATTERNS[0].search(named) and NOISE_PATTERNS[0].search(plain)
+    with warnings.catch_warnings(record=True) as records:
+        install_warning_filters()
+        warnings.warn(RuleLoweringWarning(named), stacklevel=1)
+        warnings.warn(RuleLoweringWarning(plain), stacklevel=1)
+    assert [str(record.message) for record in records] == [named, plain]
+    assert [classify_rule_warning(str(record.message)) for record in records] == ["dfthc", "noise"]
+
+
+@pytest.mark.parametrize("rule", ["_toffoli_elbow", "_ppm"])
+def test_classify_rule_warning(rule):
     names = {"OuterPrepare"}
-    noise = ("Excluded the _toffoli_elbow decomposition rule for Toffoli since "
+    noise = (f"Excluded the {rule} decomposition rule for Toffoli since "
              "--decompose-lowering cannot work with multiple registers yet")
     assert classify_rule_warning(noise, names) == "noise"
     assert classify_rule_warning(
