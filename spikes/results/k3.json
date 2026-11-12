@@ -29,5 +29,12 @@
     "ancillas_zero": true,
     "passed": true
   },
+  "warnings": {
+    "prototype": [],
+    "other": [
+      "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+    ],
+    "noise": 70
+  },
   "verdict": "pass"
 }

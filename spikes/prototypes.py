@@ -14,16 +14,23 @@ from collections import Counter
 from collections.abc import Callable, Sequence
 
 import pennylane as qp
+from catalyst.decomposition.rule_lowering_warning import RuleLoweringWarning
 from pennylane.core import Operator2
 from pennylane.typing import Wire
 
 from dfthc.compile import mcm_parities, register_rule, resource_key
+from dfthc.testing.resources import classify_rule_warning
 
 WORD = 32
 
 
 def to_words(value: int, width: int) -> tuple[int, ...]:
-    """Split a ``width``-bit integer into 32-bit words, least significant first."""
+    """Split a ``width``-bit integer into 32-bit words, least significant first.
+
+    Raises ``ValueError`` unless ``0 <= value < 2**width``.
+    """
+    if not 0 <= value < 2**width:
+        raise ValueError(f"value {value} does not fit in {width} unsigned bits")
     return tuple((value >> (WORD * w)) & (2**WORD - 1) for w in range(-(-width // WORD)))
 
 
@@ -175,7 +182,11 @@ def swap_permutation(block_bits: int, low: int) -> list[int]:
 
 
 class ProtoTableRead(Operator2):
-    """QROAM read: ``target ‖ junk`` receive the requested entry and the rest of its block."""
+    """QROAM read: ``target ‖ junk`` receive the requested entry and the rest of its block.
+
+    Entry bit i goes onto wire i of its register (least significant first, unlike the big-endian
+    registers of spec 6.7); prototype only.
+    """
 
     compilable_argnames = ("table", "high_ranges", "block_bits", "width")
     wire_argnames = ("high", "low", "target", "junk", "work")
@@ -239,8 +250,16 @@ register_rule(ProtoTableRead, _proto_table_read)
 
 
 def loaded_masks(table, high_ranges, block_bits, width):
-    """(address, mask) for every loaded address; bit (r * width + i) is bit i of register r."""
+    """(address, mask) for every loaded address; bit (r * width + i) is bit i of register r.
+
+    Entry bit i goes onto wire i of its register (least significant first, unlike the big-endian
+    registers of spec 6.7); prototype only. Raises ``ValueError`` for an entry outside
+    ``[0, 2**width)``.
+    """
     entries = {a: from_words(e) for a, e in table}
+    for address, entry in entries.items():
+        if not 0 <= entry < 2**width:
+            raise ValueError(f"entry {entry} at address {address} does not fit in {width} bits")
     ranges = [range(lo, hi) for _, lo, hi in high_ranges]
     widths = [w for w, _, _ in high_ranges]
     result = []
@@ -276,8 +295,7 @@ def _erase_body(emit, table, high_ranges, block_bits, width, high, low, target, 
     qubits = list(target) + list(junk)
     outcomes = [measure(q) for q in qubits]
     masks = loaded_masks(table, high_ranges, block_bits, width)
-    parities = dict(zip((a for a, _ in masks),
-                        mcm_parities(outcomes, [m for _, m in masks]) if outcomes else [],
+    parities = dict(zip((a for a, _ in masks), mcm_parities(outcomes, [m for _, m in masks]),
                         strict=True))
     registers = _split_high(high, high_ranges) + [(low, 0, 2**block_bits)]
     widths = [w for w, _, _ in high_ranges] + [block_bits]
@@ -341,3 +359,32 @@ def _nested_toffolis(ranges) -> int:
         total += leaves * unary_toffolis(lo, hi, w, controlled=index > 0)
         leaves *= hi - lo
     return total
+
+
+# ---------------------------------------------------------------------------------------------
+# Warning policy (spec 7.4, rule 12).
+# ---------------------------------------------------------------------------------------------
+
+
+def classify_warnings(records, names) -> dict:
+    """Sort warnings recorded by ``warnings.catch_warnings(record=True)`` for a spike verdict.
+
+    Returns ``{"prototype": [...], "other": [...], "noise": count}``. A warning whose text names
+    an operator in ``names`` goes to ``"prototype"`` (a spike fails on any). A
+    ``RuleLoweringWarning`` matching PennyLane's known noise only increments ``"noise"``. Every
+    other text goes to ``"other"``, for example the ``qp.analyze`` warning "unable to determine
+    the branch". Classification uses :func:`dfthc.testing.resources.classify_rule_warning`.
+    """
+    result = {"prototype": [], "other": [], "noise": 0}
+    for record in records:
+        message = str(record.message)
+        kind = classify_rule_warning(message, names)
+        if kind == "noise" and not issubclass(record.category, RuleLoweringWarning):
+            kind = "other"
+        if kind == "dfthc":
+            result["prototype"].append(message)
+        elif kind == "noise":
+            result["noise"] += 1
+        else:
+            result["other"].append(message)
+    return result

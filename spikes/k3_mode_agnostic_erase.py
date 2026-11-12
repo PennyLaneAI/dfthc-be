@@ -7,13 +7,16 @@ unvisited addresses:
    and on lightning.qubit the address superposition is restored exactly for five seeds;
 3. tape path: _tape_decompose with the pinned rules, simulated by default.qubit with deferred
    measurements, restores the address state exactly and leaves every ancilla in |0>.
+Every warning of the run is recorded and classified, and a warning that names a prototype
+operator fails the verdict (spec 7.4, rule 12).
 Writes spikes/results/k3.json and exits with status 1 if any criterion fails.
 
-Run: CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 .venv/bin/python spikes/k3_mode_agnostic_erase.py
-"""
+Run: CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src .venv/bin/python spikes/k3_mode_agnostic_erase.py
+"""  # noqa: E501
 
 import json
 import sys
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -26,6 +29,7 @@ from prototypes import (  # noqa: E402
     ProtoTableRead,
     _proto_table_erase,
     _proto_table_read,
+    classify_warnings,
     erase_toffolis,
     read_toffolis,
     to_words,
@@ -111,13 +115,18 @@ def check_tape_path():
 
 def main():
     results = {}
-    for name, check in (("tape_rules", check_tape_rules), ("capture", check_capture),
-                        ("tape_path", check_tape_path)):
-        try:
-            results[name] = check()
-        except Exception as exc:  # noqa: BLE001
-            results[name] = {"passed": False, "error": f"{type(exc).__name__}: {exc}"[:2000]}
+    with warnings.catch_warnings(record=True) as records:
+        warnings.simplefilter("always")
+        for name, check in (("tape_rules", check_tape_rules), ("capture", check_capture),
+                            ("tape_path", check_tape_path)):
+            try:
+                results[name] = check()
+            except Exception as exc:  # noqa: BLE001
+                results[name] = {"passed": False, "error": f"{type(exc).__name__}: {exc}"[:2000]}
     passed = all(r is True or r.get("passed") for r in results.values())
+    results["warnings"] = classify_warnings(
+        records, {ProtoTableRead.__name__, ProtoTableErase.__name__})
+    passed = passed and not results["warnings"]["prototype"]
     results["verdict"] = "pass" if passed else "fail"
     out = Path(__file__).parent / "results" / "k3.json"
     out.parent.mkdir(exist_ok=True)
