@@ -15,21 +15,23 @@ The driver compiles SHAPE_PROGRAMS[shape] within LIMITS[shape] (seconds, and the
 cap per program, which kills at effective_limit_mb(cap): 15/16 of it) and
 writes spikes/results/k1_<shape>.json. Memory is MEMORY_METHOD. The controlled walk must cost
 exactly 2 more Toffolis, 2 more measured uncomputes and the same explicit measurements as the walk.
-Every warning of a compile is recorded and classified (spikes/prototypes.classify_warnings).
+Every warning of a compile is recorded and classified (spikes/prototypes.classify_warnings); the
+result files keep each text up to its first "{" plus the suffix after its last "}".
 Exit status 1 if a compile fails, is killed or over its limits, a warning names a prototype
 operator, or the controlled-walk deltas differ. Catalyst also lowers the generic adjoint and
 controlled candidates of operators with pinned rules and drops the measuring ones with a "Skipped
 ... it contains a mid-circuit measurement" warning, which for the measured erases
 (EXPECTED_MEASURING) is recorded as "expected" and does not fail the verdict. A needed measuring
-path that is missing still fails loudly through the hard pins, the gate-set closure in
-compiled_resources and the exact counts.
+path that is missing fails the compile with Catalyst's CompileError when the modified target has
+no other rule (both measuring prototypes have exactly one rule); a substitute rule would be caught
+by the exact counts.
 
 The FeMoco shape is a large-scale compile (master plan section 12.9). --project fits the small and
 mid results (PROJECTION_METHOD) and writes k1_projection.json. The FeMoco driver refuses, with exit
 status 2 and without compiling, unless that projection belongs to the current code_hash() (the
-driver, the prototypes, dfthc.compile, the watchdog, the toolchain versions and the lock file) and
-keeps the walk and the controlled walk within 60 minutes and the effective limit of the 8 GB cap
-(7,680 MB), by sampled peak and upper bound.
+driver, the prototypes, dfthc.compile, dfthc.testing.resources, the watchdog, the toolchain
+versions and the lock file) and keeps the walk and the controlled walk within 60 minutes and the
+effective limit of the 8 GB cap (7,680 MB), by the sampled peak and the getrusage companion.
 Each FeMoco program compiles at most once per code_hash(): k1_femoco.json is checkpointed after
 every program, a completed program is reused, and a failed one is retried only with
 --allow-retry, which needs the user's approval. A FeMoco --program run without the token of a
@@ -75,6 +77,7 @@ from prototypes import (  # noqa: E402
 )
 
 import dfthc.compile  # noqa: E402
+import dfthc.testing.resources  # noqa: E402
 import dfthc.testing.watchdog  # noqa: E402
 from dfthc.compile import (  # noqa: E402
     FIXED_DECOMPS,
@@ -644,8 +647,6 @@ def _angle_erase_resources(shape, tables, wires):
     # are nonzero (mcm_parities returns False exactly for those that are 0).
     _angle_erase_body(counter, s, lay, list(range(lay.num_wires)), tables, count_measure,
                       count_cond, parities=lambda outcomes, masks: [bool(m) for m in masks])
-    counter.counts["Hadamard"] -= 0
-    counter.counts["MidMeasure"] -= 0
     return counts_to_resources(counter.counts)
 
 
@@ -892,18 +893,19 @@ EXPECTED_MEASURING = frozenset({ProtoTableErase.__name__, ProtoAngleErase.__name
 MEMORY_METHOD = (
     "peak_mb: sampled peak of the summed physical footprint of the compile's process tree "
     "(dfthc.testing.watchdog), the gate metric; the watchdog kills the tree above the limit. "
-    "rusage_sum_mb: ru_maxrss of the compile process plus ru_maxrss of its finished children "
-    "(getrusage), an upper bound, because Catalyst runs its compiler and linker as blocking "
-    "subprocesses while Python holds the traced program"
+    "rusage_sum_mb: the getrusage companion, ru_maxrss of the compile process plus ru_maxrss of "
+    "its finished children. It is not an upper bound: under memory pressure the resident size "
+    "drops compressed pages that the footprint keeps counting, so it can fall below peak_mb"
 )
 PROJECTION_METHOD = (
     "size measure: the stand-in program's emitted gates, from its resource functions "
     "(DecompositionGraph.resource_estimate, no compile). Time: power law through the two largest "
     "calibration shapes, exponent at least 1. Memory: least-squares line through all calibration "
-    "shapes, slope at least 0, for peak_mb (the gate metric) and rusage_sum_mb (the upper bound). "
-    "The FeMoco compile may run only if, for the walk and the controlled walk, the projected time, "
-    "peak_mb and rusage_sum_mb are all within the time limit of LIMITS['femoco'] and the "
-    "watchdog's effective limit of its cap (7,680 MB of 8 GB), where execution would be killed"
+    "shapes, slope at least 0, for peak_mb (the gate metric) and rusage_sum_mb (the getrusage "
+    "companion). The FeMoco compile may run only if, for the walk and the controlled walk, the "
+    "projected time, peak_mb and rusage_sum_mb are all within the time limit of LIMITS['femoco'] "
+    "and the watchdog's effective limit of its cap (7,680 MB of 8 GB), where execution would be "
+    "killed"
 )
 RESULTS = Path(__file__).resolve().parent / "results"
 FEMOCO_LOCK = RESULTS / "k1_femoco.lock"
@@ -911,6 +913,7 @@ TOKEN_VARIABLE = "DFTHC_K1_FEMOCO_TOKEN"
 LOCK_FILE = Path(__file__).resolve().parents[1] / "requirements-nightly.lock"
 _HASHED_FILES = (Path(__file__).resolve(), Path(__file__).resolve().parent / "prototypes.py",
                  Path(dfthc.compile.__file__).resolve(),
+                 Path(dfthc.testing.resources.__file__).resolve(),
                  Path(dfthc.testing.watchdog.__file__).resolve())
 _DISTRIBUTIONS = ("pennylane", "pennylane_catalyst", "pennylane_lightning", "jax", "jaxlib",
                   "numpy")
@@ -931,7 +934,8 @@ def environment() -> dict[str, str]:
 
 def code_hash() -> str:
     """SHA-256 over what a compile result depends on: this driver, the prototypes,
-    dfthc.compile, the watchdog and environment()."""
+    dfthc.compile, dfthc.testing.resources (the warning classifier), the watchdog and
+    environment()."""
     digest = hashlib.sha256()
     for path in _HASHED_FILES:
         digest.update(path.read_bytes())
@@ -993,8 +997,20 @@ def compile_one(shape_name: str, program: str) -> dict:
             "compiled_gates": sum(resources.counts.values()),
             "toffoli": resources.toffoli, "measurements": resources.measurements,
             "measured_and_uncomputes": resources.measured_and_uncomputes,
-            "warnings": classify_warnings(records, PROTOTYPE_NAMES,
-                                          expected_measuring=EXPECTED_MEASURING)}
+            "warnings": short_warnings(classify_warnings(records, PROTOTYPE_NAMES,
+                                                         expected_measuring=EXPECTED_MEASURING))}
+
+
+def short_warning(message: str) -> str:
+    """The text up to its first "{" plus the suffix after its last "}" (no attribute dumps)."""
+    if "{" not in message:
+        return message
+    return message[: message.index("{")] + message[message.rindex("}") + 1:]
+
+
+def short_warnings(classified: dict) -> dict:
+    return {kind: [short_warning(m) for m in texts] if isinstance(texts, list) else texts
+            for kind, texts in classified.items()}
 
 
 def controlled_walk_check(results: dict) -> dict:
@@ -1042,15 +1058,15 @@ def project(calibration: dict[str, dict]) -> dict:
             [(gates[s], calibration[s][program]["seconds"]) for s in shapes], gates["femoco"])
         peak, peak_slope = _fit_memory(
             [(gates[s], calibration[s][program]["peak_mb"]) for s in shapes], gates["femoco"])
-        upper, _ = _fit_memory(
+        companion, _ = _fit_memory(
             [(gates[s], calibration[s][program]["rusage_sum_mb"]) for s in shapes], gates["femoco"])
         programs[program] = {
             "gates": gates, "seconds": round(seconds), "time_exponent": round(exponent, 2),
             "peak_mb": round(peak), "mb_per_1000_gates": round(1000 * peak_slope, 2),
-            "rusage_sum_mb_upper_bound": round(upper)}
+            "rusage_sum_mb_companion": round(companion)}
         if seconds > seconds_limit:
             reasons.append(f"{program}: {seconds / 60:.0f} min > {seconds_limit / 60:.0f} min")
-        for label, value in (("sampled peak", peak), ("upper bound", upper)):
+        for label, value in (("sampled peak", peak), ("getrusage companion", companion)):
             if not within_effective_limit(value, cap_mb):
                 reasons.append(f"{program}: {label} {value / 1024:.1f} GB > "
                                f"{memory_limit / 1024:.1f} GB")
@@ -1149,7 +1165,8 @@ def drive(shape_name: str, allow_retry: bool = False) -> int:
                 record["within_budget"] = (record["seconds"] <= seconds_limit
                                            and within_effective_limit(run.peak_mb, cap_mb))
                 results[program] = record
-            print(program, json.dumps(results[program])[:600], flush=True)
+            console = {k: v for k, v in results[program].items() if k != "warnings"}
+            print(program, json.dumps(console), flush=True)
             if shape_name == "femoco":
                 write_results(shape_name, results)
     finally:

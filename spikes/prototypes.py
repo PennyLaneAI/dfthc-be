@@ -10,7 +10,6 @@ compilable integers as signed 64-bit values, and larger values fail to compile (
 
 from __future__ import annotations
 
-import re
 from collections import Counter
 from collections.abc import Callable, Iterable, Sequence
 
@@ -367,17 +366,11 @@ def _nested_toffolis(ranges) -> int:
 # ---------------------------------------------------------------------------------------------
 
 
-_MEASURING_SKIP = re.compile(
-    r"^Skipped the \w+ decomposition rule for ((?:(?:Adjoint|C)\()+)(\w+)(\)+).*: it contains "
-    r"a mid-circuit measurement, which is not supported with adjoint or control regions\.?\Z",
-    re.DOTALL,
-)
-
-
-def _expected_measuring_skip(message: str, expected_measuring: Iterable[str]) -> bool:
-    match = _MEASURING_SKIP.match(message)
-    return bool(match) and match[2] in expected_measuring and (
-        len(match[3]) == match[1].count("("))
+def _frozen_names(names: Iterable[str], argument: str) -> frozenset[str]:
+    if isinstance(names, str):
+        raise TypeError(f"{argument} must be an iterable of operator names, not the string "
+                        f"{names!r}")
+    return frozenset(names)
 
 
 def classify_warnings(records, names, *, expected_measuring: Iterable[str] = ()) -> dict:
@@ -385,26 +378,32 @@ def classify_warnings(records, names, *, expected_measuring: Iterable[str] = ())
 
     Returns ``{"prototype": [...], "expected": [...], "other": [...], "noise": count}``. A warning
     whose text names an operator in ``names`` goes to ``"prototype"`` (a spike fails on any),
-    except a ``RuleLoweringWarning`` "Skipped the <rule> decomposition rule for <op>...: it
-    contains a mid-circuit measurement, which is not supported with adjoint or control regions"
-    whose <op> wraps an operator of ``expected_measuring`` in one or more ``Adjoint(...)`` or
-    ``C(...)``: it goes to ``"expected"``. A ``RuleLoweringWarning`` matching PennyLane's known
-    noise only increments ``"noise"``. Every other text goes to ``"other"``, for example the
-    ``qp.analyze`` warning "unable to determine the branch". Classification uses
-    :func:`dfthc.testing.resources.classify_rule_warning`.
+    except a ``RuleLoweringWarning`` that is exactly Catalyst's "Skipped the <rule> decomposition
+    rule for <op>: it contains a mid-circuit measurement, which is not supported with adjoint or
+    control regions." where <op> is balanced ``Adjoint(...)``/``C(...)`` wrappers around one
+    operator of ``expected_measuring``, followed only by attribute dumps, and that operator is the
+    only name of ``names`` in the text: it goes to ``"expected"``. A ``RuleLoweringWarning``
+    matching PennyLane's known noise only increments ``"noise"``. Every other text goes to
+    ``"other"``, for example the ``qp.analyze`` warning "unable to determine the branch".
+    ``names`` and ``expected_measuring`` are frozen to sets; a bare ``str`` raises ``TypeError``.
+    Classification uses :func:`dfthc.testing.resources.classify_rule_warning`: its ``"expected"``
+    shape against ``names`` finds the sole prototype name, and against ``expected_measuring`` it
+    confirms that name is a measuring operator; its ``"dfthc"`` and every other ``"expected"``
+    become ``"prototype"``.
     """
+    names = _frozen_names(names, "names")
+    expected_measuring = _frozen_names(expected_measuring, "expected_measuring")
     result = {"prototype": [], "expected": [], "other": [], "noise": 0}
     for record in records:
         message = str(record.message)
+        rule_warning = issubclass(record.category, RuleLoweringWarning)
         kind = classify_rule_warning(message, names)
-        if kind == "noise" and not issubclass(record.category, RuleLoweringWarning):
-            kind = "other"
-        if kind == "dfthc" and issubclass(record.category, RuleLoweringWarning) and (
-                _expected_measuring_skip(message, expected_measuring)):
+        if kind == "expected" and rule_warning and (
+                classify_rule_warning(message, expected_measuring) == "expected"):
             result["expected"].append(message)
-        elif kind == "dfthc":
+        elif kind in ("expected", "dfthc"):
             result["prototype"].append(message)
-        elif kind == "noise":
+        elif kind == "noise" and rule_warning:
             result["noise"] += 1
         else:
             result["other"].append(message)
