@@ -5,21 +5,30 @@ wire values into ``uint64`` words: wire ``w`` is bit ``63 - w % 64`` of word ``w
 0 is the most significant bit, as in PennyLane's statevectors. Amplitudes below
 :data:`PRUNE_THRESHOLD` are dropped whenever terms merge.
 
-Wires are the integers ``0 .. num_wires - 1``. Every operation of ``dfthc.compile.GATE_SET``
-except ``MidMeasure`` has one handler; ``TemporaryAND``, ``Adjoint(TemporaryAND)`` and
+Wires are the integers ``0 .. num_wires - 1``. Every operation of ``dfthc.compile.GATE_SET`` has
+one handler, and so has ``Conditional``; ``TemporaryAND``, ``Adjoint(TemporaryAND)`` and
 ``PhaseGradientStatePrep`` check their preconditions on every term and raise ``AssertionError``
 with the offending key. Any other operation raises :class:`UnsupportedOperation`.
+
+Mid-circuit measurements take their outcome from ``postselect`` if it is set, else from the
+simulator's policy: :class:`ForcedPolicy` (a schedule, for the outcome certificates of spec 12.5),
+:class:`SeededPolicy` (random) or :class:`BranchPolicy` (both outcomes on listed wires, through
+:meth:`SparseSimulator.run_branches`). Each outcome is recorded under its ``MidMeasure`` operator,
+which is what ``MeasurementValue.concretize`` looks up.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+import copy
+from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass
 
 import numpy as np
+from pennylane.ops import Conditional
 
 PRUNE_THRESHOLD = 1e-14
 MAX_DENSE_WIRES = 25
+MEASUREMENT_TOLERANCE = 1e-12
 _ONE = np.uint64(1)
 
 
@@ -129,14 +138,75 @@ class SparseState:
         return "".join("1" if self.bits(wire)[row] else "0" for wire in range(self.num_wires))
 
 
-class SparseSimulator:
-    """Applies gate-set operations to a :class:`SparseState` (spec 12.3).
+class ForcedPolicy:
+    """Outcomes from ``schedule``, one per measurement in order (spec 12.3, forced policy)."""
 
-    ``policy`` (outcomes of mid-circuit measurements) and ``strict`` (assert uniformly random
-    erasure measurements) are stored for the measurement handler, which this version lacks.
+    def __init__(self, schedule: Sequence[int]):
+        self.schedule = [int(outcome) for outcome in schedule]
+        if any(outcome not in (0, 1) for outcome in self.schedule):
+            raise ValueError(f"forced outcomes must be 0 or 1; got {list(schedule)}")
+        self.position = 0
+
+    def choose(self, op, probability_one: float) -> int:
+        if self.position >= len(self.schedule):
+            raise ValueError(f"the forced schedule of {len(self.schedule)} outcomes is exhausted "
+                             f"at {op}")
+        outcome = self.schedule[self.position]
+        self.position += 1
+        return outcome
+
+
+class SeededPolicy:
+    """Random outcomes with the measured probabilities, from ``seed`` (spec 12.3, seeded)."""
+
+    def __init__(self, seed: int):
+        self.rng = np.random.default_rng(seed)
+
+    def choose(self, op, probability_one: float) -> int:
+        return int(self.rng.random() < probability_one)
+
+
+class BranchPolicy:
+    """Both outcomes of every measurement on ``wires``, for QPE control bits (spec 12.3, branch).
+
+    Only :meth:`SparseSimulator.run_branches` can follow both outcomes. Measurements on other
+    wires go to ``otherwise`` (for example a :class:`ForcedPolicy` for erasure measurements).
+    """
+
+    def __init__(self, wires: Collection, *, otherwise=None):
+        self.wires = frozenset(int(wire) for wire in wires)
+        self.otherwise = otherwise
+
+    def branches(self, op) -> bool:
+        return int(op.wires[0]) in self.wires
+
+    def choose(self, op, probability_one: float) -> int:
+        if self.branches(op):
+            raise ValueError(f"{op} is on a branch wire: simulate with run_branches")
+        if self.otherwise is None:
+            raise ValueError(f"no policy chooses the outcome of {op}: it is not on a branch wire")
+        return self.otherwise.choose(op, probability_one)
+
+
+@dataclass
+class Branch:
+    """One measurement branch: the recorded outcomes, the normalized state and its probability."""
+
+    record: dict
+    state: SparseState
+    probability: float
+
+
+class SparseSimulator:
+    """Applies gate-set operations, measurements and conditionals to a :class:`SparseState`.
+
     :meth:`run` starts from ``initial_state`` (default ``|0...0>``; it must have ``num_wires``
     wires, and its equal keys are merged), applies the operations in order and returns the final
-    state.
+    state; ``record`` then maps every ``MidMeasure`` to its outcome.
+    :meth:`run_branches` also follows both outcomes of the measurements a :class:`BranchPolicy`
+    names. In strict mode every other measurement without ``postselect`` must have probability 1/2
+    (within :data:`MEASUREMENT_TOLERANCE`): a precondition check of the measured erasure, not a
+    certificate (spec 12.3).
     """
 
     def __init__(self, num_wires: int, *, policy=None, strict: bool = True):
@@ -144,6 +214,7 @@ class SparseSimulator:
         self.policy = policy
         self.strict = strict
         self.state = SparseState.basis(num_wires, 0)
+        self.record: dict = {}
         self._handlers = {
             "PauliX": self._controlled_x, "CNOT": self._controlled_x,
             "Toffoli": self._controlled_x, "SWAP": self._swap, "PauliY": self._y,
@@ -153,28 +224,84 @@ class SparseSimulator:
             "TemporaryAND": self._temporary_and,
             "Adjoint(TemporaryAND)": self._adjoint_temporary_and,
             "PhaseGradientStatePrep": self._phase_gradient_state_prep,
+            "MidMeasure": self._mid_measure,
         }
 
     @property
     def supported_operations(self) -> frozenset[str]:
-        return frozenset(self._handlers)
+        return frozenset(self._handlers) | {"Conditional"}
+
+    def _start(self, initial_state: SparseState | None) -> SparseState:
+        if initial_state is None:
+            return SparseState.basis(self.num_wires, 0)
+        words = _num_words(self.num_wires)
+        if initial_state.num_wires != self.num_wires or initial_state.keys.shape[1] != words:
+            raise ValueError(f"initial_state has {initial_state.num_wires} wires and key "
+                             f"width {initial_state.keys.shape[1]}; the simulator has "
+                             f"{self.num_wires} wires and key width {words}")
+        return SparseState(self.num_wires, *_merge(initial_state.keys, initial_state.amps))
 
     def run(self, operations: Iterable, initial_state: SparseState | None = None) -> SparseState:
-        if initial_state is None:
-            self.state = SparseState.basis(self.num_wires, 0)
-        else:
-            words = _num_words(self.num_wires)
-            if initial_state.num_wires != self.num_wires or initial_state.keys.shape[1] != words:
-                raise ValueError(f"initial_state has {initial_state.num_wires} wires and key "
-                                 f"width {initial_state.keys.shape[1]}; the simulator has "
-                                 f"{self.num_wires} wires and key width {words}")
-            self.state = SparseState(self.num_wires,
-                                     *_merge(initial_state.keys, initial_state.amps))
+        if isinstance(self.policy, BranchPolicy):
+            raise ValueError("a BranchPolicy follows both outcomes: simulate with run_branches")
+        self.state, self.record = self._start(initial_state), {}
         for op in operations:
             self.apply(op)
         return self.state
 
+    def run_branches(self, operations: Iterable,
+                     initial_state: SparseState | None = None) -> list[Branch]:
+        """Every branch of the measurements on branch wires, with its probability.
+
+        Each branch consumes its own copy of the policy, so a forced schedule for the other
+        measurements restarts in every branch. A postselected measurement drops the branches
+        that cannot pass it and weights the others by their success probability, so the returned
+        probabilities are conditional on every postselection succeeding, as with ``default.qubit``
+        and deferred measurements. Raises ``ValueError`` if no branch passes a postselection.
+        """
+        policy = self.policy
+        branches = [(Branch({}, self._start(initial_state), 1.0), copy.deepcopy(policy))]
+        try:
+            for op in operations:
+                following = []
+                for branch, self.policy in branches:
+                    self.state, self.record = branch.state, branch.record
+                    if op.name == "MidMeasure" and op.postselect is not None:
+                        (wire,) = self._wires(op)
+                        success = branch.state.probability(wire, int(op.postselect))
+                        if success >= MEASUREMENT_TOLERANCE:
+                            self._project(op, wire, int(op.postselect))
+                            branch.probability *= success
+                            following.append((branch, self.policy))
+                        continue
+                    if not self._branches(op):
+                        self.apply(op)
+                        following.append((branch, self.policy))
+                        continue
+                    (wire,) = self._wires(op)
+                    for outcome in (0, 1):
+                        if branch.state.probability(wire, outcome) < MEASUREMENT_TOLERANCE:
+                            continue
+                        self.state, self.record = branch.state.copy(), dict(branch.record)
+                        probability = self._project(op, wire, outcome)
+                        following.append((Branch(self.record, self.state,
+                                                 branch.probability * probability),
+                                          copy.deepcopy(self.policy)))
+                if not following:
+                    raise ValueError(f"no branch can pass the postselection {op}")
+                branches = following
+        finally:
+            self.policy = policy
+        total = sum(branch.probability for branch, _ in branches)
+        for branch, _ in branches:
+            branch.probability /= total
+        return [branch for branch, _ in branches]
+
     def apply(self, op) -> None:
+        if isinstance(op, Conditional):
+            if op.meas_val.concretize(self.record):
+                self.apply(op.base)
+            return
         handler = self._handlers.get(op.name)
         if handler is None:
             raise UnsupportedOperation(f"no simulator handler for {op.name} (spec 12.3): {op}")
@@ -276,3 +403,39 @@ class SparseSimulator:
             keys[ones, word] |= mask
         phases = np.exp(-2j * np.pi * values / 2**size) / np.sqrt(2**size)
         state.keys, state.amps = keys, (state.amps[:, None] * phases[None, :]).ravel()
+
+    def _branches(self, op) -> bool:
+        return (op.name == "MidMeasure" and op.postselect is None
+                and isinstance(self.policy, BranchPolicy) and self.policy.branches(op))
+
+    def _mid_measure(self, op) -> None:
+        (wire,) = self._wires(op)
+        probability_one = self.state.probability(wire, 1)
+        if op.postselect is not None:
+            outcome = int(op.postselect)
+        else:
+            if self.policy is None:
+                raise ValueError(f"no policy chooses the outcome of {op}")
+            if self.strict and abs(probability_one - 0.5) > MEASUREMENT_TOLERANCE:
+                raise AssertionError(f"strict mode: {op} has P(1) = {probability_one}, not 1/2 "
+                                     "(spec 12.3)")
+            outcome = self.policy.choose(op, probability_one)
+        self._project(op, wire, outcome)
+
+    def _project(self, op, wire: int, outcome: int) -> float:
+        """Keep the terms with ``wire == outcome``, normalize them, record the outcome and reset
+        if asked; return the outcome's probability. Normalizing by the kept weight itself, not by
+        ``1 - P(1)``, keeps rounding errors from compounding over many measurements."""
+        state = self.state
+        keep = state.bits(wire) == bool(outcome)
+        weights = np.abs(state.amps) ** 2
+        kept = weights[keep].sum()
+        probability = float(kept / weights.sum())
+        if probability < MEASUREMENT_TOLERANCE:
+            raise ValueError(f"{op} cannot give outcome {outcome}: it has probability "
+                             f"{probability:.3g}")
+        state.keys, state.amps = state.keys[keep], state.amps[keep] / np.sqrt(kept)
+        if op.reset and outcome:
+            state.flip(wire)
+        self.record[op] = outcome
+        return probability
