@@ -1,0 +1,80 @@
+{
+  "dfthcbe_commit": "930255020cec30172e0a7d17c0071d9476a687d1",
+  "versions": {
+    "dfthcbe": "1.0",
+    "qualtran": "0.7.0",
+    "numpy": "2.5.4",
+    "sympy": "1.14.0",
+    "python": "3.12.7"
+  },
+  "parameters": {
+    "H2_STO3G_TEST": {
+      "N": 2,
+      "R": 2,
+      "B": 2,
+      "C": 1,
+      "n_plus": 1,
+      "b_rot": 4,
+      "b_k1": 2,
+      "b_k2": 2,
+      "s_u": 3,
+      "k1": 1,
+      "k2": 1,
+      "ke1": 1,
+      "ke2": 1
+    },
+    "H2_631G_TEST": {
+      "N": 4,
+      "R": 2,
+      "B": 2,
+      "C": 2,
+      "n_plus": 3,
+      "b_rot": 4,
+      "b_k1": 2,
+      "b_k2": 2,
+      "s_u": 3,
+      "k1": 1,
+      "k2": 1,
+      "ke1": 1,
+      "ke2": 1
+    },
+    "FEMOCO54": {
+      "N": 54,
+      "R": 10,
+      "B": 27,
+      "C": 27,
+      "n_plus": 27,
+      "b_rot": 15,
+      "b_k1": 15,
+      "b_k2": 15,
+      "s_u": 7,
+      "k1": 2,
+      "k2": 4,
+      "ke1": 4,
+      "ke2": 2
+    },
+    "X_O_FAILS": {
+      "N": 2,
+      "R": 3,
+      "B": 1,
+      "C": 1,
+      "n_plus": 1,
+      "b_rot": 6,
+      "b_k1": 3,
+      "b_k2": 2,
+      "s_u": 3,
+      "k1": 1,
+      "k2": 1,
+      "ke1": 1,
+      "ke2": 1
+    }
+  },
+  "systems": {
+    "tables_h2_sto3g_test.json": "h2_sto3g_R2_B2_C1",
+    "tables_h2_631g_test.json": "h2_631g_R2_B2_C2",
+    "encoded_h2_sto3g_test.npz": "h2_sto3g_R2_B2_C1",
+    "encoded_x_o_fails.npz": "random_factors(2, 3, 1, 1, n_plus=1, seed=3)"
+  },
+  "encoded_block": "exact tensor contraction of DFTHCBlockEncoding.from_factors(..., exact_erase=True) with every ancilla pinned to |0>",
+  "femoco_counts": "DFTHCWalk.symbolic call graph evaluated at FEMOCO54; Toffolis = Toffoli + CSwap + And + T/4 of QECGatesCost"
+}
