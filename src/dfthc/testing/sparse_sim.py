@@ -94,14 +94,20 @@ class SparseState:
     def copy(self) -> SparseState:
         return SparseState(self.num_wires, self.keys.copy(), self.amps.copy())
 
+    def _checked_locate(self, wire: int) -> tuple[int, np.uint64]:
+        """The word and the bit mask of ``wire``, a Python or NumPy integer in the state."""
+        if not isinstance(wire, (int, np.integer)) or not 0 <= wire < self.num_wires:
+            raise ValueError(f"wire {wire} outside [0, {self.num_wires})")
+        return _locate(int(wire))
+
     def bits(self, wire: int) -> np.ndarray:
         """Boolean value of ``wire`` on every term."""
-        word, mask = _locate(wire)
+        word, mask = self._checked_locate(wire)
         return (self.keys[:, word] & mask) != 0
 
     def flip(self, wire: int, where: np.ndarray | None = None) -> None:
         """Flip ``wire`` on the terms selected by ``where`` (all terms if ``None``)."""
-        word, mask = _locate(wire)
+        word, mask = self._checked_locate(wire)
         if where is None:
             self.keys[:, word] ^= mask
         else:
@@ -128,8 +134,9 @@ class SparseSimulator:
 
     ``policy`` (outcomes of mid-circuit measurements) and ``strict`` (assert uniformly random
     erasure measurements) are stored for the measurement handler, which this version lacks.
-    :meth:`run` starts from ``initial_state`` (default ``|0...0>``), applies the operations in
-    order and returns the final state.
+    :meth:`run` starts from ``initial_state`` (default ``|0...0>``; it must have ``num_wires``
+    wires, and its equal keys are merged), applies the operations in order and returns the final
+    state.
     """
 
     def __init__(self, num_wires: int, *, policy=None, strict: bool = True):
@@ -153,8 +160,16 @@ class SparseSimulator:
         return frozenset(self._handlers)
 
     def run(self, operations: Iterable, initial_state: SparseState | None = None) -> SparseState:
-        self.state = (SparseState.basis(self.num_wires, 0) if initial_state is None
-                      else initial_state.copy())
+        if initial_state is None:
+            self.state = SparseState.basis(self.num_wires, 0)
+        else:
+            words = _num_words(self.num_wires)
+            if initial_state.num_wires != self.num_wires or initial_state.keys.shape[1] != words:
+                raise ValueError(f"initial_state has {initial_state.num_wires} wires and key "
+                                 f"width {initial_state.keys.shape[1]}; the simulator has "
+                                 f"{self.num_wires} wires and key width {words}")
+            self.state = SparseState(self.num_wires,
+                                     *_merge(initial_state.keys, initial_state.amps))
         for op in operations:
             self.apply(op)
         return self.state
