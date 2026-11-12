@@ -1,0 +1,7 @@
+{
+  "issue": "https://github.com/PennyLaneAI/catalyst/issues/3431",
+  "outcomes": {
+    "Yfirst": "OK",
+    "CBfirst": "ERROR CompileError"
+  }
+}
