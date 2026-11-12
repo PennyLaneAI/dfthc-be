@@ -91,6 +91,8 @@ def encoded_factors(params: WalkParams, tables: WalkTables,
     ``w~_b = a_b sqrt(4 Lambda p_rc)``, ``w~_pm = Lambda p``, and the unit vectors are
     ``vector_from_angles`` of the loaded angles. ``h1``, ``h_sym``, ``beta_1``, ``e_upper`` and
     ``eta`` are carried over; ``h1_shifted``, ``lambda_h1`` and ``lambda_h2`` are recomputed.
+    Their own normalization, ``lambda_h1 + lambda_h2``, is not the walk's: take ``Lambda~`` from
+    :func:`encoded_block`.
     """
     p, t = params, tables
     lam = normalization(factors)

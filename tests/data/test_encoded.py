@@ -21,9 +21,11 @@ from dfthc.data.tables import WalkTables
 from dfthc.params import H2_631G_TEST, H2_STO3G_TEST, WalkParams
 
 TEST_PRESETS = [(H2_STO3G_TEST, "h2_sto3g_R2_B2_C1"), (H2_631G_TEST, "h2_631g_R2_B2_C2")]
-X_O_FAILS = WalkParams(N=2, R=3, B=1, C=1, n_plus=1, b_rot=4, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1,
+X_O_FAILS = WalkParams(N=2, R=3, B=1, C=1, n_plus=1, b_rot=6, b_k1=3, b_k2=2, s_u=3, k1=1, k2=1,
                        ke1=1, ke2=1)
-"""X_o = 5, so the uniform preparation of x_o fails too (dfthcbe's "x_o_fails" shape)."""
+"""X_o = 5, so the uniform preparation of x_o fails too (dfthcbe's "x_o_fails" shape). At
+b_rot = 6 the loaded directions are generic (at 4 bits every tail angle is a multiple of pi/2),
+and b_k1 != b_k2 tells the outer keep bits from the inner ones."""
 
 FAILURE_SIGN_MARGIN = 1e-2
 """The documented difference between dfthcbe's failure signs and ours exceeds this. The maximal
@@ -40,7 +42,8 @@ def _lcu_block(params, tables, factors):
     """<0|BE|0> from the circuit's structure, without walk_integrals (spec 3.3 and 8.5):
     (1 - P_x) sum_x p_x avg_sigma (2 A_x^dag A_x) - I, with A_SF = a_B + sum_b a_b M_b,
     M_b = (i/2) sum_sigma gamma_0 gamma_1 along u~_b, a_b the failure-weighted signed inner
-    probabilities, and A = a_u (D1) or a_u^dag (Q1) on one spin."""
+    probabilities, and A = a_u (D1) or a_u^dag (Q1) on one spin. A failed b acts as +I: our
+    exact read loads zeros there."""
     p, t, n = params, tables, params.N
     ann = np.array([[annihilation(j, s, n) for s in (0, 1)] for j in range(n)])
     eye = np.eye(4**n)
@@ -59,7 +62,7 @@ def _lcu_block(params, tables, factors):
         if x < p.RC:
             q = alias_probabilities(t.inner_alt[x], t.inner_keep[x], p.b_k2)
             amps = (1 - fail_b) * (1 - 2 * np.array(t.inner_sgn[x])) * q
-            amps[p.B] += fail_b * our_failure_signs(p, t)[x]
+            amps[p.B] += fail_b
             u = [vector_from_angles(t.sf_angles[x // p.C][b], p.b_rot) for b in range(p.B)]
             a = amps[p.B] * eye + sum(amps[b] * pair(u[b]) for b in range(p.B))
             block = block + outer[x] * 2 * a.conj().T @ a
@@ -134,12 +137,12 @@ def _signs_case(B, k2, seed):
     params = WalkParams(N=2, R=2, B=B, C=1, n_plus=1, b_rot=4, b_k1=2, b_k2=2, s_u=3, k1=1, k2=k2,
                         ke1=1, ke2=1)
     factors = random_factors(2, 2, B, 1, n_plus=1, seed=seed)
-    return params, WalkTables.from_factors(factors, params)
+    return params, WalkTables.from_factors(factors, params), factors
 
 
 @pytest.mark.parametrize(("B", "k2"), [(2, 1), (5, 2), (27, 4)])
 def test_failure_signs_agree_when_the_last_block_covers_the_register(B, k2):
-    params, tables = _signs_case(B, k2, seed=11)
+    params, tables, _ = _signs_case(B, k2, seed=11)
     assert 2**params.w_b <= -(-(B + 1) // 2**k2) * 2**k2
     assert np.array_equal(our_failure_signs(params, tables), np.ones(params.RC))
     assert np.allclose(dfthcbe_failure_signs(params, tables), our_failure_signs(params, tables),
@@ -149,8 +152,9 @@ def test_failure_signs_agree_when_the_last_block_covers_the_register(B, k2):
 @pytest.mark.parametrize(("B", "k2", "reads"), [(4, 1, (1, 1, "B")), (6, 0, ("B",))])
 def test_failure_signs_differ_as_documented(B, k2, reads):
     """(B+1, k2) = (5, 1): failed b = 5, 6, 7 read padding, entry 4 (= B) and padding in dfthcbe;
-    (7, 0): failed b = 7 reads entry 6 (= B). Ours read padding everywhere: +1."""
-    params, tables = _signs_case(B, k2, seed=5)
+    (7, 0): failed b = 7 reads entry 6 (= B). Ours read padding everywhere: +1, and the model
+    follows ours."""
+    params, tables, factors = _signs_case(B, k2, seed=5)
     kept = np.array(tables.inner_keep)[:, B] / 2**params.b_k2
     sgn, d_sgn = np.array(tables.inner_sgn)[:, B], np.array(tables.inner_d_sgn)[:, B]
     entry_sign = (1 - 2 * sgn) * (kept + (1 - kept) * (1 - 2 * d_sgn))
@@ -158,6 +162,9 @@ def test_failure_signs_differ_as_documented(B, k2, reads):
     port = dfthcbe_failure_signs(params, tables)
     assert np.allclose(port, expected, rtol=0, atol=1e-12)
     assert np.abs(port - our_failure_signs(params, tables)).max() > FAILURE_SIGN_MARGIN
+    h_tilde, lambda_tilde = encoded_block(params, tables, factors)
+    assert np.allclose(h_tilde / lambda_tilde - np.eye(16), _lcu_block(params, tables, factors),
+                       rtol=0, atol=1e-10)
 
 
 def test_encoded_block_needs_dense_sizes():
