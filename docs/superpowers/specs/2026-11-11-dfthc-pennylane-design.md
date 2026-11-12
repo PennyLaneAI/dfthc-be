@@ -1365,7 +1365,7 @@ Toffolis per walk at FeMoco-54.
 
 | Block (calls per walk) | Paper (Table III) | dfthcbe | Ours (§9.24) | Main reason for Ours − dfthcbe |
 | --- | ---: | ---: | ---: | --- |
-| Uniform preparation of $x_o$, prepare and unprepare | 72 | 74 | 54 | measured comparator and AND-ladder uncomputes (`cmp-free`) |
+| Uniform preparation of $x_o$, prepare and unprepare | 72 | 74 | 54 | measured comparator uncomputes and PennyLane's $(n-1)$-Toffoli classical comparator, less one Toffoli per rotation ($s - 1$ against Qualtran's $s - 2$) (`cmp-free`) |
 | Outer read, keep test and swap | 177 | 175 | 180 | exact range boundaries (+5, `exact-iter`) |
 | Outer unprepare and erase | 61 | 57 | 45 | free comparator adjoint (`cmp-free`); exact boundaries (+3) |
 | Uniform preparation of $b$, two prepare/unprepare pairs | 80 | 84 | 68 | `cmp-free` |
@@ -1387,7 +1387,7 @@ Ours minus the paper is −204, by cause:
 - **Givens ladders: −424.** Each $R_z$ costs $b_{\mathrm{rot}} - 1$ Toffolis with Qualtran's `ControlledAddOrSubtract`, as in dfthcbe. The paper counts $b_{\mathrm{rot}}$.
 - **Inner reads: +186.** Our swapped inner entry has $d_2 = 26$ bits (alt, keep, sgn, d_sgn and $r$), against the 20-bit entries of the paper's Table III.
 - **Angle loads and erases, and the inner erase: +80**, after moving the paper's tail fixup to step 18. These come from exact boundaries in place of pruned iteration, and from one-hot padding.
-- **Uniform preparations and the outer erase: −46.** Measured uncomputes and the free comparator adjoints of PennyLane's primitives.
+- **Uniform preparations and the outer erase: −46.** Measured comparator uncomputes (free comparator adjoints) and PennyLane's $(n-1)$-Toffoli classical comparator, partly offset by the rotations' $s - 1$ Toffolis each (Qualtran's cost $s - 2$). dfthcbe's AND-ladder uncompute is measured too, so it is not a source of the difference.
 - **Remaining terms: net 0.** Outer read +3, spin multiplexer +4, Majorana gate −4, reflections −3.
 
 Ours minus dfthcbe is +152: the same inner-read, boundary and padding causes, partly offset by the free comparator adjoints. The Givens ladders equal dfthcbe's (5,936). The controlled walk costs two more Toffolis than the walk. The deferred refinements (§4.4 item 8; §9.3) would save up to 100 Toffolis, from truncated or pruned iteration.

@@ -641,9 +641,12 @@ All Phase 1 tasks consume the Phase 0 interfaces (`dfthc.compile`, `dfthc.testin
 
 ### Workstream C: L1 primitives
 
-Code-level steps: `2026-11-11-dfthc-phase1-primitives.md`. Every rule emits its gates through
-`dfthc.ops.unary.Emitter`, whose counting mode is the rule's resource function; registers and table
-entries are big-endian (spec 6.7); constructors validate through `dfthc.ops._validate` (spec 9.0).
+Code-level steps: `2026-11-11-dfthc-phase1-primitives.md`. Rules that loop over compilable data
+(unary iteration, QROAM loads and fix-ups, the phase-gradient fan-out) emit their gates through
+`dfthc.ops.unary.Emitter`, whose counting mode is the rule's resource function; straight-line rules
+whose children are composite keys (`FlaggedUniformPrep`, `ZeroReflection`) may declare resources by
+hand, with T2 at a size in every branch of the rule; registers and table entries are big-endian
+(spec 6.7); constructors validate through `dfthc.ops._validate` (spec 9.0).
 `QROAMRead` loads each unary leaf with one `qp.for_loop` over a dynamic per-leaf array (spec 9.3;
 section 3, item 19); the code-level plan's revision 2 (Task G0.1) holds it.
 
