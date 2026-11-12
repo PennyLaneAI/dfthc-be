@@ -724,7 +724,7 @@ Presets:
 
 ### 8.5 The encoded-Hamiltonian model
 
-`dfthc.data.encoded.encoded_block(params, tables)` returns $(\tilde H_{\mathrm{SA}}, \tilde\Lambda)$ such that the circuit satisfies $\langle 0\vert\mathrm{BE}\vert 0\rangle = \tilde H_{\mathrm{SA}}/\tilde\Lambda - I$. $\tilde H_{\mathrm{SA}}$ is a dense matrix on the $4^N$ Fock space, for $N \le 4$. The model accounts for:
+`dfthc.data.encoded.encoded_block(params, tables, factors)` returns $(\tilde H_{\mathrm{SA}}, \tilde\Lambda)$ (the factors give the absolute scale $\Lambda$, which the alias tables lose) such that the circuit satisfies $\langle 0\vert\mathrm{BE}\vert 0\rangle = \tilde H_{\mathrm{SA}}/\tilde\Lambda - I$. $\tilde H_{\mathrm{SA}}$ is a dense matrix on the $4^N$ Fock space, for $N \le 4$. The model accounts for:
 - alias rounding, through probabilities from the tables;
 - the sign columns;
 - the rounded angles, as $\tilde u = $ `vector_from_angles` of the discretized angles;
@@ -741,7 +741,7 @@ Only the walk-frame offset is involved; the physical-frame offset never enters $
 **Failed uniform preparation of $b$.**
 - **Where the failure goes.** The uniform preparation of $b$ leaves probability $P_{\mathrm{fail}}(b)$, the same for every row, on values $b \in [B+1, 2^{w_b})$ with $\mathrm{succ}_b = 0$.
 - **What our read loads there.** On SF rows the inner `QROAMRead` loads, for every such $b$, a target entry of zeros (§9.3: padding inside a partially live block, or nothing at all in a block outside the live range). So $\mathrm{keep} = 0$, the comparator always sets $\mathrm{less\_than}_b$, the alias swap moves $\mathrm{alt} = 0$ into `b`, and $\mathrm{sgn} = \mathrm{d\_sgn} = 0$. `InnerSigns` therefore applies no sign. The Majorana gate is off because $\mathrm{succ}_b = 0$, so `InnerSelect` acts as $V^\dagger V = I$.
-- **Result.** Every failed branch of an SF row acts as $+I$, so our failure sign is $\sigma_{\mathrm{fail}} = +1$ for every SF row. With $s_b$ the sign of $w_b$ and $\tilde q_b$ the prepared inner probabilities, the inner amplitudes are $a_b = (1 - P_{\mathrm{fail}}(b))\, s_b\, \tilde q_b$ for $b \le B$, and the identity term gains $a_B \mathrel{+}= P_{\mathrm{fail}}(b)\,\sigma_{\mathrm{fail}}$. These become $\tilde w_b = a_b\sqrt{4\tilde\Lambda\,\tilde p_{rc}}$ and $\tilde w_\pm = \tilde\Lambda\,\tilde p$, the same structure as dfthcbe's `encoded_factors`.
+- **Result.** Every failed branch of an SF row acts as $+I$, so our failure sign is $\sigma_{\mathrm{fail}} = +1$ for every SF row. With $s_b$ the sign of $w_b$ and $\tilde q_b$ the prepared inner probabilities, the inner amplitudes are $a_b = (1 - P_{\mathrm{fail}}(b))\, s_b\, \tilde q_b$ for $b \le B$, and the identity term gains $a_B \mathrel{+}= P_{\mathrm{fail}}(b)\,\sigma_{\mathrm{fail}}$. These become $\tilde w_b = a_b\sqrt{4\Lambda\,\tilde p_{rc}}$ and $\tilde w_\pm = \Lambda\,\tilde p$, with the input factors' $\Lambda$, not $\tilde\Lambda$: the $x_o$ failure enters only through $\tilde\Lambda = \Lambda/(1 - P_{\mathrm{fail}}(x_o))$, since $\tilde H_{\mathrm{SA}}/\tilde\Lambda = (1 - P_{\mathrm{fail}}(x_o)) \sum_x \tilde p_x\, 2 A_x^\dagger A_x$ gives $\tilde H_{\mathrm{SA}} = \Lambda \sum_x \tilde p_x\, 2 A_x^\dagger A_x$. This is the same structure as dfthcbe's `encoded_factors`.
 - **One-body rows** are unaffected: their select does not depend on $b$, and their inner read loads nothing for any $b$.
 
 **Comparison with dfthcbe's `failure_signs`.**
