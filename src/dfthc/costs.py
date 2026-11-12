@@ -51,9 +51,12 @@ def unary(lo: int, hi: int, n: int, controlled: bool) -> int:
 
 def unary_nested(outer: Range, inner: Range, controlled: bool) -> int:
     """Nested exact iteration (spec 9.24): ``U_2 = U(lo1, hi1, n1, c) + (hi1 - lo1) U(lo2, hi2,
-    n2, 1)``, the inner register iterated under every outer leaf."""
+    n2, c2)``, the inner register iterated under every outer leaf, whose flag controls it:
+    ``c2 = [n1 > 0 or c]``, since a zero-width outer register without control has no flag."""
     lo1, hi1, n1 = outer
-    return unary(lo1, hi1, n1, controlled) + (hi1 - lo1) * unary(*inner, controlled=True)
+    inner_controlled = n1 > 0 or controlled
+    return (unary(lo1, hi1, n1, controlled)
+            + (hi1 - lo1) * unary(*inner, controlled=inner_controlled))
 
 
 def truncated_unary(L: int, controlled: bool) -> int:
