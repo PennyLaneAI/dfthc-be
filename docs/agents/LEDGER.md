@@ -67,9 +67,9 @@ marked `merged` is never re-dispatched after a loss of context.
 
 | Id | Title | Tier | Status | Branch | Merge commit | Test evidence | Reviews (GPT-5.6 / Opus) | Open issues |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2D.1 | `OuterPrepare` and `OuterUnprepare` | A | not started | `phase2/2D.1` | | | / | plan `phase2-prepare` (`e96fbfb`); per-commit base + 44 (656 -> 700 on `f7acf97`) |
+| 2D.1 | `OuterPrepare` and `OuterUnprepare` | A | in progress | `phase2/2D.1` | | from `main` at `e219c77`, lane-a, implementer 3f97999b (inherit) | / | plan `phase2-prepare` (`e96fbfb`); per-commit base + 44 (656 -> 700 on `f7acf97`) |
 | 2D.2 | `InnerPrepare`, `InnerUnprepare`, `InnerSigns` | A | not started | `phase2/2D.2` | | | / | after 2D.1 (same module `prepare.py`); plan `phase2-prepare`; + 48 (700 -> 748); shared edit `costs.inner_signs()` |
-| 2E.1 | `TailAngleLoad`, `SFAngleLoad` | B | not started | `phase2/2E.1` | | | / n/a | plan `phase2-blocks` (`e96fbfb`); + 36 (656 -> 692 on `f7acf97`) |
+| 2E.1 | `TailAngleLoad`, `SFAngleLoad` | B | in progress | `phase2/2E.1` | | from `main` at `e219c77`, lane-b, implementer 3f98660f (Sonnet) | / n/a | plan `phase2-blocks` (`e96fbfb`); + 36 (656 -> 692 on `f7acf97`) |
 | 2E.2 | `AngleErase` | A | not started | `phase2/2E.2` | | | / | after 2E.1 (same module `angle_data.py`); plan `phase2-blocks`; + 23 (692 -> 715) |
 | 2E.3 | `SpinMux`, `SpinSwap` | B | not started | `phase2/2E.3` | | | / n/a | plan `phase2-blocks`; + 24; independent of the other E tasks |
 | 2E.4 | `GivensRotation`, `GivensLadder`, `GivensLadderDagger` | A | not started | `phase2/2E.4` | | | / | plan `phase2-blocks`; + 35; independent of the other E tasks |
