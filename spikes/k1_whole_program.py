@@ -43,6 +43,17 @@ writes k1r1_<shape>.json, requires T, M and A equal to Task 0.9's (EXPECTED_TMA)
 and no prototype warning per program, stops at the first program that fails, starts a mid shape
 only after the smaller shapes passed for this code_hash(), and compiles no FeMoco shape.
 --project --remedy 1 writes k1r1_projection.json (REMEDY_PROJECTION_METHOD).
+
+--arm F|FP|FPG (Task 0.9c, on top of partial remedy 1) compiles an arm: F uses the spec's erase
+fixup with one-hot bits (erase_geometry; ProtoTableEraseF, ProtoAngleEraseF), FP also runs the
+conditional CZs of each fixup leaf in one static-bound qp.for_loop, and FPG also loops the Givens
+ladder rungs (ProtoGivensLadderLoop, with a pinned explicit adjoint rule). --fixup-check runs arm
+F's tape-mode correctness check first (fixup_check). --all --arm writes k1c_<arm>_<shape>.json
+with the stop gate of arm_problems (T/M/A equal to the arm's resource functions, the independent
+count and arm F; loops per class; conditional sites), refuses per arm_refusal, applies the mid14
+controlled-walk rule of arm_controlled_skip and, with DFTHC_K1C_LEDGER set, the budget guard.
+--project --arm writes that arm into k1c_projection.json (ARM_PROJECTION_METHOD). Task 0.9c
+compiles no FeMoco shape.
 """
 
 from __future__ import annotations
@@ -71,7 +82,9 @@ import jax.numpy as jnp
 import numpy as np
 import pennylane as qp
 from pennylane.core import Operator2
+from pennylane.core.operator import abstractify
 from pennylane.decomposition import DecompositionGraph
+from pennylane.transforms import _tape_decompose
 from pennylane.typing import AbstractArray, Wire
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -79,16 +92,26 @@ import prototypes  # noqa: E402
 from prototypes import (  # noqa: E402
     WORD,
     ProtoTableErase,
+    ProtoTableEraseF,
+    ProtoTableEraseFP,
     ProtoTableRead,
     _Count,
     _Emit,
+    _erase_counts,
     _measure_x,
     _split_high,
     classify_warnings,
     counts_to_resources,
+    fixup_leaves,
     from_words,
+    loaded_masks,
+    measured_parities,
     nested_iterate,
+    onehot_erase_body,
+    onehot_erase_counts,
+    phase_fixup,
     to_words,
+    unary_toffolis,
 )
 
 import dfthc.compile  # noqa: E402
@@ -514,6 +537,14 @@ def _layout(shape_tuple):
     return Layout(Shape(*shape_tuple))
 
 
+def _variant(remedy):
+    """The stand-in variant of a ``remedy`` switch: None (baseline), "R1" (partial remedy 1, for
+    ``True``) or a Task 0.9c arm name of ARMS."""
+    if isinstance(remedy, str):
+        return remedy
+    return "R1" if remedy else None
+
+
 def _w(wires, register):
     return [wires[i] for i in register]
 
@@ -559,7 +590,11 @@ def _prepare_body(s, lay, wires, which, tables, unprepare, remedy=False):
         for c, a, x in swaps:
             qp.CSWAP([wires[c], wires[a], wires[x]])
         qp.adjoint(comparator())
-        ProtoTableErase(*static, *wire_args)
+        erase_cls = _table_erase_cls(remedy)
+        if erase_cls is ProtoTableErase:
+            ProtoTableErase(*static, *wire_args)
+        else:
+            erase_cls(*static, erase_geometry(s)[which], *wire_args)
         for wire in m + extra:
             qp.H(wires[wire])
         qp.adjoint(ProtoUniformPrep(_w(wires, index), _w(wires, succ)))
@@ -571,15 +606,18 @@ def _prepare_resources(s, lay, which, tables, unprepare, remedy=False):
     width, junk = static[3], (2**static[2] - 1) * static[3]
     n_index = s.w_x if which == "outer" else s.w_b
     b_k = s.b_k1 if which == "outer" else s.b_k2
-    table_op = ProtoTableErase if unprepare else ProtoTableRead
+    table_op = _table_erase_cls(remedy) if unprepare else ProtoTableRead
     def maybe_adjoint(op):
         return qp.adjoint(op) if unprepare else op
 
     cmp_key = resource_key(lambda: maybe_adjoint(qp.LeftQuantumComparator(
         Wire[b_k], Wire[b_k], Wire[1], Wire[b_k - 1], "<=")))
     uniform = resource_key(lambda: maybe_adjoint(ProtoUniformPrep(Wire[n_index], Wire[1])))
-    table = _abstract(table_op, *static, Wire[nh], Wire[nl], Wire[width], Wire[junk],
-                      Wire[len(lay.work)])
+    wire_keys = (Wire[nh], Wire[nl], Wire[width], Wire[junk], Wire[len(lay.work)])
+    if table_op in (ProtoTableEraseF, ProtoTableEraseFP):
+        table = _abstract(table_op, *static, erase_geometry(s)[which], *wire_keys)
+    else:
+        table = _abstract(table_op, *static, *wire_keys)
     if remedy and not unprepare:
         table = _r1_read_key(static, (nh, nl, width, junk, len(lay.work)))
     return {uniform: 1, qp.H: b_k + 1, table: 1, cmp_key: 1, qp.CSWAP: n_index}
@@ -752,30 +790,32 @@ def _select_ops(shape, tables, wires, adjoint_majorana, remedy=False):
                 _w(wires, lay.G1), _w(wires, lay.b_neq_B), _w(wires, lay.sigma_0),
                 _w(wires, lay.psi_dn[:1]), _w(wires, lay.work[:2]))
     tail_load, sf_load = _angle_loads(remedy)
+    ladder_cls = _ladder_cls(remedy)
     tail_load(*part)
     sf_load(*part)
     ProtoSpinMux(*mux)
     ProtoSpinSwap(*swap)
-    ProtoGivensLadder(*ladder)
+    ladder_cls(*ladder)
     if adjoint_majorana:
         qp.adjoint(ProtoMajorana(*majorana))
     else:
         ProtoMajorana(*majorana)
-    qp.adjoint(ProtoGivensLadder(*ladder))
+    qp.adjoint(ladder_cls(*ladder))
     ProtoSpinSwap(*swap)
     ProtoSpinMux(*mux)
-    ProtoAngleErase(*part)
+    _angle_erase_cls(remedy)(*part)
 
 
 def _select_resources(shape, tables, adjoint_majorana, remedy=False):
     s, lay = Shape(*shape), _layout(shape)
     part_keys = [_abstract(c, shape, tables, Wire[lay.num_wires])
-                 for c in (*_angle_loads(remedy), ProtoAngleErase)]
+                 for c in (*_angle_loads(remedy), _angle_erase_cls(remedy))]
     mux = _abstract(ProtoSpinMux, Wire[1], Wire[1], Wire[1], Wire[1])
     swap = _abstract(ProtoSpinSwap, Wire[1], Wire[s.N], Wire[s.N])
     ladder_args = (s.b_rot, Wire[s.N], Wire[len(lay.angles)], Wire[s.b_rot], Wire[len(lay.work)])
-    ladder = _abstract(ProtoGivensLadder, *ladder_args)
-    ladder_dagger = resource_key(lambda: qp.adjoint(ProtoGivensLadder(*ladder_args)))
+    ladder_cls = _ladder_cls(remedy)
+    ladder = _abstract(ladder_cls, *ladder_args)
+    ladder_dagger = resource_key(lambda: qp.adjoint(ladder_cls(*ladder_args)))
     maj_args = (Wire[1],) * 7 + (Wire[2],)
     majorana = resource_key(lambda: qp.adjoint(ProtoMajorana(*maj_args)) if adjoint_majorana
                             else ProtoMajorana(*maj_args))
@@ -807,11 +847,38 @@ class ProtoWalk(ProtoWalkPart):
     """Stand-in DFTHCWalk (spec 9.22)."""
 
 
+def _parts(remedy):
+    """(outer prepare, inner prepare, inner select, block encoding, walk) of a variant."""
+    return {None: (ProtoOuterPrepare, ProtoInnerPrepare, ProtoInnerSelect, ProtoBlockEncoding,
+                   ProtoWalk),
+            "R1": (ProtoOuterPrepareR1, ProtoInnerPrepareR1, ProtoInnerSelectR1,
+                   ProtoBlockEncodingR1, ProtoWalkR1),
+            "F": (ProtoOuterPrepareF, ProtoInnerPrepareF, ProtoInnerSelectF, ProtoBlockEncodingF,
+                  ProtoWalkF),
+            "FP": (ProtoOuterPrepareFP, ProtoInnerPrepareFP, ProtoInnerSelectFP,
+                   ProtoBlockEncodingFP, ProtoWalkFP),
+            "FPG": (ProtoOuterPrepareFPG, ProtoInnerPrepareFPG, ProtoInnerSelectFPG,
+                    ProtoBlockEncodingFPG, ProtoWalkFPG)}[_variant(remedy)]
+
+
+def _table_erase_cls(remedy):
+    return {None: ProtoTableErase, "R1": ProtoTableErase, "F": ProtoTableEraseF,
+            "FP": ProtoTableEraseFP, "FPG": ProtoTableEraseFP}[_variant(remedy)]
+
+
+def _angle_erase_cls(remedy):
+    return {None: ProtoAngleErase, "R1": ProtoAngleErase, "F": ProtoAngleEraseF,
+            "FP": ProtoAngleEraseFP, "FPG": ProtoAngleEraseFP}[_variant(remedy)]
+
+
+def _ladder_cls(remedy):
+    return ProtoGivensLadderLoop if _variant(remedy) == "FPG" else ProtoGivensLadder
+
+
 def _be_parts(remedy):
-    """The outer prepare, inner prepare and inner select of the baseline or of partial remedy 1."""
-    if remedy:
-        return ProtoOuterPrepareR1, ProtoInnerPrepareR1, ProtoInnerSelectR1
-    return ProtoOuterPrepare, ProtoInnerPrepare, ProtoInnerSelect
+    """The outer prepare, inner prepare and inner select of a variant (baseline, partial remedy 1
+    or a Task 0.9c arm)."""
+    return _parts(remedy)[:3]
 
 
 def _be_ops(shape, tables, wires, control=None, remedy=False):
@@ -880,7 +947,7 @@ register_rule("C(ProtoBlockEncoding)", qp.register_resources(_c_be_resources)(_c
 
 def _walk_keys(shape, tables, controlled, remedy):
     n = Wire[_layout(shape).num_wires]
-    block_encoding = ProtoBlockEncodingR1 if remedy else ProtoBlockEncoding
+    block_encoding = _parts(remedy)[3]
     if not controlled:
         return {_abstract(block_encoding, shape, tables, n): 1,
                 _abstract(ProtoZeroReflection, *_ab_args(shape)): 1}
@@ -890,7 +957,7 @@ def _walk_keys(shape, tables, controlled, remedy):
 
 
 def _walk_ops(shape, tables, wires, control, remedy):
-    block_encoding = ProtoBlockEncodingR1 if remedy else ProtoBlockEncoding
+    block_encoding = _parts(remedy)[3]
     _, ab = _refs(shape, wires)
     if control is None:
         block_encoding(shape, tables, wires)
@@ -942,13 +1009,17 @@ def _word_array(words):
     """Canonicalize table words once for the dynamic ``words`` argument (L-23).
 
     Abstract arrays (resource keys) and tracers (operators rebuilt by Catalyst) pass unchanged.
-    Raises ``ValueError`` for a word outside [0, 2**32).
+    Raises ``ValueError`` for a word that is not an integer in [0, 2**32), checked on the Python
+    integers before the WORD_DTYPE cast (which would overflow first for words beyond int64).
     """
     if isinstance(words, AbstractArray) or qp.math.is_tracer(words):
         return words
-    array = np.asarray(words, dtype=WORD_DTYPE)
-    if not ((array >= 0) & (array < 2**WORD)).all():
-        raise ValueError(f"table words must lie in [0, 2**{WORD}): {array}")
+    values = np.asarray(words, dtype=object)
+    bad = [w for w in values.flat
+           if isinstance(w, bool) or not isinstance(w, (int, np.integer)) or not 0 <= w < 2**WORD]
+    if bad:
+        raise ValueError(f"table words must be integers in [0, 2**{WORD}), got {bad[0]!r}")
+    array = values.astype(WORD_DTYPE)
     return jnp.asarray(array) if qp.capture.enabled() else array
 
 
@@ -1017,13 +1088,14 @@ def _bit_loader(words, width):
     return load
 
 
-def _r1_read_counts(addresses, high_ranges, block_bits, width):
-    """Gate counts of ProtoTableReadR1; "CNOT" is an upper bound (every loaded bit set)."""
+def _r1_read_counts(addresses, high_ranges, block_bits, width, count_loads=True):
+    """Gate counts of ProtoTableReadR1; "CNOT" is an upper bound (every loaded bit set). Without
+    ``count_loads`` the bit loops' bodies are left out (zero table words)."""
     counter = _Count()
     dummy = list(range(10_000))
 
     def load(flag, row, register):
-        counter.counts["CNOT"] += width
+        counter.counts["CNOT"] += width if count_loads else 0
 
     _r1_read_body(counter, addresses, high_ranges, block_bits, width,
                   dummy[: sum(w for w, _, _ in high_ranges)], dummy[:block_bits], dummy[:width],
@@ -1135,6 +1207,464 @@ register_rule(ProtoWalkR1, qp.register_resources(_walk_r1_resources)(_walk_r1))
 register_rule("C(ProtoWalkR1)", qp.register_resources(_c_walk_r1_resources)(_c_walk_r1))
 
 
+# --------------------------------------------------------------------------- Task 0.9c arms
+# On top of partial remedy 1 (--arm): F, the spec's erase fixup (one-hot bits, spec 9.4/9.5/9.17);
+# FP, as F with the conditional CZs of each fixup leaf in one static-bound qp.for_loop; FPG, as FP
+# with ProtoGivensLadderLoop (the rungs in a qp.for_loop, with an explicit pinned adjoint rule).
+
+ARMS = ("F", "FP", "FPG")
+ARM_PARENT = {"F": None, "FP": "F", "FPG": "FP"}
+"""The arm each arm builds on (Task 0.9c requirement 3: a failed arm stops the arms on top)."""
+ERASE_OBS = {"small": (1, 2), "mid10": (3, 4), "mid14": (3, 5), "femoco": (4, 7)}
+"""(outer, inner) table-erase one-hot bits of the rule of erase_geometry (brief, requirement 1)."""
+SF_OBS = {"small": 2, "mid10": 3, "mid14": 4, "femoco": 5}
+"""One-hot bits of the angle erase's SF fixup, w_b (spec 9.17); its tail fixup has ob = 0."""
+
+
+def onehot_cost(onehot_bits: int) -> int:
+    """O(ob) of spec 9.24: TemporaryANDs of the one-hot tree."""
+    return 2**onehot_bits - 2 if onehot_bits else 0
+
+
+@functools.cache
+def erase_geometry(s: Shape) -> dict[str, int]:
+    """One-hot bits of the stand-in's fixups: one spike-local rule for every shape (Task 0.9c).
+
+    Outer erase: covered set [0, L), L = ceil(X_o / K1) K1; ob = q minimizes
+    U(0, ceil(L / 2**q), w_x - q, 0) + O(q) over 0 <= q <= w_x with 2**q <= K1 d1. Inner erase:
+    covered x in [0, RC), b in [0, ceil((B+1) / K2) K2), flattened (x << w_b) | b; ob = w_b + q
+    minimizes U(0, ceil(RC / 2**q), w_x - q, 0) + O(ob) over 0 <= q <= w_x with 2**ob <= K2 d2.
+    Ties go to the smallest ob. SF fixup: ob = w_b; tail fixup: ob = 0. Raises ``ValueError`` if
+    the padded b range is not the whole w_b-bit register (the inner rule assumes it).
+    """
+    k1, k2 = 2**s.k1, 2**s.k2
+    covered_outer = -(-s.X_o // k1) * k1
+    outer = min((unary_toffolis(0, -(-covered_outer // 2**q), s.w_x - q, False) + onehot_cost(q), q)
+                for q in range(s.w_x + 1) if 2**q <= k1 * s.d1)[1]
+    if -(-(s.B + 1) // k2) * k2 != 2**s.w_b:
+        raise ValueError(f"padded b range {-(-(s.B + 1) // k2) * k2} != 2**w_b = {2**s.w_b}")
+    inner = min((unary_toffolis(0, -(-s.RC // 2**q), s.w_x - q, False)
+                 + onehot_cost(s.w_b + q), s.w_b + q)
+                for q in range(s.w_x + 1) if 2 ** (s.w_b + q) <= k2 * s.d2)[1]
+    return {"outer": outer, "inner": inner, "sf": s.w_b, "tail": 0}
+
+
+for _name, _shape in SHAPES.items():
+    _geometry = erase_geometry(_shape)
+    if ((_geometry["outer"], _geometry["inner"]), _geometry["sf"]) != (ERASE_OBS[_name],
+                                                                       SF_OBS[_name]):
+        raise RuntimeError(f"erase_geometry({_name}) = {_geometry}, not {ERASE_OBS[_name]}, "
+                           f"SF {SF_OBS[_name]}")
+
+
+class ProtoAngleEraseF(ProtoWalkPart):
+    """Stand-in AngleErase with spec 9.17's fixups (K-1 arm F): measure the angles and b_neq_B,
+    the SF fixup over (r, b) in [0, R) x [0, B) with ob = w_b on the first 2**w_b reset angle
+    wires, enabled on G0 = 0 while G0 is live, then measure G0 and G1, then the tail fixup over
+    x_o in [RC, X_o) with ob = 0. Never adjointed or controlled."""
+
+
+class ProtoAngleEraseFP(ProtoWalkPart):
+    """ProtoAngleEraseF with the SF fixup's conditional CZs in one qp.for_loop per r leaf (FP)."""
+
+
+def _angle_erase_onehot_body(emit, s, lay, wires, tables, measure, parities, looped):
+    _, _, tail, sf = tables
+    angle_wires = _w(wires, lay.angles + lay.b_neq_B)
+    if 2**s.w_b > len(angle_wires):
+        raise ValueError(f"the SF fixup needs {2**s.w_b} one-hot wires, has {len(angle_wires)}")
+    outcomes = [measure(q) for q in angle_wires]
+    sf_parities = parities(outcomes, [from_words(e) for _, e in sf])
+    g0, g1 = wires[lay.G0[0]], wires[lay.G1[0]]
+    emit.x(g0)
+    phase_fixup(emit, _w(wires, lay.r + lay.b), fixup_leaves([a for a, _ in sf], s.w_b), s.w_b,
+                angle_wires[: 2**s.w_b], _w(wires, lay.work), sf_parities, control=g0,
+                looped=looped)
+    emit.x(g0)
+    flag_outcomes = [measure(g0), measure(g1)]
+    angle_bits = (s.N - 1) * s.b_rot
+    tail_masks = []
+    for _, entry in tail:
+        value = from_words(entry)
+        tail_masks.append((value & (2**angle_bits - 1)) | (value >> angle_bits) << (angle_bits + 1))
+    phase_fixup(emit, _w(wires, lay.x_o), fixup_leaves([a for a, _ in tail], 0), 0, [],
+                _w(wires, lay.work), parities(outcomes + flag_outcomes, tail_masks))
+
+
+def angle_erase_onehot_counts(shape, tables) -> Counter:
+    """Gate counts of ProtoAngleEraseF and of ProtoAngleEraseFP (loop bodies as if unrolled)."""
+    s, lay = Shape(*shape), _layout(shape)
+    counter = _Count()
+
+    def measure(qubit):
+        counter.counts.update({"Hadamard": 1, "MidMeasure": 1})
+
+    _angle_erase_onehot_body(counter, s, lay, list(range(lay.num_wires)), tables, measure,
+                             lambda outcomes, masks: [None] * len(masks), looped=False)
+    return counter.counts
+
+
+def _angle_erase_onehot_rule(name, looped):
+    def resources(shape, tables, wires):
+        return counts_to_resources(angle_erase_onehot_counts(shape, tables))
+
+    def rule(shape, tables, wires):
+        _angle_erase_onehot_body(_Emit(), Shape(*shape), _layout(shape), wires, tables,
+                                 _measure_x, measured_parities, looped)
+
+    rule.__name__ = name
+    return qp.register_resources(resources)(rule)
+
+
+register_rule(ProtoAngleEraseF, _angle_erase_onehot_rule("_proto_angle_erase_f", looped=False))
+register_rule(ProtoAngleEraseFP, _angle_erase_onehot_rule("_proto_angle_erase_fp", looped=True))
+
+
+class ProtoGivensLadderLoop(Operator2):
+    """ProtoGivensLadder with its rungs in one static-bound ``qp.for_loop`` (K-1 arm FPG).
+
+    Iteration t applies rung t on (system[t], system[t + 1], angle row t), with ``system`` and the
+    ``(N - 1, b_rot)`` angle rows as indexable arrays. The adjoint has its own pinned rule (rungs
+    k = N - 2 - t, each ``qp.adjoint(ProtoGivensRotation(...))``): no auto-derived adjoint of a
+    loop body is relied on (L-6). The rung is unchanged.
+    """
+
+    compilable_argnames = ("b_rot",)
+    wire_argnames = ("system", "angles", "phase_grad", "work")
+
+    def __init__(self, b_rot, system, angles, phase_grad, work):
+        super().__init__(b_rot, system, angles, phase_grad, work)
+
+
+def _rung_key(b_rot, adjoint):
+    def rung():
+        op = ProtoGivensRotation(Wire[1], Wire[1], Wire[b_rot], Wire[b_rot], Wire[b_rot - 1])
+        return qp.adjoint(op) if adjoint else op
+
+    return resource_key(rung)
+
+
+def _ladder_arrays(system, angles, b_rot):
+    """``system`` and the angle rows, shape (N - 1, b_rot), indexable by a traced loop index."""
+    rows = len(system) - 1
+    if qp.capture.enabled():
+        return jnp.asarray(system), jnp.asarray(angles).reshape(rows, b_rot)
+    return list(system), np.asarray(list(angles), dtype=object).reshape(rows, b_rot)
+
+
+@qp.register_resources(lambda b_rot, system, angles, phase_grad, work: {
+    _rung_key(b_rot, False): len(system) - 1})
+def _proto_ladder_loop(b_rot, system, angles, phase_grad, work):
+    system_array, rows = _ladder_arrays(system, angles, b_rot)
+
+    @qp.for_loop(0, len(system) - 1, 1)
+    def rung(t):
+        ProtoGivensRotation([system_array[t]], [system_array[t + 1]], rows[t], phase_grad,
+                            work[: b_rot - 1])
+
+    rung()
+
+
+@qp.register_resources(lambda base: {_rung_key(base.b_rot, True): len(base.system) - 1})
+def _adjoint_proto_ladder_loop(base):
+    b_rot, last = base.b_rot, len(base.system) - 2
+    system_array, rows = _ladder_arrays(base.system, base.angles, b_rot)
+
+    @qp.for_loop(0, last + 1, 1)
+    def rung(t):
+        k = last - t
+        qp.adjoint(ProtoGivensRotation([system_array[k]], [system_array[k + 1]], rows[k],
+                                       base.phase_grad, base.work[: b_rot - 1]))
+
+    rung()
+
+
+register_rule(ProtoGivensLadderLoop, _proto_ladder_loop)
+register_rule("Adjoint(ProtoGivensLadderLoop)", _adjoint_proto_ladder_loop)
+
+
+def _make_select(name, arm):
+    cls = type(name, (ProtoWalkPart,), {"__doc__": f"ProtoInnerSelect of arm {arm} (Task 0.9c)."})
+
+    def resources(shape, tables, wires):
+        return _select_resources(shape, tables, False, remedy=arm)
+
+    def rule(shape, tables, wires):
+        _select_ops(shape, tables, wires, False, remedy=arm)
+
+    def adjoint_resources(base):
+        return _select_resources(base.shape, base.tables, True, remedy=arm)
+
+    def adjoint_rule(base):
+        _select_ops(base.shape, base.tables, base.wires, True, remedy=arm)
+
+    rule.__name__, adjoint_rule.__name__ = f"_{name.lower()}_rule", f"_{name.lower()}_adjoint"
+    register_rule(cls, qp.register_resources(resources)(rule))
+    register_rule(f"Adjoint({name})", qp.register_resources(adjoint_resources)(adjoint_rule))
+    return cls
+
+
+def _make_block_encoding(name, arm):
+    cls = type(name, (ProtoWalkPart,), {"__doc__": f"ProtoBlockEncoding of arm {arm}."})
+
+    def resources(shape, tables, wires):
+        return _be_resources(shape, tables, False, remedy=arm)
+
+    def rule(shape, tables, wires):
+        _be_ops(shape, tables, wires, remedy=arm)
+
+    def c_resources(base, control_wires, control_values, work_wires, work_wire_type):
+        return _be_resources(base.shape, base.tables, True, remedy=arm)
+
+    def c_rule(base, control_wires, control_values, work_wires, work_wire_type):
+        _be_ops(base.shape, base.tables, base.wires, control=control_wires[0], remedy=arm)
+
+    rule.__name__, c_rule.__name__ = f"_{name.lower()}_rule", f"_c_{name.lower()}"
+    register_rule(cls, qp.register_resources(resources)(rule))
+    register_rule(f"C({name})", qp.register_resources(c_resources)(c_rule))
+    return cls
+
+
+def _make_walk(name, arm):
+    cls = type(name, (ProtoWalkPart,), {"__doc__": f"ProtoWalk of arm {arm} (Task 0.9c)."})
+
+    def resources(shape, tables, wires):
+        return _walk_keys(shape, tables, False, arm)
+
+    def rule(shape, tables, wires):
+        _walk_ops(shape, tables, wires, None, arm)
+
+    def c_resources(base, control_wires, control_values, work_wires, work_wire_type):
+        return _walk_keys(base.shape, base.tables, True, arm)
+
+    def c_rule(base, control_wires, control_values, work_wires, work_wire_type):
+        _walk_ops(base.shape, base.tables, base.wires, control_wires[0], arm)
+
+    rule.__name__, c_rule.__name__ = f"_{name.lower()}_rule", f"_c_{name.lower()}"
+    register_rule(cls, qp.register_resources(resources)(rule))
+    register_rule(f"C({name})", qp.register_resources(c_resources)(c_rule))
+    return cls
+
+
+ProtoOuterPrepareF = _make_prepare("ProtoOuterPrepareF", "outer", remedy="F")
+ProtoInnerPrepareF = _make_prepare("ProtoInnerPrepareF", "inner", remedy="F")
+ProtoInnerSelectF = _make_select("ProtoInnerSelectF", "F")
+ProtoBlockEncodingF = _make_block_encoding("ProtoBlockEncodingF", "F")
+ProtoWalkF = _make_walk("ProtoWalkF", "F")
+ProtoOuterPrepareFP = _make_prepare("ProtoOuterPrepareFP", "outer", remedy="FP")
+ProtoInnerPrepareFP = _make_prepare("ProtoInnerPrepareFP", "inner", remedy="FP")
+ProtoInnerSelectFP = _make_select("ProtoInnerSelectFP", "FP")
+ProtoBlockEncodingFP = _make_block_encoding("ProtoBlockEncodingFP", "FP")
+ProtoWalkFP = _make_walk("ProtoWalkFP", "FP")
+ProtoOuterPrepareFPG = _make_prepare("ProtoOuterPrepareFPG", "outer", remedy="FPG")
+ProtoInnerPrepareFPG = _make_prepare("ProtoInnerPrepareFPG", "inner", remedy="FPG")
+ProtoInnerSelectFPG = _make_select("ProtoInnerSelectFPG", "FPG")
+ProtoBlockEncodingFPG = _make_block_encoding("ProtoBlockEncodingFPG", "FPG")
+ProtoWalkFPG = _make_walk("ProtoWalkFPG", "FPG")
+
+
+# --------------------------------------------------------------------------- arm F fixup check
+# Task 0.9c requirement 2, tape mode only (no qjit): the reduced 11-wire read/erase geometry of
+# K-3/K-10 with an ob = 1 one-hot fixup, and the phase-fixup helper alone on the small shape's
+# outer, inner, SF and tail covered geometries against a classical phase oracle, plus 3 mutants.
+
+FIXUP_WIDTH, FIXUP_BLOCK_BITS, FIXUP_ONEHOT_BITS = 2, 1, 1
+FIXUP_HIGH_RANGES = ((2, 0, 3),)
+"""Blocks 0..2 visited: addresses 0..4 hold entries, 5 is a visited dead position, 6 and 7 are
+never loaded (spikes/k3_mode_agnostic_erase.py, spikes/k10_measurement_arrays.py)."""
+FIXUP_WIRES = ([0, 1], [2], [3, 4], [5, 6], [7, 8, 9, 10])
+"""(high, low, target, junk, work) of the 11-wire round trip."""
+FIXUP_SEEDS = (0, 1, 2)
+FIXUP_TOLERANCE = 1e-10
+
+
+def _fixup_table(seed):
+    rng = np.random.default_rng(seed)
+    return tuple((a, to_words(int(v), FIXUP_WIDTH))
+                 for a, v in enumerate(rng.integers(0, 2**FIXUP_WIDTH, size=5)))
+
+
+def _fixup_round_trip(table, erase) -> dict:
+    """|+> on the 3 address wires, the remedy-1 read, then ``erase()``; tape-decomposed with the
+    pinned rules, measurements deferred, simulated on default.qubit. Compares the full reduced
+    address density matrix with |+><+| elementwise and requires probability one on all read,
+    one-hot and work ancillas being zero."""
+    high, low, target, junk, work = FIXUP_WIRES
+    qp.decomposition.enable_graph()
+    with qp.queuing.AnnotatedQueue() as queue:
+        for wire in high + low:
+            qp.H(wire)
+        _r1_read((table, FIXUP_HIGH_RANGES, FIXUP_BLOCK_BITS, FIXUP_WIDTH),
+                 (high, low, target, junk, work))
+        erase()
+        qp.density_matrix(wires=high + low)
+        qp.probs(wires=target + junk + work)
+    [tape], _ = _tape_decompose(qp.tape.QuantumScript.from_queue(queue), gate_set=GATE_SET,
+                                fixed_decomps=dict(FIXED_DECOMPS))
+    [deferred], _ = qp.defer_measurements(tape)
+    rho, probs = qp.devices.DefaultQubit().execute(deferred)
+    error = float(np.max(np.abs(rho - np.full((8, 8), 1 / 8))))
+    return {"density_max_error": error, "ancillas_zero_probability": float(probs[0]),
+            "passed": bool(error < FIXUP_TOLERANCE and abs(probs[0] - 1) < FIXUP_TOLERANCE)}
+
+
+def _fixup_erase_op(table, cls):
+    return lambda: cls(table, FIXUP_HIGH_RANGES, FIXUP_BLOCK_BITS, FIXUP_WIDTH,
+                       FIXUP_ONEHOT_BITS, *FIXUP_WIRES)
+
+
+def _fixup_mutant_erase(table, **hooks):
+    return lambda: onehot_erase_body(_Emit(), table, FIXUP_HIGH_RANGES, FIXUP_BLOCK_BITS,
+                                     FIXUP_WIDTH, FIXUP_ONEHOT_BITS, *FIXUP_WIRES, _measure_x,
+                                     measured_parities, False, **hooks)
+
+
+def _flip_parity(index):
+    def hook(values):
+        values = values.copy()
+        values[index] = (not values[index]) if isinstance(values[index], bool) else ~values[index]
+        return values
+
+    return hook
+
+
+def _swap_first_positions(leaves):
+    (h, positions, base), *rest = leaves
+    return [(h, (positions[1], positions[0], *positions[2:]), base), *rest]
+
+
+def fixup_oracle_geometries() -> dict:
+    """The small shape's covered geometries: what the arm's code feeds the helper (``covered``,
+    from loaded_masks and the angle tables) and, independently, the oracle's covered set from the
+    shape formulas of requirement 1."""
+    s, lay = SHAPES["small"], Layout(SHAPES["small"])
+    tables, geometry = random_tables(s), erase_geometry(SHAPES["small"])
+    outer_static, _ = _read_args(s, lay, list(range(lay.num_wires)), "outer", tables)
+    inner_static, _ = _read_args(s, lay, list(range(lay.num_wires)), "inner", tables)
+    padded_b = -(-(s.B + 1) // 2**s.k2) * 2**s.k2
+    return {
+        "outer": {"address_bits": s.w_x, "onehot_bits": geometry["outer"], "control": False,
+                  "covered": [a for a, _ in loaded_masks(*outer_static)],
+                  "oracle": list(range(-(-s.X_o // 2**s.k1) * 2**s.k1))},
+        "inner": {"address_bits": s.w_x + s.w_b, "onehot_bits": geometry["inner"],
+                  "control": False, "covered": [a for a, _ in loaded_masks(*inner_static)],
+                  "oracle": [(x << s.w_b) | b for x in range(s.RC) for b in range(padded_b)]},
+        "sf": {"address_bits": s.w_r + s.w_b, "onehot_bits": geometry["sf"], "control": True,
+               "covered": [a for a, _ in tables[3]],
+               "oracle": [(r << s.w_b) | b for r in range(s.R) for b in range(s.B)]},
+        "tail": {"address_bits": s.w_x, "onehot_bits": geometry["tail"], "control": False,
+                 "covered": [a for a, _ in tables[2]], "oracle": list(range(s.RC, s.X_o))},
+    }
+
+
+def _oracle_case(geometry, parities, parities_hook=None, leaves_hook=None,
+                 covered_hook=None) -> float:
+    """Max amplitude error of the helper against the phase oracle with ``parities``, over every
+    computational address (and both G0 values for the SF geometry, enabled on G0 = 0), with the
+    one-hot and work ancillas zero. The hooks mutate only what the helper receives."""
+    n, ob, control = geometry["address_bits"], geometry["onehot_bits"], geometry["control"]
+    covered = covered_hook(geometry["covered"]) if covered_hook else geometry["covered"]
+    address = list(range(n))
+    g0 = [n] if control else []
+    first_onehot = n + len(g0)
+    onehot = list(range(first_onehot, first_onehot + (2**ob if ob else 0)))
+    work = list(range(first_onehot + len(onehot), first_onehot + len(onehot) + n))
+    leaves = fixup_leaves(covered, ob)
+    leaves = leaves_hook(leaves) if leaves_hook else leaves
+    num_wires = n + len(g0) + len(onehot) + len(work)
+    with qp.queuing.AnnotatedQueue() as queue:
+        for wire in range(num_wires):  # fixes the state's wire order (address, G0, one-hot, work)
+            qp.Identity(wire)
+        for wire in address + g0:
+            qp.H(wire)
+        if control:
+            qp.X(g0[0])
+        phase_fixup(_Emit(), address, leaves, ob, onehot, work,
+                    parities_hook(parities) if parities_hook else parities,
+                    control=g0[0] if control else None)
+        if control:
+            qp.X(g0[0])
+        qp.state()
+    state = qp.devices.DefaultQubit(wires=num_wires).execute(
+        qp.tape.QuantumScript.from_queue(queue))
+    oracle = {a: i for i, a in enumerate(geometry["oracle"])}
+    expected = np.zeros(2**num_wires, dtype=complex)
+    norm = 1 / np.sqrt(2 ** (n + len(g0)))
+    for basis in range(2 ** (n + len(g0))):
+        a, enabled = (basis >> 1, not basis & 1) if control else (basis, True)
+        sign = -1 if enabled and a in oracle and parities[oracle[a]] else 1
+        expected[basis << (num_wires - n - len(g0))] = sign * norm
+    return float(np.max(np.abs(np.asarray(state) - expected)))
+
+
+def fixup_check() -> dict:
+    """Task 0.9c requirement 2 (tape mode): see the section comment. ``passed`` needs every
+    round trip and oracle case exact and every mutant rejected."""
+    start = time.perf_counter()
+    tables = {seed: _fixup_table(seed) for seed in FIXUP_SEEDS}
+    record = {"geometry": {
+        "round_trip": {"wires": dict(zip(("high", "low", "target", "junk", "work"), FIXUP_WIRES,
+                                         strict=True)),
+                       "width": FIXUP_WIDTH, "block_bits": FIXUP_BLOCK_BITS,
+                       "high_ranges": FIXUP_HIGH_RANGES, "onehot_bits": FIXUP_ONEHOT_BITS,
+                       "onehot_wires": (FIXUP_WIRES[2] + FIXUP_WIRES[3])[: 2**FIXUP_ONEHOT_BITS],
+                       "covered": list(range(6)), "dead": [5], "unvisited": [6, 7]}},
+              "seeds": list(FIXUP_SEEDS),
+              "tables": {seed: [from_words(e) for _, e in t] for seed, t in tables.items()}}
+    record["round_trip"] = {seed: _fixup_round_trip(t, _fixup_erase_op(t, ProtoTableEraseF))
+                            for seed, t in tables.items()}
+    record["round_trip_fp"] = {seed: _fixup_round_trip(t, _fixup_erase_op(t, ProtoTableEraseFP))
+                               for seed, t in tables.items()}
+    oracle = {}
+    for name, geometry in fixup_oracle_geometries().items():
+        size = len(geometry["covered"])
+        vectors = [[False] * size] + [[i == j for j in range(size)] for i in range(size)]
+        errors = [_oracle_case(geometry, v) for v in vectors]
+        oracle[name] = {**{k: geometry[k] for k in ("address_bits", "onehot_bits", "control")},
+                        "covered": len(geometry["covered"]),
+                        "covered_matches_oracle": geometry["covered"] == geometry["oracle"],
+                        "parity_vectors": len(vectors),
+                        "addresses_checked": 2 ** (geometry["address_bits"] + geometry["control"]),
+                        "max_error": max(errors),
+                        "passed": max(errors) < FIXUP_TOLERANCE
+                        and geometry["covered"] == geometry["oracle"]}
+    record["oracle"] = oracle
+    mutant_seed = next(seed for seed, t in tables.items()
+                       if from_words(t[4][1]) and from_words(t[0][1]) != from_words(t[1][1]))
+    table = tables[mutant_seed]
+    inner = fixup_oracle_geometries()["inner"]
+    dead_inner = SHAPES["small"].B + 1  # (x, b) = (0, B + 1), a dead position of a visited block
+    unit = [[i == j for j in range(len(inner["covered"]))] for i in range(len(inner["covered"]))]
+    mutants = {
+        "flip_parity_0": {
+            "round_trip": _fixup_round_trip(table, _fixup_mutant_erase(
+                table, parities_hook=_flip_parity(0))),
+            "oracle_inner": _oracle_case(inner, [False] * len(inner["covered"]),
+                                         parities_hook=_flip_parity(0))},
+        "drop_dead_address": {
+            "round_trip": _fixup_round_trip(table, _fixup_mutant_erase(
+                table, masks_hook=lambda masks: [(a, m) for a, m in masks if a != 5])),
+            "oracle_inner": _oracle_case(
+                inner, unit[inner["covered"].index(dead_inner)],
+                covered_hook=lambda covered: [a for a in covered if a != dead_inner])},
+        "swap_onehot_0_1": {
+            "round_trip": _fixup_round_trip(table, _fixup_mutant_erase(
+                table, leaves_hook=_swap_first_positions)),
+            "oracle_inner": _oracle_case(inner, unit[0], leaves_hook=_swap_first_positions)},
+    }
+    for mutant in mutants.values():
+        mutant["rejected"] = (not mutant["round_trip"]["passed"]
+                              and mutant["oracle_inner"] > FIXUP_TOLERANCE)
+    record["mutants"] = {"seed": mutant_seed, "dead_mask": from_words(table[4][1]) << FIXUP_WIDTH,
+                         "inner_dead_address": dead_inner, **mutants}
+    record["passed"] = (all(r["passed"] for r in record["round_trip"].values())
+                        and all(r["passed"] for r in record["round_trip_fp"].values())
+                        and all(o["passed"] for o in oracle.values())
+                        and all(m["rejected"] for m in mutants.values()))
+    record["seconds"] = round(time.perf_counter() - start, 1)
+    return record
+
+
 # --------------------------------------------------------------------------- driver
 
 PROGRAMS = ("walk", "controlled_walk", "inner_prepare", "inner_select")
@@ -1157,7 +1687,9 @@ PROTOTYPE_NAMES = frozenset(
     if isinstance(obj, type) and issubclass(obj, Operator2) and obj.__name__.startswith("Proto"))
 """Class names of the Proto* operators of this driver and spikes/prototypes.py; a recorded
 warning that names one fails the verdict (spec 7.4, rule 12)."""
-EXPECTED_MEASURING = frozenset({ProtoTableErase.__name__, ProtoAngleErase.__name__})
+EXPECTED_MEASURING = frozenset(cls.__name__ for cls in (
+    ProtoTableErase, ProtoAngleErase, ProtoTableEraseF, ProtoTableEraseFP, ProtoAngleEraseF,
+    ProtoAngleEraseFP))
 """Measuring operators whose measured rule Catalyst may skip under Adjoint(...) or C(...)."""
 MEMORY_METHOD = (
     "peak_mb: sampled peak of the summed physical footprint of the compile's process tree "
@@ -1236,8 +1768,7 @@ def build(shape_name: str, program: str, remedy: bool = False, tables=None):
     tables = random_tables(s) if tables is None else tables
     wires = list(range(lay.num_wires))
     control = lay.num_wires
-    walk = ProtoWalkR1 if remedy else ProtoWalk
-    _, inner_prepare, inner_select = _be_parts(remedy)
+    _, inner_prepare, inner_select, _, walk = _parts(remedy)
 
     def qfunc():
         qp.PhaseGradientStatePrep(lay.phase_grad)
@@ -1318,6 +1849,243 @@ def projection_size_gates(shape_name: str, program: str) -> int:
     return projection_size_parts(shape_name, program)["projection_size_gates"]
 
 
+# --------------------------------------------------------------------------- Task 0.9c sizes
+
+
+def _names(counts: Counter, drop=()) -> dict:
+    return {name: n for name, n in counts.items() if n and name not in drop}
+
+
+def _erase_f_structure(op, looped):
+    a = op.arguments
+    counts = onehot_erase_counts(a["table"], a["high_ranges"], a["block_bits"], a["width"],
+                                 a["onehot_bits"])
+    covered = [x for x, _ in loaded_masks(a["table"], a["high_ranges"], a["block_bits"],
+                                          a["width"])]
+    loops = Counter({"fixup_leaf": len(fixup_leaves(covered, a["onehot_bits"]))} if looped else {})
+    return counts_to_resources(Counter(_names(counts, ("CZ",) if looped else ()))), loops, \
+        counts["CZ"]
+
+
+def _angle_erase_f_structure(op, looped):
+    a, s = op.arguments, Shape(*op.arguments["shape"])
+    counts = angle_erase_onehot_counts(a["shape"], a["tables"])
+    loops = Counter({"fixup_leaf": len(fixup_leaves([x for x, _ in a["tables"][3]], s.w_b))}
+                    if looped else {})
+    return counts_to_resources(Counter(_names(counts, ("CZ",) if looped else ()))), loops, \
+        counts["CZ"] + counts["PauliZ"]
+
+
+def _read_r1_structure(op):
+    a = op.arguments
+    counts = _r1_read_counts(a["addresses"], a["high_ranges"], a["block_bits"], a["width"],
+                             count_loads=False)
+    return counts_to_resources(counts), Counter({"read_bit": len(a["addresses"])}), 0
+
+
+def _plain_erase_structure(op):
+    a = op.arguments
+    counts = _erase_counts(a["table"], a["high_ranges"], a["block_bits"], a["width"])
+    return counts_to_resources(counts), Counter(), counts["PauliZ"]
+
+
+def _plain_angle_erase_structure(op):
+    a = op.arguments
+    resources = _angle_erase_resources(a["shape"], a["tables"], a["wires"])
+    return resources, Counter(), resources.get(qp.Z, 0)
+
+
+STRUCTURE = {
+    "ProtoTableReadR1": _read_r1_structure,
+    "ProtoTableErase": _plain_erase_structure,
+    "ProtoAngleErase": _plain_angle_erase_structure,
+    "ProtoTableEraseF": lambda op: _erase_f_structure(op, False),
+    "ProtoTableEraseFP": lambda op: _erase_f_structure(op, True),
+    "ProtoAngleEraseF": lambda op: _angle_erase_f_structure(op, False),
+    "ProtoAngleEraseFP": lambda op: _angle_erase_f_structure(op, True),
+    "ProtoGivensLadderLoop": lambda op: ({}, Counter({"givens_base": 1}), 0),
+    "Adjoint(ProtoGivensLadderLoop)": lambda op: ({}, Counter({"givens_adjoint": 1}), 0),
+}
+"""Operators whose structure the static-size counter does not take from their resource function
+alone: ``(non-loop resources, loop sites by class, logical conditional sites)``. Loop bodies
+contribute no static gate: the bit loads of the remedy-1 reads (zero table words), the CZs of
+the FP fixup leaves and the rungs of the looped ladders."""
+
+
+def _key_name(key) -> str:
+    return key.name if isinstance(getattr(key, "name", None), str) else str(key)
+
+
+@functools.cache
+def structural_size(shape_name: str, program: str, remedy=False) -> dict:
+    """Static size of a program, independent of qp.analyze (Task 0.9c requirement 5).
+
+    Recursively expands the program's resource graph (the pinned rules the solver uses) with
+    program multiplicities and counts every emitted gate-set primitive outside a qp.for_loop:
+    neither the loop operation nor its body counts (STRUCTURE). PennyLane operators count with
+    their resource estimate; PhaseGradientStatePrep is not counted, as in Task 0.9b. Tables are
+    random_tables(shape). Returns ``static_size``, ``static_gates`` by name,
+    ``projection_loop_sites`` by loop class (with program multiplicity) and
+    ``conditional_sites`` (one per covered address of every erase fixup, unhinted).
+    """
+    qfunc, _ = build(shape_name, program, remedy)
+    with qp.queuing.AnnotatedQueue() as queue:
+        qfunc()
+    solution = DecompositionGraph(operations=queue.queue, gate_set=GATE_SET,
+                                  fixed_decomps=FIXED_DECOMPS).solve()
+    memo = {}
+
+    def expand(op):
+        name = _key_name(op)
+        if name in GATE_SET:
+            return Counter({name: 1}), Counter(), 0
+        if "Proto" not in name:
+            estimate = solution.resource_estimate(op).gate_counts
+            return Counter({_key_name(k): int(v) for k, v in estimate.items()}), Counter(), 0
+        if op in memo:
+            return memo[op]
+        if name in STRUCTURE:
+            keys, loops, sites = STRUCTURE[name](op)
+            keys = {abstractify(k): n for k, n in keys.items()}
+        else:
+            rule = solution.decomposition(op)
+            keys, loops, sites = rule.compute_resources(**op.arguments).gate_counts, Counter(), 0
+        gates, loops = Counter(), Counter(loops)
+        for key, n in keys.items():
+            key_gates, key_loops, key_sites = expand(key)
+            for k, v in key_gates.items():
+                gates[k] += n * v
+            for k, v in key_loops.items():
+                loops[k] += n * v
+            sites += n * key_sites
+        memo[op] = gates, loops, sites
+        return memo[op]
+
+    gates, loops, sites = Counter(), Counter(), 0
+    for op in queue.queue:
+        if op.name == "PhaseGradientStatePrep":
+            continue
+        op_gates, op_loops, op_sites = expand(abstractify(op))
+        gates.update(op_gates)
+        loops.update(op_loops)
+        sites += op_sites
+    return {"static_size": sum(gates.values()), "static_gates": dict(sorted(gates.items())),
+            "projection_loop_sites": {kind: loops[kind] for kind in LOOP_CLASSES},
+            "conditional_sites": sites}
+
+
+def check_r1_counter() -> dict:
+    """Apply structural_size to partial remedy 1: it must reproduce PROBE_A_WALK_SIZES."""
+    sizes = {shape: structural_size(shape, "walk", True)["static_size"]
+             for shape in PROBE_A_WALK_SIZES}
+    if sizes != PROBE_A_WALK_SIZES:
+        raise ValueError(f"structural_size of the remedy-1 walk {sizes} != {PROBE_A_WALK_SIZES}")
+    return sizes
+
+
+ERASE_MULTIPLICITY = {"walk": {"outer": 1, "inner": 2, "angle": 2},
+                      "controlled_walk": {"outer": 1, "inner": 2, "angle": 2},
+                      "inner_prepare": {"inner": 1}, "inner_select": {"angle": 1}}
+"""Erase operators per program: the walk unprepares the outer state once and the inner state
+twice, and runs two inner selects (each ends with an angle erase)."""
+FEMOCO_ERASE_TMA = {"outer": (36, 96, 36), "inner": (196, 416, 196), "angle": (102, 798, 102)}
+FEMOCO_ERASE_SITES = {"outer": 324, "inner": 8640, "sf": 270, "tail": 54}
+FEMOCO_WALK_SITES = 18252
+"""FeMoco targets of Task 0.9c requirement 3 (spec 9.5, 9.17, 9.24)."""
+
+
+def independent_erase_counts(shape_name: str) -> dict:
+    """Each erase's T, M, A and logical conditional sites, directly from U and O of spec 9.24 and
+    the covered sets of requirement 1 (no resource function), and the plain-fixup T of partial
+    remedy 1 (the nested exact iteration over the loaded set)."""
+    s, ob = SHAPES[shape_name], erase_geometry(SHAPES[shape_name])
+    u = unary_toffolis
+    k1, k2 = 2**s.k1, 2**s.k2
+    covered_outer, blocks_outer = -(-s.X_o // k1) * k1, -(-s.X_o // k1)
+    padded_b, blocks_inner, q = -(-(s.B + 1) // k2) * k2, -(-(s.B + 1) // k2), ob["inner"] - s.w_b
+    outer = u(0, -(-covered_outer // 2 ** ob["outer"]), s.w_x - ob["outer"], False) \
+        + onehot_cost(ob["outer"])
+    inner = u(0, -(-s.RC // 2**q), s.w_x - q, False) + onehot_cost(ob["inner"])
+    sf, tail = u(0, s.R, s.w_r, True) + onehot_cost(s.w_b), u(s.RC, s.X_o, s.w_x, False)
+    return {
+        "outer": {"T": outer, "M": k1 * s.d1, "A": outer, "sites": covered_outer,
+                  "onehot_bits": ob["outer"],
+                  "plain_T": u(0, blocks_outer, s.w_x - s.k1, False)
+                  + blocks_outer * u(0, k1, s.k1, True)},
+        "inner": {"T": inner, "M": k2 * s.d2, "A": inner, "sites": s.RC * padded_b,
+                  "onehot_bits": ob["inner"],
+                  "plain_T": u(0, s.RC, s.w_x, False)
+                  + s.RC * u(0, blocks_inner, s.w_b - s.k2, True)
+                  + s.RC * blocks_inner * u(0, k2, s.k2, True)},
+        "angle": {"T": sf + tail, "M": (s.N - 1) * s.b_rot + 3, "A": sf + tail,
+                  "sites": s.R * s.B + s.N, "sf_sites": s.R * s.B, "tail_sites": s.N,
+                  "sf_T": sf, "tail_T": tail, "onehot_bits": s.w_b,
+                  "plain_T": u(0, s.R, s.w_r, True) + s.R * u(0, s.B, s.w_b, True) + tail},
+    }
+
+
+def _tma(counts) -> list[int]:
+    return [counts.get("Toffoli", 0) + counts.get("TemporaryAND", 0), counts.get("MidMeasure", 0),
+            counts.get("Adjoint(TemporaryAND)", 0)]
+
+
+def resource_erase_counts(shape_name: str, remedy) -> dict:
+    """Each erase's T, M, A and conditional sites from the arm's operator resource functions."""
+    s, lay = SHAPES[shape_name], Layout(SHAPES[shape_name])
+    shape, tables = tuple(getattr(s, f) for f in Shape.__dataclass_fields__), random_tables(s)
+    wires, ob = list(range(lay.num_wires)), erase_geometry(s)
+    out = {}
+    for which in ("outer", "inner"):
+        static, _ = _read_args(s, lay, wires, which, tables)
+        counts = onehot_erase_counts(*static, ob[which])
+        out[which] = {"tma": _tma(counts), "sites": counts["CZ"]}
+    counts = angle_erase_onehot_counts(shape, tables)
+    out["angle"] = {"tma": _tma(counts), "sites": counts["CZ"] + counts["PauliZ"]}
+    return out
+
+
+def independent_program(shape_name: str, program: str) -> dict:
+    """An arm's program T/M/A and conditional sites from Task 0.9's compiled remedy-1 T/M/A
+    (EXPECTED_TMA) plus the independent erase deltas; T/M/A is None at the FeMoco shape."""
+    erases = independent_erase_counts(shape_name)
+    multiplicity = ERASE_MULTIPLICITY[program]
+    sites = sum(n * erases[e]["sites"] for e, n in multiplicity.items())
+    base = EXPECTED_TMA.get(shape_name, {}).get(program)
+    if base is None:
+        return {"tma": None, "conditional_sites": sites}
+    delta = sum(n * (erases[e]["T"] - erases[e]["plain_T"]) for e, n in multiplicity.items())
+    return {"tma": [base[0] + delta, base[1], base[2] + delta], "conditional_sites": sites}
+
+
+def independent_count_check() -> dict:
+    """Task 0.9c requirement 3: per shape, the independent erase counts against the resource
+    functions, and the FeMoco targets. ``ok`` needs every comparison equal."""
+    out, ok = {}, True
+    for shape_name in (*CALIBRATION_SHAPES, "femoco"):
+        independent, declared = independent_erase_counts(shape_name), resource_erase_counts(
+            shape_name, "F")
+        rows = {}
+        for e in ("outer", "inner", "angle"):
+            tma = [independent[e][k] for k in ("T", "M", "A")]
+            rows[e] = {"independent": tma, "resource_functions": declared[e]["tma"],
+                       "sites": independent[e]["sites"],
+                       "resource_function_sites": declared[e]["sites"],
+                       "onehot_bits": independent[e]["onehot_bits"],
+                       "plain_T": independent[e]["plain_T"]}
+            ok &= tma == declared[e]["tma"] and independent[e]["sites"] == declared[e]["sites"]
+        out[shape_name] = rows
+    femoco = out["femoco"]
+    targets = {e: list(FEMOCO_ERASE_TMA[e]) == femoco[e]["independent"] for e in FEMOCO_ERASE_TMA}
+    sites = independent_erase_counts("femoco")
+    walk_sites = independent_program("femoco", "walk")["conditional_sites"]
+    targets["sites"] = ({"outer": sites["outer"]["sites"], "inner": sites["inner"]["sites"],
+                         "sf": sites["angle"]["sf_sites"], "tail": sites["angle"]["tail_sites"]}
+                        == FEMOCO_ERASE_SITES and walk_sites == FEMOCO_WALK_SITES)
+    out["femoco_targets"] = targets
+    out["ok"] = bool(ok and all(targets.values()))
+    return out
+
+
 @contextlib.contextmanager
 def rule_capture_log():
     """Record every rule target Catalyst captures (target ID, seconds, equations, bit loops),
@@ -1331,13 +2099,14 @@ def rule_capture_log():
 
     def entry(target_spec, seconds, traced):
         target = str(target_spec.target_id)
-        loops = sum(_count_equations(t.closed_jaxpr, "for_loop") for t in traced
-                    ) if target.startswith(f"{ProtoTableReadR1.__name__}{{") else 0
+        kind = loop_class(target)
+        loops = sum(_count_equations(t.closed_jaxpr, "for_loop") for t in traced) if kind else 0
         return {"id": target.split("{", 1)[0],
                 "signature": hashlib.sha256(target.encode()).hexdigest()[:16],
                 "seconds": seconds,
                 "equations": sum(len(t.closed_jaxpr.jaxpr.eqns) for t in traced),
-                "for_loops": loops}
+                "for_loops": loops if kind == "read_bit" else 0,
+                "loop_class": kind, "class_for_loops": loops}
 
     def timed_convert(interp, target_spec):
         start = time.perf_counter()
@@ -1358,6 +2127,41 @@ def rule_capture_log():
     finally:
         interpreter._convert_decomp_target_spec = convert
         rules.materialize_decomp_target_spec = materialize
+
+
+LOOP_CLASSES = ("read_bit", "fixup_leaf", "givens_base", "givens_adjoint")
+LOOP_TARGET_PREFIXES = {
+    "read_bit": (f"{ProtoTableReadR1.__name__}{{",),
+    "fixup_leaf": tuple(f"{c.__name__}{{" for c in (ProtoTableEraseF, ProtoTableEraseFP,
+                                                     ProtoAngleEraseF, ProtoAngleEraseFP)),
+    "givens_base": tuple(f"{c.__name__}{{" for c in (ProtoGivensLadder, ProtoGivensLadderLoop)),
+    "givens_adjoint": tuple(f"Adjoint({c.__name__}){{"
+                            for c in (ProtoGivensLadder, ProtoGivensLadderLoop)),
+}
+"""Captured rule targets whose qp.for_loop equations each loop class counts: the bare operators
+that may hold the loop (and the ladders' adjoints); unused distributed Adjoint/C candidates of
+the other operators are not counted."""
+
+
+def loop_class(target: str) -> str | None:
+    """The loop class of a captured rule target ID, or None."""
+    for kind, prefixes in LOOP_TARGET_PREFIXES.items():
+        if target.startswith(prefixes):
+            return kind
+    return None
+
+
+def captured_loops(log: list[dict]) -> dict:
+    """Per loop class, the sorted nonzero for_loop counts of its distinct captured targets (one
+    per full target signature, the maximum over repeated captures, as in Task 0.9b)."""
+    per_class = {kind: {} for kind in LOOP_CLASSES}
+    for e in log:
+        if e.get("loop_class"):
+            seen = per_class[e["loop_class"]]
+            seen[e["signature"]] = max(seen.get(e["signature"], 0), e["class_for_loops"])
+    return {"captured": {kind: sorted(v for v in seen.values() if v)
+                         for kind, seen in per_class.items()},
+            "targets": {kind: len(seen) for kind, seen in per_class.items()}}
 
 
 def _count_equations(jaxpr, primitive: str) -> int:
@@ -1394,20 +2198,24 @@ R1_READ_TABLES = {"walk": (0, 1, 2, 3), "controlled_walk": (0, 1, 2, 3), "inner_
 """Indices into random_tables() (outer, inner, tail, sf) of the remedy-1 reads of each program."""
 
 
-def bit_loop_evidence(shape_name: str, program: str, log: list[dict], counts: dict) -> dict:
+def bit_loop_evidence(shape_name: str, program: str, log: list[dict], counts: dict,
+                      remedy=True) -> dict:
     """Whether the compile kept the remedy's bit loops (requirement 1): the captured
     ProtoTableReadR1 rules hold one qp.for_loop per loaded address, and the analyzed CNOTs equal
     the declared upper bound (every loaded bit), not the baseline's set-bit count, which a
     constant-folded table would give. Catalyst may capture a target more than once per compile,
-    so loops are counted once per distinct target."""
+    so loops are counted once per distinct target. For a Task 0.9c arm the set-bit count is the
+    arm's declared CNOTs with the reads' upper bound replaced by the baseline's set bits."""
     tables = random_tables(SHAPES[shape_name])
     expected_loops = sum(len(tables[i]) for i in R1_READ_TABLES[program])
     loops = {}
     for e in log:
         loops[e["signature"]] = max(loops.get(e["signature"], 0), e["for_loops"])
     captured = sum(loops.values())
-    upper_bound = declared_counts(shape_name, program, remedy=True)["CNOT"]
+    upper_bound = declared_counts(shape_name, program, remedy=remedy)["CNOT"]
     set_bits = declared_counts(shape_name, program)["CNOT"]
+    if _variant(remedy) != "R1":
+        set_bits += upper_bound - declared_counts(shape_name, program, remedy=True)["CNOT"]
     cnot = counts.get("CNOT", 0)
     return {"for_loops_captured": captured, "for_loops_expected": expected_loops,
             "cnot_analyzed": cnot, "cnot_declared_upper_bound": upper_bound,
@@ -1425,7 +2233,7 @@ def compile_one(shape_name: str, program: str, remedy: bool = False) -> dict:
     own = resource.getrusage(resource.RUSAGE_SELF)
     children = resource.getrusage(resource.RUSAGE_CHILDREN)
     scale = 1 if sys.platform == "darwin" else 1024
-    record = {"program": program, "shape": shape_name, "remedy": int(remedy),
+    record = {"program": program, "shape": shape_name, "remedy": int(bool(remedy)),
               "num_wires": num_wires, "seconds": round(wall, 1),
               "cpu_seconds": round(own.ru_utime + own.ru_stime + children.ru_utime
                                    + children.ru_stime, 1),
@@ -1441,8 +2249,14 @@ def compile_one(shape_name: str, program: str, remedy: bool = False) -> dict:
                                                            expected_measuring=EXPECTED_MEASURING))}
     if remedy:
         record["table_word_dtype"] = np.dtype(WORD_DTYPE).name
-        record["bit_loops"] = bit_loop_evidence(shape_name, program, log, resources.counts)
-        record["projection_size"] = projection_size_parts(shape_name, program)
+        record["bit_loops"] = bit_loop_evidence(shape_name, program, log, resources.counts,
+                                                remedy)
+        if _variant(remedy) in ARMS:
+            record["arm"] = _variant(remedy)
+            record["loops"] = captured_loops(log)
+            record["projection_size"] = structural_size(shape_name, program, remedy)
+        else:
+            record["projection_size"] = projection_size_parts(shape_name, program)
     return record
 
 
@@ -1592,6 +2406,154 @@ def project_remedy(calibration: dict[str, dict]) -> dict:
             "environment": environment()}
 
 
+ARM_PROJECTION_METHOD = (
+    "x: structural_size(shape, program, arm)['static_size'], the static size (every emitted "
+    "gate-set primitive outside a qp.for_loop, by recursive expansion of the arm's resource graph "
+    "with program multiplicities; neither loop operations nor loop bodies count; "
+    "PhaseGradientStatePrep not counted); the same counter reproduces PROBE_A_WALK_SIZES on "
+    "partial remedy 1. Estimate (a), Task 0.9b's formulas on the arm's fit points (k1c files of "
+    "this code_hash() with counts, within_budget and a passed stop gate): time a power law "
+    "through the two largest fit shapes, exponent at least 1; memory a least-squares line, slope "
+    "at least 0, for peak_mb and rusage_sum_mb. femoco_allowed uses estimate (a) only, as in Task "
+    "0.9b. Estimate (b), sensitivity evidence: with P, S, W the static sizes of inner_prepare, "
+    "inner_select and walk and R = W - 2P - 2S, per memory metric y: H = 300 MB, "
+    "cP = max(yP14 - H, 0)/P14, cS = max(yS14 - H, 0)/S14, cR = estimate (a)'s walk slope, "
+    "alpha = (yW14 - H)/(2 cP P14 + 2 cS S14 + cR R14), prediction H + alpha (2 cP P + 2 cS S + "
+    "cR R) at FeMoco (size-scaled, the best value); the address-scaled variant replaces P_femoco "
+    "by P14 times the inner erase's covered-address growth. Time: H = 0 and cR = yW14/W14. The "
+    "walk's range is the hull of estimate (a) and both variants. The controlled walk multiplies "
+    "each component endpoint by the observed mid10 controlled/walk ratio of the same metric (the "
+    "best value uses the size-scaled endpoint), widened by the small-shape ratio and the "
+    "controlled walk's estimate (a); it is not an independently calibrated component model. "
+    "Task 0.9c compiles no FeMoco shape"
+)
+COMPONENT_OVERHEAD_MB = 300
+
+
+def _hull(values: dict) -> list[float]:
+    return [round(min(values.values())), round(max(values.values()))]
+
+
+def component_model(calibration: dict, sizes: dict, estimate_a: dict, current: str) -> dict:
+    """Estimate (b) of Task 0.9c requirement 5 (ARM_PROJECTION_METHOD) for one arm."""
+    points = {}
+    for shape, programs in (("mid14", ("walk", "inner_prepare", "inner_select")),
+                            ("mid10", ("walk", "controlled_walk")),
+                            ("small", ("walk", "controlled_walk"))):
+        for program in programs:
+            record, why = fit_point(calibration.get(shape, {}), program, current)
+            if record is None:
+                raise ValueError(f"component model: no {shape} {program} point ({why})")
+            points[shape, program] = record
+    size = {shape: {p: sizes[shape][p]["static_size"]
+                    for p in ("walk", "inner_prepare", "inner_select")}
+            for shape in ("mid14", "femoco")}
+    rest = {shape: size[shape]["walk"] - 2 * size[shape]["inner_prepare"]
+            - 2 * size[shape]["inner_select"] for shape in size}
+    if min(rest.values()) < 0:
+        raise ValueError(f"component model: R = W - 2P - 2S < 0 ({rest})")
+    growth = (independent_erase_counts("femoco")["inner"]["sites"]
+              / independent_erase_counts("mid14")["inner"]["sites"])
+    p14, s14, w14, r14 = (size["mid14"]["inner_prepare"], size["mid14"]["inner_select"],
+                          size["mid14"]["walk"], rest["mid14"])
+    pf, sf, rf = size["femoco"]["inner_prepare"], size["femoco"]["inner_select"], rest["femoco"]
+    out = {"static_sizes": size, "rest": rest, "inner_address_growth": growth,
+           "walk": {}, "controlled_walk": {}}
+    slopes = {"peak_mb": estimate_a["walk"]["mb_per_gate"],
+              "rusage_sum_mb": estimate_a["walk"]["companion_mb_per_gate"],
+              "seconds": points["mid14", "walk"]["seconds"] / w14}
+    a_values = {"peak_mb": "peak_mb", "rusage_sum_mb": "rusage_sum_mb_companion",
+                "seconds": "seconds"}
+    for metric, slope in slopes.items():
+        overhead = 0 if metric == "seconds" else COMPONENT_OVERHEAD_MB
+        y_p, y_s, y_w = (points["mid14", p][metric]
+                         for p in ("inner_prepare", "inner_select", "walk"))
+        c_p, c_s = max(y_p - overhead, 0) / p14, max(y_s - overhead, 0) / s14
+        alpha = (y_w - overhead) / (2 * c_p * p14 + 2 * c_s * s14 + slope * r14)
+        size_scaled = overhead + alpha * (2 * c_p * pf + 2 * c_s * sf + slope * rf)
+        address_scaled = overhead + alpha * (2 * c_p * p14 * growth + 2 * c_s * sf + slope * rf)
+        walk_ends = {"estimate_a": estimate_a["walk"][a_values[metric]],
+                     "size_scaled": size_scaled, "address_scaled": address_scaled}
+        out["walk"][metric] = {
+            "H": overhead, "cP": c_p, "cS": c_s, "cR": slope, "alpha": alpha,
+            "best": round(size_scaled), "endpoints": {k: round(v) for k, v in walk_ends.items()},
+            "range": _hull(walk_ends)}
+        ratio_mid10 = points["mid10", "controlled_walk"][metric] / points["mid10", "walk"][metric]
+        ratio_small = points["small", "controlled_walk"][metric] / points["small", "walk"][metric]
+        controlled_ends = {"estimate_a": estimate_a["controlled_walk"][a_values[metric]],
+                           "size_scaled_x_mid10": size_scaled * ratio_mid10,
+                           "address_scaled_x_mid10": address_scaled * ratio_mid10,
+                           "size_scaled_x_small": size_scaled * ratio_small,
+                           "address_scaled_x_small": address_scaled * ratio_small}
+        out["controlled_walk"][metric] = {
+            "ratio_mid10": round(ratio_mid10, 3), "ratio_small": round(ratio_small, 3),
+            "best": round(size_scaled * ratio_mid10),
+            "endpoints": {k: round(v) for k, v in controlled_ends.items()},
+            "range": _hull(controlled_ends)}
+    return out
+
+
+def femoco_counts() -> dict:
+    """The stand-in walk's FeMoco T/M/A from the resource functions (no compile): partial remedy
+    1 (Task 0.9b's stand-in) and arm F (FP and FPG have F's counts)."""
+    return {variant: _tma(declared_counts("femoco", program, remedy=remedy))
+            for variant, remedy in (("R1", True), ("F", "F"))
+            for program in ("walk",)}
+
+
+def project_arm(arm: str, calibration: dict[str, dict]) -> dict:
+    """Project one arm's FeMoco walk and controlled walk (ARM_PROJECTION_METHOD).
+
+    ``calibration`` maps calibration shapes to their k1c_<arm>_<shape>.json content. Raises
+    ValueError if the structural counter misses PROBE_A_WALK_SIZES on partial remedy 1, a program
+    has fewer than two fit points, or the component model lacks a point.
+    """
+    r1_sizes = check_r1_counter()
+    current = code_hash()
+    seconds_limit, cap_mb = LIMITS["femoco"]
+    memory_limit = effective_limit_mb(cap_mb)
+    sizes = {shape: {p: structural_size(shape, p, arm) for p in PROGRAMS}
+             for shape in (*CALIBRATION_SHAPES, "femoco")}
+    estimate_a, reasons = {}, []
+    for program in SHAPE_PROGRAMS["femoco"]:
+        points, missing = {}, {}
+        for shape in CALIBRATION_SHAPES:
+            record, why = fit_point(calibration.get(shape, {}), program, current)
+            if record is None:
+                missing[shape] = why
+            else:
+                points[shape] = record
+        if len(points) < 2:
+            raise ValueError(f"{arm} {program}: fewer than two fit points ({missing})")
+        x = {s: sizes[s][program]["static_size"] for s in [*points, "femoco"]}
+        seconds, exponent = _fit_time([(x[s], r["seconds"]) for s, r in points.items()],
+                                      x["femoco"])
+        peak, peak_slope = _fit_memory([(x[s], r["peak_mb"]) for s, r in points.items()],
+                                       x["femoco"])
+        companion, companion_slope = _fit_memory(
+            [(x[s], r["rusage_sum_mb"]) for s, r in points.items()], x["femoco"])
+        estimate_a[program] = {
+            "fit_shapes": list(points), "missing_points": missing, "static_size": x,
+            "points": {s: {"seconds": r["seconds"], "peak_mb": r["peak_mb"],
+                           "rusage_sum_mb": r["rusage_sum_mb"]} for s, r in points.items()},
+            "seconds": round(seconds), "time_exponent": round(exponent, 2),
+            "peak_mb": round(peak), "mb_per_gate": peak_slope,
+            "rusage_sum_mb_companion": round(companion), "companion_mb_per_gate": companion_slope}
+        if seconds > seconds_limit:
+            reasons.append(f"{program}: {seconds / 60:.0f} min > {seconds_limit / 60:.0f} min")
+        for label, value in (("sampled peak", peak), ("getrusage companion", companion)):
+            if not within_effective_limit(value, cap_mb):
+                reasons.append(f"{program}: {label} {value / 1024:.1f} GB > "
+                               f"{memory_limit / 1024:.1f} GB")
+    return {"estimate_a": estimate_a,
+            "estimate_b": component_model(calibration, sizes, estimate_a, current),
+            "sizes": {shape: {p: {k: v for k, v in r.items() if k != "static_gates"}
+                              for p, r in by_program.items()}
+                      for shape, by_program in sizes.items()},
+            "femoco_allowed": not reasons, "reason": "; ".join(reasons) or "within the limits",
+            "r1_counter_check": r1_sizes}
+
+
 def femoco_refusal() -> str | None:
     """Why the projection does not allow the FeMoco compile now, or None if it does."""
     projection_file = RESULTS / "k1_projection.json"
@@ -1620,7 +2582,12 @@ def _driver_token_valid() -> bool:
 
 
 def results_path(name: str, remedy: bool = False) -> Path:
-    """spikes/results/k1_<name>.json, or k1r1_<name>.json for partial remedy 1."""
+    """spikes/results/k1_<name>.json, k1r1_<name>.json for partial remedy 1, k1c_<arm>_<name>.json
+    for a Task 0.9c arm, and k1c_projection.json for every arm's projection."""
+    variant = _variant(remedy)
+    if variant in ARMS:
+        return RESULTS / ("k1c_projection.json" if name == "projection"
+                          else f"k1c_{variant}_{name}.json")
     return RESULTS / f"{'k1r1' if remedy else 'k1'}_{name}.json"
 
 
@@ -1668,11 +2635,210 @@ def remedy_refusal(shape_name: str) -> str | None:
     return None
 
 
+def expected_loops(shape_name: str, program: str, remedy) -> dict:
+    """Per loop class, the sorted nonzero for_loop counts per distinct captured target that the
+    arm's static geometry implies (requirement 3): one bit loop per loaded address of each read,
+    one fixup-leaf loop per high leaf of each one-hot erase in FP/FPG, one loop in each looped
+    ladder rule in FPG."""
+    variant, s = _variant(remedy), SHAPES[shape_name]
+    out = {kind: [] for kind in LOOP_CLASSES}
+    if variant is None:
+        return out
+    tables, ob = random_tables(s), erase_geometry(s)
+    out["read_bit"] = sorted(len(tables[i]) for i in R1_READ_TABLES[program])
+    if variant in ("FP", "FPG"):
+        covered_outer = -(-s.X_o // 2**s.k1) * 2**s.k1
+        leaves = {"outer": -(-covered_outer // 2 ** ob["outer"]),
+                  "inner": -(-s.RC // 2 ** (ob["inner"] - s.w_b)), "angle": s.R}
+        out["fixup_leaf"] = sorted(leaves[e] for e in ERASE_MULTIPLICITY[program])
+    if variant == "FPG" and "angle" in ERASE_MULTIPLICITY[program]:
+        out["givens_base"], out["givens_adjoint"] = [1], [1]
+    return out
+
+
+def arm_expectations(shape_name: str, program: str, arm: str) -> dict:
+    """What a Task 0.9c arm's program must give, derived before its compile (no compile):
+    T/M/A from the arm's resource functions, from the independent count (Task 0.9's T/M/A plus
+    the erase deltas of independent_erase_counts) and, for FP and FPG, from arm F's resource
+    functions; the loops per class; the logical conditional sites."""
+    independent = independent_program(shape_name, program)
+    expected = {"tma_resource_functions": _tma(declared_counts(shape_name, program, remedy=arm)),
+                "tma_independent": independent["tma"],
+                "conditional_sites": independent["conditional_sites"],
+                "loops": expected_loops(shape_name, program, arm)}
+    if arm != "F":
+        expected["tma_F"] = _tma(declared_counts(shape_name, program, remedy="F"))
+    return expected
+
+
+def arm_problems(shape_name: str, program: str, record: dict, expected: dict) -> list[str]:
+    """Why a Task 0.9c arm's program record trips the stop gate (requirement 3, as Task 0.9b
+    requirement 2): an error (kill, survivors, nonzero status, malformed output, symbolic counts,
+    CompileError), over the limits, a prototype warning, T/M/A unequal to the resource functions,
+    the independent count or arm F, folded table loads, a lost or extra loop in a class, or wrong
+    logical conditional sites."""
+    if "error" in record:
+        return [f"error: {record['error'][-300:]}"]
+    problems = []
+    if not record.get("within_budget"):
+        problems.append("over the time or memory limit")
+    if record["warnings"]["prototype"]:
+        problems.append("a warning names a prototype")
+    tma = [record["toffoli"], record["measurements"], record["measured_and_uncomputes"]]
+    for label in ("tma_resource_functions", "tma_independent", "tma_F"):
+        if expected.get(label) is not None and tma != list(expected[label]):
+            problems.append(f"T/M/A {tma} != {label} {expected[label]}")
+    if not record["bit_loops"]["retained"]:
+        problems.append("the read's bit loads are folded or lost")
+    for kind in LOOP_CLASSES:
+        got = record["loops"]["captured"].get(kind)
+        if got != expected["loops"][kind]:
+            problems.append(f"{kind} loops {got} != {expected['loops'][kind]}")
+    if record["projection_size"]["conditional_sites"] != expected["conditional_sites"]:
+        problems.append(f"conditional sites {record['projection_size']['conditional_sites']} "
+                        f"!= {expected['conditional_sites']}")
+    return problems
+
+
+def _passing(path: Path, current: str) -> bool:
+    saved = json.loads(path.read_text()) if path.exists() else {}
+    return saved.get("verdict") == "pass" and saved.get("code_hash") == current
+
+
+def arm_refusal(shape_name: str, arm: str) -> str | None:
+    """Why a Task 0.9c arm's shape may not compile now: never the FeMoco shape; arm F needs a
+    passing fixup check (requirement 2) for this code_hash(); a mid shape needs the arm's passing
+    smaller shapes; FP and FPG need their parent arm's passing file at the same shape."""
+    if shape_name == "femoco":
+        return "Task 0.9c compiles no FeMoco shape; the projection is evidence for G0"
+    current = code_hash()
+    if arm == "F":
+        saved = (json.loads(results_path("small", "F").read_text())
+                 if results_path("small", "F").exists() else {})
+        if not (saved.get("fixup_check", {}).get("passed")
+                and saved.get("code_hash") == current):
+            return "stop gate: no passing fixup check for this code (run --fixup-check first)"
+    for shape in CALIBRATION_SHAPES[: CALIBRATION_SHAPES.index(shape_name)]:
+        if not _passing(results_path(shape, arm), current):
+            return f"stop gate: no passing {results_path(shape, arm).name} for this code"
+    parent = ARM_PARENT[arm]
+    if parent and not _passing(results_path(shape_name, parent), current):
+        return (f"stop gate: arm {arm} builds on {parent}, which has no passing "
+                f"{results_path(shape_name, parent).name} for this code")
+    return None
+
+
+def arm_controlled_skip(arm: str, walk14: dict) -> tuple[dict | None, dict]:
+    """The mid14 controlled-walk rule of requirement 4: control_ratio = max(1.8, mid10 controlled
+    walk peak / mid10 walk peak) from the arm's passing mid10 pair; run only if control_ratio
+    times the mid14 walk's peak is below 3,500 MB. Returns (skip record or None, the rule's
+    values); a missing or failed mid10 pair or mid14 walk means skip, not an assumed 1.8."""
+    floor, limit_mb = CONTROLLED_SKIP
+    current = code_hash()
+    path = results_path("mid10", arm)
+    mid10 = json.loads(path.read_text()) if path.exists() else {}
+    pair = [fit_point(mid10, p, current)[0] for p in ("walk", "controlled_walk")]
+    walk_ok = walk14.get("gate", {}).get("ok") and "peak_mb" in walk14
+    if None in pair or not walk_ok:
+        reason = ("no passing mid10 walk and controlled walk for this code" if None in pair
+                  else "the mid14 walk did not pass")
+        return {"reason": f"{reason}: skipped, not an assumed {floor}"}, {}
+    ratio = max(floor, pair[1]["peak_mb"] / pair[0]["peak_mb"])
+    rule = {"control_ratio": round(ratio, 3), "mid10_walk_peak_mb": pair[0]["peak_mb"],
+            "mid10_controlled_walk_peak_mb": pair[1]["peak_mb"],
+            "mid14_walk_peak_mb": walk14["peak_mb"],
+            "projected_peak_mb": round(ratio * walk14["peak_mb"]), "limit_mb": limit_mb}
+    if ratio * walk14["peak_mb"] < limit_mb:
+        return None, rule
+    return {"reason": f"control_ratio {ratio:.3f} x the mid14 walk's peak is "
+                      f"{ratio * walk14['peak_mb']:.0f} MB, not below {limit_mb} MB "
+                      "(Task 0.9c, requirement 4)", **rule}, rule
+
+
+BUDGET_SECONDS = 2700
+"""Task 0.9c's watched compile budget (requirement 4), with inclusive accounting."""
+LEDGER_VARIABLE = "DFTHC_K1C_LEDGER"
+"""Path of the JSON-lines budget ledger; when set, drive() appends every watched child and
+refuses a child whose timeout would cross BUDGET_SECONDS unless its expected duration fits."""
+
+
+def ledger_total() -> float:
+    path = os.environ.get(LEDGER_VARIABLE)
+    if not path or not Path(path).exists():
+        return 0.0
+    return sum(json.loads(line)["compile_seconds"]
+               for line in Path(path).read_text().splitlines() if line.strip())
+
+
+def ledger_append(label: str, seconds: float, compiles: bool = True) -> None:
+    """Persist one watched child's seconds and the running total (no-op without the ledger)."""
+    path = os.environ.get(LEDGER_VARIABLE)
+    if not path:
+        return
+    total = ledger_total() + (seconds if compiles else 0.0)
+    with open(path, "a") as ledger:
+        ledger.write(json.dumps({"label": label, "seconds": round(seconds, 1),
+                                 "compile_seconds": round(seconds, 1) if compiles else 0.0,
+                                 "total_compile_seconds": round(total, 1),
+                                 "time": time.strftime("%Y-%m-%dT%H:%M:%S")}) + "\n")
+
+
+def expected_seconds(shape_name: str, program: str, remedy) -> float | None:
+    """A child's expected duration from the immediately preceding same-program shape of the same
+    variant, scaled by Task 0.9b's remedy-1 growth between the two shapes for that program (the
+    walk's if remedy 1 lacks the program); None without a preceding record."""
+    previous = [s for s in CALIBRATION_SHAPES[: CALIBRATION_SHAPES.index(shape_name)]
+                if program in SHAPE_PROGRAMS[s]] if shape_name in CALIBRATION_SHAPES else []
+    if not previous:
+        return None
+    path = results_path(previous[-1], remedy)
+    record = (json.loads(path.read_text()) if path.exists() else {}).get(program, {})
+    if "watched_seconds" not in record:
+        return None
+    r1 = {s: json.loads(results_path(s, True).read_text())
+          for s in (previous[-1], shape_name) if results_path(s, True).exists()}
+    for name in (program, "walk"):
+        try:
+            growth = (r1[shape_name][name]["watched_seconds"]
+                      / r1[previous[-1]][name]["watched_seconds"])
+            return record["watched_seconds"] * growth
+        except (KeyError, ZeroDivisionError):
+            continue
+    return None
+
+
+def budget_refusal(timeout_s: float, expected_s: float | None) -> str | None:
+    """Why a watched child may not start under the ledger's budget, or None."""
+    if not os.environ.get(LEDGER_VARIABLE):
+        return None
+    remaining = BUDGET_SECONDS - ledger_total()
+    if timeout_s <= remaining or (expected_s is not None and expected_s <= remaining):
+        return None
+    return (f"budget: {remaining:.0f} of {BUDGET_SECONDS} watched compile seconds remain, the "
+            f"timeout is {timeout_s:.0f} s and the expected duration "
+            f"{'unknown' if expected_s is None else f'{expected_s:.0f} s'}")
+
+
+ARM_NOTES = (
+    "Arm F follows one spike-local ob rule at every shape (erase_geometry). At mid10 the spec's "
+    "MID_NAPHTHALENE parameters (k_e1 = 2, k_e2 = 1) would give the outer erase ob 2 (T 15) "
+    "instead of this rule's 3 (T 12); the inner ob 4 agrees",
+    "All arms remain stand-ins: erase masks and tables are compilable constants (no dynamic-mask "
+    "erase path), and the SF angle load keeps its enable placeholder",
+    "Erase conditionals carry qp.hint({'branch-prob': 0.5}): analyzed CZ and Z counts are "
+    "expected values; T, M and A are exact",
+)
+"""Notes written into every k1c_<arm>_<shape>.json, after NOTES."""
+
+
 def write_results(shape_name: str, results: dict, remedy: bool = False,
-                  skipped: dict | None = None) -> dict:
-    """Write k1_<shape>.json (k1r1_<shape>.json with the remedy) from the program records so far;
-    the verdict covers all of them, and a skipped program counts as complete."""
+                  skipped: dict | None = None, stopped: str | None = None) -> dict:
+    """Write k1_<shape>.json (k1r1_<shape>.json with the remedy, k1c_<arm>_<shape>.json for an
+    arm) from the program records so far; the verdict covers all of them, and a skipped program
+    counts as complete. ``stopped`` (the budget guard's reason) leaves the shape incomplete. Arm
+    F's small file keeps its fixup check, and fails without a passing one for this code."""
     skipped = skipped or {}
+    path, variant = results_path(shape_name, remedy), _variant(remedy)
     record = {p: results[p] for p in SHAPE_PROGRAMS[shape_name] if p in results}
     complete = len(record) + len(skipped) == len(SHAPE_PROGRAMS[shape_name])
     failed = any(not program.get("within_budget") or program.get("warnings", {}).get("prototype")
@@ -1683,15 +2849,23 @@ def write_results(shape_name: str, results: dict, remedy: bool = False,
         failed |= not record["controlled_walk_check"]["ok"]
     if skipped:
         record["skipped"] = skipped
+    if stopped:
+        record["stopped"] = stopped
+    if variant == "F" and shape_name == "small":
+        saved = json.loads(path.read_text()) if path.exists() else {}
+        fixup = saved.get("fixup_check") if saved.get("code_hash") == code_hash() else None
+        record["fixup_check"] = fixup
+        failed |= not (fixup or {}).get("passed")
     if remedy:
-        record["notes"] = list(NOTES)
+        record["notes"] = list(NOTES) + (list(ARM_NOTES) if variant in ARMS else [])
     seconds_limit, cap_mb = LIMITS[shape_name]
     record.update(limits={"seconds": seconds_limit, "mb": effective_limit_mb(cap_mb),
                           "cap_mb": cap_mb},
                   memory_method=MEMORY_METHOD, code_hash=code_hash(), environment=environment(),
-                  verdict="fail" if failed else "pass" if complete else "incomplete")
+                  verdict="fail" if failed else "pass" if complete and not stopped
+                  else "incomplete")
     RESULTS.mkdir(exist_ok=True)
-    results_path(shape_name, remedy).write_text(json.dumps(record, indent=2) + "\n")
+    path.write_text(json.dumps(record, indent=2) + "\n")
     return record
 
 
@@ -1707,12 +2881,54 @@ def compressor_mb() -> float | None:
     return round(pages * page / 2**20, 1)
 
 
+_NUMBER = (int, float)
+CHILD_FIELDS = {"program": str, "shape": str, "seconds": _NUMBER, "cpu_seconds": _NUMBER,
+                "rusage_sum_mb": _NUMBER, "toffoli": int, "measurements": int,
+                "measured_and_uncomputes": int, "counts": dict, "diagnostics": dict,
+                "warnings": dict}
+"""Fields (and types) every child record needs before the driver uses it."""
+REMEDY_CHILD_FIELDS = {"table_word_dtype": str, "bit_loops": dict, "projection_size": dict}
+"""Further fields of a remedy-1 child record."""
+ARM_CHILD_FIELDS = {"arm": str, "loops": dict}
+"""Further fields of a Task 0.9c arm's child record."""
+
+
+def child_record(line: str, shape_name: str, program: str, remedy) -> tuple[dict | None, str]:
+    """Parse and validate a child's JSON line: the record, or None and why it is malformed
+    (Task 0.9b review I1). A malformed record becomes an ``error`` record in drive()."""
+    try:
+        record = json.loads(line)
+    except json.JSONDecodeError as exc:
+        return None, f"not JSON ({exc})"
+    if not isinstance(record, dict):
+        return None, f"a JSON {type(record).__name__}, not an object"
+    arm = _variant(remedy) in ARMS
+    fields = {**CHILD_FIELDS, **(REMEDY_CHILD_FIELDS if remedy else {}),
+              **(ARM_CHILD_FIELDS if arm else {})}
+    for name, kind in fields.items():
+        if name not in record:
+            return None, f"missing field {name!r}"
+        if isinstance(record[name], bool) or not isinstance(record[name], kind):
+            return None, f"field {name!r} has type {type(record[name]).__name__}"
+    if (record["shape"], record["program"]) != (shape_name, program):
+        return None, f"record of {record['shape']}/{record['program']}, not {shape_name}/{program}"
+    if not isinstance(record["warnings"].get("prototype"), list):
+        return None, "warnings['prototype'] is not a list"
+    if remedy and not isinstance(record["bit_loops"].get("retained"), bool):
+        return None, "bit_loops['retained'] is not a bool"
+    if arm and (not isinstance(record["loops"].get("captured"), dict)
+                or not isinstance(record["projection_size"].get("conditional_sites"), int)):
+        return None, "loops['captured'] or projection_size['conditional_sites'] is malformed"
+    return record, ""
+
+
 def drive(shape_name: str, allow_retry: bool = False, remedy: bool = False) -> int:
     seconds_limit, cap_mb = LIMITS[shape_name]
     results, programs, env = {}, list(SHAPE_PROGRAMS[shape_name]), dict(os.environ)
-    skipped = {}
+    skipped, stopped = {}, None
+    arm = _variant(remedy) if _variant(remedy) in ARMS else None
     if remedy:
-        refusal = remedy_refusal(shape_name)
+        refusal = arm_refusal(shape_name, arm) if arm else remedy_refusal(shape_name)
         if refusal:
             print("refused:", refusal, flush=True)
             return 2
@@ -1743,7 +2959,14 @@ def drive(shape_name: str, allow_retry: bool = False, remedy: bool = False) -> i
             return 2
     try:
         for program in programs:
-            if remedy and shape_name == "mid14" and program == "controlled_walk":
+            rule = None
+            if arm and shape_name == "mid14" and program == "controlled_walk":
+                skip, rule = arm_controlled_skip(arm, results.get("walk", {}))
+                if skip:
+                    skipped[program] = skip
+                    print(program, "skipped", json.dumps(skip), flush=True)
+                    continue
+            elif remedy and shape_name == "mid14" and program == "controlled_walk":
                 factor, limit_mb = CONTROLLED_SKIP
                 projected = factor * results["walk"]["peak_mb"]
                 if projected >= limit_mb:
@@ -1753,30 +2976,51 @@ def drive(shape_name: str, allow_retry: bool = False, remedy: bool = False) -> i
                         "projected_peak_mb": round(projected)}
                     print(program, "skipped", json.dumps(skipped[program]), flush=True)
                     continue
+            expected = arm_expectations(shape_name, program, arm) if arm else None
+            refusal = budget_refusal(seconds_limit + 60,
+                                     expected_seconds(shape_name, program, remedy))
+            if refusal:
+                stopped = f"{program}: {refusal}"
+                print("stopped:", stopped, flush=True)
+                break
             command = [sys.executable, __file__, "--shape", shape_name, "--program", program,
-                       *(["--remedy", "1"] if remedy else [])]
+                       *(["--arm", arm] if arm else ["--remedy", "1"] if remedy else [])]
             before = compressor_mb()
             run = run_watched(command, cap_mb=cap_mb, timeout_s=seconds_limit + 60, env=env)
             after = compressor_mb()
+            ledger_append(f"{_variant(remedy) or 'baseline'}/{shape_name}/{program}", run.seconds)
             load = {"watched_seconds": round(run.seconds, 1), "compressor_mb_before": before,
                     "compressor_mb_after": after,
                     "compressor_mb_delta": (None if None in (before, after)
                                             else round(after - before, 1))}
             lines = [line for line in run.stdout.splitlines() if line.startswith("{")]
-            if run.killed or run.survivors or run.returncode != 0 or not lines:
-                reason = f"killed: {run.killed}" if run.killed else run.stderr[-3000:]
+            record, malformed = (child_record(lines[-1], shape_name, program, remedy) if lines
+                                 else (None, "no line starting with '{'"))
+            if run.killed or run.survivors or run.returncode != 0 or malformed:
+                if run.killed:
+                    reason = f"killed: {run.killed}"
+                elif run.survivors or run.returncode != 0:
+                    reason = run.stderr[-3000:]
+                else:
+                    reason = f"malformed output: {malformed}; stdout tail: {run.stdout[-300:]!r}"
                 results[program] = {"error": reason, **run.summary(), **load}
             else:
-                record = json.loads(lines[-1])
                 record["peak_mb"] = round(run.peak_mb, 1)
                 record["within_budget"] = (record["seconds"] <= seconds_limit
                                            and within_effective_limit(run.peak_mb, cap_mb))
                 results[program] = {**record, **load}
-            if remedy:
+            if arm:
+                results[program]["expected"] = expected
+                if rule:
+                    results[program]["control_rule"] = rule
+                problems = arm_problems(shape_name, program, results[program], expected)
+            elif remedy:
                 problems = remedy_problems(shape_name, program, results[program])
+            if remedy:
                 results[program]["gate"] = {"ok": not problems, "problems": problems}
             console = {k: v for k, v in results[program].items()
-                       if k not in ("warnings", "counts", "diagnostics")}
+                       if k not in ("warnings", "counts", "diagnostics", "expected",
+                                    "projection_size")}
             print(program, json.dumps(console), flush=True)
             if shape_name == "femoco":
                 write_results(shape_name, results)
@@ -1786,7 +3030,7 @@ def drive(shape_name: str, allow_retry: bool = False, remedy: bool = False) -> i
     finally:
         if shape_name == "femoco":
             FEMOCO_LOCK.unlink(missing_ok=True)
-    record = write_results(shape_name, results, remedy, skipped)
+    record = write_results(shape_name, results, remedy, skipped, stopped)
     if "controlled_walk_check" in record:
         print("controlled_walk_check", json.dumps(record["controlled_walk_check"]), flush=True)
     print("verdict:", record["verdict"])
@@ -1799,12 +3043,77 @@ def write_projection(remedy: bool = False) -> int:
         path = results_path(shape, remedy)
         if path.exists():
             calibration[shape] = json.loads(path.read_text())
+    if _variant(remedy) in ARMS:
+        return write_arm_projection(_variant(remedy), calibration)
     projection = project_remedy(calibration) if remedy else project(calibration)
     results_path("projection", remedy).write_text(json.dumps(projection, indent=2) + "\n")
     for program, values in projection["programs"].items():
         print(program, json.dumps(values), flush=True)
     print("femoco_allowed:", projection["femoco_allowed"], "-", projection["reason"])
     return 0
+
+
+def write_arm_projection(arm: str, calibration: dict) -> int:
+    """Add (or replace) one arm in k1c_projection.json; arms of another code_hash() are dropped."""
+    path = results_path("projection", arm)
+    saved = json.loads(path.read_text()) if path.exists() else {}
+    arms = saved.get("arms", {}) if saved.get("code_hash") == code_hash() else {}
+    arms[arm] = project_arm(arm, calibration)
+    seconds_limit, cap_mb = LIMITS["femoco"]
+    projection = {
+        "method": ARM_PROJECTION_METHOD,
+        "limits": {"seconds": seconds_limit, "mb": effective_limit_mb(cap_mb), "cap_mb": cap_mb},
+        "arms": dict(sorted(arms.items())),
+        "erase_geometry": {shape: erase_geometry(s) for shape, s in SHAPES.items()},
+        "independent_count_check": independent_count_check(),
+        "femoco_counts": femoco_counts(),
+        "notes": list(ARM_NOTES), "code_hash": code_hash(), "environment": environment()}
+    path.write_text(json.dumps(projection, indent=2) + "\n")
+    result = arms[arm]
+    for program, values in result["estimate_a"].items():
+        print(arm, program, "estimate (a)", json.dumps({k: values[k] for k in (
+            "fit_shapes", "static_size", "seconds", "time_exponent", "peak_mb",
+            "rusage_sum_mb_companion")}), flush=True)
+    for program, metrics in result["estimate_b"].items():
+        if program in ("walk", "controlled_walk"):
+            print(arm, program, "estimate (b)", json.dumps(
+                {m: {"best": v["best"], "range": v["range"]} for m, v in metrics.items()}),
+                flush=True)
+    print(arm, "femoco_allowed:", result["femoco_allowed"], "-", result["reason"])
+    return 0
+
+
+def run_fixup_check() -> int:
+    """--fixup-check: fixup_check() in a child under the watchdog (tape mode, no qjit, so no
+    compile seconds); the record goes into k1c_F_small.json as ``fixup_check``."""
+    run = run_watched([sys.executable, __file__, "--fixup-check-child"], cap_mb=2048,
+                      timeout_s=600, env=dict(os.environ))
+    ledger_append("F/small/fixup_check (tape only)", run.seconds, compiles=False)
+    lines = [line for line in run.stdout.splitlines() if line.startswith("{")]
+    try:
+        record = json.loads(lines[-1])
+        malformed = "" if isinstance(record, dict) and isinstance(record.get("passed"), bool) \
+            else "not a fixup-check record"
+    except (IndexError, json.JSONDecodeError) as exc:
+        record, malformed = {}, f"no fixup-check record ({exc})"
+    if run.killed or run.survivors or run.returncode != 0 or malformed:
+        record = {"passed": False, "error": f"killed: {run.killed}" if run.killed
+                  else malformed or run.stderr[-3000:], **run.summary()}
+    record.update(watched_seconds=round(run.seconds, 1), peak_mb=round(run.peak_mb, 1),
+                  method="tape mode: _tape_decompose with the pinned rules, deferred "
+                         "measurements, default.qubit; no qjit")
+    path = results_path("small", "F")
+    saved = json.loads(path.read_text()) if path.exists() else {}
+    if saved.get("code_hash") != code_hash():
+        saved = {"verdict": "incomplete"}
+    saved.update(fixup_check=record, code_hash=code_hash(), environment=environment())
+    if not record["passed"]:
+        saved["verdict"] = "fail"
+    RESULTS.mkdir(exist_ok=True)
+    path.write_text(json.dumps(saved, indent=2) + "\n")
+    print("fixup_check", json.dumps({k: record.get(k) for k in (
+        "passed", "seconds", "watched_seconds", "peak_mb", "error")}), flush=True)
+    return 0 if record["passed"] else 1
 
 
 def main():
@@ -1816,8 +3125,18 @@ def main():
     parser.add_argument("--allow-retry", action="store_true")
     parser.add_argument("--remedy", type=int, choices=(1,),
                         help="partial remedy 1 (reads and angle loads); default: the baseline")
+    parser.add_argument("--arm", choices=ARMS,
+                        help="Task 0.9c arm on top of partial remedy 1 (implies --remedy 1)")
+    parser.add_argument("--fixup-check", action="store_true",
+                        help="arm F's tape-mode fixup check into k1c_F_small.json")
+    parser.add_argument("--fixup-check-child", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
-    remedy = args.remedy == 1
+    remedy = args.arm or args.remedy == 1
+    if args.fixup_check_child:
+        print(json.dumps(fixup_check(), default=str), flush=True)
+        return
+    if args.fixup_check:
+        sys.exit(run_fixup_check())
     if args.project:
         sys.exit(write_projection(remedy))
     if args.shape is None:

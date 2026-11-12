@@ -1,0 +1,606 @@
+{
+  "walk": {
+    "program": "walk",
+    "shape": "mid14",
+    "remedy": 1,
+    "num_wires": 541,
+    "seconds": 82.5,
+    "cpu_seconds": 83.0,
+    "rusage_sum_mb": 2389.8,
+    "analyzed_gates_upper_bound": 93932,
+    "toffoli": 2657,
+    "measurements": 672,
+    "measured_and_uncomputes": 2354,
+    "counts": {
+      "Adjoint(S)": 156,
+      "Adjoint(TemporaryAND)": 2354,
+      "CNOT": 83190,
+      "CZ": 882,
+      "GlobalPhase": 2,
+      "Hadamard": 1328,
+      "MidCircuitMeasure": 672,
+      "PauliX": 2518,
+      "PauliZ": 16,
+      "PhaseGradientStatePrep": 1,
+      "S": 156,
+      "TemporaryAND": 2354,
+      "Toffoli": 303
+    },
+    "diagnostics": {
+      "compile_seconds": 82.5,
+      "rule_capture_seconds": 39.75,
+      "rule_targets": 424,
+      "rule_equations": 171510,
+      "modified_target_lowerings": 228,
+      "modified_target_seconds": 15.7,
+      "modified_target_equations": 20204,
+      "modified_target_signatures": 65,
+      "modified_target_ids": [
+        "Adjoint(CNOT)",
+        "Adjoint(CSWAP)",
+        "Adjoint(CZ)",
+        "Adjoint(ControlledPhaseShift)",
+        "Adjoint(GlobalPhase)",
+        "Adjoint(Hadamard)",
+        "Adjoint(LeftQuantumComparator)",
+        "Adjoint(MultiRZ)",
+        "Adjoint(PPR_2)",
+        "Adjoint(PPR_4)",
+        "Adjoint(PPR_8)",
+        "Adjoint(PauliRot)",
+        "Adjoint(PauliX)",
+        "Adjoint(PauliZ)",
+        "Adjoint(PhaseShift)",
+        "Adjoint(ProtoAngleEraseF)",
+        "Adjoint(ProtoGivensLadder)",
+        "Adjoint(ProtoGivensRotation)",
+        "Adjoint(ProtoInnerPrepareF)",
+        "Adjoint(ProtoInnerSelectF)",
+        "Adjoint(ProtoMajorana)",
+        "Adjoint(ProtoOuterPrepareF)",
+        "Adjoint(ProtoSFAngleLoadR1)",
+        "Adjoint(ProtoSpinMux)",
+        "Adjoint(ProtoSpinSwap)",
+        "Adjoint(ProtoTableReadR1)",
+        "Adjoint(ProtoTailAngleLoadR1)",
+        "Adjoint(ProtoUniformPrep)",
+        "Adjoint(RX)",
+        "Adjoint(RY)",
+        "Adjoint(RZ)",
+        "Adjoint(Rot)",
+        "Adjoint(S)",
+        "Adjoint(SemiAdder)",
+        "Adjoint(T)",
+        "Adjoint(TemporaryAND)",
+        "Adjoint(Toffoli)"
+      ],
+      "modified_target_lowerings_by_id": {
+        "Adjoint(CNOT)": 4,
+        "Adjoint(CSWAP)": 4,
+        "Adjoint(CZ)": 4,
+        "Adjoint(ControlledPhaseShift)": 4,
+        "Adjoint(GlobalPhase)": 4,
+        "Adjoint(Hadamard)": 4,
+        "Adjoint(LeftQuantumComparator)": 2,
+        "Adjoint(MultiRZ)": 8,
+        "Adjoint(PPR_2)": 8,
+        "Adjoint(PPR_4)": 28,
+        "Adjoint(PPR_8)": 56,
+        "Adjoint(PauliRot)": 16,
+        "Adjoint(PauliX)": 4,
+        "Adjoint(PauliZ)": 4,
+        "Adjoint(PhaseShift)": 4,
+        "Adjoint(ProtoAngleEraseF)": 2,
+        "Adjoint(ProtoGivensLadder)": 2,
+        "Adjoint(ProtoGivensRotation)": 2,
+        "Adjoint(ProtoInnerPrepareF)": 4,
+        "Adjoint(ProtoInnerSelectF)": 4,
+        "Adjoint(ProtoMajorana)": 2,
+        "Adjoint(ProtoOuterPrepareF)": 4,
+        "Adjoint(ProtoSFAngleLoadR1)": 2,
+        "Adjoint(ProtoSpinMux)": 4,
+        "Adjoint(ProtoSpinSwap)": 4,
+        "Adjoint(ProtoTableReadR1)": 8,
+        "Adjoint(ProtoTailAngleLoadR1)": 2,
+        "Adjoint(ProtoUniformPrep)": 4,
+        "Adjoint(RX)": 4,
+        "Adjoint(RY)": 4,
+        "Adjoint(RZ)": 4,
+        "Adjoint(Rot)": 4,
+        "Adjoint(S)": 2,
+        "Adjoint(SemiAdder)": 2,
+        "Adjoint(T)": 2,
+        "Adjoint(TemporaryAND)": 4,
+        "Adjoint(Toffoli)": 4
+      }
+    },
+    "warnings": {
+      "prototype": [],
+      "expected": [
+        "Skipped the _proto_angle_erase_f decomposition rule for Adjoint(ProtoAngleEraseF): it contains a mid-circuit measurement, which is not supported with adjoint or control regions.",
+        "Skipped the _proto_angle_erase_f decomposition rule for Adjoint(ProtoAngleEraseF): it contains a mid-circuit measurement, which is not supported with adjoint or control regions."
+      ],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 22
+    },
+    "table_word_dtype": "int64",
+    "bit_loops": {
+      "for_loops_captured": 826,
+      "for_loops_expected": 826,
+      "cnot_analyzed": 83190,
+      "cnot_declared_upper_bound": 83190,
+      "cnot_set_bits": 46715,
+      "retained": true
+    },
+    "arm": "F",
+    "loops": {
+      "captured": {
+        "read_bit": [
+          14,
+          62,
+          78,
+          672
+        ],
+        "fixup_leaf": [],
+        "givens_base": [],
+        "givens_adjoint": []
+      },
+      "targets": {
+        "read_bit": 4,
+        "fixup_leaf": 3,
+        "givens_base": 1,
+        "givens_adjoint": 1
+      }
+    },
+    "projection_size": {
+      "static_size": 24644,
+      "static_gates": {
+        "Adjoint(S)": 156,
+        "Adjoint(TemporaryAND)": 2354,
+        "CNOT": 13540,
+        "CZ": 1760,
+        "GlobalPhase": 2,
+        "Hadamard": 1536,
+        "MidMeasure": 672,
+        "PauliX": 1781,
+        "PauliZ": 30,
+        "S": 156,
+        "TemporaryAND": 2354,
+        "Toffoli": 303
+      },
+      "projection_loop_sites": {
+        "read_bit": 1590,
+        "fixup_leaf": 0,
+        "givens_base": 0,
+        "givens_adjoint": 0
+      },
+      "conditional_sites": 1784
+    },
+    "peak_mb": 2091.0,
+    "within_budget": true,
+    "watched_seconds": 87.0,
+    "compressor_mb_before": 11406.6,
+    "compressor_mb_after": 13107.1,
+    "compressor_mb_delta": 1700.5,
+    "expected": {
+      "tma_resource_functions": [
+        2657,
+        672,
+        2354
+      ],
+      "tma_independent": [
+        2657,
+        672,
+        2354
+      ],
+      "conditional_sites": 1784,
+      "loops": {
+        "read_bit": [
+          14,
+          62,
+          78,
+          672
+        ],
+        "fixup_leaf": [],
+        "givens_base": [],
+        "givens_adjoint": []
+      }
+    },
+    "gate": {
+      "ok": true,
+      "problems": []
+    }
+  },
+  "inner_prepare": {
+    "program": "inner_prepare",
+    "shape": "mid14",
+    "remedy": 1,
+    "num_wires": 541,
+    "seconds": 41.1,
+    "cpu_seconds": 41.9,
+    "rusage_sum_mb": 1488.5,
+    "analyzed_gates_upper_bound": 18461,
+    "toffoli": 339,
+    "measurements": 96,
+    "measured_and_uncomputes": 259,
+    "counts": {
+      "Adjoint(TemporaryAND)": 259,
+      "CNOT": 16708,
+      "CZ": 384,
+      "Hadamard": 136,
+      "MidCircuitMeasure": 96,
+      "PauliX": 538,
+      "PhaseGradientStatePrep": 1,
+      "TemporaryAND": 259,
+      "Toffoli": 80
+    },
+    "diagnostics": {
+      "compile_seconds": 41.1,
+      "rule_capture_seconds": 20.25,
+      "rule_targets": 338,
+      "rule_equations": 56340,
+      "modified_target_lowerings": 190,
+      "modified_target_seconds": 8.67,
+      "modified_target_equations": 6128,
+      "modified_target_signatures": 50,
+      "modified_target_ids": [
+        "Adjoint(CNOT)",
+        "Adjoint(CSWAP)",
+        "Adjoint(CZ)",
+        "Adjoint(ControlledPhaseShift)",
+        "Adjoint(GlobalPhase)",
+        "Adjoint(Hadamard)",
+        "Adjoint(LeftQuantumComparator)",
+        "Adjoint(MultiRZ)",
+        "Adjoint(PPR_2)",
+        "Adjoint(PPR_4)",
+        "Adjoint(PPR_8)",
+        "Adjoint(PauliRot)",
+        "Adjoint(PauliX)",
+        "Adjoint(PauliZ)",
+        "Adjoint(PhaseShift)",
+        "Adjoint(ProtoInnerPrepareF)",
+        "Adjoint(ProtoTableReadR1)",
+        "Adjoint(ProtoUniformPrep)",
+        "Adjoint(RX)",
+        "Adjoint(RY)",
+        "Adjoint(RZ)",
+        "Adjoint(Rot)",
+        "Adjoint(S)",
+        "Adjoint(T)",
+        "Adjoint(TemporaryAND)",
+        "Adjoint(Toffoli)"
+      ],
+      "modified_target_lowerings_by_id": {
+        "Adjoint(CNOT)": 4,
+        "Adjoint(CSWAP)": 4,
+        "Adjoint(CZ)": 4,
+        "Adjoint(ControlledPhaseShift)": 4,
+        "Adjoint(GlobalPhase)": 4,
+        "Adjoint(Hadamard)": 4,
+        "Adjoint(LeftQuantumComparator)": 2,
+        "Adjoint(MultiRZ)": 8,
+        "Adjoint(PPR_2)": 8,
+        "Adjoint(PPR_4)": 28,
+        "Adjoint(PPR_8)": 56,
+        "Adjoint(PauliRot)": 16,
+        "Adjoint(PauliX)": 4,
+        "Adjoint(PauliZ)": 4,
+        "Adjoint(PhaseShift)": 4,
+        "Adjoint(ProtoInnerPrepareF)": 4,
+        "Adjoint(ProtoTableReadR1)": 2,
+        "Adjoint(ProtoUniformPrep)": 2,
+        "Adjoint(RX)": 4,
+        "Adjoint(RY)": 4,
+        "Adjoint(RZ)": 4,
+        "Adjoint(Rot)": 4,
+        "Adjoint(S)": 2,
+        "Adjoint(T)": 2,
+        "Adjoint(TemporaryAND)": 4,
+        "Adjoint(Toffoli)": 4
+      }
+    },
+    "warnings": {
+      "prototype": [],
+      "expected": [],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 20
+    },
+    "table_word_dtype": "int64",
+    "bit_loops": {
+      "for_loops_captured": 672,
+      "for_loops_expected": 672,
+      "cnot_analyzed": 16708,
+      "cnot_declared_upper_bound": 16708,
+      "cnot_set_bits": 8336,
+      "retained": true
+    },
+    "arm": "F",
+    "loops": {
+      "captured": {
+        "read_bit": [
+          672
+        ],
+        "fixup_leaf": [],
+        "givens_base": [],
+        "givens_adjoint": []
+      },
+      "targets": {
+        "read_bit": 1,
+        "fixup_leaf": 1,
+        "givens_base": 0,
+        "givens_adjoint": 0
+      }
+    },
+    "projection_size": {
+      "static_size": 2620,
+      "static_gates": {
+        "Adjoint(TemporaryAND)": 259,
+        "CNOT": 580,
+        "CZ": 768,
+        "Hadamard": 136,
+        "MidMeasure": 96,
+        "PauliX": 442,
+        "TemporaryAND": 259,
+        "Toffoli": 80
+      },
+      "projection_loop_sites": {
+        "read_bit": 672,
+        "fixup_leaf": 0,
+        "givens_base": 0,
+        "givens_adjoint": 0
+      },
+      "conditional_sites": 768
+    },
+    "peak_mb": 1156.9,
+    "within_budget": true,
+    "watched_seconds": 44.4,
+    "compressor_mb_before": 13074.3,
+    "compressor_mb_after": 11781.2,
+    "compressor_mb_delta": -1293.1,
+    "expected": {
+      "tma_resource_functions": [
+        339,
+        96,
+        259
+      ],
+      "tma_independent": [
+        339,
+        96,
+        259
+      ],
+      "conditional_sites": 768,
+      "loops": {
+        "read_bit": [
+          672
+        ],
+        "fixup_leaf": [],
+        "givens_base": [],
+        "givens_adjoint": []
+      }
+    },
+    "gate": {
+      "ok": true,
+      "problems": []
+    }
+  },
+  "inner_select": {
+    "program": "inner_select",
+    "shape": "mid14",
+    "remedy": 1,
+    "num_wires": 541,
+    "seconds": 18.8,
+    "cpu_seconds": 19.8,
+    "rusage_sum_mb": 968.5,
+    "analyzed_gates_upper_bound": 27294,
+    "toffoli": 902,
+    "measurements": 198,
+    "measured_and_uncomputes": 869,
+    "counts": {
+      "Adjoint(S)": 78,
+      "Adjoint(TemporaryAND)": 869,
+      "CNOT": 24071,
+      "CZ": 40,
+      "Hadamard": 462,
+      "MidCircuitMeasure": 198,
+      "PauliX": 588,
+      "PauliZ": 7,
+      "PhaseGradientStatePrep": 1,
+      "S": 78,
+      "TemporaryAND": 869,
+      "Toffoli": 33
+    },
+    "diagnostics": {
+      "compile_seconds": 18.8,
+      "rule_capture_seconds": 7.33,
+      "rule_targets": 310,
+      "rule_equations": 67734,
+      "modified_target_lowerings": 158,
+      "modified_target_seconds": 1.02,
+      "modified_target_equations": 1068,
+      "modified_target_signatures": 42,
+      "modified_target_ids": [
+        "Adjoint(CNOT)",
+        "Adjoint(CZ)",
+        "Adjoint(ControlledPhaseShift)",
+        "Adjoint(GlobalPhase)",
+        "Adjoint(Hadamard)",
+        "Adjoint(MultiRZ)",
+        "Adjoint(PPR_2)",
+        "Adjoint(PPR_4)",
+        "Adjoint(PPR_8)",
+        "Adjoint(PauliRot)",
+        "Adjoint(PauliX)",
+        "Adjoint(PauliZ)",
+        "Adjoint(PhaseShift)",
+        "Adjoint(ProtoGivensLadder)",
+        "Adjoint(ProtoGivensRotation)",
+        "Adjoint(RX)",
+        "Adjoint(RY)",
+        "Adjoint(RZ)",
+        "Adjoint(Rot)",
+        "Adjoint(S)",
+        "Adjoint(SemiAdder)",
+        "Adjoint(T)",
+        "Adjoint(TemporaryAND)",
+        "Adjoint(Toffoli)"
+      ],
+      "modified_target_lowerings_by_id": {
+        "Adjoint(CNOT)": 4,
+        "Adjoint(CZ)": 4,
+        "Adjoint(ControlledPhaseShift)": 4,
+        "Adjoint(GlobalPhase)": 4,
+        "Adjoint(Hadamard)": 4,
+        "Adjoint(MultiRZ)": 8,
+        "Adjoint(PPR_2)": 8,
+        "Adjoint(PPR_4)": 28,
+        "Adjoint(PPR_8)": 32,
+        "Adjoint(PauliRot)": 16,
+        "Adjoint(PauliX)": 4,
+        "Adjoint(PauliZ)": 4,
+        "Adjoint(PhaseShift)": 4,
+        "Adjoint(ProtoGivensLadder)": 2,
+        "Adjoint(ProtoGivensRotation)": 2,
+        "Adjoint(RX)": 4,
+        "Adjoint(RY)": 4,
+        "Adjoint(RZ)": 4,
+        "Adjoint(Rot)": 4,
+        "Adjoint(S)": 2,
+        "Adjoint(SemiAdder)": 2,
+        "Adjoint(T)": 2,
+        "Adjoint(TemporaryAND)": 4,
+        "Adjoint(Toffoli)": 4
+      }
+    },
+    "warnings": {
+      "prototype": [],
+      "expected": [],
+      "other": [
+        "Resource analysis was unable to determine the branch of a conditional or switch statement. The results will take the maximum resources across all possible branches, serving as an upper bound."
+      ],
+      "noise": 20
+    },
+    "table_word_dtype": "int64",
+    "bit_loops": {
+      "for_loops_captured": 92,
+      "for_loops_expected": 92,
+      "cnot_analyzed": 24071,
+      "cnot_declared_upper_bound": 24071,
+      "cnot_set_bits": 14540,
+      "retained": true
+    },
+    "arm": "F",
+    "loops": {
+      "captured": {
+        "read_bit": [
+          14,
+          78
+        ],
+        "fixup_leaf": [],
+        "givens_base": [],
+        "givens_adjoint": []
+      },
+      "targets": {
+        "read_bit": 2,
+        "fixup_leaf": 1,
+        "givens_base": 1,
+        "givens_adjoint": 1
+      }
+    },
+    "projection_size": {
+      "static_size": 9199,
+      "static_gates": {
+        "Adjoint(S)": 78,
+        "Adjoint(TemporaryAND)": 869,
+        "CNOT": 6025,
+        "CZ": 79,
+        "Hadamard": 566,
+        "MidMeasure": 198,
+        "PauliX": 390,
+        "PauliZ": 14,
+        "S": 78,
+        "TemporaryAND": 869,
+        "Toffoli": 33
+      },
+      "projection_loop_sites": {
+        "read_bit": 92,
+        "fixup_leaf": 0,
+        "givens_base": 0,
+        "givens_adjoint": 0
+      },
+      "conditional_sites": 92
+    },
+    "peak_mb": 688.0,
+    "within_budget": true,
+    "watched_seconds": 22.1,
+    "compressor_mb_before": 11778.7,
+    "compressor_mb_after": 11131.0,
+    "compressor_mb_delta": -647.7,
+    "expected": {
+      "tma_resource_functions": [
+        902,
+        198,
+        869
+      ],
+      "tma_independent": [
+        902,
+        198,
+        869
+      ],
+      "conditional_sites": 92,
+      "loops": {
+        "read_bit": [
+          14,
+          78
+        ],
+        "fixup_leaf": [],
+        "givens_base": [],
+        "givens_adjoint": []
+      }
+    },
+    "gate": {
+      "ok": true,
+      "problems": []
+    }
+  },
+  "skipped": {
+    "controlled_walk": {
+      "reason": "control_ratio 1.800 x the mid14 walk's peak is 3764 MB, not below 3500 MB (Task 0.9c, requirement 4)",
+      "control_ratio": 1.8,
+      "mid10_walk_peak_mb": 1545.8,
+      "mid10_controlled_walk_peak_mb": 2633.0,
+      "mid14_walk_peak_mb": 2091.0,
+      "projected_peak_mb": 3764,
+      "limit_mb": 3500
+    }
+  },
+  "notes": [
+    "Table words are int64 holding 32 data bits each: with uint32 words, Catalyst builds no rule for ProtoTableReadR1 ('Failed to synthesize the distributed decomposition rules ...: ui32') and the compile fails; reproducer: .scratch/task-0.9b/dtype_repro.py (not committed)",
+    "Arm F follows one spike-local ob rule at every shape (erase_geometry). At mid10 the spec's MID_NAPHTHALENE parameters (k_e1 = 2, k_e2 = 1) would give the outer erase ob 2 (T 15) instead of this rule's 3 (T 12); the inner ob 4 agrees",
+    "All arms remain stand-ins: erase masks and tables are compilable constants (no dynamic-mask erase path), and the SF angle load keeps its enable placeholder",
+    "Erase conditionals carry qp.hint({'branch-prob': 0.5}): analyzed CZ and Z counts are expected values; T, M and A are exact"
+  ],
+  "limits": {
+    "seconds": 900,
+    "mb": 3840.0,
+    "cap_mb": 4096
+  },
+  "memory_method": "peak_mb: sampled peak of the summed physical footprint of the compile's process tree (dfthc.testing.watchdog), the gate metric; the watchdog kills the tree above the limit. rusage_sum_mb: the getrusage companion, ru_maxrss of the compile process plus ru_maxrss of its finished children. It is not an upper bound: under memory pressure the resident size drops compressed pages that the footprint keeps counting, so it can fall below peak_mb",
+  "code_hash": "60a29677bedd1b4fcac81030e8bc4516c8aa0174b4a9dca2c68e380621d2210a",
+  "environment": {
+    "python": "3.12.7",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "pennylane": "0.46.0.dev151",
+    "pennylane_catalyst": "0.16.0.dev140",
+    "pennylane_lightning": "0.46.0.dev34",
+    "jax": "0.7.1",
+    "jaxlib": "0.7.1",
+    "numpy": "2.5.4",
+    "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+  },
+  "verdict": "pass"
+}
