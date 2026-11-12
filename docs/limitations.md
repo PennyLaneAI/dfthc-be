@@ -16,7 +16,8 @@ file.
   controls the unitary inverse of `Op`'s base rule instead (one Toffoli and four PauliX for a
   one-CNOT base rule, no measurement). It fails only when no unitary path exists. Canary:
   `test_measuring_adjoint_rule_has_no_controlled_path`. Mitigation: spec 7.4 rules 5 and 6; never
-  place a measuring operator under `qp.ctrl`.
+  place a measuring operator under `qp.ctrl`. Since G0 no program wraps a dfthc composite in an
+  adjoint or a control (spec 7.4 rule 6), so no measuring rule is wrapped by design.
 - **L-3, rule selection is cost-based.** With unweighted counts the solver picks the auto-derived
   inverse (two CNOTs) over the measured adjoint rule. Canary:
   `test_unweighted_solver_prefers_unitary_inverse`. Mitigation: weighted gate set, pins, T6.
@@ -32,18 +33,20 @@ file.
   `for_loop`, `cond` and a nested operator) compiles to `{"PauliX": "4"}`; the IRMapping crash was
   not reproduced. The canary fails if the crash returns; it cannot detect a fix. Canary:
   `test_auto_adjoint_with_nested_control_flow`. Mitigation kept: no control flow in auto-adjointed
-  bodies (spec 7.4 rule 4).
+  bodies (spec 7.4 rule 4). Since G0 the looped `QROAMRead` and `ControlledWalkPower` are never
+  adjointed or controlled by construction (spec 7.4 rule 6), which the inventory test checks.
 - **L-7, `C(ChangeOpBasis)` loses its saving under capture** (pennylane#10357). Controlling
   `change_op_basis(CNOT, Z, CNOT)` gives two Toffolis instead of zero. Canary:
-  `test_controlled_change_op_basis_controls_everything`. Mitigation: explicit `C(DFTHCWalk)` and
-  `C(DFTHCBlockEncoding)` rules.
+  `test_controlled_change_op_basis_controls_everything`. Mitigation: the explicit controlled
+  classes `ControlledDFTHCWalk` and `ControlledDFTHCBlockEncoding` (spec 7.4 rule 6).
 - **L-8, generic controlled wrapping adds PauliX** (pennylane#10080). Generic control of a one-CNOT
   rule compiles to one Toffoli plus four PauliX. Canary: `test_generic_ctrl_adds_paulix_per_control`.
-  Mitigation: explicit `C(...)` rules.
+  Mitigation: explicit controlled classes (spec 7.4 rule 6).
 - **L-9, function calls inside control regions** (catalyst#3330, catalyst#3384), **changed**.
   Controlling a `qp.capture.subroutine` leaves `C(PauliX)` undecomposed at `level="user"` (outside
   the gate set), and compiling for execution fails. Canary:
-  `test_function_call_in_ctrl_region_raises`. Mitigation: no `Subroutine`; explicit `C(...)` rules.
+  `test_function_call_in_ctrl_region_raises`. Mitigation: no `Subroutine`; explicit controlled
+  classes (spec 7.4 rule 6).
 - **L-10, compilation can depend on gate order** (catalyst#3431). Canary:
   `test_order_dependent_compile`, built from the issue's reproducer in
   `tests/canary/reproducers/catalyst_3431.py`, with the observed outcome per order recorded in

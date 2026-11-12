@@ -14,13 +14,15 @@ This file holds Tasks 1C.1 to 1C.6 of the master plan (`docs/superpowers/plans/2
 
 **Revision 1 (2026-11-12)** answers the GPT-5.6 plan review (`.superpowers/sdd/phase1c-plan-review-1.md`, 5 Important findings) with the orchestrator's decisions: `MID_NAPHTHALENE` compiled counts for `PhaseFixup` and `QROAMErase` (I1); the warning finding restricted to isolated probes (I2); the certificates' mutation check kept as a script and a log (I3); the outer-erase range fixed in Task 1A.7 as a prerequisite, with a cross-check against `QROAMErase.fixup_high_ranges` (I4); the remedy-1 data contract (I5); `MID_NAPHTHALENE` with dfthcbe's naphthalene block bits; and the per-commit base of `main` at `aeb417e`.
 
+**Revision 2 (2026-11-12, Task G0.1)** brings in the G0 decision "K-1 at G0" (ledger): Task 1C.3's `QROAMRead` loads each unary leaf with one `qp.for_loop` over a dynamic `int64` array of per-leaf words ("Appendix: per-leaf read loads"), with a compiled read check at K = 16 and width 40; Tasks 1C.4 and 1C.5 change only where their tests build a read; the Global Constraints' rules 3 to 7 follow the amended spec 7.4; the per-commit base is `main`'s 225 tests at G0. Revision 2 resynced the replica's `main`-owned files to `main` at `e0d3afb` (Task 0.2c's `compile.py` and canaries, the Task 0.9c to 0.9e spikes) and replayed Tasks 1C.3 to 1C.5, RED then GREEN, with the files of Tasks 1C.1, 1C.6 and 1C.2 present but their unchanged tests not re-run (`.scratch/plan-check/stages/g0-1/run_stages_g01.sh`, log `stages/g0-1/stages-g01.log`; one worker, under the watchdog, 277 s at a peak of 526 MB). Every Workstream C per-commit test then ran once on the resynced replica (log `stages/g0-1/ops-per-commit-rev2.log`). Review round 1 (GPT-5.6) added `rtol=0` to the 17 tolerance checks of the Workstream C tests, so every `np.allclose` states both tolerances (HANDOFF section 6, test tolerances), and made `test_compiled_read_on_lightning[3]` assert the flagless read's X bound; the eight affected test files then passed serially under the watchdog (194 per-commit tests in 284 s at a peak of 493 MB, and the 7 slow certificates; log `stages/g0-1/review1/rtol-rerun.log`).
+
 **Load.** The dry-run ran when lane-a signalled a quiet machine; the `slow` compiles of revision 1 ran alone, each under `dfthc.testing.watchdog.run_watched`. Timings are from the development laptop and vary with its load.
 
 ---
 
 ## Changes from the master plan
 
-The exact old and new texts are in `phase1c-doc-edits.md` (next to this plan; written and checked against `main` at `aeb417e` by `.scratch/plan-check/stages/make_phase1c_doc_edits.py`). None is applied yet. The edit ids below refer to that file.
+The exact old and new texts of revision 1 are in `phase1c-doc-edits.md` (written and checked against `main` at `aeb417e` by `.scratch/plan-check/stages/make_phase1c_doc_edits.py`), applied on `main` in `a1ffbd6`; the edit ids of changes 1 to 6 refer to that file. Revision 2's edits are in `g0-1-doc-edits.md` (written and checked against `main` at `e0d3afb` by `.scratch/plan-check/stages/make_g0_1_doc_edits.py`); their ids start with G.
 
 1. **Tasks 1C.1, 1C.2 and 1C.3 gain dependencies, and 1C.2 moves from wave 1-d to wave 1-e** (M5 to M7).
    - 1C.2's T3 test compares the failure weight with `dfthc.data.encoded.uniform_failure_probability` (Task 1A.5, wave 1-d), as the master plan's acceptance test says, and runs its `s = 7` cases (29 wires) on the sparse simulator (Task 1B.2, wave 1-b). 1C.2 is off the critical path; in wave 1-e it follows 1C.4 and may slip to wave 1-f next to 1C.5.
@@ -39,6 +41,11 @@ The exact old and new texts are in `phase1c-doc-edits.md` (next to this plan; wr
    - **1C.4:** in tape mode `PhaseFixup`'s parities must be `MeasurementValue`s, so both modes emit one conditional per covered address (decision "K-10 consequences", item 3); `high_ranges` is static; `emit_phase_fixup` skips Python `False` entries (callers decide them from compilable data) and takes `emit`; `test_erase_conditionals_are_hinted` asserts exact expected counts instead of the absence of the warning (section 3, item 15), and a separate test shows the warning absent for a fixup without any AND; `MID_NAPHTHALENE` compiled counts (`slow`; review I1).
    - **1C.5:** `extra_onehot` is always an argument (0 wires unless `K width < 2**ob`), because an `Operator2` has one signature; the static `fixup_high_ranges` and the cross-check of change 5; the certificates add a k = 2 outer shape, a `(6, 2)` inner shape and its enabled form to the four preset shapes; a test that the erase has no adjoint or controlled path; `MID_NAPHTHALENE` compiled counts (`slow`; review I1).
    - **1C.6:** `work` is a minimum size (the controlled rule needs one more wire); `C(ZeroReflection)` is defined for one control wire with control value 1; the exact matrices come from one compiled run each (reference-register construction), and each T-count program applies both pattern values.
+7. **Revision 2 (Task G0.1): per-leaf read loads, and the explicit-class design around them** (for this workstream the master-plan edits GM1, GM3, GM7 and GM8 and the spec edits GS10, GS11, GS16, GS18 to GS21 and GS51; the other G edits carry lever X into Phases 2 to 4).
+   - **1C.3** is written for per-leaf loads (appendix): dynamic `leaf_words`, the builder `leaf_words_from_table`, `exact=False`, no auto-adjoint test, the compiled read check at K = 16 and width 40; 44 per-commit tests (was 35). The master plan's Task 1C.3 entry follows (GM8).
+   - **1C.4 and 1C.5** are unchanged except their expected read counts and the tests that build a read.
+   - **Global Constraints** rules 3 to 7 follow the amended spec 7.4 (rule 4: loops in `QROAMRead` and `ControlledWalkPower` only, both never adjointed or controlled; rule 6: explicit adjoint and controlled classes; rule 7: every class's base rule is pinned). This file and the master plan include `templates/_global_constraints_g01.md`; the Phase 0 and Phase 1 A and B plans keep the shared fragment unchanged.
+   - **1C.6** is unchanged: `C(ZeroReflection)` stays a tested primitive; Phase 3's `ControlledRefT2` and `ControlledRefAB` emit the multi-controlled Z with its helper instead of requesting `C(ZeroReflection)` (spec 7.4 rule 6).
 
 ## Findings for other plans and documents
 
@@ -87,11 +94,11 @@ GATE_SET = {
 **Rules for operators and decomposition rules (spec 7.4, one line each)**
 1. No allocation inside rules: no `qp.allocate`, no `work_wires=` in `qp.register_resources`; every ancilla is an explicit wire argument; every operator exposes `required_wires(**compilable_args) -> dict[str, int]`.
 2. Resource-function keys are `Operator2` abstract instances built through `dfthc.compile.resource_key`; every emitted operator is declared; counts are Python integers; resource functions never raise.
-3. Every argument that determines circuit structure is in `compilable_argnames`; `static_argnames` are not used; `dynamic_argnames` only for runtime data (`PhaseFixup` parities, `QPERound` earlier bits, K-1 remedy tables).
-4. Bodies of auto-adjointed operators contain no `qp.for_loop` or `qp.cond`; `qp.cond` only on mid-circuit measurement outcomes in erase operators and the QPE wrapper; `qp.for_loop` only in `ControlledWalkPower`.
-5. Measurement-based uncompute lives only in `QROAMErase`, `AngleErase` and explicit `Adjoint(Op)` rules with signature `(base)`; an operator that contains a measurement is never placed under `qp.ctrl`.
-6. Controlled versions come only from explicit `C(Op)` rules with signature `(base, control_wires, control_values, work_wires, work_wire_type)`.
-7. One base rule per operator; explicit adjoint and controlled rules are pinned (§7.5).
+3. Every argument that determines circuit structure is in `compilable_argnames`; `static_argnames` are not used; `dynamic_argnames` only for runtime data (`PhaseFixup` parities, `QPERound` earlier bits, `QROAMRead`'s per-leaf table words).
+4. Bodies of auto-adjointed operators contain no `qp.for_loop` or `qp.cond`; `qp.cond` on mid-circuit measurement outcomes only in erase operators and the QPE wrapper; `qp.for_loop` only in `QROAMRead` (one loop per unary leaf, with `qp.cond` on table bits) and `ControlledWalkPower`, both never adjointed or controlled.
+5. Measurement-based uncompute lives only in `QROAMErase`, `AngleErase` and the base rules of `OuterUnprepare` and `InnerUnprepare`; an operator that contains a measurement is never placed under `qp.ctrl`.
+6. Adjoint and controlled forms of composites are explicit operator classes (`OuterUnprepare`, `InnerUnprepare`, `InnerSelectDagger`, `GivensLadderDagger`, `ControlledRefT2`, `ControlledRefAB`, `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk` and `ControlledToyWalk`); no rule or program calls `qp.adjoint` or `qp.ctrl` on a dfthc composite; the one `C(Op)` rule left is `C(ZeroReflection)`, with signature `(base, control_wires, control_values, work_wires, work_wire_type)`.
+7. One base rule per operator; every class's base rule is pinned, the adjoint and controlled classes of rule 6 included, and so are the remaining symbolic rules (§7.5).
 8. Unique class names; a test asserts that PennyLane registers none of our names.
 9. Rules run in both capture and tape mode; mode-specific classical code is confined to helpers (`dfthc.compile.mcm_parities`).
 10. Exact swaps only (`CSWAP`).
@@ -135,7 +142,7 @@ GATE_SET = {
 | `src/dfthc/ops/uniform.py` | 1C.2 | `FlaggedUniformPrep`, `amplitude_angles` |
 | `tests/ops/test_uniform.py` | 1C.2 | uniformity, failure weight, round trips, counts |
 | `src/dfthc/ops/qroam.py` | 1C.3, extended by 1C.4 and 1C.5 | `QROAMEmitter`, address helpers, `QROAMRead`; then `PhaseFixup`, `emit_phase_fixup`; then `QROAMErase` |
-| `tests/ops/test_qroam_read.py` | 1C.3 | every computational address, counts, helpers |
+| `tests/ops/test_qroam_read.py` | 1C.3 | every computational address, the K = 16 compiled check, counts, the leaf-word contract, helpers |
 | `tests/ops/test_phase_fixup.py` | 1C.4 | phases on the covered set, hints, counts |
 | `tests/ops/test_qroam_erase.py` | 1C.5 | counts, rule selection, smoke runs, `mcm_parities` linearity |
 | `tests/ops/test_certificates_qroam.py` | 1C.5 | spec 12.5 certificates (`slow`) |
@@ -146,18 +153,18 @@ Within each wave of master plan section 5 (as amended by change 1), the tasks' f
 
 **Shell conventions.** Run commands from the worktree root of your lane. `VENV="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.venv"` locates the shared environment, as in the earlier plans.
 
-**Expected test counts.** Each task states its targeted count exactly. The per-commit tier (`scripts/test.sh -m "not slow and not release" -q`) counts **221 tests on `main` at `aeb417e`** (220 measured on the replica at `f770ca2`, plus Task 0.4b's canary). Each task's expected per-commit number is that base, plus the per-commit tests of every Phase 1 A and B task of the earlier waves (master plan section 5 as amended by change 1: wave 1-a 95 = 41 + 31 + 23, wave 1-b 58 = 17 + 14 + 27 with Task 1A.7's revision-1 test, wave 1-c 49 = 49 + 0, wave 1-d 15, wave 1-e 7), plus the Workstream C tasks of the earlier waves, plus the task's own. If `main` or a merged task has a different count, shift by the difference; the pass criterion is "no failures, no errors, no warnings summary", and the number is a cross-check.
+**Expected test counts.** Each task states its targeted count exactly. The per-commit tier (`scripts/test.sh -m "not slow and not release" -q`) counts **225 tests on `main` at G0** (`b2b8c95`: revision 1's 221 at `aeb417e` plus Task 0.2c's four). Each task's expected per-commit number is that base, plus the per-commit tests of every Phase 1 A and B task of the earlier waves (master plan section 5 as amended by change 1: wave 1-a 95 = 41 + 31 + 23, wave 1-b 58 = 17 + 14 + 27 with Task 1A.7's revision-1 test, wave 1-c 49 = 49 + 0, wave 1-d 15, wave 1-e 7), plus the Workstream C tasks of the earlier waves, plus the task's own. If `main` or a merged task has a different count, shift by the difference; the pass criterion is "no failures, no errors, no warnings summary", and the number is a cross-check.
 
 | Task | Wave | Base: earlier waves | Own per-commit | Expected per-commit tier | Slow tests |
 | --- | --- | --- | ---: | ---: | ---: |
-| 1C.1 | 1-c | 221 + 95 + 58 = 374 | 36 | 410 | 0 |
-| 1C.3 | 1-d | 374 + 49 (1A.4) + 36 (1C.1) = 459 | 35 | 494 | 2 |
-| 1C.6 | 1-d | 459 | 32 | 491 | 1 |
-| 1C.2 | 1-e | 459 + 15 (1A.5) + 35 (1C.3) + 32 (1C.6) = 541 | 40 | 581 | 0 |
-| 1C.4 | 1-e | 541 | 25 | 566 | 2 |
-| 1C.5 | 1-f | 541 + 7 (1A.6) + 40 (1C.2) + 25 (1C.4) = 613 | 17 | 630 | 9 |
+| 1C.1 | 1-c | 225 + 95 + 58 = 378 | 36 | 414 | 0 |
+| 1C.3 | 1-d | 378 + 49 (1A.4) + 36 (1C.1) = 463 | 44 | 507 | 2 |
+| 1C.6 | 1-d | 463 | 32 | 495 | 1 |
+| 1C.2 | 1-e | 463 + 15 (1A.5) + 44 (1C.3) + 32 (1C.6) = 554 | 40 | 594 | 0 |
+| 1C.4 | 1-e | 554 | 25 | 579 | 2 |
+| 1C.5 | 1-f | 554 + 7 (1A.6) + 40 (1C.2) + 25 (1C.4) = 626 | 17 | 643 | 9 |
 
-With all of Phase 1 merged the per-commit tier counts 630 tests (221 + 224 for Workstreams A and B + 185 for Workstream C), and Workstream C adds 14 nightly tests. Dry-run of the per-commit tier on the replica with `main`'s 221 tests at `aeb417e` and all of Workstream C (revision 1): 406 tests (405 passed, plus the replica-only failure described under "Code provenance") in 516 s with lane-a quiet (log `.scratch/plan-check/stages/1c-per-commit-tier-rev1.log`); before revision 1 the tier took 686 s on a loaded machine, and `main`'s 220 tests at `f770ca2` alone 351 s. Workstreams A and B's 224 per-commit tests add about 10 s. Every Workstream C test runs in under 8 s in a warm worker, and every process tree measured stays below 530 MB (watchdog footprint).
+With all of Phase 1 merged the per-commit tier counts 643 tests (225 + 224 for Workstreams A and B + 194 for Workstream C), and Workstream C adds 14 nightly tests (revision 1: 630 = 221 + 224 + 185). Dry-run of the per-commit tier on the replica with `main`'s 221 tests at `aeb417e` and all of Workstream C (revision 1): 406 tests (405 passed, plus the replica-only failure described under "Code provenance") in 516 s with lane-a quiet (log `.scratch/plan-check/stages/1c-per-commit-tier-rev1.log`); before revision 1 the tier took 686 s on a loaded machine, and `main`'s 220 tests at `f770ca2` alone 351 s. Workstreams A and B's 224 per-commit tests add about 10 s. Revision 2 ran Workstream C's 194 per-commit tests once on the resynced replica with one worker (log `stages/g0-1/ops-per-commit-rev2.log`). Every Workstream C test runs in under 8 s in a warm worker, and every process tree measured stays below 530 MB (watchdog footprint).
 
 **Design notes the tasks share.**
 - *Counting twin.* A rule body takes an emitter: `Emitter()` emits PennyLane operations, `Emitter(counting=True)` counts them by name, and the resource function runs the body on dummy integer wires and maps the counts to keys with `as_resources`. A body therefore decides which gates to emit from compilable data only (spec 7.4 rules 2 and 3).
@@ -167,28 +174,27 @@ With all of Phase 1 merged the per-commit tier counts 630 tests (221 + 224 for W
 
 ---
 
-## Appendix: if remedy 1 is adopted
+## Appendix: per-leaf read loads (adopted at G0; revision 2)
 
-This appendix sits before the tasks so that the task-brief extraction of Task 1C.6 does not include it. Tasks 1C.3 to 1C.5 wait for the G0 decision on K-1 (master plan section 12.6). Every task below is written for the spec's current design: compilable tables of 32-bit words (L-24). If the user adopts remedy 1 (spec 16, K-1; Task 0.9b measured its partial form), these are the changes, task by task; the orchestrator brings them into the plan at G0. The remedy's leaf body is `ProtoTableReadR1` in `spikes/k1_whole_program.py` as merged from Task 0.9b (`e1f4593`, identical on `main` at `aeb417e`): `WORD_DTYPE` (line 927), `_r1_read_body` (983) and `_bit_loader` (1006). Its word helper `_word_array` (941) range-checks after the `int64` cast (ledger: Task 0.9b review, M1); use the corrected one named below instead.
+This appendix sits before the tasks so that the task-brief extraction of Task 1C.6 does not include it. The G0 decision "K-1 at G0" adopted two compile-memory levers that Task 0.9d measured and one FeMoco-54 stand-in compile confirmed (the controlled walk with both levers: 2,648 MB in 51 s against 2,566 MB projected, exact counts): per-leaf read loads in `QROAMRead` (lever P, spec 9.3) and explicit operator classes for the adjoint and controlled composites (lever X, spec 7.4 rule 6, which concerns Phases 2 to 4). Task 1C.3 below is written for lever P; this appendix records what changed against revision 1 and why. The measured read is `ProtoTableReadP` in `spikes/k1_whole_program.py` on `main` (`p_leaf_words`, `_p_leaf_loader`, `_proto_table_read_p`; Task 0.9d).
 
-**Unchanged:** Tasks 1C.1, 1C.2 and 1C.6 (no tables); the unary helper, the address model, every T, M and A count and closed form (Task 0.9b: Toffoli counts unchanged at every shape); the certificates' method.
+**Unchanged:** Tasks 1C.1, 1C.2 and 1C.6 (no tables); the unary helper, the address model, every T, M and A count and closed form; the erase, the fixup and the certificates' method.
 
 **Task 1C.3, `QROAMRead`.**
-- *Interface.* `table` splits into compilable `addresses` (the live addresses, sorted) and dynamic `words`, an `int64` array of shape `(len(addresses), ceil(width / 32))` holding 32 data bits per word, least significant word first (decision "Table words are `int64`": Catalyst builds no rule for an unsigned dynamic argument). `dynamic_argnames = ("words",)`, canonicalized once in `__init__` (L-23). `loaded_bits` and `loaded_contents` take `(addresses, words)`.
-- *Data contract of `words`.* Concrete words (Python or NumPy integers, nested sequences or arrays) are validated as integers in `[0, 2**32)`, with booleans and floats rejected, *before* the conversion to an `int64` array, so a word beyond the `int64` range cannot wrap around before the check; a violation raises `ValueError`. Tracers and abstract arrays (operators rebuilt by Catalyst, resource keys) are checked for shape `(len(addresses), ceil(width / 32))` and an integer dtype only, never concretized. The corrected helper is `_word_array` in `spikes/k1_whole_program.py` on current `main`, introduced by merge `ea569d1` (line 1008). It validates concrete words before the cast as above and passes tracers and abstract arrays unchanged; the shape and dtype check for those is the production addition.
-- *Rule body.* The iteration and the swap network stay unrolled in Python. At each loaded address of a leaf, a `qp.for_loop(0, width, 1)` over the bits applies `qp.cond(bit == 1, qp.CNOT)([flag, register[i]])`, with `register` a `jnp` array under capture (`_bit_loader`); for a `None` flag the conditional gate is `qp.X(register[i])`. The bit index follows spec 6.7, not the prototype: wire `i` takes `bit = (words[row, (width - 1 - i) // 32] >> ((width - 1 - i) % 32)) & 1`.
-- *Resources.* The CNOT count becomes an upper bound (every loaded bit set), so the rule is registered with `qp.register_resources(..., exact=False)`; T2's `assert_valid_decomp_rule` then checks only that every emitted gate is declared. The loops have static bounds, so `qp.analyze` stays non-symbolic.
-- *Adjoint (K-10 consequence 4; L-6, catalyst#3217).* The body now has loops and data conditionals, so `QROAMRead` joins the never-adjointed operators of spec 7.4 rule 4's remedy exception. `test_auto_adjoint_is_a_re_read` and spec 9.3's "auto adjoint is a test reference" are dropped; the exhaustive T3 test establishes the read, and the 1C.5 certificates establish that the erase undoes it. Task 0.9b observed that Catalyst still lowers the unused `Adjoint(...)` and `C(...)` candidates of such a leaf without a warning; the measuring-rule warning policy is unchanged, because the read has no measurement and the expected warnings come from the erases.
-- *Tests.* Unchanged except the constructor's table arguments and the dropped adjoint test (36 tests, 34 per commit).
+- *Interface.* The compilable `table` is gone. The dynamic `leaf_words` is an `int64` array of shape `leaf_words_shape(...) = (num_leaves, K, ceil(width / 32))`: row `l` belongs to the `l`-th unary leaf in visiting order (`leaf_blocks`), position `p` to the address `(leaf_blocks[l] << k) | p`. Callers build it from their compilable table with `QROAMRead.leaf_words_from_table`, which validates the table as revision 1's constructor did. `required_wires` drops its unused `table` argument; `loaded_bits` and `loaded_contents` keep the table form, because the erase builds its masks from the table.
+- *Bit order.* Spec 6.7 holds on the wires: wire `i` of a register holds entry bit `width - 1 - i`. The array builder encodes it, so bit `s` of word `w` is the bit for wire `32 w + s`, and the loop body is the one Task 0.9d measured (`p = t // width`, `i = t % width`, word `i // 32`, shift `i % 32`; 77 captured equations per leaf), with no index reversal under capture. The convention lives in one classical helper, checked by hand (`test_leaf_words_by_hand`) and on every address against `loaded_bits` (the T3 tests). The spike stored natural bit order; production does not take its order from the prototype (decision "Task 0.7 review decisions", item 3).
+- *Data contract.* Concrete words (Python or NumPy integers, nested sequences or arrays) must be integers in `[0, 2**32)`, booleans and floats rejected, checked on the Python values before the `int64` cast, so that no word wraps around before the check. Every padding and dead position, and every bit beyond `width`, must be zero: a nonzero dead position would load data that the erase's masks do not cover. Tracers and abstract arrays (operators rebuilt by Catalyst, resource keys) are checked for their shape and an integer dtype only. Under capture the array becomes a JAX array (L-23). Violations raise `ValueError`.
+- *Rule body.* The unary iteration and the swap network stay unrolled in Python. At each leaf one `qp.for_loop(0, K * width, 1)` applies `qp.cond(bit == 1, CNOT)(flag, register[p * width + i])`, with `register = target ‖ junk` as one JAX array under capture; no conditional surrounds the loop. A leaf without a flag (the whole address low and no enable, revision 1's `None` flag) uses `qp.cond(bit == 1, qp.X)` instead: `test_compiled_read_on_lightning[3]` compiles it and asserts its counts, and `test_every_address_loads_loaded_bits[outer-k3]` checks it on every address.
+- *Resources.* The counting twin declares `K width` CNOTs (X gates for the flagless leaf) per leaf, every position and bit with padding included, so the rule is registered with `qp.register_resources(..., exact=False)`; T2's `assert_valid_decomp_rule` then checks that every emitted gate is declared. T, M and A come from the unrolled iteration and swap network and do not depend on the data, so T4 asserts them exactly against `dfthc.costs.qroam_read`, as before. T4 also asserts that the analyzed CNOT count equals the declared one plus two per `CSWAP`: `qp.analyze` counts every unhinted load conditional, so the compiled program and the declared upper bound agree. For the flagless leaf the bound is on X gates: `test_compiled_read_on_lightning[3]` asserts T, M and A and the analyzed X count equal to the declared `K width` (review round 1; a twin that declares one X fewer passes T2 but fails this check). The loops have static bounds, so the counts stay concrete.
+- *Adjoint and control.* `QROAMRead` is never adjointed or controlled (spec 7.4 rules 4 and 6). `test_auto_adjoint_is_a_re_read` and spec 9.3's "auto adjoint is a test reference" are dropped: the exhaustive T3 test establishes the read, and the 1C.5 certificates establish that the erase undoes it. Under lever X no adjoint or controlled form of a composite that contains the read is ever requested, so Catalyst synthesizes no `Adjoint(QROAMRead)` or `C(QROAMRead)` candidate; Phase 3's inventory test checks that per program.
+- *Compiled read check at K = 16 and width > 32* (Task 0.9d, Opus finding M-2). `test_compiled_multiword_read_with_sixteen_positions` compiles the rule once on lightning for a 6-bit address over `[0, 40)` with `k = 4` and `width = 40`: three leaves, two words per entry, dead positions 40 to 47 and unvisited addresses 48 to 63, with the address and `leaf_words` as runtime arguments. The 640 target and junk wires are aliased onto 7 lightning wires (7 divides no `2**b * 40`, so every `CSWAP` acts on distinct wires; the rule is called directly, because an operator rejects repeated wires, as in the Task 0.9b Opus probe). Every address of the domain must give the folded image of the spec's loads and swap network, and a word-order and a bit-order mutant of the array must both fail. Revision-2 dry run: 4.2 s at 264 MB under the watchdog.
+- *Tests.* 46 (44 per commit, 2 slow; revision 1: 37, 35 and 2): the auto-adjoint test is dropped; added are the flagless compiled case, the K = 16 check, `test_leaf_words_by_hand`, revision 1's four table violations (now raised by the builder) and seven leaf-word violations.
 
-**Task 1C.4, `PhaseFixup`.** Unchanged under the partial remedy that Task 0.9b measured (reads and angle loads only). Under the full remedy, `emit_phase_fixup` receives a parity for every loaded address (the masks are no longer compile-time data, so no entry is known to be `False`), and the CZ count's expectation becomes `|loaded set| / 2`; T and the tests are otherwise unchanged.
+**Task 1C.4, `PhaseFixup`.** Unchanged. Its staged `qroam.py` carries the revision-2 read, and `test_qroam_read.py -m "not slow"` now gives 44.
 
-**Task 1C.5, `QROAMErase`.**
-- *Partial remedy (Task 0.9b's form).* The erase keeps the compilable table and is unchanged; the read and its erase then hold the same table once as dynamic words and once as compilable data.
-- *Full remedy.* The erase takes `(addresses, words)` as the read. Its masks are built inside the rule from `words`: with `jnp` under capture, with NumPy in tape mode. `dfthc.compile.mcm_parities` gains a dynamic-mask path in both modes (Task 0.2's module; Task 0.9b names this as the missing piece), and every loaded address gets a conditional, decided from the compilable `addresses` (K-10 consequence 3). T, M and A are unchanged; the CZ expectation is `|loaded set| / 2`; `test_erase_is_not_a_second_read_and_its_conditionals_are_hinted` asserts that. The "masks are never compilable data" hypothesis (decision "K-10 consequences", item 2) does not arise, because the masks are then dynamic.
-- *Measuring-rule warnings.* Unchanged: the erase measures and is never adjointed or controlled; Catalyst's dropped `Adjoint(QROAMErase)` and `C(QROAMErase)` candidates stay "expected".
+**Task 1C.5, `QROAMErase`.** The erase keeps its compilable table and is unchanged: the read and its erase hold the same table once as dynamic per-leaf words and once as compilable data, the form Task 0.9d measured (its arms P and PX kept arm F's erases). The tests that run a read (the lightning smoke run and the certificates) build its `leaf_words` from the same table. Dynamic erase masks (revision 1's "full remedy") are not adopted: no measurement asks for them, and the masks are still derived inside the rule from the compilable table (decision "K-10 consequences", item 2).
 
-**Counts.** No per-commit count changes except Task 1C.3's (one test fewer); the expected tiers shift by −1 from 1C.3 on.
+**Counts.** Task 1C.3's per-commit tests rise from 35 to 44, and the G0 base is 225; the expected tiers are in "Expected test counts".
 
 ---
 
@@ -387,7 +393,7 @@ def test_every_basis_address_raises_exactly_its_flag(control_value):
         for lo, hi in itertools.combinations(range(2**n + 1), 2):
             final, address, flags, control, work = _simulate_iterate(n, lo, hi, control_value)
             assert len(final.amps) == 2 ** (n + len(control))
-            assert np.allclose(final.amps, 1 / np.sqrt(len(final.amps)), atol=1e-12)
+            assert np.allclose(final.amps, 1 / np.sqrt(len(final.amps)), rtol=0, atol=1e-12)
             for row in range(len(final.amps)):
                 a = sum(int(final.bits(w)[row]) << (n - 1 - i) for i, w in enumerate(address))
                 c = int(final.bits(control[0])[row]) if control else 0
@@ -461,7 +467,7 @@ def test_compiled_flags_on_lightning(widths, ranges, control_value):
         return qp.state()
 
     expected = _expected_state(widths, ranges, control_value)
-    assert np.allclose(np.asarray(circuit()), expected, atol=1e-10)
+    assert np.allclose(np.asarray(circuit()), expected, rtol=0, atol=1e-10)
 
 
 @pytest.mark.compiled
@@ -530,7 +536,7 @@ def test_semiadder_adding_one_kicks_back_the_positive_phase():
     one = np.zeros(2**4)
     one[1] = 1.0
     expected = np.exp(2j * np.pi / 2**b) * np.kron(np.kron(_gradient(b), one), np.eye(8)[0])
-    assert np.allclose(_lightning_state(11, body), expected, atol=1e-10)
+    assert np.allclose(_lightning_state(11, body), expected, rtol=0, atol=1e-10)
 
 
 @pytest.mark.compiled
@@ -555,7 +561,7 @@ def test_rotation_applies_its_phase(m):
     omega = np.exp(2j * np.pi / 2**m)
     targets = np.kron([1, omega], [1, omega ** (2**m - 1)]) / 2
     expected = np.kron(np.kron(targets, _gradient(b)), np.eye(2 ** (2 * m - 1))[0])
-    assert np.allclose(_lightning_state(num_wires, body), expected, atol=1e-10)
+    assert np.allclose(_lightning_state(num_wires, body), expected, rtol=0, atol=1e-10)
 
 
 @pytest.mark.compiled
@@ -571,7 +577,7 @@ def test_adjoint_applies_the_conjugate_phase():
 
     target = np.array([1, np.exp(-2j * np.pi * k / 2**m)]) / np.sqrt(2)
     expected = np.kron(np.kron(target, _gradient(m)), np.eye(2**5)[0])
-    assert np.allclose(_lightning_state(9, body), expected, atol=1e-10)
+    assert np.allclose(_lightning_state(9, body), expected, rtol=0, atol=1e-10)
 
 
 @pytest.mark.compiled
@@ -1019,7 +1025,7 @@ Expected: `36 passed` (17 to 36 s, depending on the machine's load; every test u
 - [ ] **Step 5: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `410 passed` (374 + 36; see "Expected test counts").
+Expected: `414 passed` (378 + 36; see "Expected test counts").
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -1125,7 +1131,7 @@ def _without_gradient(state, wires):
         key = _value(state, others, row)
         amplitudes.setdefault(key, []).append(amp * np.sqrt(2**b) * np.exp(2j * np.pi * y / 2**b))
     for key, values in amplitudes.items():
-        assert len(values) == 2**b and np.allclose(values, values[0], atol=1e-12), key
+        assert len(values) == 2**b and np.allclose(values, values[0], rtol=0, atol=1e-12), key
     return {key: values[0] for key, values in amplitudes.items()}, len(others)
 
 
@@ -1146,7 +1152,7 @@ def test_succ_part_is_exactly_uniform(L, s):
             good.append(amp)
         else:
             failure += abs(amp) ** 2
-    assert len(good) == L and np.allclose(good, good[0], atol=1e-12)
+    assert len(good) == L and np.allclose(good, good[0], rtol=0, atol=1e-12)
     assert abs(failure - uniform_failure_probability(L, s)) < 1e-12
     assert abs(L * abs(good[0]) ** 2 + failure - 1) < 1e-12
 
@@ -1207,7 +1213,7 @@ def test_compiled_round_trip_on_lightning():
     before = 2 ** (lg(L) + 1 + 2)
     after = 2 ** len(wires["work"])
     expected = np.kron(np.kron(np.eye(before)[0], grad), np.eye(after)[0])
-    assert np.allclose(_lightning(num_wires, body, qp.state), expected, atol=1e-10)
+    assert np.allclose(_lightning(num_wires, body, qp.state), expected, rtol=0, atol=1e-10)
 
 
 @pytest.mark.compiled
@@ -1496,7 +1502,7 @@ Expected: `40 passed` (22 to 43 s; the slowest test, the FeMoco-width adjoint, t
 - [ ] **Step 5: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `581 passed` (541 + 40).
+Expected: `594 passed` (554 + 40).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -1512,7 +1518,7 @@ git commit -m "Add FlaggedUniformPrep"
 
 ### Task 1C.3: `QROAMRead`
 
-**Task id:** `1C.3` · **Branch:** `phase1/1C.3` · **Tier:** A (`inherit`) · **Reviewers:** GPT-5.6 and Opus · **Depends on:** 1C.1, 1B.2 (change 1). Tasks 1C.3 to 1C.5 are gated by the G0 decision on K-1 (master plan section 12.6); the "Appendix: if remedy 1 is adopted" before Task 1C.1 lists what remedy 1 would change.
+**Task id:** `1C.3` · **Branch:** `phase1/1C.3` · **Tier:** A (`inherit`) · **Reviewers:** GPT-5.6 and Opus · **Depends on:** 1C.1, 1B.2 (change 1). The G0 decision "K-1 at G0" adopted per-leaf read loads, and this task is written for them (revision 2); the "Appendix: per-leaf read loads" before Task 1C.1 lists what changed and why.
 
 **Files:**
 - Create: `src/dfthc/ops/qroam.py` (the `QROAMRead` part), `tests/ops/test_qroam_read.py`
@@ -1520,22 +1526,22 @@ git commit -m "Add FlaggedUniformPrep"
 **Interfaces:**
 - Consumes: `Emitter`, `as_resources`, `iterate_nested`, `work_required` and `dfthc.ops._validate` (1C.1); `dfthc.costs.qroam_read` (1A.7); the presets of `dfthc.params` (1A.1); `SparseSimulator`, `decompose_for_simulation` (1B.2).
 - Produces, in `dfthc.ops.qroam`:
-  - `WORD = 32` and `QROAMEmitter(Emitter)` with `cswap(control, a, b)`;
-  - `QROAMRead(table, address_widths, live_ranges, width, block_bits, control_value, address, target, junk, work, control)`, all but the wire registers compilable:
-    - `table`: `(address, words)` pairs, each address live (every register value in its live range), each entry below `2**width` in `ceil(width / 32)` words in [0, 2**32), least significant first; canonicalized to sorted tuples;
-    - `address_widths`: one or two widths, at least one wire, the first of two nonempty; `live_ranges`: one `(lo, hi)` per register; `width >= 1`; `0 <= block_bits <= address_widths[-1]`; `control_value`: `None` (with a 0-wire `control`), 0 or 1;
-  - static methods: `required_wires(table, address_widths, live_ranges, width, block_bits, control_value) -> dict`, `visited_ranges(address_widths, live_ranges, block_bits) -> list[tuple[int, int, int]]`, `loaded_ranges(address_widths, live_ranges, block_bits) -> tuple[tuple[int, int], ...]`, `loaded_set(address_widths, live_ranges, block_bits) -> list[int]`, `junk_layout(block_bits, low) -> list[int]`, `loaded_bits(table, address, *, address_widths, live_ranges, width, block_bits) -> int`, `loaded_contents(table, addresses, *, ...) -> list[int]`;
-  - the rule `_qroam_read`; the adjoint is auto-derived and used only as a test reference.
+  - `WORD = 32`, `WORD_DTYPE = np.int64` and `QROAMEmitter(Emitter)` with `cswap(control, a, b)`, `wire_array(target, junk)` and `load(flag, leaf_words, leaf, register, positions, width)` (one `qp.for_loop` per leaf; counting: `positions * width` gates, the upper bound);
+  - `QROAMRead(leaf_words, address_widths, live_ranges, width, block_bits, control_value, address, target, junk, work, control)`:
+    - dynamic `leaf_words`: an `int64` array of shape `leaf_words_shape(address_widths, live_ranges, width, block_bits) = (num_leaves, 2**block_bits, ceil(width / 32))`; row `l` is the `l`-th leaf of `leaf_blocks`, position `p` the address `(leaf_blocks[l] << block_bits) | p`; 32 data bits per word in wire order (bit `s` of word `w` is the bit for wire `32 w + s`, entry bit `width - 1 - (32 w + s)`, spec 6.7); data contract: concrete words must be integers in [0, 2**32), booleans and floats rejected, checked before the `int64` cast, and zero at padding and dead positions and beyond `width`; tracers and abstract arrays are checked for shape and an integer dtype only; `ValueError` otherwise;
+    - compilable: `address_widths` (one or two widths, at least one wire, the first of two nonempty), `live_ranges` (one `(lo, hi)` per register), `width >= 1`, `0 <= block_bits <= address_widths[-1]`, `control_value` (`None` with a 0-wire `control`, 0 or 1);
+  - static methods: `required_wires(address_widths, live_ranges, width, block_bits, control_value) -> dict`, `visited_ranges(address_widths, live_ranges, block_bits) -> list[tuple[int, int, int]]`, `loaded_ranges(address_widths, live_ranges, block_bits) -> tuple[tuple[int, int], ...]`, `loaded_set(address_widths, live_ranges, block_bits) -> list[int]`, `junk_layout(block_bits, low) -> list[int]`, `leaf_blocks(address_widths, live_ranges, block_bits) -> list[int]` (the leaves in visiting order), `leaf_words_shape(...) -> tuple[int, int, int]`, `leaf_words_from_table(table, *, address_widths, live_ranges, width, block_bits) -> np.ndarray` (`table`: `(address, words)` pairs, each address live, each entry below `2**width` in `ceil(width / 32)` words in [0, 2**32), least significant first), `loaded_bits(table, address, *, address_widths, live_ranges, width, block_bits) -> int`, `loaded_contents(table, addresses, *, ...) -> list[int]`;
+  - the rule `_qroam_read`, registered with `exact=False`. It is never adjointed or controlled.
 
-**Acceptance tests** (37 tests in `tests/ops/test_qroam_read.py`, 2 of them `slow`):
-- T3, exhaustive failed-address tests item 1 of spec 12.1 on the sparse simulator, with `H` on the whole address register (9 tests): inner shapes with rows [0, 2) of a 3-bit `x_o` (`X_o = 5`, so x_o 2 to 4 are one-body rows and 5 to 7 failed) and (B+1, k2) ∈ {(3,1), (5,1), (6,2), (7,0), (28,4)}, widths `w_b + 4`; outer shapes `X_o = 5` with k = 0, 1, 2, 3. Every computational address ends with `target ‖ junk == loaded_bits`, `work` in `|0>`, amplitude +1/sqrt N (no phase), and every address occurs.
+**Acceptance tests** (46 tests in `tests/ops/test_qroam_read.py`, 2 of them `slow`):
+- T3, exhaustive failed-address tests item 1 of spec 12.1 on the sparse simulator, with `H` on the whole address register (9 tests): inner shapes with rows [0, 2) of a 3-bit `x_o` (`X_o = 5`, so x_o 2 to 4 are one-body rows and 5 to 7 failed) and (B+1, k2) ∈ {(3,1), (5,1), (6,2), (7,0), (28,4)}, widths `w_b + 4`; outer shapes `X_o = 5` with k = 0, 1, 2, 3 (k = 3: the whole address is low, one flagless leaf). Every computational address ends with `target ‖ junk == loaded_bits`, `work` in `|0>`, amplitude +1/sqrt N (no phase), and every address occurs.
 - An enable in `|+>` with control value 0 or 1 loads only on its value (2 tests).
-- Compiled on lightning at k = 1 and 2: the exact output state (2 tests).
-- The auto-derived adjoint undoes the read (lightning) and its T equals the read's.
-- T4: T = U(visited) + (2^k − 1) width and A = U at `H2_STO3G_TEST` and `H2_631G_TEST`, outer and inner (4 tests), with an enable, and at `MID_NAPHTHALENE` outer and inner (`slow`); the FeMoco ranges `[(0, 81, 7)]` and `[(0, 270, 9), (0, 2, 1)]`, the closed forms 156 and 933, and `required_wires` at FeMoco (work 6 and 9).
-- T5 at `level="device"`; T2 at two sizes (one enabled); `junk_layout`, `loaded_bits` and the range helpers by hand; nine constructor violations.
+- Compiled on lightning at k = 1, 2 and 3: the exact output state; k = 3 compiles the flagless leaf's conditional X loads and also asserts T, M and A and the analyzed X count equal to the declared upper bound, `2**k * width` (3 tests).
+- The compiled read check at K = 16 and width 40 (appendix; Task 0.9d, Opus finding M-2): every address of the domain on 7 aliased lightning wires equals the folded image of the spec's loads and swap network; a word-order and a bit-order mutant of the array fail.
+- T4: T = U(visited) + (2^k − 1) width, M = 0, A = U, and the analyzed CNOT count equal to the declared upper bound plus two per `CSWAP` (`exact=False`), at `H2_STO3G_TEST` and `H2_631G_TEST`, outer and inner (4 tests), with an enable, and at `MID_NAPHTHALENE` outer and inner (`slow`); the FeMoco ranges `[(0, 81, 7)]` and `[(0, 270, 9), (0, 2, 1)]`, the closed forms 156 and 933, `required_wires` at FeMoco (work 6 and 9), and the leaf-array shapes of the four reads of a FeMoco walk, (81, 4, 1), (540, 16, 1), (54, 1, 25) and (270, 1, 25): 945 leaves.
+- T5 at `level="device"`; T2 at two sizes (one enabled; with `exact=False` every emitted gate must be declared); `junk_layout`, `loaded_bits`, `leaf_words_from_table` (wire order, one- and two-word entries) and the range and leaf helpers by hand; four table violations raised by the builder; twelve constructor violations, five structural and seven of the leaf-word contract.
 
-**Definition of done:** `37 passed` targeted (35 in the per-commit tier); the per-commit tier passes; `ruff check .` clean; one commit.
+**Definition of done:** `46 passed` targeted (44 in the per-commit tier); the per-commit tier passes; `ruff check .` clean; one commit.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1544,13 +1550,15 @@ Create `tests/ops/test_qroam_read.py`:
 ```python
 """QROAMRead (spec 9.3): every computational address, no phase, counts, helpers."""
 
+import jax.numpy as jnp
 import numpy as np
 import pennylane as qp
 import pytest
+from pennylane.typing import AbstractArray
 
 from dfthc import costs
 from dfthc.compile import FIXED_DECOMPS, GATE_SET, compiled_resources
-from dfthc.ops.qroam import QROAMRead, _qroam_read
+from dfthc.ops.qroam import QROAMEmitter, QROAMRead, _qroam_read, _read_body
 from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE, lg
 from dfthc.testing.sparse_sim import SparseSimulator
 from dfthc.testing.tape import decompose_for_simulation
@@ -1583,7 +1591,7 @@ def inner_shape(RC, X_o, B1, k, width):
 
 
 def layout(widths, live_ranges, width, k, control_value=None):
-    sizes = QROAMRead.required_wires((), widths, live_ranges, width, k, control_value)
+    sizes = QROAMRead.required_wires(widths, live_ranges, width, k, control_value)
     wires, start = {}, 0
     for name, size in sizes.items():
         wires[name] = list(range(start, start + size))
@@ -1591,9 +1599,15 @@ def layout(widths, live_ranges, width, k, control_value=None):
     return wires, start
 
 
+def leaf_words(table, widths, live_ranges, width, k):
+    return QROAMRead.leaf_words_from_table(table, address_widths=widths, live_ranges=live_ranges,
+                                           width=width, block_bits=k)
+
+
 def make_read(table, widths, live_ranges, width, k, control_value, wires):
-    return QROAMRead(table, widths, live_ranges, width, k, control_value, wires["address"],
-                     wires["target"], wires["junk"], wires["work"], wires["control"])
+    return QROAMRead(leaf_words(table, widths, live_ranges, width, k), widths, live_ranges,
+                     width, k, control_value, wires["address"], wires["target"], wires["junk"],
+                     wires["work"], wires["control"])
 
 
 def value_of(state, register, row):
@@ -1613,7 +1627,8 @@ OUTER = [outer_shape(5, k, 5) for k in (0, 1, 2, 3)]
 def test_every_address_loads_loaded_bits(shape):
     """T3, exhaustive (sparse simulator): on H|0> over the whole address register, every
     computational address ends with target ‖ junk == loaded_bits, work in |0>, amplitude +1/sqrt N.
-    Includes failed x_o >= X_o, failed b >= B + 1, one-body rows and dead block positions."""
+    Includes failed x_o >= X_o, failed b >= B + 1, one-body rows, dead block positions, and
+    (outer-k3) the flagless leaf of a fully low address."""
     widths, live, width, k = shape
     table = random_table(widths, live, width)
     wires, num_wires = layout(widths, live, width, k)
@@ -1626,7 +1641,7 @@ def test_every_address_loads_loaded_bits(shape):
     state = SparseSimulator(num_wires).run(decompose_for_simulation(qfunc).operations)
     size = 2 ** sum(widths)
     assert len(state.amps) == size
-    assert np.allclose(state.amps, 1 / np.sqrt(size), atol=1e-12)
+    assert np.allclose(state.amps, 1 / np.sqrt(size), rtol=0, atol=1e-12)
     contents = wires["target"] + wires["junk"]
     seen = set()
     for row in range(size):
@@ -1687,9 +1702,11 @@ def _loaded_state(table, widths, live, width, k, wires, num_wires):
 
 
 @pytest.mark.compiled
-@pytest.mark.parametrize("k", [1, 2])
+@pytest.mark.parametrize("k", [1, 2, 3])
 def test_compiled_read_on_lightning(k):
-    """T3 on the compiled path: the exact output state, so the read adds no phase."""
+    """T3 on the compiled path: the exact output state, so the read adds no phase. At k = 3 the
+    whole 3-bit address is low: one flagless leaf, whose loads are conditional X gates; there T4
+    also holds, with the analyzed X count equal to the declared upper bound 2**k * width."""
     widths, live, width, _ = outer_shape(5, k, 2)
     table = random_table(widths, live, width)
     wires, num_wires = layout(widths, live, width, k)
@@ -1700,37 +1717,102 @@ def test_compiled_read_on_lightning(k):
         make_read(table, widths, live, width, k, None, wires)
 
     expected = _loaded_state(table, widths, live, width, k, wires, num_wires)
-    assert np.allclose(_lightning_state(num_wires, body), expected, atol=1e-10)
+    assert np.allclose(_lightning_state(num_wires, body), expected, rtol=0, atol=1e-10)
+    if k == 3:
+        resources, declared = _assert_compiled_counts((widths, live, width, k))
+        assert resources.counts["PauliX"] == declared["PauliX"] == 2**k * width
+
+
+# The compiled read check at FeMoco's inner block size and with two-word entries (Task 0.9d,
+# Opus M-2): K = 16 positions of width 40 > 32, so every load loop crosses a word boundary.
+# Its 640 target and junk wires are aliased onto ALIAS lightning wires: virtual wire j is
+# physical wire j mod ALIAS, so each physical wire ends with the XOR of its virtual wires' bits,
+# then permuted by the swap network. 7 divides no 2**b * 40, so every CSWAP acts on distinct
+# wires. The rule is called directly, because an operator rejects repeated wires.
+MULTIWORD = ((6,), ((0, 40),), 40, 4)
+ALIAS = 7
+
+
+def _aliased_expected(table, address):
+    """The physical register after the read at ``address``, as a big-endian integer: the
+    spec's loads (wire i of position p holds entry bit width - 1 - i) and swap network, with
+    every virtual wire folded onto its physical one."""
+    widths, live, width, k = MULTIWORD
+    entries = {a: sum(w << (32 * i) for i, w in enumerate(words)) for a, words in table}
+    bits = [0] * ALIAS
+    block, low = address >> k, address & (2**k - 1)
+    if block in QROAMRead.leaf_blocks(widths, live, k):
+        for p in range(2**k):
+            value = entries.get((block << k) | p, 0)
+            for i in range(width):
+                bits[(p * width + i) % ALIAS] ^= (value >> (width - 1 - i)) & 1
+    for b in reversed(range(k)):
+        if (low >> b) & 1:
+            for r in range(2**b):
+                for i in range(width):
+                    x, y = (r * width + i) % ALIAS, ((r + 2**b) * width + i) % ALIAS
+                    bits[x], bits[y] = bits[y], bits[x]
+    return sum(bit << (ALIAS - 1 - j) for j, bit in enumerate(bits))
 
 
 @pytest.mark.compiled
-def test_auto_adjoint_is_a_re_read():
-    """Spec 9.3: the auto-derived adjoint undoes the read (test reference only)."""
-    widths, live, width, k = outer_shape(5, 2, 2)
-    table = random_table(widths, live, width)
-    wires, num_wires = layout(widths, live, width, k)
+def test_compiled_multiword_read_with_sixteen_positions():
+    """One lightning qjit, the address and leaf_words as runtime arguments, every address of
+    the domain (three leaves, dead positions 40 to 47, unvisited 48 to 63): the aliased register
+    equals the spec's loads. A word-order and a bit-order mutant of the array both fail."""
+    widths, live, width, k = MULTIWORD
+    table = random_table(widths, live, width, seed=40)
+    words = leaf_words(table, widths, live, width, k)
+    assert words.shape == (3, 16, 2)
+    n = sum(widths)
+    address = list(range(n))
+    work = [n]
+    physical = list(range(n + 1, n + 1 + ALIAS))
+    register = [physical[j % ALIAS] for j in range(2**k * width)]
 
-    def body():
-        for wire in wires["address"]:
-            qp.H(wire)
-        make_read(table, widths, live, width, k, None, wires)
-        qp.adjoint(make_read(table, widths, live, width, k, None, wires))
+    @qp.qjit(capture=True)
+    @qp.decompose(gate_set=GATE_SET, fixed_decomps=dict(FIXED_DECOMPS))
+    @qp.qnode(qp.device("lightning.qubit", wires=n + 1 + ALIAS))
+    def circuit(a, array):
+        for position, wire in enumerate(address):
+            qp.cond(((a >> (n - 1 - position)) & 1) == 1, qp.X)(wire)
+        _qroam_read(array, widths, live, width, k, None, address, register[:width],
+                    register[width:], work, [])
+        return qp.probs(wires=physical)
 
-    expected = np.zeros(2**num_wires)
-    expected[[a << (num_wires - 3) for a in range(8)]] = 1 / np.sqrt(8)
-    assert np.allclose(_lightning_state(num_wires, body), expected, atol=1e-10)
-    adjoint = compiled_resources(
-        lambda: qp.adjoint(make_read(table, widths, live, width, k, None, wires)),
-        num_wires=num_wires)
-    assert adjoint.toffoli == costs.qroam_read(
-        QROAMRead.visited_ranges(widths, live, k), k, width, False).toffoli
+    def outcomes(array):
+        return [np.asarray(circuit(a, jnp.asarray(array))) for a in range(2**n)]
+
+    probabilities = outcomes(words)
+    assert all(abs(p.max() - 1) < 1e-9 for p in probabilities)
+    assert [int(np.argmax(p)) for p in probabilities] == [
+        _aliased_expected(table, a) for a in range(2**n)]
+    natural = np.zeros_like(words)
+    for leaf, block in enumerate(QROAMRead.leaf_blocks(widths, live, k)):
+        for p in range(2**k):
+            entry = dict(table).get((block << k) | p, (0, 0))
+            natural[leaf, p] = entry
+    for mutant in (words[:, :, ::-1], natural):
+        assert [int(np.argmax(p)) for p in outcomes(mutant)] != [
+            _aliased_expected(table, a) for a in range(2**n)]
 
 
 def preset_shapes(p):
     return [outer_shape(p.X_o, p.k1, p.d1), inner_shape(p.RC, p.X_o, p.B + 1, p.k2, p.d2)]
 
 
+def _declared_counts(widths, live, width, k, control_value):
+    """The rule's declared gate counts by name (its counting twin)."""
+    counter = QROAMEmitter(counting=True)
+    wires, _ = layout(widths, live, width, k, control_value)
+    _read_body(counter, None, widths, live, width, k, control_value, **wires)
+    return counter.counts
+
+
 def _assert_compiled_counts(shape, control_value=None):
+    """T, M and A exact; CNOT equal to the declared upper bound plus two per CSWAP, because
+    qp.analyze counts every unhinted load conditional. Returns the analyzed resources and the
+    declared counts."""
     widths, live, width, k = shape
     table = random_table(widths, live, width)
     wires, num_wires = layout(widths, live, width, k, control_value)
@@ -1742,6 +1824,10 @@ def _assert_compiled_counts(shape, control_value=None):
     assert (resources.toffoli, resources.measurements) == (expected.toffoli, 0)
     swaps = (2**k - 1) * width
     assert resources.measured_and_uncomputes == expected.toffoli - swaps
+    declared = _declared_counts(widths, live, width, k, control_value)
+    assert declared["CSWAP"] == swaps
+    assert resources.counts["CNOT"] == declared["CNOT"] + 2 * swaps
+    return resources, declared
 
 
 @pytest.mark.compiled
@@ -1766,17 +1852,23 @@ def test_toffoli_count_at_mid_naphthalene(shape):
 
 
 def test_femoco_counts_on_the_closed_form():
-    """FeMoco-54 is asserted on the closed forms; no FeMoco table is compiled (12.9)."""
+    """FeMoco-54 is asserted on the closed forms; no FeMoco table is compiled (12.9). The four
+    reads of a walk have 81 + 540 + 54 + 270 = 945 leaves (Task 0.9d)."""
     p = FEMOCO54
     outer, inner = preset_shapes(p)
     assert QROAMRead.visited_ranges(*outer[:2], outer[3]) == [(0, 81, 7)]
     assert QROAMRead.visited_ranges(*inner[:2], inner[3]) == [(0, 270, 9), (0, 2, 1)]
     assert costs.qroam_read([(0, 81, 7)], p.k1, p.d1, False).toffoli == 84 + 72 == 156
     assert costs.qroam_read([(0, 270, 9), (0, 2, 1)], p.k2, p.d2, False).toffoli == 933
-    assert QROAMRead.required_wires((), *outer[:2], p.d1, p.k1, None) == {
+    assert QROAMRead.required_wires(*outer[:2], p.d1, p.k1, None) == {
         "address": 9, "target": 24, "junk": 72, "work": 6, "control": 0}
-    assert QROAMRead.required_wires((), *inner[:2], p.d2, p.k2, None) == {
+    assert QROAMRead.required_wires(*inner[:2], p.d2, p.k2, None) == {
         "address": 14, "target": 26, "junk": 390, "work": 9, "control": 0}
+    tail = ((p.w_x,), ((p.RC, p.X_o),), (p.N - 1) * p.b_rot + 2, 0)
+    sf = ((p.w_r, p.w_b), ((0, p.R), (0, p.B)), (p.N - 1) * p.b_rot + 1, 0)
+    shapes = [QROAMRead.leaf_words_shape(*s) for s in (outer, inner, tail, sf)]
+    assert shapes == [(81, 4, 1), (540, 16, 1), (54, 1, 25), (270, 1, 25)]
+    assert sum(s[0] for s in shapes) == 945
 
 
 @pytest.mark.compiled
@@ -1790,6 +1882,7 @@ def test_no_dfthc_operator_survives_at_device_level():
 
 @pytest.mark.parametrize(("shape", "control_value"), [(OUTER[1], None), (INNER[2], 0)])
 def test_rule_is_valid(shape, control_value):
+    """T2: with exact=False, every emitted gate must be declared."""
     widths, live, width, k = shape
     table = random_table(widths, live, width)
     wires, _ = layout(widths, live, width, k, control_value)
@@ -1812,29 +1905,70 @@ def test_loaded_bits_by_hand():
                       (2 << 2) | 0, (0 << 2) | 2, 0, 0]
 
 
+def test_leaf_words_by_hand():
+    """Wire order (spec 6.7 on the wires): bit i of the word stream is entry bit width - 1 - i.
+    X_o = 5, k = 1, width 2: entries 1 = 0b01 -> 0b10, 2 -> 0b01, 3 -> 0b11; address 5 is dead.
+    Width 33: the top entry bit lands in word 0, bit 0, and bit 0 in word 1, bit 0."""
+    table = tuple((a, (v,)) for a, v in enumerate([1, 2, 3, 1, 2]))
+    args = {"address_widths": (3,), "live_ranges": ((0, 5),), "width": 2, "block_bits": 1}
+    words = QROAMRead.leaf_words_from_table(table, **args)
+    assert words.dtype == np.int64
+    assert words.tolist() == [[[2], [1]], [[3], [2]], [[1], [0]]]
+    wide = {"address_widths": (1,), "live_ranges": ((0, 2),), "width": 33, "block_bits": 1}
+    words = QROAMRead.leaf_words_from_table(((0, (0, 1)), (1, (1, 0))), **wide)
+    assert words.tolist() == [[[1, 0], [0, 1]]]
+
+
 def test_loaded_and_visited_sets():
     assert QROAMRead.visited_ranges((3,), ((0, 5),), 1) == [(0, 3, 2)]
     assert QROAMRead.visited_ranges((3, 3), ((0, 2), (0, 5)), 3) == [(0, 2, 3)]
     assert QROAMRead.loaded_ranges((3, 3), ((0, 2), (0, 5)), 2) == ((0, 2), (0, 8))
     assert QROAMRead.loaded_set((3,), ((0, 5),), 1) == [0, 1, 2, 3, 4, 5]
     assert QROAMRead.loaded_set((2, 2), ((1, 2), (0, 3)), 1) == [4, 5, 6, 7]
+    assert QROAMRead.leaf_blocks((3, 3), ((1, 3), (0, 5)), 2) == [2, 3, 4, 5]
+    assert QROAMRead.leaf_blocks((3,), ((0, 5),), 3) == [0]
+    assert QROAMRead.leaf_words_shape((3, 3), ((1, 3), (0, 5)), 33, 2) == (4, 4, 2)
+
+
+@pytest.mark.parametrize(("table", "match"), [
+    (((5, (1,)),), "outside the live ranges"),
+    (((0, (4,)),), "does not fit in 2 bits"),
+    (((0, (1, 0)),), "must be 1 words"),
+    (((0, (1,)), (0, (2,))), "appears twice"),
+])
+def test_leaf_words_from_table_validates(table, match):
+    with pytest.raises(ValueError, match=match):
+        QROAMRead.leaf_words_from_table(table, address_widths=(3,), live_ranges=((0, 5),),
+                                        width=2, block_bits=1)
+
+
+def _words(**changes):
+    """Valid leaf_words of the X_o = 5, k = 1, width-2 read, with entries changed."""
+    words = np.zeros((3, 2, 1), dtype=object)
+    for (leaf, position), word in changes.get("set", {}).items():
+        words[leaf, position, 0] = word
+    return words
 
 
 @pytest.mark.parametrize(("change", "match"), [
-    ({"table": ((5, (1,)),)}, "outside the live ranges"),
-    ({"table": ((0, (4,)),)}, "does not fit in 2 bits"),
-    ({"table": ((0, (1, 0)),)}, "must be 1 words"),
-    ({"table": ((0, (1,)), (0, (2,)))}, "appears twice"),
     ({"block_bits": 4}, r"block_bits must lie in \[0, 3\]"),
     ({"address_widths": (0, 3), "live_ranges": ((0, 1), (0, 5))}, "nonempty first register"),
     ({"live_ranges": ((0, 9),)}, "not a nonempty range of 3-bit values"),
     ({"control_value": 2}, r"control_value must lie in \[0, 1\]"),
     ({"junk": [9]}, "'junk' has 1 wires; expected 2"),
+    ({"leaf_words": np.zeros((2, 2, 1), dtype=np.int64)}, r"shape \(3, 2, 1\)"),
+    ({"leaf_words": AbstractArray((3, 2, 2), np.int64)}, r"shape \(3, 2, 1\)"),
+    ({"leaf_words": _words(set={(0, 0): 2**32 + 1})}, r"integers in \[0, 2\*\*32\)"),
+    ({"leaf_words": _words(set={(0, 0): True})}, r"integers in \[0, 2\*\*32\)"),
+    ({"leaf_words": _words(set={(0, 0): 1.0})}, r"integers in \[0, 2\*\*32\)"),
+    ({"leaf_words": _words(set={(2, 1): 1})}, "padding or dead position"),
+    ({"leaf_words": _words(set={(0, 0): 4})}, "bits beyond width 2"),
 ])
 def test_constructor_validates(change, match):
-    args = {"table": ((0, (1,)),), "address_widths": (3,), "live_ranges": ((0, 5),), "width": 2,
-            "block_bits": 1, "control_value": None, "address": [0, 1, 2], "target": [3, 4],
-            "junk": [5, 6], "work": [7], "control": []} | change
+    args = {"leaf_words": np.zeros((3, 2, 1), dtype=np.int64), "address_widths": (3,),
+            "live_ranges": ((0, 5),), "width": 2, "block_bits": 1, "control_value": None,
+            "address": [0, 1, 2], "target": [3, 4], "junk": [5, 6], "work": [7],
+            "control": []} | change
     with pytest.raises(ValueError, match=match):
         QROAMRead(**args)
 ```
@@ -1860,15 +1994,21 @@ significant: the integer address is ``(a_1 << w_2) | a_2``. Each register has a 
 **Bit order.** Every register holds an entry big-endian: wire ``i`` of a ``width``-wire register
 holds bit ``width - 1 - i``. ``target ‖ junk`` is read as one big-endian integer of
 ``2**block_bits * width`` bits (``target`` most significant, then the junk slots in order); that
-integer is :meth:`QROAMRead.loaded_bits`.
+integer is :meth:`QROAMRead.loaded_bits`. The read's dynamic ``leaf_words`` hold the entries in
+wire order instead: bit ``s`` of word ``w`` of block position ``p`` is the bit for wire
+``32 w + s`` of that position's register, which is entry bit ``width - 1 - (32 w + s)``
+(:meth:`QROAMRead.leaf_words_from_table` converts a table).
 """
 
 from __future__ import annotations
 
 import itertools
 
+import jax.numpy as jnp
+import numpy as np
 import pennylane as qp
 from pennylane.core import Operator2
+from pennylane.typing import AbstractArray
 
 from dfthc.compile import register_rule
 from dfthc.ops._validate import canonical_ints, check_int, check_wires
@@ -1877,12 +2017,49 @@ from dfthc.ops.unary import Emitter, as_resources, iterate_nested, work_required
 WORD = 32
 """Data bits per table word (spec 8.4, L-24)."""
 
+WORD_DTYPE = np.int64
+"""dtype of ``leaf_words``: signed, because Catalyst builds no rule for an operator with an
+unsigned dynamic argument (L-26); 32 data bits per word keep every word non-negative."""
+
 
 class QROAMEmitter(Emitter):
     """:class:`~dfthc.ops.unary.Emitter` with the gates of the read."""
 
     def cswap(self, control, a, b):
         self.gate("CSWAP", lambda: qp.CSWAP([control, a, b]))
+
+    def wire_array(self, target, junk):
+        """``target ‖ junk`` as one register that a traced loop index can address: a JAX array
+        under capture, a list in tape mode; ``None`` when counting."""
+        if self.counts is not None:
+            return None
+        if not qp.capture.enabled():
+            return list(target) + list(junk)
+        if len(junk) == 0:
+            return jnp.asarray(target)
+        return jnp.concatenate([jnp.asarray(target), jnp.asarray(junk)])
+
+    def load(self, flag, leaf_words, leaf, register, positions, width):
+        """The loads of unary leaf ``leaf``: one ``qp.for_loop`` over its ``positions * width``
+        bits. Iteration ``t`` takes position ``p = t // width`` and bit ``i = t % width`` and
+        applies, conditioned on that bit of ``leaf_words``, a CNOT from ``flag`` (an ``X`` for a
+        ``None`` flag) onto ``register[p * width + i]``. No conditional surrounds the loop.
+        Counting: ``positions * width`` gates, the upper bound."""
+        name = "PauliX" if flag is None else "CNOT"
+        if self.counts is not None:
+            self.counts[name] += positions * width
+            return
+
+        @qp.for_loop(0, positions * width, 1)
+        def bit_loop(t):
+            p, i = t // width, t % width
+            bit = (leaf_words[leaf, p, i // WORD] >> (i % WORD)) & 1
+            if flag is None:
+                qp.cond(bit == 1, qp.X)(register[p * width + i])
+            else:
+                qp.cond(bit == 1, qp.CNOT)([flag, register[p * width + i]])
+
+        bit_loop()
 
 
 # --------------------------------------------------------------------------- address helpers
@@ -2003,6 +2180,52 @@ def _entries(table) -> dict[int, int]:
     return {address: _entry_value(words) for address, words in table}
 
 
+def _wire_order(value, width) -> int:
+    """``value`` with its ``width`` bits reversed: bit ``i`` of the result is the bit for wire
+    ``i`` of a big-endian register (spec 6.7)."""
+    return int(format(value, f"0{width}b")[::-1], 2)
+
+
+def _live_positions(widths, live_ranges, block_bits) -> np.ndarray:
+    """``(num_leaves, K)`` booleans: which block positions of each leaf hold a live address."""
+    blocks = QROAMRead.leaf_blocks(widths, live_ranges, block_bits)
+    return np.array([[_is_live((block << block_bits) | p, widths, live_ranges)
+                      for p in range(2**block_bits)] for block in blocks], dtype=bool)
+
+
+def _leaf_word_array(leaf_words, widths, live_ranges, width, block_bits):
+    """Canonicalize the dynamic ``leaf_words`` once (L-23).
+
+    Concrete words (Python or NumPy integers, nested sequences or arrays) must be integers in
+    ``[0, 2**32)``, booleans and floats rejected, checked on the Python values before the
+    ``int64`` cast, so that no word can wrap around before the check; every padding and dead
+    position must be zero, and so must every bit beyond ``width`` (wire order). Tracers and
+    abstract arrays (operators rebuilt by Catalyst, resource keys) are checked for their shape
+    and an integer dtype only. Raises ``ValueError``.
+    """
+    shape = QROAMRead.leaf_words_shape(widths, live_ranges, width, block_bits)
+    if isinstance(leaf_words, AbstractArray) or qp.math.is_tracer(leaf_words):
+        if tuple(leaf_words.shape) != shape or not np.issubdtype(np.dtype(leaf_words.dtype),
+                                                                 np.integer):
+            raise ValueError(f"leaf_words must be an integer array of shape {shape}, got "
+                             f"{tuple(leaf_words.shape)} of {leaf_words.dtype}")
+        return leaf_words
+    values = np.asarray(leaf_words, dtype=object)
+    if values.shape != shape:
+        raise ValueError(f"leaf_words must have shape {shape}, got {values.shape}")
+    for word in values.flat:
+        if isinstance(word, bool) or not isinstance(word, (int, np.integer)) or not (
+                0 <= word < 2**WORD):
+            raise ValueError(f"leaf words must be integers in [0, 2**{WORD}), got {word!r}")
+    array = values.astype(WORD_DTYPE)
+    if np.any(array[~_live_positions(widths, live_ranges, block_bits)]):
+        raise ValueError("a padding or dead position of leaf_words holds a nonzero word")
+    spare = WORD * shape[2] - width
+    if spare and np.any(array[..., -1] >> (WORD - spare)):
+        raise ValueError(f"leaf_words holds bits beyond width {width}")
+    return jnp.asarray(array) if qp.capture.enabled() else array
+
+
 def _swap_order(block_bits, low) -> list[int]:
     """The block position each register ``target, junk slot 0, ...`` holds after the swap
     network for the low address bits ``low``."""
@@ -2048,7 +2271,8 @@ class QROAMRead(Operator2):
     enable not satisfied                           0                0
     ============================================== ================ =========================
 
-    Entries missing from ``table`` are zero. ``junk`` slot ``r`` holds the block position
+    ``T`` is the table that :meth:`leaf_words_from_table` packed into ``leaf_words``; entries
+    missing from it are zero. ``junk`` slot ``r`` holds the block position
     ``junk_layout(k, a mod K)[r]``. :meth:`loaded_bits` gives ``target ‖ junk`` for every address.
     The read adds no phase, and the address is unchanged.
 
@@ -2064,8 +2288,12 @@ class QROAMRead(Operator2):
     ``control`` 0 wires, or 1 (the enable)        any      unchanged
     =========== ================================= ======== ===============================
 
-    **Compilable arguments.** ``table`` (``(address, words)`` pairs, every address in the live
-    ranges, each entry below ``2**width``); ``address_widths`` (one or two widths);
+    **Arguments.** Dynamic: ``leaf_words``, an ``int64`` array of shape :meth:`leaf_words_shape`,
+    ``(num_leaves, K, ceil(width / 32))``: row ``l`` belongs to the ``l``-th unary leaf in
+    visiting order (:meth:`leaf_blocks`), position ``p`` to the address
+    ``(leaf_blocks[l] << k) | p``; 32 data bits per word in wire order (module docstring); zero
+    at padding and dead positions. Callers build it from their compilable table with
+    :meth:`leaf_words_from_table`. Compilable: ``address_widths`` (one or two widths);
     ``live_ranges`` (one ``(lo, hi)`` per register); ``width`` (int >= 1); ``block_bits``
     (``0 <= k <= address_widths[-1]``); ``control_value`` (``None`` without an enable wire, else
     the enabling value 0 or 1).
@@ -2076,19 +2304,27 @@ class QROAMRead(Operator2):
     **Decomposition.** (1) Nested exact unary iteration (:mod:`dfthc.ops.unary`) over the visited
     blocks: the first register over its live range, then the top ``w_p - k`` bits of the last
     register over the blocks that meet its live range, rooted at the enable. (2) At each block
-    leaf, CNOTs from the leaf flag fan out all ``K`` entries into ``target ‖ junk``. (3) A
-    swap-with-zero network on the low ``k`` address bits, most significant first: for bit ``b``,
-    ``CSWAP`` register ``r`` with register ``r + 2**b`` for ``r < 2**b``, which moves the
-    selected entry into ``target`` with ``(K - 1) width`` exact ``CSWAP``\s.
+    leaf ``l``, one ``qp.for_loop`` over its ``K width`` bits: iteration ``t`` takes position
+    ``p = t // width`` and bit ``i = t % width`` and applies
+    ``qp.cond(bit == 1, CNOT)(leaf flag, (target ‖ junk)[p width + i])`` with
+    ``bit = (leaf_words[l, p, i // 32] >> (i % 32)) & 1`` (an ``X`` instead of the CNOT when the
+    whole address is low and there is no enable, so no flag exists). No conditional surrounds a
+    loop. (3) A swap-with-zero network on the low ``k`` address bits, most significant first:
+    for bit ``b``, ``CSWAP`` register ``r`` with register ``r + 2**b`` for ``r < 2**b``, which
+    moves the selected entry into ``target`` with ``(K - 1) width`` exact ``CSWAP``\s.
 
-    **Adjoint and control.** The adjoint is auto-derived (a reverse re-read; no loops or
-    conditionals in the body). It is only a test reference: the walk erases with
-    :class:`QROAMErase`. Never controlled; use the enable.
+    **Adjoint and control.** Never adjointed or controlled: its body has loops and data
+    conditionals (spec 7.4 rule 4; L-6), and no program wraps a composite that contains it in an
+    adjoint or a control (spec 7.4 rule 6). The walk erases with :class:`QROAMErase`; use the
+    enable instead of a control.
 
     **Cost.** :func:`dfthc.costs.qroam_read` with ``ranges = visited_ranges(...)``:
     :math:`T = U` (or :math:`U_2`) over the visited block ranges, controlled if there is an
-    enable, plus :math:`(2^k - 1)` ``width``; ``M = 0``. At FeMoco-54: outer 84 + 72 = 156,
-    inner 543 + 390 = 933.
+    enable, plus :math:`(2^k - 1)` ``width``; ``M = 0``; ``A = U``. At FeMoco-54: outer
+    84 + 72 = 156, inner 543 + 390 = 933. The rule declares ``num_leaves K width`` load CNOTs
+    (every position and bit, padding included) and is registered with ``exact=False``: the CNOT
+    count is an upper bound, which ``qp.analyze`` reports as well, because it counts every
+    unhinted load conditional; T, M and A do not depend on the data and are exact.
 
     **Paper and dfthcbe.** Steps 2 and 6 (and the engine of 10 and 11); the QROAM of Berry et al.
     (Quantum 3, 208) with the junk kept until a measured erase. dfthcbe: the reads in
@@ -2103,32 +2339,35 @@ class QROAMRead(Operator2):
         from dfthc.ops.qroam import QROAMRead
 
         table = tuple((a, (v,)) for a, v in enumerate([1, 2, 3, 1, 2]))
-        program = lambda: QROAMRead(table, (3,), ((0, 5),), 2, 1, None, address=[0, 1, 2],
+        shape = {"address_widths": (3,), "live_ranges": ((0, 5),), "width": 2, "block_bits": 1}
+        words = QROAMRead.leaf_words_from_table(table, **shape)  # shape (3, 2, 1)
+        program = lambda: QROAMRead(words, *shape.values(), None, address=[0, 1, 2],
                                     target=[3, 4], junk=[5, 6], work=[7], control=[])
         compiled_resources(program, num_wires=8).toffoli  # U(0, 3, 2, 0) + 2 = 2 + 2
     """
 
-    compilable_argnames = ("table", "address_widths", "live_ranges", "width", "block_bits",
+    dynamic_argnames = ("leaf_words",)
+    compilable_argnames = ("address_widths", "live_ranges", "width", "block_bits",
                            "control_value")
     wire_argnames = ("address", "target", "junk", "work", "control")
 
-    def __init__(self, table, address_widths, live_ranges, width, block_bits, control_value,
+    def __init__(self, leaf_words, address_widths, live_ranges, width, block_bits, control_value,
                  address, target, junk, work, control):
         address_widths, live_ranges = _check_address(address_widths, live_ranges)
         width = check_int("width", width, low=1)
         block_bits = check_int("block_bits", block_bits, low=0, high=address_widths[-1])
         control_value = _check_control_value(control_value)
-        table = _check_table(table, address_widths, live_ranges, width)
+        leaf_words = _leaf_word_array(leaf_words, address_widths, live_ranges, width, block_bits)
         check_wires("QROAMRead",
                     {"address": address, "target": target, "junk": junk, "work": work,
                      "control": control},
-                    self.required_wires(table, address_widths, live_ranges, width, block_bits,
+                    self.required_wires(address_widths, live_ranges, width, block_bits,
                                         control_value))
-        super().__init__(table, address_widths, live_ranges, width, block_bits, control_value,
-                         address, target, junk, work, control)
+        super().__init__(leaf_words, address_widths, live_ranges, width, block_bits,
+                         control_value, address, target, junk, work, control)
 
     @staticmethod
-    def required_wires(table, address_widths, live_ranges, width, block_bits,
+    def required_wires(address_widths, live_ranges, width, block_bits,
                        control_value) -> dict[str, int]:
         """Exact register sizes."""
         ranges = QROAMRead.visited_ranges(address_widths, live_ranges, block_bits)
@@ -2167,6 +2406,39 @@ class QROAMRead(Operator2):
         return _swap_order(block_bits, low)[1:]
 
     @staticmethod
+    def leaf_blocks(address_widths, live_ranges, block_bits) -> list[int]:
+        """The high part of every unary leaf (its block), in the order the iteration visits the
+        leaves: outermost register first, values increasing. Row ``l`` of ``leaf_words``."""
+        widths, ranges = _check_address(address_widths, live_ranges)
+        specs = _high_specs(widths, ranges, block_bits)
+        return [_concatenate(values, [n for _, n, _, _ in specs])
+                for values in itertools.product(*(range(lo, hi) for _, _, lo, hi in specs))]
+
+    @staticmethod
+    def leaf_words_shape(address_widths, live_ranges, width, block_bits) -> tuple[int, int, int]:
+        """``(num_leaves, K, ceil(width / 32))``, the shape of ``leaf_words``."""
+        return (len(QROAMRead.leaf_blocks(address_widths, live_ranges, block_bits)),
+                2**block_bits, -(-width // WORD))
+
+    @staticmethod
+    def leaf_words_from_table(table, *, address_widths, live_ranges, width,
+                              block_bits) -> np.ndarray:
+        """The ``leaf_words`` of ``table`` (``(address, words)`` pairs, every address live, each
+        entry below ``2**width`` in 32-bit words, least significant first): each entry in wire
+        order at its leaf and position, zero at padding and dead positions. ``ValueError`` for an
+        invalid table."""
+        widths, ranges = _check_address(address_widths, live_ranges)
+        entries = _entries(_check_table(table, widths, ranges, width))
+        words = np.zeros(QROAMRead.leaf_words_shape(widths, ranges, width, block_bits),
+                         dtype=WORD_DTYPE)
+        for leaf, block in enumerate(QROAMRead.leaf_blocks(widths, ranges, block_bits)):
+            for position in range(2**block_bits):
+                stream = _wire_order(entries.get((block << block_bits) | position, 0), width)
+                for w in range(words.shape[2]):
+                    words[leaf, position, w] = (stream >> (WORD * w)) & (2**WORD - 1)
+        return words
+
+    @staticmethod
     def loaded_bits(table, address, *, address_widths, live_ranges, width, block_bits) -> int:
         """``target ‖ junk`` as one big-endian integer after an enabled read at ``address``;
         0 outside the loaded set."""
@@ -2183,26 +2455,17 @@ class QROAMRead(Operator2):
         return _loaded_contents(_entries(table), widths, ranges, width, block_bits, addresses)
 
 
-def _read_body(emit, table, address_widths, live_ranges, width, block_bits, control_value,
+def _read_body(emit, leaf_words, address_widths, live_ranges, width, block_bits, control_value,
                address, target, junk, work, control):
-    entries = _entries(table)
     registers = [target] + [junk[r * width:(r + 1) * width] for r in range(2**block_bits - 1)]
-    specs = _high_specs(address_widths, live_ranges, block_bits)
-    high_widths = [n for _, n, _, _ in specs]
+    register = emit.wire_array(target, junk)
+    leaves = itertools.count()
 
     def leaf(flag, values):
-        block = _concatenate(values, high_widths)
-        for position, register in enumerate(registers):
-            value = entries.get((block << block_bits) | position, 0)
-            for i in range(width):
-                if (value >> (width - 1 - i)) & 1:
-                    if flag is None:
-                        emit.x(register[i])
-                    else:
-                        emit.cnot(flag, register[i])
+        emit.load(flag, leaf_words, next(leaves), register, 2**block_bits, width)
 
-    iterate_nested(_registers(address, specs), work, leaf, emit=emit,
-                   **_control(control, control_value))
+    iterate_nested(_registers(address, _high_specs(address_widths, live_ranges, block_bits)),
+                   work, leaf, emit=emit, **_control(control, control_value))
     low = address[len(address) - block_bits:]
     for b in reversed(range(block_bits)):
         for r in range(2**b):
@@ -2210,20 +2473,20 @@ def _read_body(emit, table, address_widths, live_ranges, width, block_bits, cont
                 emit.cswap(low[block_bits - 1 - b], registers[r][i], registers[r + 2**b][i])
 
 
-def _qroam_read_resources(table, address_widths, live_ranges, width, block_bits, control_value,
-                          address, target, junk, work, control):
+def _qroam_read_resources(leaf_words, address_widths, live_ranges, width, block_bits,
+                          control_value, address, target, junk, work, control):
     counter = QROAMEmitter(counting=True)
-    wires = _dummy(QROAMRead.required_wires(table, address_widths, live_ranges, width, block_bits,
+    wires = _dummy(QROAMRead.required_wires(address_widths, live_ranges, width, block_bits,
                                             control_value))
-    _read_body(counter, table, address_widths, live_ranges, width, block_bits, control_value,
-               **wires)
+    _read_body(counter, leaf_words, address_widths, live_ranges, width, block_bits,
+               control_value, **wires)
     return as_resources(counter.counts)
 
 
-@qp.register_resources(_qroam_read_resources)
-def _qroam_read(table, address_widths, live_ranges, width, block_bits, control_value, address,
-                target, junk, work, control):
-    _read_body(QROAMEmitter(), table, address_widths, live_ranges, width, block_bits,
+@qp.register_resources(_qroam_read_resources, exact=False)
+def _qroam_read(leaf_words, address_widths, live_ranges, width, block_bits, control_value,
+                address, target, junk, work, control):
+    _read_body(QROAMEmitter(), leaf_words, address_widths, live_ranges, width, block_bits,
                control_value, address, target, junk, work, control)
 
 
@@ -2233,12 +2496,12 @@ register_rule(QROAMRead, _qroam_read)
 - [ ] **Step 4: Run the tests**
 
 Run: `scripts/test.sh tests/ops/test_qroam_read.py -q`
-Expected: `37 passed` (21 to 47 s, including the two `MID_NAPHTHALENE` compiles, 3.3 s and 8.5 s when each ran alone under `run_watched`, at peaks of 306 and 492 MB; not heavy).
+Expected: `46 passed` (20 s in the revision-2 replay with one worker, including the two `MID_NAPHTHALENE` compiles, 2.8 s and 3.5 s when each ran alone under `run_watched`, at peaks of 270 and 304 MB, log `.scratch/plan-check/stages/g0-1/mid-read-compiles.log`; not heavy).
 
 - [ ] **Step 5: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `494 passed` (459 + 35).
+Expected: `507 passed` (463 + 44).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -2277,7 +2540,7 @@ git commit -m "Add QROAMRead with exhaustive failed-address tests"
 - `test_erase_conditionals_are_hinted` (2 tests): 8 conditional CZs (ob = 3) and 8 conditional Zs (ob = 0) count exactly 4. `test_and_free_fixup_compiles_without_the_unresolved_branch_warning`: a fixup without any AND shows no warning. The warning is one flag per compiled module, and one `TemporaryAND` raises it on its own (master plan section 3, item 15; isolated probes in `.scratch/plan-check/stages/branch-warning-probes.log`), so only these exact counts can show that the conditionals are hinted.
 - T5; T2 in tape mode at three sizes; tape mode rejects a bool array; `address_order`, `high_ranges` and `required_wires`; three constructor violations.
 
-**Definition of done:** `27 passed` targeted (25 in the per-commit tier); `scripts/test.sh tests/ops/test_qroam_read.py -m "not slow" -q` still gives `35 passed`; the per-commit tier passes; `ruff check .` clean; one commit.
+**Definition of done:** `27 passed` targeted (25 in the per-commit tier); `scripts/test.sh tests/ops/test_qroam_read.py -m "not slow" -q` still gives `44 passed`; the per-commit tier passes; `ruff check .` clean; one commit.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2379,7 +2642,7 @@ def test_fixup_applies_exactly_the_parity_table(shape, ob, control_value):
     for table in tables(size):
         state = np.asarray(circuit(jnp.asarray(table)))
         expected = expected_state(widths, covered, control_value, table, num_wires)
-        assert np.allclose(state, expected, atol=1e-10), table
+        assert np.allclose(state, expected, rtol=0, atol=1e-10), table
 
 
 def test_tape_path_with_measured_parities():
@@ -2567,7 +2830,10 @@ significant: the integer address is ``(a_1 << w_2) | a_2``. Each register has a 
 **Bit order.** Every register holds an entry big-endian: wire ``i`` of a ``width``-wire register
 holds bit ``width - 1 - i``. ``target ‖ junk`` is read as one big-endian integer of
 ``2**block_bits * width`` bits (``target`` most significant, then the junk slots in order); that
-integer is :meth:`QROAMRead.loaded_bits`.
+integer is :meth:`QROAMRead.loaded_bits`. The read's dynamic ``leaf_words`` hold the entries in
+wire order instead: bit ``s`` of word ``w`` of block position ``p`` is the bit for wire
+``32 w + s`` of that position's register, which is entry bit ``width - 1 - (32 w + s)``
+(:meth:`QROAMRead.leaf_words_from_table` converts a table).
 """
 
 from __future__ import annotations
@@ -2588,12 +2854,49 @@ from dfthc.ops.unary import Emitter, as_resources, iterate_nested, work_required
 WORD = 32
 """Data bits per table word (spec 8.4, L-24)."""
 
+WORD_DTYPE = np.int64
+"""dtype of ``leaf_words``: signed, because Catalyst builds no rule for an operator with an
+unsigned dynamic argument (L-26); 32 data bits per word keep every word non-negative."""
+
 
 class QROAMEmitter(Emitter):
     """:class:`~dfthc.ops.unary.Emitter` with the gates of the read and the fixup."""
 
     def cswap(self, control, a, b):
         self.gate("CSWAP", lambda: qp.CSWAP([control, a, b]))
+
+    def wire_array(self, target, junk):
+        """``target ‖ junk`` as one register that a traced loop index can address: a JAX array
+        under capture, a list in tape mode; ``None`` when counting."""
+        if self.counts is not None:
+            return None
+        if not qp.capture.enabled():
+            return list(target) + list(junk)
+        if len(junk) == 0:
+            return jnp.asarray(target)
+        return jnp.concatenate([jnp.asarray(target), jnp.asarray(junk)])
+
+    def load(self, flag, leaf_words, leaf, register, positions, width):
+        """The loads of unary leaf ``leaf``: one ``qp.for_loop`` over its ``positions * width``
+        bits. Iteration ``t`` takes position ``p = t // width`` and bit ``i = t % width`` and
+        applies, conditioned on that bit of ``leaf_words``, a CNOT from ``flag`` (an ``X`` for a
+        ``None`` flag) onto ``register[p * width + i]``. No conditional surrounds the loop.
+        Counting: ``positions * width`` gates, the upper bound."""
+        name = "PauliX" if flag is None else "CNOT"
+        if self.counts is not None:
+            self.counts[name] += positions * width
+            return
+
+        @qp.for_loop(0, positions * width, 1)
+        def bit_loop(t):
+            p, i = t // width, t % width
+            bit = (leaf_words[leaf, p, i // WORD] >> (i % WORD)) & 1
+            if flag is None:
+                qp.cond(bit == 1, qp.X)(register[p * width + i])
+            else:
+                qp.cond(bit == 1, qp.CNOT)([flag, register[p * width + i]])
+
+        bit_loop()
 
     def cond_cz(self, parity, a, b):
         def branch():
@@ -2726,6 +3029,52 @@ def _entries(table) -> dict[int, int]:
     return {address: _entry_value(words) for address, words in table}
 
 
+def _wire_order(value, width) -> int:
+    """``value`` with its ``width`` bits reversed: bit ``i`` of the result is the bit for wire
+    ``i`` of a big-endian register (spec 6.7)."""
+    return int(format(value, f"0{width}b")[::-1], 2)
+
+
+def _live_positions(widths, live_ranges, block_bits) -> np.ndarray:
+    """``(num_leaves, K)`` booleans: which block positions of each leaf hold a live address."""
+    blocks = QROAMRead.leaf_blocks(widths, live_ranges, block_bits)
+    return np.array([[_is_live((block << block_bits) | p, widths, live_ranges)
+                      for p in range(2**block_bits)] for block in blocks], dtype=bool)
+
+
+def _leaf_word_array(leaf_words, widths, live_ranges, width, block_bits):
+    """Canonicalize the dynamic ``leaf_words`` once (L-23).
+
+    Concrete words (Python or NumPy integers, nested sequences or arrays) must be integers in
+    ``[0, 2**32)``, booleans and floats rejected, checked on the Python values before the
+    ``int64`` cast, so that no word can wrap around before the check; every padding and dead
+    position must be zero, and so must every bit beyond ``width`` (wire order). Tracers and
+    abstract arrays (operators rebuilt by Catalyst, resource keys) are checked for their shape
+    and an integer dtype only. Raises ``ValueError``.
+    """
+    shape = QROAMRead.leaf_words_shape(widths, live_ranges, width, block_bits)
+    if isinstance(leaf_words, AbstractArray) or qp.math.is_tracer(leaf_words):
+        if tuple(leaf_words.shape) != shape or not np.issubdtype(np.dtype(leaf_words.dtype),
+                                                                 np.integer):
+            raise ValueError(f"leaf_words must be an integer array of shape {shape}, got "
+                             f"{tuple(leaf_words.shape)} of {leaf_words.dtype}")
+        return leaf_words
+    values = np.asarray(leaf_words, dtype=object)
+    if values.shape != shape:
+        raise ValueError(f"leaf_words must have shape {shape}, got {values.shape}")
+    for word in values.flat:
+        if isinstance(word, bool) or not isinstance(word, (int, np.integer)) or not (
+                0 <= word < 2**WORD):
+            raise ValueError(f"leaf words must be integers in [0, 2**{WORD}), got {word!r}")
+    array = values.astype(WORD_DTYPE)
+    if np.any(array[~_live_positions(widths, live_ranges, block_bits)]):
+        raise ValueError("a padding or dead position of leaf_words holds a nonzero word")
+    spare = WORD * shape[2] - width
+    if spare and np.any(array[..., -1] >> (WORD - spare)):
+        raise ValueError(f"leaf_words holds bits beyond width {width}")
+    return jnp.asarray(array) if qp.capture.enabled() else array
+
+
 def _swap_order(block_bits, low) -> list[int]:
     """The block position each register ``target, junk slot 0, ...`` holds after the swap
     network for the low address bits ``low``."""
@@ -2771,7 +3120,8 @@ class QROAMRead(Operator2):
     enable not satisfied                           0                0
     ============================================== ================ =========================
 
-    Entries missing from ``table`` are zero. ``junk`` slot ``r`` holds the block position
+    ``T`` is the table that :meth:`leaf_words_from_table` packed into ``leaf_words``; entries
+    missing from it are zero. ``junk`` slot ``r`` holds the block position
     ``junk_layout(k, a mod K)[r]``. :meth:`loaded_bits` gives ``target ‖ junk`` for every address.
     The read adds no phase, and the address is unchanged.
 
@@ -2787,8 +3137,12 @@ class QROAMRead(Operator2):
     ``control`` 0 wires, or 1 (the enable)        any      unchanged
     =========== ================================= ======== ===============================
 
-    **Compilable arguments.** ``table`` (``(address, words)`` pairs, every address in the live
-    ranges, each entry below ``2**width``); ``address_widths`` (one or two widths);
+    **Arguments.** Dynamic: ``leaf_words``, an ``int64`` array of shape :meth:`leaf_words_shape`,
+    ``(num_leaves, K, ceil(width / 32))``: row ``l`` belongs to the ``l``-th unary leaf in
+    visiting order (:meth:`leaf_blocks`), position ``p`` to the address
+    ``(leaf_blocks[l] << k) | p``; 32 data bits per word in wire order (module docstring); zero
+    at padding and dead positions. Callers build it from their compilable table with
+    :meth:`leaf_words_from_table`. Compilable: ``address_widths`` (one or two widths);
     ``live_ranges`` (one ``(lo, hi)`` per register); ``width`` (int >= 1); ``block_bits``
     (``0 <= k <= address_widths[-1]``); ``control_value`` (``None`` without an enable wire, else
     the enabling value 0 or 1).
@@ -2799,19 +3153,27 @@ class QROAMRead(Operator2):
     **Decomposition.** (1) Nested exact unary iteration (:mod:`dfthc.ops.unary`) over the visited
     blocks: the first register over its live range, then the top ``w_p - k`` bits of the last
     register over the blocks that meet its live range, rooted at the enable. (2) At each block
-    leaf, CNOTs from the leaf flag fan out all ``K`` entries into ``target ‖ junk``. (3) A
-    swap-with-zero network on the low ``k`` address bits, most significant first: for bit ``b``,
-    ``CSWAP`` register ``r`` with register ``r + 2**b`` for ``r < 2**b``, which moves the
-    selected entry into ``target`` with ``(K - 1) width`` exact ``CSWAP``\s.
+    leaf ``l``, one ``qp.for_loop`` over its ``K width`` bits: iteration ``t`` takes position
+    ``p = t // width`` and bit ``i = t % width`` and applies
+    ``qp.cond(bit == 1, CNOT)(leaf flag, (target ‖ junk)[p width + i])`` with
+    ``bit = (leaf_words[l, p, i // 32] >> (i % 32)) & 1`` (an ``X`` instead of the CNOT when the
+    whole address is low and there is no enable, so no flag exists). No conditional surrounds a
+    loop. (3) A swap-with-zero network on the low ``k`` address bits, most significant first:
+    for bit ``b``, ``CSWAP`` register ``r`` with register ``r + 2**b`` for ``r < 2**b``, which
+    moves the selected entry into ``target`` with ``(K - 1) width`` exact ``CSWAP``\s.
 
-    **Adjoint and control.** The adjoint is auto-derived (a reverse re-read; no loops or
-    conditionals in the body). It is only a test reference: the walk erases with
-    :class:`QROAMErase`. Never controlled; use the enable.
+    **Adjoint and control.** Never adjointed or controlled: its body has loops and data
+    conditionals (spec 7.4 rule 4; L-6), and no program wraps a composite that contains it in an
+    adjoint or a control (spec 7.4 rule 6). The walk erases with :class:`QROAMErase`; use the
+    enable instead of a control.
 
     **Cost.** :func:`dfthc.costs.qroam_read` with ``ranges = visited_ranges(...)``:
     :math:`T = U` (or :math:`U_2`) over the visited block ranges, controlled if there is an
-    enable, plus :math:`(2^k - 1)` ``width``; ``M = 0``. At FeMoco-54: outer 84 + 72 = 156,
-    inner 543 + 390 = 933.
+    enable, plus :math:`(2^k - 1)` ``width``; ``M = 0``; ``A = U``. At FeMoco-54: outer
+    84 + 72 = 156, inner 543 + 390 = 933. The rule declares ``num_leaves K width`` load CNOTs
+    (every position and bit, padding included) and is registered with ``exact=False``: the CNOT
+    count is an upper bound, which ``qp.analyze`` reports as well, because it counts every
+    unhinted load conditional; T, M and A do not depend on the data and are exact.
 
     **Paper and dfthcbe.** Steps 2 and 6 (and the engine of 10 and 11); the QROAM of Berry et al.
     (Quantum 3, 208) with the junk kept until a measured erase. dfthcbe: the reads in
@@ -2826,32 +3188,35 @@ class QROAMRead(Operator2):
         from dfthc.ops.qroam import QROAMRead
 
         table = tuple((a, (v,)) for a, v in enumerate([1, 2, 3, 1, 2]))
-        program = lambda: QROAMRead(table, (3,), ((0, 5),), 2, 1, None, address=[0, 1, 2],
+        shape = {"address_widths": (3,), "live_ranges": ((0, 5),), "width": 2, "block_bits": 1}
+        words = QROAMRead.leaf_words_from_table(table, **shape)  # shape (3, 2, 1)
+        program = lambda: QROAMRead(words, *shape.values(), None, address=[0, 1, 2],
                                     target=[3, 4], junk=[5, 6], work=[7], control=[])
         compiled_resources(program, num_wires=8).toffoli  # U(0, 3, 2, 0) + 2 = 2 + 2
     """
 
-    compilable_argnames = ("table", "address_widths", "live_ranges", "width", "block_bits",
+    dynamic_argnames = ("leaf_words",)
+    compilable_argnames = ("address_widths", "live_ranges", "width", "block_bits",
                            "control_value")
     wire_argnames = ("address", "target", "junk", "work", "control")
 
-    def __init__(self, table, address_widths, live_ranges, width, block_bits, control_value,
+    def __init__(self, leaf_words, address_widths, live_ranges, width, block_bits, control_value,
                  address, target, junk, work, control):
         address_widths, live_ranges = _check_address(address_widths, live_ranges)
         width = check_int("width", width, low=1)
         block_bits = check_int("block_bits", block_bits, low=0, high=address_widths[-1])
         control_value = _check_control_value(control_value)
-        table = _check_table(table, address_widths, live_ranges, width)
+        leaf_words = _leaf_word_array(leaf_words, address_widths, live_ranges, width, block_bits)
         check_wires("QROAMRead",
                     {"address": address, "target": target, "junk": junk, "work": work,
                      "control": control},
-                    self.required_wires(table, address_widths, live_ranges, width, block_bits,
+                    self.required_wires(address_widths, live_ranges, width, block_bits,
                                         control_value))
-        super().__init__(table, address_widths, live_ranges, width, block_bits, control_value,
-                         address, target, junk, work, control)
+        super().__init__(leaf_words, address_widths, live_ranges, width, block_bits,
+                         control_value, address, target, junk, work, control)
 
     @staticmethod
-    def required_wires(table, address_widths, live_ranges, width, block_bits,
+    def required_wires(address_widths, live_ranges, width, block_bits,
                        control_value) -> dict[str, int]:
         """Exact register sizes."""
         ranges = QROAMRead.visited_ranges(address_widths, live_ranges, block_bits)
@@ -2890,6 +3255,39 @@ class QROAMRead(Operator2):
         return _swap_order(block_bits, low)[1:]
 
     @staticmethod
+    def leaf_blocks(address_widths, live_ranges, block_bits) -> list[int]:
+        """The high part of every unary leaf (its block), in the order the iteration visits the
+        leaves: outermost register first, values increasing. Row ``l`` of ``leaf_words``."""
+        widths, ranges = _check_address(address_widths, live_ranges)
+        specs = _high_specs(widths, ranges, block_bits)
+        return [_concatenate(values, [n for _, n, _, _ in specs])
+                for values in itertools.product(*(range(lo, hi) for _, _, lo, hi in specs))]
+
+    @staticmethod
+    def leaf_words_shape(address_widths, live_ranges, width, block_bits) -> tuple[int, int, int]:
+        """``(num_leaves, K, ceil(width / 32))``, the shape of ``leaf_words``."""
+        return (len(QROAMRead.leaf_blocks(address_widths, live_ranges, block_bits)),
+                2**block_bits, -(-width // WORD))
+
+    @staticmethod
+    def leaf_words_from_table(table, *, address_widths, live_ranges, width,
+                              block_bits) -> np.ndarray:
+        """The ``leaf_words`` of ``table`` (``(address, words)`` pairs, every address live, each
+        entry below ``2**width`` in 32-bit words, least significant first): each entry in wire
+        order at its leaf and position, zero at padding and dead positions. ``ValueError`` for an
+        invalid table."""
+        widths, ranges = _check_address(address_widths, live_ranges)
+        entries = _entries(_check_table(table, widths, ranges, width))
+        words = np.zeros(QROAMRead.leaf_words_shape(widths, ranges, width, block_bits),
+                         dtype=WORD_DTYPE)
+        for leaf, block in enumerate(QROAMRead.leaf_blocks(widths, ranges, block_bits)):
+            for position in range(2**block_bits):
+                stream = _wire_order(entries.get((block << block_bits) | position, 0), width)
+                for w in range(words.shape[2]):
+                    words[leaf, position, w] = (stream >> (WORD * w)) & (2**WORD - 1)
+        return words
+
+    @staticmethod
     def loaded_bits(table, address, *, address_widths, live_ranges, width, block_bits) -> int:
         """``target ‖ junk`` as one big-endian integer after an enabled read at ``address``;
         0 outside the loaded set."""
@@ -2906,26 +3304,17 @@ class QROAMRead(Operator2):
         return _loaded_contents(_entries(table), widths, ranges, width, block_bits, addresses)
 
 
-def _read_body(emit, table, address_widths, live_ranges, width, block_bits, control_value,
+def _read_body(emit, leaf_words, address_widths, live_ranges, width, block_bits, control_value,
                address, target, junk, work, control):
-    entries = _entries(table)
     registers = [target] + [junk[r * width:(r + 1) * width] for r in range(2**block_bits - 1)]
-    specs = _high_specs(address_widths, live_ranges, block_bits)
-    high_widths = [n for _, n, _, _ in specs]
+    register = emit.wire_array(target, junk)
+    leaves = itertools.count()
 
     def leaf(flag, values):
-        block = _concatenate(values, high_widths)
-        for position, register in enumerate(registers):
-            value = entries.get((block << block_bits) | position, 0)
-            for i in range(width):
-                if (value >> (width - 1 - i)) & 1:
-                    if flag is None:
-                        emit.x(register[i])
-                    else:
-                        emit.cnot(flag, register[i])
+        emit.load(flag, leaf_words, next(leaves), register, 2**block_bits, width)
 
-    iterate_nested(_registers(address, specs), work, leaf, emit=emit,
-                   **_control(control, control_value))
+    iterate_nested(_registers(address, _high_specs(address_widths, live_ranges, block_bits)),
+                   work, leaf, emit=emit, **_control(control, control_value))
     low = address[len(address) - block_bits:]
     for b in reversed(range(block_bits)):
         for r in range(2**b):
@@ -2933,20 +3322,20 @@ def _read_body(emit, table, address_widths, live_ranges, width, block_bits, cont
                 emit.cswap(low[block_bits - 1 - b], registers[r][i], registers[r + 2**b][i])
 
 
-def _qroam_read_resources(table, address_widths, live_ranges, width, block_bits, control_value,
-                          address, target, junk, work, control):
+def _qroam_read_resources(leaf_words, address_widths, live_ranges, width, block_bits,
+                          control_value, address, target, junk, work, control):
     counter = QROAMEmitter(counting=True)
-    wires = _dummy(QROAMRead.required_wires(table, address_widths, live_ranges, width, block_bits,
+    wires = _dummy(QROAMRead.required_wires(address_widths, live_ranges, width, block_bits,
                                             control_value))
-    _read_body(counter, table, address_widths, live_ranges, width, block_bits, control_value,
-               **wires)
+    _read_body(counter, leaf_words, address_widths, live_ranges, width, block_bits,
+               control_value, **wires)
     return as_resources(counter.counts)
 
 
-@qp.register_resources(_qroam_read_resources)
-def _qroam_read(table, address_widths, live_ranges, width, block_bits, control_value, address,
-                target, junk, work, control):
-    _read_body(QROAMEmitter(), table, address_widths, live_ranges, width, block_bits,
+@qp.register_resources(_qroam_read_resources, exact=False)
+def _qroam_read(leaf_words, address_widths, live_ranges, width, block_bits, control_value,
+                address, target, junk, work, control):
+    _read_body(QROAMEmitter(), leaf_words, address_widths, live_ranges, width, block_bits,
                control_value, address, target, junk, work, control)
 
 
@@ -3182,12 +3571,12 @@ Run: `scripts/test.sh tests/ops/test_phase_fixup.py -q`
 Expected: `27 passed` (27 s in the serial replay, including the two `MID_NAPHTHALENE` compiles).
 
 Run: `scripts/test.sh tests/ops/test_qroam_read.py -m "not slow" -q`
-Expected: `35 passed`.
+Expected: `44 passed`.
 
 - [ ] **Step 5: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `566 passed` (541 + 25).
+Expected: `579 passed` (554 + 25).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -3221,7 +3610,7 @@ git commit -m "Add PhaseFixup and emit_phase_fixup"
 - T4: the FeMoco ranges and closed forms `Cost(36, 96)` and `Cost(196, 416)` and `required_wires` at FeMoco (work 4 and 6, no extra one-hot); compiled T and M equal the closed forms for the outer and inner erases of both test presets, with M = K width and A = T (4 tests); an enabled erase whose one-hot needs 4 extra wires. `test_counts_at_mid_naphthalene` (`slow`, 2 tests): T, M and A exact at the outer erase of `MID_NAPHTHALENE` (k = 1, ob = 3, width 21, M = 42) and its inner erase (k = 2, ob = 4, width 23, M = 92). Each compiled alone under `run_watched`: T = A = 12, M = 42 in 2.2 s at a peak of 276 MB (outer), T = A = 34, M = 92 in 3.6 s at 317 MB (inner); log `.scratch/plan-check/stages/1c-mid-compiles.log`.
 - `test_fixup_high_ranges_agree_with_the_cost_model`: `costs.outer_unprepare` and `inner_unprepare` equal `w + qroam_erase(fixup_high_ranges(...)) + F^dag` at the four presets and at 128 shapes with `X_o` from 5 to 12 and every `k1`, `ke1` up to 3. `fixup_high_ranges` is the oracle (change 5): against Task 1A.7's code before its revision 1 the test fails at `X_o = 5`, `k1 = 2`, `ke1 = 0` (T 16 against 17; log `.scratch/plan-check/stages/1A-rev1/xcheck_against_old_costs.log`).
 - T6: the erase's T differs from a re-read's; its conditional CZs count `ceil(nonzero masks / 2)`; the verbose listing names `_qroam_erase`. `qp.adjoint` and `qp.ctrl` of the erase fail with `CompileError` "Decomposition rule not found", after Catalyst's "expected" measuring-rule warning (2 tests).
-- Lightning smoke runs: read then erase (k = 2, ob = 2) restore a phased address state for seeds 0 to 4.
+- Lightning smoke runs: read then erase (k = 2, ob = 2) restore a phased address state for seeds 0 to 4; the read's `leaf_words` come from the erase's table (`QROAMRead.leaf_words_from_table`).
 - `mcm_parities` linearity: the capture core at the FeMoco-54 inner-erase shape (8,640 masks from a random FeMoco-shape inner table, 416 outcomes, 100 random pairs; classical, nothing compiled) and the tape implementation at the `H2_631G_TEST` inner erase (zero masks give `False`).
 - T5; T2 in tape mode at two sizes (one enabled); `required_wires` and two constructor violations.
 - Certificates (spec 12.5; `slow`, 7 tests, 3 to 7 s together): for the outer and inner erases of both test presets, an outer shape with k = 2 and `X_o = 5`, an inner shape with (B+1, k2) = (6, 2), and that shape enabled with control value 0, run read then erase on the sparse simulator in strict mode under the zero schedule and every unit schedule (M + 1 runs; M = 8 to 28). Each run must consume exactly M forced outcomes and return exactly the phased input state of address and control with every ancilla in `|0>`. Mutation check (`.scratch/plan-check/stages/mutate_erase_1c.py`, mutant sources in `stages/mutants/`, log `stages/1c-erase-mutants.log`, which names every failing case): outcomes passed in wire order instead of reversed fail 7 of 7 shapes; the fixup over the live instead of the loaded set fails the 5 shapes with dead positions (`sto3g-outer` and `631g-outer`, which have none, pass); the first conditional dropped fails 7 of 7.
@@ -3284,7 +3673,7 @@ def erase_shapes(p):
 def layout(shape, control_value=None):
     widths, live, width, k, ob = shape
     erase = QROAMErase.required_wires((), widths, live, width, k, control_value, ob)
-    read_work = QROAMRead.required_wires((), widths, live, width, k, control_value)["work"]
+    read_work = QROAMRead.required_wires(widths, live, width, k, control_value)["work"]
     sizes = dict(erase, work=max(erase["work"], read_work))
     wires, start = {}, 0
     for name, size in sizes.items():
@@ -3295,9 +3684,11 @@ def layout(shape, control_value=None):
 
 def make_read(table, shape, control_value, wires):
     widths, live, width, k, _ = shape
-    work = wires["work"][:QROAMRead.required_wires((), widths, live, width, k,
+    work = wires["work"][:QROAMRead.required_wires(widths, live, width, k,
                                                    control_value)["work"]]
-    return QROAMRead(table, widths, live, width, k, control_value, wires["address"],
+    words = QROAMRead.leaf_words_from_table(table, address_widths=widths, live_ranges=live,
+                                            width=width, block_bits=k)
+    return QROAMRead(words, widths, live, width, k, control_value, wires["address"],
                      wires["target"], wires["junk"], work, wires["control"])
 
 
@@ -3479,7 +3870,7 @@ def test_lightning_smoke_runs_with_five_seeds():
             make_erase(table, shape, None, wires)
             return qp.state()
 
-        assert np.allclose(np.asarray(round_trip()), expected, atol=1e-10), seed
+        assert np.allclose(np.asarray(round_trip()), expected, rtol=0, atol=1e-10), seed
 
 
 def _inner_masks(p, seed=3):
@@ -3610,7 +4001,7 @@ IDS = ["sto3g-outer", "sto3g-inner", "631g-outer", "631g-inner", "outer-k2", "in
 def layout(shape, control_value):
     widths, live, width, k, ob = shape
     erase = QROAMErase.required_wires((), widths, live, width, k, control_value, ob)
-    read = QROAMRead.required_wires((), widths, live, width, k, control_value)
+    read = QROAMRead.required_wires(widths, live, width, k, control_value)
     sizes = dict(erase, work=max(erase["work"], read["work"]))
     wires, start = {}, 0
     for name, size in sizes.items():
@@ -3640,10 +4031,12 @@ def test_read_erase_round_trip_certificate(shape, control_value):
     table = random_table(widths, live, width)
     wires, num_wires, read_work, erase_work = layout(shape, control_value)
     inputs = wires["address"] + wires["control"]
+    words = QROAMRead.leaf_words_from_table(table, address_widths=widths, live_ranges=live,
+                                            width=width, block_bits=k)
 
     def round_trip():
         phased_prepare(inputs)
-        QROAMRead(table, widths, live, width, k, control_value, wires["address"],
+        QROAMRead(words, widths, live, width, k, control_value, wires["address"],
                   wires["target"], wires["junk"], wires["work"][:read_work], wires["control"])
         QROAMErase(table, widths, live, width, k, control_value, ob, wires["address"],
                    wires["target"], wires["junk"], wires["work"][:erase_work], wires["control"],
@@ -3661,7 +4054,7 @@ def test_read_erase_round_trip_certificate(shape, control_value):
         keys, amps = sorted_terms(simulator.run(operations))
         assert simulator.policy.position == num_measured
         assert np.array_equal(keys, expected_keys), schedule
-        assert np.allclose(amps, expected_amps, atol=1e-12), schedule
+        assert np.allclose(amps, expected_amps, rtol=0, atol=1e-12), schedule
 ```
 
 - [ ] **Step 2: Run them to confirm they fail**
@@ -3685,9 +4078,12 @@ significant: the integer address is ``(a_1 << w_2) | a_2``. Each register has a 
 **Bit order.** Every register holds an entry big-endian: wire ``i`` of a ``width``-wire register
 holds bit ``width - 1 - i``. ``target ‖ junk`` is read as one big-endian integer of
 ``2**block_bits * width`` bits (``target`` most significant, then the junk slots in order); that
-integer is :meth:`QROAMRead.loaded_bits`. Bit ``i`` of it is the wire ``M - 1 - i`` of
-``target ‖ junk``, so the erase passes its outcomes to :func:`dfthc.compile.mcm_parities` in
-reverse wire order.
+integer is :meth:`QROAMRead.loaded_bits`. The read's dynamic ``leaf_words`` hold the entries in
+wire order instead: bit ``s`` of word ``w`` of block position ``p`` is the bit for wire
+``32 w + s`` of that position's register, which is entry bit ``width - 1 - (32 w + s)``
+(:meth:`QROAMRead.leaf_words_from_table` converts a table).
+Bit ``i`` of ``loaded_bits`` is the wire ``M - 1 - i`` of ``target ‖ junk``, so the erase passes
+its outcomes to :func:`dfthc.compile.mcm_parities` in reverse wire order.
 """
 
 from __future__ import annotations
@@ -3708,12 +4104,49 @@ from dfthc.ops.unary import Emitter, as_resources, iterate_nested, work_required
 WORD = 32
 """Data bits per table word (spec 8.4, L-24)."""
 
+WORD_DTYPE = np.int64
+"""dtype of ``leaf_words``: signed, because Catalyst builds no rule for an operator with an
+unsigned dynamic argument (L-26); 32 data bits per word keep every word non-negative."""
+
 
 class QROAMEmitter(Emitter):
     """:class:`~dfthc.ops.unary.Emitter` with the gates of the read, the fixup and the erase."""
 
     def cswap(self, control, a, b):
         self.gate("CSWAP", lambda: qp.CSWAP([control, a, b]))
+
+    def wire_array(self, target, junk):
+        """``target ‖ junk`` as one register that a traced loop index can address: a JAX array
+        under capture, a list in tape mode; ``None`` when counting."""
+        if self.counts is not None:
+            return None
+        if not qp.capture.enabled():
+            return list(target) + list(junk)
+        if len(junk) == 0:
+            return jnp.asarray(target)
+        return jnp.concatenate([jnp.asarray(target), jnp.asarray(junk)])
+
+    def load(self, flag, leaf_words, leaf, register, positions, width):
+        """The loads of unary leaf ``leaf``: one ``qp.for_loop`` over its ``positions * width``
+        bits. Iteration ``t`` takes position ``p = t // width`` and bit ``i = t % width`` and
+        applies, conditioned on that bit of ``leaf_words``, a CNOT from ``flag`` (an ``X`` for a
+        ``None`` flag) onto ``register[p * width + i]``. No conditional surrounds the loop.
+        Counting: ``positions * width`` gates, the upper bound."""
+        name = "PauliX" if flag is None else "CNOT"
+        if self.counts is not None:
+            self.counts[name] += positions * width
+            return
+
+        @qp.for_loop(0, positions * width, 1)
+        def bit_loop(t):
+            p, i = t // width, t % width
+            bit = (leaf_words[leaf, p, i // WORD] >> (i % WORD)) & 1
+            if flag is None:
+                qp.cond(bit == 1, qp.X)(register[p * width + i])
+            else:
+                qp.cond(bit == 1, qp.CNOT)([flag, register[p * width + i]])
+
+        bit_loop()
 
     def cond_cz(self, parity, a, b):
         def branch():
@@ -3857,6 +4290,52 @@ def _entries(table) -> dict[int, int]:
     return {address: _entry_value(words) for address, words in table}
 
 
+def _wire_order(value, width) -> int:
+    """``value`` with its ``width`` bits reversed: bit ``i`` of the result is the bit for wire
+    ``i`` of a big-endian register (spec 6.7)."""
+    return int(format(value, f"0{width}b")[::-1], 2)
+
+
+def _live_positions(widths, live_ranges, block_bits) -> np.ndarray:
+    """``(num_leaves, K)`` booleans: which block positions of each leaf hold a live address."""
+    blocks = QROAMRead.leaf_blocks(widths, live_ranges, block_bits)
+    return np.array([[_is_live((block << block_bits) | p, widths, live_ranges)
+                      for p in range(2**block_bits)] for block in blocks], dtype=bool)
+
+
+def _leaf_word_array(leaf_words, widths, live_ranges, width, block_bits):
+    """Canonicalize the dynamic ``leaf_words`` once (L-23).
+
+    Concrete words (Python or NumPy integers, nested sequences or arrays) must be integers in
+    ``[0, 2**32)``, booleans and floats rejected, checked on the Python values before the
+    ``int64`` cast, so that no word can wrap around before the check; every padding and dead
+    position must be zero, and so must every bit beyond ``width`` (wire order). Tracers and
+    abstract arrays (operators rebuilt by Catalyst, resource keys) are checked for their shape
+    and an integer dtype only. Raises ``ValueError``.
+    """
+    shape = QROAMRead.leaf_words_shape(widths, live_ranges, width, block_bits)
+    if isinstance(leaf_words, AbstractArray) or qp.math.is_tracer(leaf_words):
+        if tuple(leaf_words.shape) != shape or not np.issubdtype(np.dtype(leaf_words.dtype),
+                                                                 np.integer):
+            raise ValueError(f"leaf_words must be an integer array of shape {shape}, got "
+                             f"{tuple(leaf_words.shape)} of {leaf_words.dtype}")
+        return leaf_words
+    values = np.asarray(leaf_words, dtype=object)
+    if values.shape != shape:
+        raise ValueError(f"leaf_words must have shape {shape}, got {values.shape}")
+    for word in values.flat:
+        if isinstance(word, bool) or not isinstance(word, (int, np.integer)) or not (
+                0 <= word < 2**WORD):
+            raise ValueError(f"leaf words must be integers in [0, 2**{WORD}), got {word!r}")
+    array = values.astype(WORD_DTYPE)
+    if np.any(array[~_live_positions(widths, live_ranges, block_bits)]):
+        raise ValueError("a padding or dead position of leaf_words holds a nonzero word")
+    spare = WORD * shape[2] - width
+    if spare and np.any(array[..., -1] >> (WORD - spare)):
+        raise ValueError(f"leaf_words holds bits beyond width {width}")
+    return jnp.asarray(array) if qp.capture.enabled() else array
+
+
 def _swap_order(block_bits, low) -> list[int]:
     """The block position each register ``target, junk slot 0, ...`` holds after the swap
     network for the low address bits ``low``."""
@@ -3902,7 +4381,8 @@ class QROAMRead(Operator2):
     enable not satisfied                           0                0
     ============================================== ================ =========================
 
-    Entries missing from ``table`` are zero. ``junk`` slot ``r`` holds the block position
+    ``T`` is the table that :meth:`leaf_words_from_table` packed into ``leaf_words``; entries
+    missing from it are zero. ``junk`` slot ``r`` holds the block position
     ``junk_layout(k, a mod K)[r]``. :meth:`loaded_bits` gives ``target ‖ junk`` for every address.
     The read adds no phase, and the address is unchanged.
 
@@ -3918,8 +4398,12 @@ class QROAMRead(Operator2):
     ``control`` 0 wires, or 1 (the enable)        any      unchanged
     =========== ================================= ======== ===============================
 
-    **Compilable arguments.** ``table`` (``(address, words)`` pairs, every address in the live
-    ranges, each entry below ``2**width``); ``address_widths`` (one or two widths);
+    **Arguments.** Dynamic: ``leaf_words``, an ``int64`` array of shape :meth:`leaf_words_shape`,
+    ``(num_leaves, K, ceil(width / 32))``: row ``l`` belongs to the ``l``-th unary leaf in
+    visiting order (:meth:`leaf_blocks`), position ``p`` to the address
+    ``(leaf_blocks[l] << k) | p``; 32 data bits per word in wire order (module docstring); zero
+    at padding and dead positions. Callers build it from their compilable table with
+    :meth:`leaf_words_from_table`. Compilable: ``address_widths`` (one or two widths);
     ``live_ranges`` (one ``(lo, hi)`` per register); ``width`` (int >= 1); ``block_bits``
     (``0 <= k <= address_widths[-1]``); ``control_value`` (``None`` without an enable wire, else
     the enabling value 0 or 1).
@@ -3930,19 +4414,27 @@ class QROAMRead(Operator2):
     **Decomposition.** (1) Nested exact unary iteration (:mod:`dfthc.ops.unary`) over the visited
     blocks: the first register over its live range, then the top ``w_p - k`` bits of the last
     register over the blocks that meet its live range, rooted at the enable. (2) At each block
-    leaf, CNOTs from the leaf flag fan out all ``K`` entries into ``target ‖ junk``. (3) A
-    swap-with-zero network on the low ``k`` address bits, most significant first: for bit ``b``,
-    ``CSWAP`` register ``r`` with register ``r + 2**b`` for ``r < 2**b``, which moves the
-    selected entry into ``target`` with ``(K - 1) width`` exact ``CSWAP``\s.
+    leaf ``l``, one ``qp.for_loop`` over its ``K width`` bits: iteration ``t`` takes position
+    ``p = t // width`` and bit ``i = t % width`` and applies
+    ``qp.cond(bit == 1, CNOT)(leaf flag, (target ‖ junk)[p width + i])`` with
+    ``bit = (leaf_words[l, p, i // 32] >> (i % 32)) & 1`` (an ``X`` instead of the CNOT when the
+    whole address is low and there is no enable, so no flag exists). No conditional surrounds a
+    loop. (3) A swap-with-zero network on the low ``k`` address bits, most significant first:
+    for bit ``b``, ``CSWAP`` register ``r`` with register ``r + 2**b`` for ``r < 2**b``, which
+    moves the selected entry into ``target`` with ``(K - 1) width`` exact ``CSWAP``\s.
 
-    **Adjoint and control.** The adjoint is auto-derived (a reverse re-read; no loops or
-    conditionals in the body). It is only a test reference: the walk erases with
-    :class:`QROAMErase`. Never controlled; use the enable.
+    **Adjoint and control.** Never adjointed or controlled: its body has loops and data
+    conditionals (spec 7.4 rule 4; L-6), and no program wraps a composite that contains it in an
+    adjoint or a control (spec 7.4 rule 6). The walk erases with :class:`QROAMErase`; use the
+    enable instead of a control.
 
     **Cost.** :func:`dfthc.costs.qroam_read` with ``ranges = visited_ranges(...)``:
     :math:`T = U` (or :math:`U_2`) over the visited block ranges, controlled if there is an
-    enable, plus :math:`(2^k - 1)` ``width``; ``M = 0``. At FeMoco-54: outer 84 + 72 = 156,
-    inner 543 + 390 = 933.
+    enable, plus :math:`(2^k - 1)` ``width``; ``M = 0``; ``A = U``. At FeMoco-54: outer
+    84 + 72 = 156, inner 543 + 390 = 933. The rule declares ``num_leaves K width`` load CNOTs
+    (every position and bit, padding included) and is registered with ``exact=False``: the CNOT
+    count is an upper bound, which ``qp.analyze`` reports as well, because it counts every
+    unhinted load conditional; T, M and A do not depend on the data and are exact.
 
     **Paper and dfthcbe.** Steps 2 and 6 (and the engine of 10 and 11); the QROAM of Berry et al.
     (Quantum 3, 208) with the junk kept until a measured erase. dfthcbe: the reads in
@@ -3957,32 +4449,35 @@ class QROAMRead(Operator2):
         from dfthc.ops.qroam import QROAMRead
 
         table = tuple((a, (v,)) for a, v in enumerate([1, 2, 3, 1, 2]))
-        program = lambda: QROAMRead(table, (3,), ((0, 5),), 2, 1, None, address=[0, 1, 2],
+        shape = {"address_widths": (3,), "live_ranges": ((0, 5),), "width": 2, "block_bits": 1}
+        words = QROAMRead.leaf_words_from_table(table, **shape)  # shape (3, 2, 1)
+        program = lambda: QROAMRead(words, *shape.values(), None, address=[0, 1, 2],
                                     target=[3, 4], junk=[5, 6], work=[7], control=[])
         compiled_resources(program, num_wires=8).toffoli  # U(0, 3, 2, 0) + 2 = 2 + 2
     """
 
-    compilable_argnames = ("table", "address_widths", "live_ranges", "width", "block_bits",
+    dynamic_argnames = ("leaf_words",)
+    compilable_argnames = ("address_widths", "live_ranges", "width", "block_bits",
                            "control_value")
     wire_argnames = ("address", "target", "junk", "work", "control")
 
-    def __init__(self, table, address_widths, live_ranges, width, block_bits, control_value,
+    def __init__(self, leaf_words, address_widths, live_ranges, width, block_bits, control_value,
                  address, target, junk, work, control):
         address_widths, live_ranges = _check_address(address_widths, live_ranges)
         width = check_int("width", width, low=1)
         block_bits = check_int("block_bits", block_bits, low=0, high=address_widths[-1])
         control_value = _check_control_value(control_value)
-        table = _check_table(table, address_widths, live_ranges, width)
+        leaf_words = _leaf_word_array(leaf_words, address_widths, live_ranges, width, block_bits)
         check_wires("QROAMRead",
                     {"address": address, "target": target, "junk": junk, "work": work,
                      "control": control},
-                    self.required_wires(table, address_widths, live_ranges, width, block_bits,
+                    self.required_wires(address_widths, live_ranges, width, block_bits,
                                         control_value))
-        super().__init__(table, address_widths, live_ranges, width, block_bits, control_value,
-                         address, target, junk, work, control)
+        super().__init__(leaf_words, address_widths, live_ranges, width, block_bits,
+                         control_value, address, target, junk, work, control)
 
     @staticmethod
-    def required_wires(table, address_widths, live_ranges, width, block_bits,
+    def required_wires(address_widths, live_ranges, width, block_bits,
                        control_value) -> dict[str, int]:
         """Exact register sizes."""
         ranges = QROAMRead.visited_ranges(address_widths, live_ranges, block_bits)
@@ -4021,6 +4516,39 @@ class QROAMRead(Operator2):
         return _swap_order(block_bits, low)[1:]
 
     @staticmethod
+    def leaf_blocks(address_widths, live_ranges, block_bits) -> list[int]:
+        """The high part of every unary leaf (its block), in the order the iteration visits the
+        leaves: outermost register first, values increasing. Row ``l`` of ``leaf_words``."""
+        widths, ranges = _check_address(address_widths, live_ranges)
+        specs = _high_specs(widths, ranges, block_bits)
+        return [_concatenate(values, [n for _, n, _, _ in specs])
+                for values in itertools.product(*(range(lo, hi) for _, _, lo, hi in specs))]
+
+    @staticmethod
+    def leaf_words_shape(address_widths, live_ranges, width, block_bits) -> tuple[int, int, int]:
+        """``(num_leaves, K, ceil(width / 32))``, the shape of ``leaf_words``."""
+        return (len(QROAMRead.leaf_blocks(address_widths, live_ranges, block_bits)),
+                2**block_bits, -(-width // WORD))
+
+    @staticmethod
+    def leaf_words_from_table(table, *, address_widths, live_ranges, width,
+                              block_bits) -> np.ndarray:
+        """The ``leaf_words`` of ``table`` (``(address, words)`` pairs, every address live, each
+        entry below ``2**width`` in 32-bit words, least significant first): each entry in wire
+        order at its leaf and position, zero at padding and dead positions. ``ValueError`` for an
+        invalid table."""
+        widths, ranges = _check_address(address_widths, live_ranges)
+        entries = _entries(_check_table(table, widths, ranges, width))
+        words = np.zeros(QROAMRead.leaf_words_shape(widths, ranges, width, block_bits),
+                         dtype=WORD_DTYPE)
+        for leaf, block in enumerate(QROAMRead.leaf_blocks(widths, ranges, block_bits)):
+            for position in range(2**block_bits):
+                stream = _wire_order(entries.get((block << block_bits) | position, 0), width)
+                for w in range(words.shape[2]):
+                    words[leaf, position, w] = (stream >> (WORD * w)) & (2**WORD - 1)
+        return words
+
+    @staticmethod
     def loaded_bits(table, address, *, address_widths, live_ranges, width, block_bits) -> int:
         """``target ‖ junk`` as one big-endian integer after an enabled read at ``address``;
         0 outside the loaded set."""
@@ -4037,26 +4565,17 @@ class QROAMRead(Operator2):
         return _loaded_contents(_entries(table), widths, ranges, width, block_bits, addresses)
 
 
-def _read_body(emit, table, address_widths, live_ranges, width, block_bits, control_value,
+def _read_body(emit, leaf_words, address_widths, live_ranges, width, block_bits, control_value,
                address, target, junk, work, control):
-    entries = _entries(table)
     registers = [target] + [junk[r * width:(r + 1) * width] for r in range(2**block_bits - 1)]
-    specs = _high_specs(address_widths, live_ranges, block_bits)
-    high_widths = [n for _, n, _, _ in specs]
+    register = emit.wire_array(target, junk)
+    leaves = itertools.count()
 
     def leaf(flag, values):
-        block = _concatenate(values, high_widths)
-        for position, register in enumerate(registers):
-            value = entries.get((block << block_bits) | position, 0)
-            for i in range(width):
-                if (value >> (width - 1 - i)) & 1:
-                    if flag is None:
-                        emit.x(register[i])
-                    else:
-                        emit.cnot(flag, register[i])
+        emit.load(flag, leaf_words, next(leaves), register, 2**block_bits, width)
 
-    iterate_nested(_registers(address, specs), work, leaf, emit=emit,
-                   **_control(control, control_value))
+    iterate_nested(_registers(address, _high_specs(address_widths, live_ranges, block_bits)),
+                   work, leaf, emit=emit, **_control(control, control_value))
     low = address[len(address) - block_bits:]
     for b in reversed(range(block_bits)):
         for r in range(2**b):
@@ -4064,20 +4583,20 @@ def _read_body(emit, table, address_widths, live_ranges, width, block_bits, cont
                 emit.cswap(low[block_bits - 1 - b], registers[r][i], registers[r + 2**b][i])
 
 
-def _qroam_read_resources(table, address_widths, live_ranges, width, block_bits, control_value,
-                          address, target, junk, work, control):
+def _qroam_read_resources(leaf_words, address_widths, live_ranges, width, block_bits,
+                          control_value, address, target, junk, work, control):
     counter = QROAMEmitter(counting=True)
-    wires = _dummy(QROAMRead.required_wires(table, address_widths, live_ranges, width, block_bits,
+    wires = _dummy(QROAMRead.required_wires(address_widths, live_ranges, width, block_bits,
                                             control_value))
-    _read_body(counter, table, address_widths, live_ranges, width, block_bits, control_value,
-               **wires)
+    _read_body(counter, leaf_words, address_widths, live_ranges, width, block_bits,
+               control_value, **wires)
     return as_resources(counter.counts)
 
 
-@qp.register_resources(_qroam_read_resources)
-def _qroam_read(table, address_widths, live_ranges, width, block_bits, control_value, address,
-                target, junk, work, control):
-    _read_body(QROAMEmitter(), table, address_widths, live_ranges, width, block_bits,
+@qp.register_resources(_qroam_read_resources, exact=False)
+def _qroam_read(leaf_words, address_widths, live_ranges, width, block_bits, control_value,
+                address, target, junk, work, control):
+    _read_body(QROAMEmitter(), leaf_words, address_widths, live_ranges, width, block_bits,
                control_value, address, target, junk, work, control)
 
 
@@ -4453,12 +4972,12 @@ Run: `scripts/test.sh tests/ops/test_certificates_qroam.py -q`
 Expected: `7 passed` (3 to 7 s; nightly tier, run targeted here).
 
 Run: `scripts/test.sh tests/ops/test_qroam_read.py tests/ops/test_phase_fixup.py -m "not slow" -q`
-Expected: `60 passed`.
+Expected: `69 passed`.
 
 - [ ] **Step 5: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `630 passed` (613 + 17).
+Expected: `643 passed` (626 + 17).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -4541,7 +5060,7 @@ def choi_matrix(num_system, apply, num_work):
         return qp.state()
 
     state = np.asarray(circuit()).reshape(2**num_system, 2**num_system, 2**num_work)
-    assert np.allclose(state[:, :, 1:], 0, atol=1e-10)
+    assert np.allclose(state[:, :, 1:], 0, rtol=0, atol=1e-10)
     return state[:, :, 0] * np.sqrt(2**num_system)
 
 
@@ -4562,7 +5081,7 @@ def test_exact_matrix_with_global_sign(n_w, target_value):
         ZeroReflection([system[w] for w in zero], [system[w] for w in one], work_wires)
 
     matrix = choi_matrix(n_w, apply, work)
-    assert np.allclose(matrix, np.diag(reflection_diagonal(n_w, target_value)), atol=1e-10)
+    assert np.allclose(matrix, np.diag(reflection_diagonal(n_w, target_value)), rtol=0, atol=1e-10)
 
 
 @pytest.mark.compiled
@@ -4581,7 +5100,7 @@ def test_exact_controlled_matrix(n_w, target_value):
 
     matrix = choi_matrix(n_w + 1, apply, work)
     expected = np.concatenate([np.ones(2**n_w), reflection_diagonal(n_w, target_value)])
-    assert np.allclose(matrix, np.diag(expected), atol=1e-10)
+    assert np.allclose(matrix, np.diag(expected), rtol=0, atol=1e-10)
 
 
 @pytest.mark.compiled
@@ -4592,7 +5111,8 @@ def test_adjoint_is_the_reflection_itself():
         qp.adjoint(ZeroReflection([system[w] for w in zero], [system[w] for w in one],
                                   work_wires))
 
-    assert np.allclose(choi_matrix(3, apply, 0), np.diag(reflection_diagonal(3, 1)), atol=1e-10)
+    assert np.allclose(choi_matrix(3, apply, 0), np.diag(reflection_diagonal(3, 1)), rtol=0,
+                       atol=1e-10)
 
 
 COUNT_CASES = [pytest.param(n_w, controlled, id=f"{n_w}-{'controlled' if controlled else 'plain'}")
@@ -4865,7 +5385,7 @@ Expected: `33 passed` (35 to 85 s with 2 workers, depending on the machine's loa
 - [ ] **Step 5: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `491 passed` (459 + 32).
+Expected: `495 passed` (463 + 32).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`

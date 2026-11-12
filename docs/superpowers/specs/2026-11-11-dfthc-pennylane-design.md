@@ -223,19 +223,19 @@ The numbering follows dfthcbe's README.
 | 13 | Swap $\psi_{\uparrow}$ with $\psi_{\downarrow}$ if $\sigma$ | `SpinSwap` |
 | 14 | Givens ladder on $\psi_{\downarrow}$ | `GivensLadder` |
 | 15 | Majorana gate on $\psi_{\downarrow}[0]$ | `MajoranaGate` |
-| 16 | Inverse Givens ladder | adjoint of `GivensLadder` |
+| 16 | Inverse Givens ladder | `GivensLadderDagger` |
 | 17 | Undo the swap, unbuild $\sigma$ | `SpinSwap`, `SpinMux` |
 | 18 | Erase angles, $[b \ne B]$, $G_0$, $G_1$ by measurement | `AngleErase` |
-| 19–22 | Undo 5–8; erase inner data by measurement | explicit `Adjoint(InnerPrepare)` rule |
+| 19–22 | Undo 5–8; erase inner data by measurement | `InnerUnprepare` |
 | 23 | $\mathrm{REF}_{T_2}$ | `RefT2` |
-| 24–27 | Undo 1–4; erase outer data by measurement | explicit `Adjoint(OuterPrepare)` rule |
+| 24–27 | Undo 1–4; erase outer data by measurement | `OuterUnprepare` |
 | 28 | $\mathrm{REF}_{\mathcal A \cup \mathcal B}$ | `RefAB` |
 
 Steps 10–18 form `InnerSelect`. Steps 5–22 run twice per block encoding:
-1. Before $\mathrm{REF}_{T_2}$: `InnerPrepare`, `InnerSigns`, `InnerSelect`, adjoint `InnerPrepare`.
-2. After it: `InnerPrepare`, adjoint `InnerSelect`, `InnerSigns`, adjoint `InnerPrepare`.
+1. Before $\mathrm{REF}_{T_2}$: `InnerPrepare`, `InnerSigns`, `InnerSelect`, `InnerUnprepare`.
+2. After it: `InnerPrepare`, `InnerSelectDagger`, `InnerSigns`, `InnerUnprepare`.
 
-The adjoint of `InnerSelect` is the same circuit with the adjoint Majorana gate, because the Majorana gate is not Hermitian.
+The adjoint of `InnerSelect`, the operator `InnerSelectDagger`, is the same circuit with the adjoint Majorana gate, because the Majorana gate is not Hermitian. Every adjoint and controlled form of a composite is an operator class of its own (§4.4 item 13, §7.4 rule 6).
 
 ## 4. Approaches considered and decision
 
@@ -287,9 +287,9 @@ Remedying Option 2 converges on Option 1. Option 3 re-implements primitives Penn
 
 1. **`QROAMRead` replaces PennyLane `QROM`.** It is used for the alias reads and the angle loads, with the paper's construction (§9.3).
 2. **The erase phase fixup is our own construction** (`PhaseFixup` and its rule helper `emit_phase_fixup`, §9.4). It applies `CZ`/`Z` gates directly. It does not load parity bits through a `QROM` into a $\lvert -\rangle$ ancilla, because PennyLane's select-swap `QROM` adds complex phases unless its block size is 1 (§14, L-12). The fallback is plain unary iteration (§9.4).
-3. **Explicit `C(...)` rules are required, not only tidier** ([pennylane#10357](https://github.com/PennyLaneAI/pennylane/issues/10357)).
+3. **Explicit controlled constructions are required, not only tidier** ([pennylane#10357](https://github.com/PennyLaneAI/pennylane/issues/10357)). Since G0 they are operator classes, not `C(...)` rules (item 13).
 4. **Structure-determining data are compilable arguments** ([catalyst#3172](https://github.com/PennyLaneAI/catalyst/issues/3172)). If compile time at FeMoco size is too high, the remedies of §16 K-1 keep the walk a single compiled program. Otherwise work stops and is escalated.
-5. **Bodies of operators that are auto-adjointed contain no `qp.for_loop`/`qp.cond`** ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)).
+5. **Bodies of operators that are auto-adjointed contain no `qp.for_loop`/`qp.cond`** ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)). Since G0 the two operators with loops, `QROAMRead` (item 12) and `ControlledWalkPower`, are never adjointed or controlled, by construction (item 13).
 6. **Rule selection is asserted.** Tests use measurement-count signatures and, where the output is capturable, the verbose rule listing of `catalyst.passes.graph_decomposition`. Conditionals carry `qp.hint` branch probabilities.
 7. **Junk persists from read to erase.** The qubit count therefore exceeds the paper's (§10.3). An alternative with no Toffoli penalty stays open (Q-1, §16). The user decided to settle it after the Phase 0 probe K-10 and the Phase 4 resource report, preferring the argument variant if it works.
 8. **Unary iteration is exact, not truncated** (decided by the user, §16 Q-4). Truncated iteration and aligned-block pruning are later optimizations.
@@ -303,6 +303,8 @@ Remedying Option 2 converges on Option 1. Option 3 re-implements primitives Penn
    - *What it supersedes.* The user chose the half-step grid to save 424 Toffolis per walk. This construction gives the same saving with exact angles and dfthcbe's tables, so it replaces the grid. It also replaces the earlier carry-in circuit, which cost $b_{\mathrm{rot}}$ per $R_z$ and had the wrong sign (review finding P-1).
 10. **Comparator work stays dirty until the unprepare.** PennyLane's comparators keep intermediate ANDs on their work wires, and their adjoints uncompute them by measurement at zero Toffolis (probed, §9.24). The keep-test and succ-flag comparator work wires therefore persist from prepare to unprepare as dedicated registers (§10.1). That costs 36 qubits and saves a comparator per unprepare.
 11. **No fallback redefines "done".** The complete walk and controlled walk must compile as single programs (D-3). Per-block compiles are diagnostics, never the deliverable (§16, K-1).
+12. **Per-leaf read loads (G0, K-1 lever P).** `QROAMRead` takes its data as a dynamic `int64` array with one row per unary leaf and loads each leaf with one `qp.for_loop` over its $K\cdot$`width` bits (§9.3). Measured in the K-1 stand-in (Task 0.9d): 77 captured equations per leaf against 46 per table entry, 945 leaf loops instead of 8,208 entry loops at FeMoco-54, identical T, M and A. The CNOT count becomes an upper bound.
+13. **Explicit adjoint and controlled classes (G0, K-1 lever X).** The adjoint and controlled forms of the composites are operator classes with their own pinned base rules: `OuterUnprepare`, `InnerUnprepare`, `InnerSelectDagger`, `GivensLadderDagger`, `ControlledRefT2`, `ControlledRefAB`, `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk` and `ControlledToyWalk`. No rule or program calls `qp.adjoint` or `qp.ctrl` on a dfthc composite (§7.4 rule 6). Reason: Catalyst synthesizes, captures and lowers the generic distributed `Adjoint`/`C` candidate of every requested modified target and of its whole subtree, although the pinned rule is chosen. These copies were 95–99% of the K-1 stand-in's distributed IR (Task 0.9d). With both levers the FeMoco-54 controlled-walk stand-in compiled in 51 s at 2,648 MB, against 2,566 MB projected, with exact counts; without either lever its projection was 12.6 GB. Every count and closed form is unchanged (decision "K-1 at G0"; an upstream Catalyst issue is drafted).
 
 ## 5. Architecture
 
@@ -314,8 +316,8 @@ The system is layered. Each layer depends only on the layers below it.
 | --- | --- | --- |
 | L0, classical data | Factors, parameters, alias and angle tables, the encoded-Hamiltonian model, fermion matrices. NumPy and SciPy only. | none |
 | L1, primitives | `PhaseGradientRotation`, `FlaggedUniformPrep`, `QROAMRead`, `PhaseFixup`, `QROAMErase`, `ZeroReflection`, and the unary-iteration helper | L0 table formats; PennyLane primitives |
-| L2, paper blocks | `OuterPrepare`, `InnerPrepare`, `InnerSigns`, `TailAngleLoad`, `SFAngleLoad`, `SpinMux`, `SpinSwap`, `GivensRotation`, `GivensLadder`, `MajoranaGate`, `AngleErase`, `InnerSelect`, `RefT2`, `RefAB` | L1 |
-| L3, assembly | `DFTHCBlockEncoding`, `DFTHCWalk` and their controlled versions; `WalkLayout` | L2 |
+| L2, paper blocks | `OuterPrepare`, `OuterUnprepare`, `InnerPrepare`, `InnerUnprepare`, `InnerSigns`, `TailAngleLoad`, `SFAngleLoad`, `SpinMux`, `SpinSwap`, `GivensRotation`, `GivensLadder`, `GivensLadderDagger`, `MajoranaGate`, `AngleErase`, `InnerSelect`, `InnerSelectDagger`, `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB` | L1 |
+| L3, assembly | `DFTHCBlockEncoding`, `DFTHCWalk` and their controlled classes `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk`; `WalkLayout` | L2 |
 | L4, application | `ControlledWalkPower`, `QPERound`, the iterative QPE driver (a quantum function, §11.1), phase-to-energy conversion | L3 |
 | Tooling | `dfthc.compile` (gate set, pins, compile and analyze helpers), `dfthc.costs` (closed forms), `dfthc.testing` (sparse simulator, fixtures, toy walk), resource report | all layers, read-only |
 
@@ -350,19 +352,19 @@ dfthc-be/
       phase_gradient.py       PhaseGradientRotation
       uniform.py              FlaggedUniformPrep
       qroam.py                QROAMRead, PhaseFixup, QROAMErase
-      reflections.py          ZeroReflection, RefT2, RefAB
-      prepare.py              OuterPrepare, InnerPrepare, InnerSigns
+      reflections.py          ZeroReflection, RefT2, RefAB, ControlledRefT2, ControlledRefAB
+      prepare.py              OuterPrepare, OuterUnprepare, InnerPrepare, InnerUnprepare, InnerSigns
       angle_data.py           TailAngleLoad, SFAngleLoad, AngleErase
       spin.py                 SpinMux, SpinSwap
-      givens.py               GivensRotation, GivensLadder
+      givens.py               GivensRotation, GivensLadder, GivensLadderDagger
       majorana.py             MajoranaGate
-      select.py               InnerSelect
-      walk.py                 DFTHCBlockEncoding, DFTHCWalk
+      select.py               InnerSelect, InnerSelectDagger
+      walk.py                 DFTHCBlockEncoding, DFTHCWalk, ControlledDFTHCBlockEncoding, ControlledDFTHCWalk
     qpe.py                    ControlledWalkPower, QPERound, iterative_phase_estimation(), energy_from_phase(), physical_energy()
     testing/
       sparse_sim.py           sparse-state simulator (§12.3)
       tape.py                 tape-path decomposition for simulation
-      toy_walk.py             ToyWalk and ToyControlledWalkPower for QPE tests (§11.4)
+      toy_walk.py             ToyWalk, ControlledToyWalk and ToyControlledWalkPower for QPE tests (§11.4)
       fixtures.py             small parameter sets, loaders for reference fixtures
       resources.py            assertions on compiled resources, warning filters
       watchdog.py             memory and time watchdog for heavy runs (§15)
@@ -580,43 +582,55 @@ Each rule exists because of a confirmed limitation (§14).
 3. **Arguments.**
    - Every argument that determines circuit structure is in `compilable_argnames`: sizes, live ranges, block bits, tables. Rules are compiled once against abstract inputs, and only compilable values are concrete inside them ([catalyst#3172](https://github.com/PennyLaneAI/catalyst/issues/3172)).
    - `static_argnames` are not used, because an operator cannot mix static and compilable arguments.
-   - `dynamic_argnames` are used only for runtime data: the parity bits of `PhaseFixup`, the earlier measured bits of `QPERound`, and the bulk tables of the K-1 remedies (§16) if they are activated.
+   - `dynamic_argnames` are used only for runtime data: the parity bits of `PhaseFixup`, the earlier measured bits of `QPERound`, and the per-leaf table words of `QROAMRead` (§9.3), which its callers build from their compilable tables.
 4. **Control flow.**
    - Bodies of operators that are auto-adjointed contain no `qp.for_loop` or `qp.cond`, because adjoint lowering can crash on nested control flow ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)). Loops are unrolled in Python with static bounds, which also keeps `qp.analyze` counts concrete.
-   - `qp.cond` appears only on mid-circuit measurement outcomes, inside erase operators and the QPE wrapper.
-   - `qp.for_loop` appears only in `ControlledWalkPower`, which is never adjointed.
-   - Exception: if the K-1 remedies (§16) are activated, `qp.for_loop` and data-dependent `qp.cond` may also appear in the bodies of never-adjointed operators (`QROAMRead`, the angle loads, the erases).
+   - `qp.cond` on mid-circuit measurement outcomes appears only inside erase operators and the QPE wrapper.
+   - `qp.for_loop` appears in two operators, both never adjointed and never controlled: `QROAMRead`, whose per-leaf loads also carry `qp.cond` on table bits (§9.3, K-1 lever P), and `ControlledWalkPower`. The angle loads reach their loops through `QROAMRead`; the erases have none. Static bounds keep the counts concrete.
+   - "Never adjointed or controlled" holds by construction since G0: no program wraps a dfthc composite in `qp.adjoint` or `qp.ctrl` (rule 6), so Catalyst synthesizes no distributed candidate of a composite, nor of a looped operator inside one. The inventory test (§12.1, T6) checks this per program.
    - PennyLane primitives that we use under an adjoint (`SemiAdder`, the comparators) are covered by Phase 0 capability tests (K-7).
 5. **Measurement-based uncompute.**
-   - It lives only in dedicated erase operators (`QROAMErase`, `AngleErase`) and in explicit `Adjoint(Op)` rules with signature `(base)`. Their resource functions declare the measurements.
+   - It lives only in dedicated erase operators (`QROAMErase`, `AngleErase`) and in the base rules of the unprepare classes `OuterUnprepare` and `InnerUnprepare` (§9.7, §9.8), which call `QROAMErase`. Their resource functions declare the measurements.
    - An operator that contains a measurement is never placed under `qp.ctrl`, because Catalyst rejects measurements in control regions.
-6. **Controlled versions.**
-   - They come only from explicit `C(Op)` rules with signature `(base, control_wires, control_values, work_wires, work_wire_type)`.
-   - Such rules are provided for `ZeroReflection`, `RefT2`, `RefAB`, `DFTHCBlockEncoding`, `DFTHCWalk` and the toy walk.
+6. **Adjoint and controlled forms of composites are operator classes (G0, K-1 lever X).**
+   - Every adjoint or controlled form of a dfthc composite that a program uses is an `Operator2` of its own whose base rule is the construction: `OuterUnprepare`, `InnerUnprepare`, `InnerSelectDagger`, `GivensLadderDagger`, `ControlledRefT2`, `ControlledRefAB`, `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk` and `ControlledToyWalk` (§7.5). No rule and no program calls `qp.adjoint` or `qp.ctrl` on a dfthc composite.
+   - *Why.* For every requested modified target Catalyst synthesizes the generic distributed `Adjoint`/`C` candidate, the base rule's body inside an adjoint or control region, and requests the same modifier of every operator in it, so whole subtrees are captured and lowered again although the pinned rule is chosen. In the K-1 stand-in these copies were 95–99% of the distributed IR (Task 0.9d); without them, and with per-leaf loads, the FeMoco-54 controlled walk compiled in 2,648 MB (decision "K-1 at G0"; upstream issue drafted). An explicit class requests no modified form, so nothing is synthesized.
+   - Leaf adjoints stay auto-derived where the body has no loop or conditional: `PhaseGradientRotation` (inside `FlaggedUniformPrep`'s), `FlaggedUniformPrep`, `GivensRotation`, `MajoranaGate`, and PennyLane's `SemiAdder` and comparators. Their small distributed candidates are the only modified dfthc targets a walk program captures.
+   - The one explicit `C(Op)` rule left is `C(ZeroReflection)`, with signature `(base, control_wires, control_values, work_wires, work_wire_type)`: a tested primitive that no walk program requests, because `ControlledRefT2` and `ControlledRefAB` emit the multi-controlled Z themselves. `DFTHCBlockEncoding` and `DFTHCWalk` have no `C(...)` rule, so `qp.ctrl` of either fails to compile with a `CompileError` (the erases inside cannot be controlled); use `ControlledDFTHCWalk`. A `C(DFTHCWalk)` rule that delegates to `ControlledDFTHCWalk` would compile with the same counts, but its program would capture the whole cascade again (Task G0.1 probe), so it is not provided.
+   - *Stray modifiers.* One `qp.adjoint` or `qp.ctrl` of a composite anywhere in a program brings the cascade back for that program: loudly if a measuring operator is inside and no rule exists, silently in memory otherwise. The inventory test (§12.1, T6) fails on any captured `Adjoint(...)` or `C(...)` target whose base is a dfthc composite or `QROAMRead`.
    - Generic controlled wrapping is never relied on: [pennylane#10357](https://github.com/PennyLaneAI/pennylane/issues/10357), [pennylane#10080](https://github.com/PennyLaneAI/pennylane/issues/10080), [catalyst#3330](https://github.com/PennyLaneAI/catalyst/pull/3330).
-7. **One base rule per operator.** Explicit adjoint and controlled rules are pinned (§7.5). The solver chooses by cost, and with unweighted counts it once preferred an auto-derived unitary inverse over our measured erase.
+7. **One base rule per operator.** Every class's base rule is pinned, the adjoint and controlled classes of rule 6 included, and so are the remaining symbolic rules (§7.5). The solver chooses by cost, and with unweighted counts it once preferred an auto-derived unitary inverse over our measured erase.
 8. **Unique class names.** Rules are keyed by class name, and a test asserts that PennyLane registers none of our names. On 2026-11-11 none collide.
 9. **Rules run in both modes.**
    - They must work under capture (PennyLane's program capture into a jaxpr, used by `qjit`) and in tape mode (the non-captured path that records operations in a `QuantumScript`). `qp.testing.assert_valid_decomp_rule` and the sparse simulator use tape mode.
    - Mode-specific classical code is confined to helpers. `dfthc.compile.mcm_parities` computes the fixup parities (§9.5) as a packed-bit matrix-vector product with `jax.numpy` under capture, and as XORs of `MeasurementValue`s in tape mode. `MeasurementValue` supports `^` and `% 2`, confirmed on 2026-11-11.
 10. **Exact swaps only.** `CSWAP` decomposes to one Toffoli and two CNOTs. Approximate swaps that leave signs are not used, because those signs would survive the measured erase.
 11. **No `Subroutine`, and no `qp.pow` on our operators.** `Subroutine` cannot take part in graph decomposition. Catalyst supports only the adjoint and control modifiers on custom operators.
-12. **Warning policy.** Tests fail on any `RuleLoweringWarning` that names a dfthc operator, except Catalyst's "Skipped the <rule> decomposition rule for <Adjoint/C of a dfthc operator>: it contains a mid-circuit measurement" warning. Catalyst also lowers the generic adjoint and controlled candidates of operators with pinned rules and drops the measuring ones. If a modified operator that the program needs has no remaining rule, the compile fails with a `CompileError`; if a non-measuring rule remains, Catalyst chooses it silently (pins do not prevent this, L-2) and the exact counts (T4) catch the substitute path. The gate-set closure (T5) backs both. Tests filter the PennyLane noise of §7.1.
+12. **Warning policy.** Tests fail on any `RuleLoweringWarning` that names a dfthc operator, except Catalyst's "Skipped the <rule> decomposition rule for <Adjoint/C of a dfthc operator>: it contains a mid-circuit measurement" warning. Catalyst also lowers the generic adjoint and controlled candidates of operators with pinned rules and drops the measuring ones. If a modified operator that the program needs has no remaining rule, the compile fails with a `CompileError`; if a non-measuring rule remains, Catalyst chooses it silently (pins do not prevent this, L-2) and the exact counts (T4) catch the substitute path. The gate-set closure (T5) backs both. Since G0 (rule 6) walk programs request no modified dfthc composite, so this warning appears only in tests that wrap a measuring operator on purpose (Tasks 1C.5 and 3.4). Tests filter the PennyLane noise of §7.1.
 13. **Adjoints use the instance form** `qp.adjoint(Op(...))`, never `qp.adjoint(Op)(*positional_args)` (L-25).
 
 ### 7.5 Pinned rules
 
-`dfthc.compile.FIXED_DECOMPS` pins every rule registered for a dfthc operator, base and symbolic. It never pins a PennyLane operator name: a pin also applies to nested instances of the same operator, and pinning PennyLane's `QROM` to select-swap broke the `QROM` nested inside it. The symbolic keys are:
+`dfthc.compile.FIXED_DECOMPS` pins every rule registered for a dfthc operator, base and symbolic: one base rule per class (rule 7), the adjoint and controlled classes of rule 6 included. It never pins a PennyLane operator name: a pin also applies to nested instances of the same operator, and pinning PennyLane's `QROM` to select-swap broke the `QROM` nested inside it.
+
+The adjoint and controlled classes (rule 6). Each base rule is the modified rule pinned here before G0, so every count and closed form is unchanged:
+
+| Class | Base rule | Replaces |
+| --- | --- | --- |
+| `OuterUnprepare` | measured-erase unprepare (§9.7) | `Adjoint(OuterPrepare)` |
+| `InnerUnprepare` | measured-erase unprepare (§9.8) | `Adjoint(InnerPrepare)` |
+| `InnerSelectDagger` | the select with the adjoint Majorana gate (§9.18) | `Adjoint(InnerSelect)` |
+| `GivensLadderDagger` | the ladder's rungs in reverse time order ($k = 0, \dots, N-2$), each an auto-adjointed `GivensRotation` (§9.15) | the auto-derived `Adjoint(GivensLadder)` |
+| `ControlledRefT2`, `ControlledRefAB` | exact controlled reflections (§9.19, §9.20) | `C(RefT2)`, `C(RefAB)` |
+| `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk` | control only the reflections (§9.21, §9.22) | `C(DFTHCBlockEncoding)`, `C(DFTHCWalk)` |
+| `ControlledToyWalk` | control only the toy reflection (§11.4) | `C(ToyWalk)` |
+
+The symbolic keys that remain:
 
 | Key | Rule |
 | --- | --- |
-| `Adjoint(OuterPrepare)` | measured-erase unprepare (§9.7) |
-| `Adjoint(InnerPrepare)` | measured-erase unprepare (§9.8) |
-| `Adjoint(InnerSelect)` | the same circuit with the adjoint Majorana gate (§9.18) |
-| `Adjoint(InnerSigns)`, `Adjoint(SpinMux)`, `Adjoint(SpinSwap)`, `Adjoint(ZeroReflection)`, `Adjoint(RefT2)`, `Adjoint(RefAB)` | self-adjoint rules |
-| `C(ZeroReflection)`, `C(RefT2)`, `C(RefAB)` | exact controlled reflections (§9.6) |
-| `C(DFTHCBlockEncoding)`, `C(DFTHCWalk)` | control only the reflections (§9.21, §9.22) |
-| `C(ToyWalk)` | control only the toy reflection (§11.4) |
+| `Adjoint(InnerSigns)`, `Adjoint(SpinMux)`, `Adjoint(SpinSwap)`, `Adjoint(ZeroReflection)`, `Adjoint(RefT2)`, `Adjoint(RefAB)` | self-adjoint rules; no walk program requests them, and a registered rule that nothing requests is not captured (Task 0.9d) |
+| `C(ZeroReflection)` | the exact controlled reflection (§9.6), a tested primitive that no walk program requests |
 
 `fixed_decomps` keys containing parentheses work in this Catalyst ([catalyst#3336](https://github.com/PennyLaneAI/catalyst/pull/3336)). This was confirmed with `Adjoint(...)` and `C(...)` keys on 2026-11-11.
 
@@ -759,7 +773,7 @@ Only the walk-frame offset is involved; the physical-frame offset never enters $
 
 ### 9.0 Common conventions for every operator
 
-- **Class.** A subclass of `pennylane.core.Operator2` with `wire_argnames`, `compilable_argnames` and, only for `PhaseFixup` and `QPERound`, `dynamic_argnames`.
+- **Class.** A subclass of `pennylane.core.Operator2` with `wire_argnames`, `compilable_argnames` and, only for `PhaseFixup`, `QPERound` and `QROAMRead`, `dynamic_argnames`.
 - **Constructor.** It validates every wire-register length against `required_wires(...)` and every compilable argument against its documented domain, raising `ValueError` with the expected value otherwise.
 - **Docstring template.** Sections in this order:
   1. purpose and mathematical action;
@@ -772,6 +786,8 @@ Only the walk-frame offset is involved; the physical-frame offset never enters $
   8. paper equations and steps, and the dfthcbe bloq it corresponds to;
   9. a minimal compiled example.
 - **Never controlled.** Unless stated otherwise, an operator is never placed under `qp.ctrl`.
+- **Adjoint and controlled classes** (§7.4 rule 6). `OuterUnprepare`, `InnerUnprepare`, `InnerSelectDagger`, `GivensLadderDagger`, `ControlledRefT2`, `ControlledRefAB`, `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk` and `ControlledToyWalk` are full operators: all nine docstring sections, `required_wires`, constructor validation and T2–T6. Section 1 of the docstring names the operator they invert or control and the identity they satisfy, for example: `OuterUnprepare` after `OuterPrepare` is the identity on the prepare's input, for every measurement outcome; `ControlledDFTHCWalk` is $\lvert 0\rangle\langle 0\rvert \otimes I + \lvert 1\rangle\langle 1\rvert \otimes W$ on ancillas in $\lvert 0\rangle$. Their wires and compilable arguments are the base operator's; the controlled classes add a one-wire `control` register, first among the wire arguments, as in `ControlledWalkPower`. Section 6 states that they are never adjointed or controlled themselves.
+- **Wire passing.** A composite passes each child only the registers that child needs, never a whole group or the layout. Reason: an operator bind costs 2 captured equations per wire passed as a list and 4 per wire passed as an array register (PennyLane's `Operator2` takes one scalar operand per wire and unpacks an array register twice; Task 0.9d, Opus finding M-5). The K-1 stand-in passed its whole layout to every child and spent about 41 captured equations per layout wire in its block encoding; its composites held 32% of the projected FeMoco-54 memory with both levers.
 - **Defaults for missing rows.** If an operator's table has no Pre or Post row, it acts unitarily on all inputs as stated under Action, and its `work` wires are $\lvert 0\rangle$ before and after. If it has no Compilable row, it takes no compilable arguments, and its sizes follow from its wire lengths.
 - **Costs.** Each "Cost" row gives the operator's Toffoli count $T$ and mid-circuit measurement count $M$ as an exact closed form or recurrence in its parameters (§9.24), followed by its value at FeMoco-54. `dfthc.costs` implements exactly these formulas, and T4 asserts them. §13.1 compares totals.
 
@@ -834,13 +850,13 @@ The *loaded set* is the set of addresses in visited blocks (the first two rows).
 | --- | --- |
 | Action | As in the table above |
 | Wires | `address` ($\sum_i w_i$), `target` (`width`), `junk` ($(K-1)\cdot$`width`), `work` (unary-iteration ancillas, per `required_wires`), `control` (0 or 1 wire) |
-| Compilable | `table` (nested tuple of ints of `width` bits), `address_widths`, `live_ranges`, `width`, `block_bits` $k$, `control_value` (`None`, 0 or 1) |
+| Arguments | Dynamic: `leaf_words`, an `int64` array of shape `(num_leaves, K, ceil(width/32))` that the caller (`OuterPrepare`, `InnerPrepare`, `TailAngleLoad`, `SFAngleLoad`) builds inside its rule from its compilable table with `QROAMRead.leaf_words_from_table`. Row $\ell$ belongs to the $\ell$-th unary leaf in visiting order, position $p$ to the address (leaf block $\ll k$) $\mid p$. It holds 32 data bits per word in wire order: bit $s$ of word $w$ is the bit for wire $32w + s$ of the position's register, which is entry bit `width` $- 1 - (32w + s)$, so the registers stay big-endian (§6.7) and the loop needs no index reversal. Padding and dead positions are zero. Concrete arrays are validated before the `int64` cast (integers in $[0, 2^{32})$, no booleans or floats; zero at padding and dead positions and beyond `width`); tracers and abstract arrays are checked for shape and an integer dtype (L-23, L-26). Compilable: `address_widths`, `live_ranges`, `width`, `block_bits` $k$, `control_value` (`None`, 0 or 1) |
 | Pre | `target`, `junk` and `work` are $\lvert 0\rangle$ |
 | Post | As in Action. `work` is $\lvert 0\rangle$, the address is unchanged. |
-| Rule | 1. Nested unary iteration over live blocks: the `dfthc.ops.unary` helper builds a `TemporaryAND` ladder whose uncompute is measured (`Adjoint(TemporaryAND)`). 2. At each block leaf, fan out all $K$ entries into `target ‖ junk` with CNOTs from the leaf flag. 3. A swap-with-zero network on the low $k$ address bits moves the selected entry into `target`, using $(K-1)\cdot$`width` exact `CSWAP`s. |
-| Classical helper | `QROAMRead.loaded_bits(table, address)` (defined above). A test checks it against simulation for every computational address of small instances. |
-| Adjoint | The auto-derived adjoint (a reverse re-read) is valid. It is used only as a test reference; the walk erases with `QROAMErase`, a different operator, so the solver never chooses between the two. |
-| Cost | $T = U$(visited block ranges, $c$) $+ (2^k - 1)\cdot$`width`, with $U$ the exact unary-iteration count of §9.24 and $c = 1$ iff there is an enable control. $M = 0$. At FeMoco-54: outer $84 + 72 = 156$; inner $543 + 390 = 933$. |
+| Rule | 1. Nested unary iteration over live blocks: the `dfthc.ops.unary` helper builds a `TemporaryAND` ladder whose uncompute is measured (`Adjoint(TemporaryAND)`). 2. At each block leaf, one `qp.for_loop` over its $K\cdot$`width` bits loads all $K$ entries into `target ‖ junk`: iteration $t$ takes position $p = \lfloor t/\text{width}\rfloor$ and bit $i = t \bmod \text{width}$ and applies a CNOT from the leaf flag onto `(target ‖ junk)`$[p\cdot\text{width} + i]$, conditioned on that bit of `leaf_words` (an `X` when the whole address is low and there is no enable, so no flag exists). No conditional surrounds the loop. 3. A swap-with-zero network on the low $k$ address bits moves the selected entry into `target`, using $(K-1)\cdot$`width` exact `CSWAP`s. |
+| Classical helpers | `QROAMRead.loaded_bits(table, address)` (defined above), checked against simulation for every computational address of small instances; `leaf_words_from_table`, `leaf_blocks` and `leaf_words_shape` build and describe the dynamic array. |
+| Adjoint and control | Never: the body has loops and data conditionals (§7.4 rule 4), and no adjoint or controlled form of a composite that contains the read is ever requested (§7.4 rule 6). The walk erases with `QROAMErase`. |
+| Cost | $T = U$(visited block ranges, $c$) $+ (2^k - 1)\cdot$`width`, with $U$ the exact unary-iteration count of §9.24 and $c = 1$ iff there is an enable control. $M = 0$. At FeMoco-54: outer $84 + 72 = 156$; inner $543 + 390 = 933$. The rule declares $K\cdot$`width` load CNOTs per leaf, or X gates for the flagless leaf (the whole address low and no enable), every position and bit with padding included, and is registered with `exact=False`: the CNOT count (the X count for the flagless leaf) is an upper bound, and `qp.analyze` reports the same bound, because it counts every unhinted load conditional. T, M and A do not depend on the data: T4 asserts them exactly and asserts the analyzed CNOT count, or X count for the flagless leaf, equal to the declared one. At FeMoco-54 the four reads of a walk have $81 + 540 + 54 + 270 = 945$ leaves. |
 
 **Known deltas against dfthcbe (deferred refinements).**
 - $r$ is part of every inner entry, so it is carried through the swap: +60 per inner read at FeMoco-54. dfthcbe writes it as a "flat" target.
@@ -894,25 +910,25 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Control | Explicit `C(ZeroReflection)` (pinned): multi-controlled Z over control ∪ pattern, then `Z` on the control. This gives exactly $\lvert 0\rangle\langle 0\rvert \otimes I + \lvert 1\rangle\langle 1\rvert \otimes (2\Pi - I)$, because $Z_c\cdot C(I - 2\Pi)$ equals that operator. For $n_w = 1$ the multi-controlled Z is a `CZ` between the control and the pattern wire, conjugated by `X` on the pattern wire if its pattern value is 0. |
 | Cost | For $n_w$ wires in total: $T = \max(n_w - 2, 0)$, a `MultiControlledX` with $n_w - 1$ controls; controlled $T = n_w - 1$. $M = 0$. Unit tests cover $n_w = 1, 2, 3$ and a case with $n_w \ge 4$, each for both pattern values of the target wire, uncontrolled and controlled. |
 
-### 9.7 `OuterPrepare` (steps 1–4) and its adjoint (steps 24–27)
+### 9.7 `OuterPrepare` (steps 1–4) and `OuterUnprepare` (steps 24–27)
 
 | | |
 | --- | --- |
 | Wires | `x_o` ($w_x$), `succ_x_o`, `succ_work_x_o` ($\lg l_x - 1$), `sigma_1`, `m_x_o` ($b_{k1}$), `less_than_x_o`, `cmp_work_x_o` ($b_{k1} - 1$), `alt_x_o` ($w_x$), `keep_x_o` ($b_{k1}$), `junk_x_o` ($(K_1-1) d_1$), `phase_grad`, `work`. Here $l_x$ is the odd part of $X_o$. The two `*_work` registers stay dirty from prepare to unprepare (§4.4, item 10). |
 | Compilable | $X_o$, `alt` and `keep` (tuples of length $X_o$), $b_{k1}$, $k_1$, $k_{e1}$, $s_u$ |
-| Base rule | 1. `FlaggedUniformPrep(L=X_o)` on (`x_o`, `succ_x_o`). 2. `H` on `m_x_o` and `sigma_1`. 3. `QROAMRead` of (alt ‖ keep) over $x_o \in [0, X_o)$ with $k_1$ block bits. 4. `LeftQuantumComparator(keep_x_o, m_x_o, less_than_x_o, cmp_work_x_o, "<=")` writes $[\mathrm{keep} \le m]$. 5. $w_x$ `CSWAP`s swap `alt_x_o` and `x_o`, controlled by `less_than_x_o`. |
+| Base rule | 1. `FlaggedUniformPrep(L=X_o)` on (`x_o`, `succ_x_o`). 2. `H` on `m_x_o` and `sigma_1`. 3. `QROAMRead` of (alt ‖ keep) over $x_o \in [0, X_o)$ with $k_1$ block bits; its `leaf_words` are built in the rule from the compilable `alt` and `keep`. 4. `LeftQuantumComparator(keep_x_o, m_x_o, less_than_x_o, cmp_work_x_o, "<=")` writes $[\mathrm{keep} \le m]$. 5. $w_x$ `CSWAP`s swap `alt_x_o` and `x_o`, controlled by `less_than_x_o`. |
 | Post | On $\mathrm{succ}_{x_o} = 1$: $\sum_x \sqrt{\tilde p(x)}\lvert x\rangle\lvert\mathrm{garb}(x)\rangle \otimes \lvert +\rangle_{\sigma_1}$, with $\tilde p$ the $b_{k1}$-bit alias distribution. Failure branches behave as in dfthcbe. |
-| `Adjoint(OuterPrepare)` (pinned) | `CSWAP`s (self-inverse), adjoint comparator (measured uncompute; also cleans `cmp_work_x_o`), `QROAMErase`, `H` on `m_x_o` and `sigma_1`, adjoint `FlaggedUniformPrep` |
+| `OuterUnprepare` (own class, pinned base rule; same wires and compilable arguments as `OuterPrepare`) | `CSWAP`s (self-inverse), adjoint comparator (measured uncompute; also cleans `cmp_work_x_o`), `QROAMErase`, `H` on `m_x_o` and `sigma_1`, adjoint `FlaggedUniformPrep` |
 | Cost | Prepare $T = F(X_o) + T_{\mathrm{read,out}} + b_{k1} + w_x$; unprepare $T = w_x + T_{\mathrm{erase,out}} + F^\dagger(X_o)$, $M = K_1 d_1$ (§9.24). At FeMoco-54: prepare $30 + 156 + 15 + 9 = 210$; unprepare $9 + 36 + 24 = 69$, $M = 96$. |
 
-### 9.8 `InnerPrepare` (steps 5–8) and its adjoint (steps 19–22)
+### 9.8 `InnerPrepare` (steps 5–8) and `InnerUnprepare` (steps 19–22)
 
 | | |
 | --- | --- |
 | Wires | `x_o` (read-only), `b` ($w_b$), `succ_b`, `succ_work_b` ($\lg l_b - 1$), `sigma_0`, `m_b` ($b_{k2}$), `less_than_b`, `cmp_work_b` ($b_{k2} - 1$), `alt_b` ($w_b$), `keep_b` ($b_{k2}$), `sgn`, `d_sgn`, `r` ($w_r$), `junk_b` ($(K_2-1) d_2$), `phase_grad`, `work`. Here $l_b$ is the odd part of $B+1$. The `*_work` registers stay dirty from prepare to unprepare. |
 | Compilable | $N, R, B, C$, the inner tables `alt`, `keep`, `sgn`, `d_sgn` (shape $(RC, B+1)$), $b_{k2}$, $k_2$, $k_{e2}$, $s_u$ |
-| Base rule | 1. `FlaggedUniformPrep(L=B+1)` on (`b`, `succ_b`). 2. `H` on `sigma_0` and `m_b`. 3. `QROAMRead` with rows $x_o \in [0, RC)$, block axis $b \in [0, B+1)$ with $k_2$ block bits, and entries (alt, keep, sgn, d_sgn, $\lfloor x_o/C\rfloor$). 4. `LeftQuantumComparator(keep_b, m_b, less_than_b, cmp_work_b, "<=")`. 5. $w_b$ `CSWAP`s for alt and `b`. One-body rows load nothing, and the uniform preparation of $b$ runs unconditionally (as in dfthcbe). |
-| `Adjoint(InnerPrepare)` (pinned) | `CSWAP`s, adjoint comparator (measured uncompute), `QROAMErase` (one-hot over the low $k_{e2}$ bits of $x_o$ and all bits of $b$), `H`s, adjoint `FlaggedUniformPrep` |
+| Base rule | 1. `FlaggedUniformPrep(L=B+1)` on (`b`, `succ_b`). 2. `H` on `sigma_0` and `m_b`. 3. `QROAMRead` with rows $x_o \in [0, RC)$, block axis $b \in [0, B+1)$ with $k_2$ block bits, and entries (alt, keep, sgn, d_sgn, $\lfloor x_o/C\rfloor$); its `leaf_words` are built in the rule from the compilable inner tables. 4. `LeftQuantumComparator(keep_b, m_b, less_than_b, cmp_work_b, "<=")`. 5. $w_b$ `CSWAP`s for alt and `b`. One-body rows load nothing, and the uniform preparation of $b$ runs unconditionally (as in dfthcbe). |
+| `InnerUnprepare` (own class, pinned base rule; same wires and compilable arguments as `InnerPrepare`) | `CSWAP`s, adjoint comparator (measured uncompute), `QROAMErase` (one-hot over the low $k_{e2}$ bits of $x_o$ and all bits of $b$), `H`s, adjoint `FlaggedUniformPrep` |
 | Cost | Prepare $T = F(B+1) + T_{\mathrm{read,in}} + b_{k2} + w_b$; unprepare $T = w_b + T_{\mathrm{erase,in}} + F^\dagger(B+1)$, $M = K_2 d_2$ (§9.24). At FeMoco-54: prepare $18 + 933 + 15 + 5 = 971$; unprepare $5 + 196 + 16 = 217$, $M = 416$. |
 
 ### 9.9 `InnerSigns` (step 9)
@@ -962,14 +978,14 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Adjoint | Self-adjoint (pinned) |
 | Cost | $T = N$ per application ($2N$ per `InnerSelect`), $M = 0$ |
 
-### 9.14 `GivensRotation` and 9.15 `GivensLadder` (steps 14 and 16)
+### 9.14 `GivensRotation` and 9.15 `GivensLadder`, `GivensLadderDagger` (steps 14 and 16)
 
 | | `GivensRotation` | `GivensLadder` |
 | --- | --- | --- |
 | Action | The rung of §6.3 on (`q_i`, `q_j`) with $\theta = 4\pi x/2^{b_{\mathrm{rot}}}$, where $x$ is the integer in `angle`; `angle` is unchanged | $U(u)$ of §6.3 on `system`, with $u$ = `vector_from_angles(angles)` |
 | Wires | `q_i`, `q_j`, `angle` ($b_{\mathrm{rot}}$), `phase_grad` ($b_{\mathrm{rot}}$), `work` ($b_{\mathrm{rot}} - 1$, the adder's work wires) | `system` ($N$), `angles`, `phase_grad`, `work` |
-| Rule | dfthcbe's `GivensRotationByPhaseGradient` (§4.4, item 9), in time order:<br>1. $\sqrt{X}^\dagger$ on `q_i`; $S$, then $\sqrt{X}^\dagger$, on `q_j`.<br>2. CNOT(`q_i` → `q_j`), then $H$ on `q_i`.<br>3. $R_z(\theta)$ on `q_i`, then on `q_j`.<br>4. $H$ on `q_i`, then CNOT(`q_i` → `q_j`).<br>5. $\sqrt{X}$ on `q_i`; $\sqrt{X}$, then $S^\dagger$, on `q_j`.<br>Here $\sqrt{X} = HSH$ and $\sqrt{X}^\dagger = HS^\dagger H$ exactly.<br>Each $R_z(\theta)$ on qubit $q$ is Qualtran's `ControlledAddOrSubtract`: `X(q)`; CNOT $q$ onto every bit of `phase_grad`; `SemiAdder(angle, phase_grad, work)`; the same CNOTs again; `X(q)`. This maps the phase-gradient value $g \mapsto g + x$ when $q = 1$ and $g \mapsto g - x$ when $q = 0$. Adding $x$ multiplies PennyLane's phase-gradient state by $e^{+2\pi i x/2^{b_{\mathrm{rot}}}}$, and subtracting it by the conjugate phase (§6.5). So $q = 1$ picks up $e^{+2\pi i x/2^{b_{\mathrm{rot}}}}$ and $q = 0$ picks up $e^{-2\pi i x/2^{b_{\mathrm{rot}}}}$: exactly $R_z(4\pi x/2^{b_{\mathrm{rot}}})$, with no global phase.<br>Verified by `.scratch/spec-final/probe_exact_givens.py`. A unit test repeats the dense check for every $x$ at $b_{\mathrm{rot}} \le 4$. | Rungs $k = 0, \dots, N-2$ on $(q_k, q_{k+1})$, unrolled in Python, in the order that realizes `angles_from_vector` |
-| Adjoint | Auto-derived ($\theta \to -\theta$) | Auto-derived (reverse order; no loops in the body). An explicit rule is added only if the canary for L-6 shows the auto path failing. |
+| Rule | dfthcbe's `GivensRotationByPhaseGradient` (§4.4, item 9), in time order:<br>1. $\sqrt{X}^\dagger$ on `q_i`; $S$, then $\sqrt{X}^\dagger$, on `q_j`.<br>2. CNOT(`q_i` → `q_j`), then $H$ on `q_i`.<br>3. $R_z(\theta)$ on `q_i`, then on `q_j`.<br>4. $H$ on `q_i`, then CNOT(`q_i` → `q_j`).<br>5. $\sqrt{X}$ on `q_i`; $\sqrt{X}$, then $S^\dagger$, on `q_j`.<br>Here $\sqrt{X} = HSH$ and $\sqrt{X}^\dagger = HS^\dagger H$ exactly.<br>Each $R_z(\theta)$ on qubit $q$ is Qualtran's `ControlledAddOrSubtract`: `X(q)`; CNOT $q$ onto every bit of `phase_grad`; `SemiAdder(angle, phase_grad, work)`; the same CNOTs again; `X(q)`. This maps the phase-gradient value $g \mapsto g + x$ when $q = 1$ and $g \mapsto g - x$ when $q = 0$. Adding $x$ multiplies PennyLane's phase-gradient state by $e^{+2\pi i x/2^{b_{\mathrm{rot}}}}$, and subtracting it by the conjugate phase (§6.5). So $q = 1$ picks up $e^{+2\pi i x/2^{b_{\mathrm{rot}}}}$ and $q = 0$ picks up $e^{-2\pi i x/2^{b_{\mathrm{rot}}}}$: exactly $R_z(4\pi x/2^{b_{\mathrm{rot}}})$, with no global phase.<br>Verified by `.scratch/spec-final/probe_exact_givens.py`. A unit test repeats the dense check for every $x$ at $b_{\mathrm{rot}} \le 4$. | Rungs $k = 0, \dots, N-2$ on $(q_k, q_{k+1})$, unrolled in Python, in time order $k = N-2, \dots, 0$ (rung 0 last, so $U = G_0 G_1 \cdots G_{N-2}$): the order that realizes `angles_from_vector`, as dfthcbe's `GivensRotationLadder`; the opposite order fails for $N \ge 3$ |
+| Adjoint | Auto-derived ($\theta \to -\theta$); `GivensLadderDagger` uses it | The class `GivensLadderDagger(b_rot, system, angles, phase_grad, work)`, with the ladder's arguments: its rungs in time order $k = 0, \dots, N-2$ (the ladder's order reversed), each `qp.adjoint(GivensRotation(...))`, unrolled; $T = 2(b_{\mathrm{rot}} - 1)(N-1)$, as for the ladder. `InnerSelect` and `InnerSelectDagger` call it; nothing adjoints `GivensLadder` itself (§7.4 rule 6). |
 | Cost | $T = 2(b_{\mathrm{rot}} - 1)$ (two $b_{\mathrm{rot}}$-bit `SemiAdder`s), $M = 0$ | $T = 2(b_{\mathrm{rot}} - 1)(N-1)$, $M = 0$; 1,484 at FeMoco-54 |
 
 ### 9.16 `MajoranaGate` (step 15)
@@ -979,7 +995,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Wires | `succ_x_o`, `succ_b`, `G0`, `G1`, `b_neq_B`, `flavour` (= `sigma_0`), `target` (= `psi_dn[0]`), `work` (2) |
 | Action | Let $a = \mathrm{succ}_{x_o}\wedge G_0$ and $s = \mathrm{succ}_{x_o}\wedge\neg G_0\wedge\mathrm{succ}_b$. 1. If $s \wedge [b\ne B]$: $-Z$ on target. 2. If $a$: $X$ on target. 3. If $a \wedge$ flavour: $Z$ on target. 4. If $a \wedge G_1$: $Z$ on flavour. Because flavour arrives in $\lvert +\rangle$ on D1/Q1 branches, the net effect on the target is $a_u$ (D1) or $a_u^\dagger$ (Q1) (§6.2). |
 | Rule | Two `TemporaryAND`s for $a$ and $s$; doubly controlled Z or X gates for steps 1–4; measured uncompute |
-| Adjoint | Auto-derived; this is the $\mathrm{Maj}^\dagger$ used in `Adjoint(InnerSelect)` |
+| Adjoint | Auto-derived; this is the $\mathrm{Maj}^\dagger$ used in `InnerSelectDagger` |
 | Cost | $T = 5$: two `TemporaryAND`s and three doubly controlled gates, each one Toffoli. $M = 0$. Same for the adjoint. |
 
 ### 9.17 `AngleErase` (step 18)
@@ -994,16 +1010,16 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Adjoint and control | Never |
 | Cost | $T = [U(0, R, w_r, 1) + O(w_b)] + U(RC, X_o, w_x, 0)$, $M = (N-1)b_{\mathrm{rot}} + 3$ (§9.24). At FeMoco-54: $T = (11 + 30) + 61 = 102$, $M = 798$. |
 
-### 9.18 `InnerSelect` (steps 10–18) and its adjoint
+### 9.18 `InnerSelect` (steps 10–18) and `InnerSelectDagger`
 
 | | |
 | --- | --- |
 | Wires | Grouped: `select` (`angles`, `G0`, `G1`, `b_neq_B`, `sg`), the needed registers of `outer` and `inner` (`succ_x_o`, `x_o`, `sigma_1`, `succ_b`, `b`, `r`, `sigma_0`), `system`, `phase_grad`, `work` |
 | Compilable | `tail_angles`, `sf_angles`, $N, R, B, C, N_+, b_{\mathrm{rot}}$, fixup bits |
-| Base rule | `TailAngleLoad`; `SFAngleLoad`; `SpinMux`; `SpinSwap`; `GivensLadder(psi_dn)`; `MajoranaGate`; adjoint `GivensLadder`; `SpinSwap`; `SpinMux`; `AngleErase` |
-| `Adjoint(InnerSelect)` (pinned) | The same sequence with the adjoint `MajoranaGate`: still loading first and erasing last |
+| Base rule | `TailAngleLoad`; `SFAngleLoad`; `SpinMux`; `SpinSwap`; `GivensLadder(psi_dn)`; `MajoranaGate`; `GivensLadderDagger(psi_dn)`; `SpinSwap`; `SpinMux`; `AngleErase` |
+| `InnerSelectDagger` (own class, pinned base rule; same wires and compilable arguments) | The same sequence with `qp.adjoint(MajoranaGate(...))`, the auto-derived leaf adjoint: still loading first and erasing last |
 | Action | On valid branches it applies $V^\dagger\,\mathrm{Maj}\,V$, with $V$ the spin-selected swap and Givens ladder. This realizes the generator pieces of §3.2. |
-| Cost | $T = T_{\mathrm{tail}} + T_{\mathrm{SF}} + 2 + 2N + 2\cdot 2(b_{\mathrm{rot}} - 1)(N-1) + 5 + T_{\mathrm{angle\,erase}}$, $M = (N-1)b_{\mathrm{rot}} + 3$; the same for the adjoint. At FeMoco-54: $61 + 291 + 2 + 108 + 2968 + 5 + 102 = 3537$, $M = 798$. |
+| Cost | $T = T_{\mathrm{tail}} + T_{\mathrm{SF}} + 2 + 2N + 2\cdot 2(b_{\mathrm{rot}} - 1)(N-1) + 5 + T_{\mathrm{angle\,erase}}$, $M = (N-1)b_{\mathrm{rot}} + 3$; the same for `InnerSelectDagger`. At FeMoco-54: $61 + 291 + 2 + 108 + 2968 + 5 + 102 = 3537$, $M = 798$. |
 
 ### 9.19 `RefT2` (step 23) and 9.20 `RefAB` (step 28)
 
@@ -1012,7 +1028,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Action | $2\Pi_{T_2} - I$ | $2\lvert 0\rangle\langle 0\rvert_{\mathcal A\cup\mathcal B} - I$ |
 | Rule | `ZeroReflection(zero_wires=(b, m_b, sigma_0), one_wires=(succ_x_o,))` | `ZeroReflection(zero_wires=(x_o, m_x_o, sigma_1, b, m_b, sigma_0))` |
 | Adjoint | Self-adjoint (pinned) | Self-adjoint (pinned) |
-| Control | Explicit `C(RefT2)` calls `C(ZeroReflection)` (pinned) | Explicit `C(RefAB)`, likewise |
+| Control | The class `ControlledRefT2(control, ...)`, with `RefT2`'s registers after the control: the multi-controlled Z over control ∪ pattern, then `Z` on the control, emitted directly with the helper of `C(ZeroReflection)` (§9.6), so no `C(...)` key is requested | `ControlledRefAB`, likewise |
 | Cost | $n_w = w_b + b_{k2} + 2$: $T = w_b + b_{k2}$, controlled $+1$; at FeMoco-54 20 and 21 | $n_w = w_x + b_{k1} + w_b + b_{k2} + 2$: $T = w_x + b_{k1} + w_b + b_{k2}$, controlled $+1$; at FeMoco-54 44 and 45 |
 
 ### 9.21 `DFTHCBlockEncoding` (steps 1–27)
@@ -1021,10 +1037,10 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | --- | --- |
 | Wires | Grouped: `outer`, `inner`, `select`, `system`, `phase_grad`, `work` (§10) |
 | Compilable | `WalkParams` fields and `WalkTables.as_compilable()` |
-| Base rule | `OuterPrepare`; [`InnerPrepare`, `InnerSigns`, `InnerSelect`, adjoint `InnerPrepare`]; `RefT2`; [`InnerPrepare`, adjoint `InnerSelect`, `InnerSigns`, adjoint `InnerPrepare`]; adjoint `OuterPrepare` |
+| Base rule | `OuterPrepare`; [`InnerPrepare`, `InnerSigns`, `InnerSelect`, `InnerUnprepare`]; `RefT2`; [`InnerPrepare`, `InnerSelectDagger`, `InnerSigns`, `InnerUnprepare`]; `OuterUnprepare` |
 | Action | $\langle 0_{\mathrm{anc}}\vert\mathrm{BE}\vert 0_{\mathrm{anc}}\rangle = \tilde H_{\mathrm{SA}}/\tilde\Lambda - I$ |
 | Adjoint | Not provided; not used |
-| Control | `C(DFTHCBlockEncoding)` (pinned): the same sequence with `qp.ctrl(RefT2)` only |
+| Control | The class `ControlledDFTHCBlockEncoding(params, tables, control, outer, inner, select, system, phase_grad, work)`: the same sequence with `ControlledRefT2` in place of `RefT2`. There is no `C(DFTHCBlockEncoding)` rule (§7.4 rule 6) |
 | Cost | $T = T_{\mathrm{out}} + T_{\mathrm{out}}^\dagger + 2\,(T_{\mathrm{in}} + T_{\mathrm{sel}} + T_{\mathrm{in}}^\dagger) + T_{\mathrm{RefT2}}$ (`InnerSigns` costs 0), $M = K_1 d_1 + 2\,(K_2 d_2 + (N-1)b_{\mathrm{rot}} + 3)$; controlled $T + 1$. At FeMoco-54: $T = 279 + 2\cdot 4725 + 20 = 9{,}749$, $M = 2524$ explicit erase measurements. |
 
 ### 9.22 `DFTHCWalk` (steps 1–28)
@@ -1032,7 +1048,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | | |
 | --- | --- |
 | Base rule | `DFTHCBlockEncoding`, then `RefAB` |
-| Control | `C(DFTHCWalk)` (pinned): `qp.ctrl(DFTHCBlockEncoding)`, then `qp.ctrl(RefAB)` |
+| Control | The class `ControlledDFTHCWalk(params, tables, control, outer, inner, select, system, phase_grad, work)`: `ControlledDFTHCBlockEncoding`, then `ControlledRefAB`. There is no `C(DFTHCWalk)` rule, so `qp.ctrl(DFTHCWalk(...))` fails to compile with a `CompileError` (the erases cannot be controlled); a delegating rule would compile but bring back the cascade of distributed candidates (§7.4 rule 6) |
 | Cost | $T = T_{\mathrm{BE}} + T_{\mathrm{RefAB}}$, $M = M_{\mathrm{BE}}$; controlled $T + 2$. At FeMoco-54: $T = 9{,}793$ (controlled 9,795) and $M = 2524$ explicit erase measurements. The walk also has $A = 8{,}675$ measured AND uncomputes (controlled 8,677), so it makes $M + A = 11{,}199$ physical measurements (controlled 11,201; §9.24). |
 
 ### 9.23 `ControlledWalkPower`
@@ -1041,7 +1057,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | --- | --- |
 | Wires | `control` (1) and the walk's groups |
 | Compilable | `power` $p \ge 1$ and the walk's arguments |
-| Rule | `qp.for_loop` with static bound $p$ over `qp.ctrl(DFTHCWalk(...), control)`; never adjointed |
+| Rule | `qp.for_loop` with static bound $p$ over `ControlledDFTHCWalk(...)`; never adjointed or controlled |
 | Cost | $T = p\,T_{C(W)}$, $M = p\,M_{W}$ |
 
 ### 9.24 Exact cost formulas
@@ -1081,19 +1097,19 @@ $$U(lo, hi, n, c) = \sum_{m=1}^{n}\Big(\big\lfloor (hi - 1)/2^m \big\rfloor - \b
 | `PhaseFixup` | $U$ or $U_2$ over the covered high ranges $+ O(\mathrm{ob})$ | 0 |
 | `QROAMErase` | `PhaseFixup` over the read's loaded set | $2^k\cdot$`width` |
 | `ZeroReflection` ($n_w$ wires) / controlled | $\max(n_w - 2, 0)$ / $n_w - 1$ | 0 |
-| `OuterPrepare` / adjoint | $F(X_o) + T_{\mathrm{read,out}} + b_{k1} + w_x$ / $w_x + T_{\mathrm{erase,out}} + F^\dagger(X_o)$ | 0 / $K_1 d_1$ |
-| `InnerPrepare` / adjoint | $F(B+1) + T_{\mathrm{read,in}} + b_{k2} + w_b$ / $w_b + T_{\mathrm{erase,in}} + F^\dagger(B+1)$ | 0 / $K_2 d_2$ |
+| `OuterPrepare` / `OuterUnprepare` | $F(X_o) + T_{\mathrm{read,out}} + b_{k1} + w_x$ / $w_x + T_{\mathrm{erase,out}} + F^\dagger(X_o)$ | 0 / $K_1 d_1$ |
+| `InnerPrepare` / `InnerUnprepare` | $F(B+1) + T_{\mathrm{read,in}} + b_{k2} + w_b$ / $w_b + T_{\mathrm{erase,in}} + F^\dagger(B+1)$ | 0 / $K_2 d_2$ |
 | `InnerSigns` | 0 | 0 |
 | `TailAngleLoad` | $U(RC, X_o, w_x, 0)$ | 0 |
 | `SFAngleLoad` | $U(0, R, w_r, 1) + R\, U(0, B, w_b, 1)$ | 0 |
 | `SpinMux`; `SpinSwap` | $1$; $N$ | 0 |
-| `GivensRotation`; `GivensLadder` (and adjoints) | $2(b_{\mathrm{rot}} - 1)$; $2(b_{\mathrm{rot}} - 1)(N-1)$ | 0 |
+| `GivensRotation`; `GivensLadder` (and their adjoints; `GivensLadderDagger`) | $2(b_{\mathrm{rot}} - 1)$; $2(b_{\mathrm{rot}} - 1)(N-1)$ | 0 |
 | `MajoranaGate` (and adjoint) | 5 | 0 |
 | `AngleErase` | $U(0, R, w_r, 1) + O(w_b) + U(RC, X_o, w_x, 0)$ | $(N-1)b_{\mathrm{rot}} + 3$ |
-| `InnerSelect` (and adjoint) | $T_{\mathrm{tail}} + T_{\mathrm{SF}} + 2 + 2N + 4(b_{\mathrm{rot}} - 1)(N-1) + 5 + T_{\mathrm{angle\,erase}}$ | $(N-1)b_{\mathrm{rot}} + 3$ |
+| `InnerSelect` (and `InnerSelectDagger`) | $T_{\mathrm{tail}} + T_{\mathrm{SF}} + 2 + 2N + 4(b_{\mathrm{rot}} - 1)(N-1) + 5 + T_{\mathrm{angle\,erase}}$ | $(N-1)b_{\mathrm{rot}} + 3$ |
 | `RefT2`; `RefAB` | `ZeroReflection` with $n_w = w_b + b_{k2} + 2$; with $n_w = w_x + b_{k1} + w_b + b_{k2} + 2$ | 0 |
 | `DFTHCBlockEncoding` | $T_{\mathrm{out}} + T_{\mathrm{out}}^\dagger + 2(T_{\mathrm{in}} + T_{\mathrm{sel}} + T_{\mathrm{in}}^\dagger) + T_{\mathrm{RefT2}}$ | $K_1 d_1 + 2(K_2 d_2 + (N-1)b_{\mathrm{rot}} + 3)$ |
-| `DFTHCWalk`; controlled walk | $T_{\mathrm{BE}} + T_{\mathrm{RefAB}}$; $+2$ | $M_{\mathrm{BE}}$ |
+| `DFTHCWalk`; `ControlledDFTHCWalk` | $T_{\mathrm{BE}} + T_{\mathrm{RefAB}}$; $+2$ | $M_{\mathrm{BE}}$ |
 | `ControlledWalkPower(p)` | $p\,T_{C(W)}$ | $p\,M_W$ |
 | `QPERound(j)` (§11.1), worst case | $2^j T_{C(W)} + \sum_{l=j+1}^{t-1}(l - j)$ | $2^j M_W$ |
 | Iterative QPE, $t$ bits, worst case | $(2^t - 1)\,T_{C(W)} + (t^3 - t)/6$ | $(2^t - 1)M_W + t$ |
@@ -1122,8 +1138,8 @@ The controlled walk has the same $T_{\mathrm{Toffoli}}$, because each of its two
 | $F(X_o)$, $F^\dagger(X_o)$; $F(B+1)$, $F^\dagger(B+1)$ | 30, 24; 18, 16 |
 | $T_{\mathrm{read,out}}$; $T_{\mathrm{read,in}}$ | 156; 933 |
 | $T_{\mathrm{erase,out}}$; $T_{\mathrm{erase,in}}$ | 36; 196 |
-| `OuterPrepare` / adjoint; `InnerPrepare` / adjoint | 210 / 69; 971 / 217 |
-| `GivensLadder`; `AngleErase`; `InnerSelect` | 1,484; 102; 3,537 |
+| `OuterPrepare` / `OuterUnprepare`; `InnerPrepare` / `InnerUnprepare` | 210 / 69; 971 / 217 |
+| `GivensLadder` and `GivensLadderDagger`; `AngleErase`; `InnerSelect` and `InnerSelectDagger` | 1,484; 102; 3,537 |
 | `RefT2`; `RefAB` | 20; 44 |
 | Block encoding; walk; controlled walk | 9,749; 9,793; 9,795 |
 | $M$ per walk, explicit erase measurements ($96 + 2\cdot 416 + 2\cdot 798$) | 2,524 |
@@ -1212,7 +1228,7 @@ The QPE program compiles at the `H2_STO3G_TEST` and `H2_631G_TEST` presets for $
 - PREP is a Hadamard.
 - SELECT is a zero-controlled `Z` plus a one-controlled `X`.
 - The walk is $W = \mathrm{REF}_{\mathrm{anc}}\,\mathrm{PREP}^\dagger\,\mathrm{SEL}\,\mathrm{PREP}$, with eigenphases $\pm\pi/4$ and $\pm 3\pi/4$.
-- It has an explicit `C(ToyWalk)` rule.
+- Its controlled form is the class `ControlledToyWalk` (control only the toy reflection; §7.4 rule 6), which `ToyControlledWalkPower` loops over.
 
 With $t = 3$ and input $\lvert 0\rangle$, QPE returns $\varphi \in \{1/8, 7/8\}$ with total probability $\cos^2(\pi/8)$ and $\varphi \in \{3/8, 5/8\}$ with $\sin^2(\pi/8)$. Both tests below pass `earlier_bits` with shape $(t,)$ to every round, so they cover round $j = t-1$ with no bit set as well as rounds with set bits. Two tests check the distribution:
 - **Exact distribution:** the sparse simulator branches on the control measurements and forces erasure-type measurements (§12.3).
@@ -1229,7 +1245,7 @@ With $t = 3$ and input $\lvert 0\rangle$, QPE returns $\varphi \in \{1/8, 7/8\}$
 | T3 | Semantics | The action against NumPy references: compiled on `lightning.qubit` up to 25 wires, or with the sparse simulator beyond that. Classical (permutation) operators are checked on every basis input of small instances. Phase operators are checked on uniform superpositions; this is the `PhaseFixup` validation, run for random, all-ones and single-bit parity tables. Erase blocks get the outcome certificate of §12.5. **Exhaustive failed-address tests** run for $(B+1, k_2) \in \{(3,1), (5,1), (6,2), (7,0), (28,4)\}$, the last one only for the read itself.<br>1. For every computational address of the outer and inner reads, including failed $x_o \ge X_o$, failed $b \ge B+1$, one-body rows and dead block positions, the loaded `target ‖ junk` equals `loaded_bits` (§9.3).<br>2. For every basis input $(x_o, b, m_b)$ with $\mathrm{succ}_b = [b \le B]$, the read, keep test, alias swap and `InnerSigns` give the sign of the selected weight for a valid $b$, and $+1$ for a failed $b$ (§8.5).<br>3. Our failure signs equal the ported `dfthcbe_failure_signs` whenever $2^{w_b} \le \lceil (B+1)/2^{k_2}\rceil 2^{k_2}$. Otherwise, as at $(5, 1)$ and $(7, 0)$, the test asserts the documented difference instead. |
 | T4 | Exact resources | `compiled_resources` Toffoli counts $T$ and measurement counts $M$ and $A$ equal the §9.24 formulas, as implemented in `dfthc.costs`, at three or more sizes per operator: `H2_STO3G_TEST` and `H2_631G_TEST` (per commit) and `MID_NAPHTHALENE` (nightly). FeMoco-54 values are asserted on the closed forms without compiling; the complete FeMoco-54 walk and controlled walk are compiled once, by the resource report (§13.3, §15). `is_symbolic` is false. Separate tests pin the PennyLane primitive costs that §9.24 assumes. |
 | T5 | Gate-set closure | The operators in `qp.analyze` output are a subset of `GATE_SET` ∪ {`MidCircuitMeasure`}. At `level="device"`, no undecomposed operator remains. |
-| T6 | Rule selection | Count signatures prove that the pinned measured rules were chosen. For example, in the compiled `Adjoint(OuterPrepare)`, `MidCircuitMeasure` equals the number of erased qubits ($d_1 + (K_1 - 1)d_1$), `Adjoint(TemporaryAND)` equals the expected measured AND uncomputes, and the Toffoli count equals the erase closed form rather than a second read. A test also compiles with `catalyst.passes.graph_decomposition(gate_set=..., fixed_decomps=..., verbose=True)` and asserts the listed rule names, if that output is capturable (checked in Phase 0). |
+| T6 | Rule selection | Count signatures prove that the pinned measured rules were chosen. For example, in the compiled `OuterUnprepare`, `MidCircuitMeasure` equals the number of erased qubits ($d_1 + (K_1 - 1)d_1$), `Adjoint(TemporaryAND)` equals the expected measured AND uncomputes, and the Toffoli count equals the erase closed form rather than a second read. A test also compiles with `catalyst.passes.graph_decomposition(gate_set=..., fixed_decomps=..., verbose=True)` and asserts the listed rule names, if that output is capturable (checked in Phase 0). **Inventory test** (§7.4 rule 6): at a test preset the walk, controlled-walk and QPE programs capture no `Adjoint(...)` or `C(...)` target whose base is a dfthc composite or `QROAMRead`, and the only modified dfthc targets are the leaf adjoints of §7.4 rule 6. It is a port of Task 0.9d's `class_check` and reads every target the frontend converts, chosen or not; it also asserts that it saw the program's own top-level target, so a hook that stops seeing targets fails instead of passing. |
 | T7 | Canaries | One focused test per claim of every limitation in §14, asserting today's behaviour. A flipped canary is a signal to revisit the mitigation, not a failure to hide. Canaries that can abort the process run in a subprocess: compiler crashes and every "no decomposition path" case. |
 | T8 | End-to-end | §12.4 |
 
@@ -1310,7 +1326,7 @@ Correctness for every outcome of an erase block is proved with GF(2) linearity, 
 - **Blocks certified:**
   - standalone `QROAMRead` → `QROAMErase` round trips in the outer and inner shapes of both test presets;
   - `TailAngleLoad` and `SFAngleLoad` followed by `AngleErase`;
-  - the composite unprepares, each preceded by its prepare: `OuterPrepare` → `Adjoint(OuterPrepare)` and `InnerPrepare` → `Adjoint(InnerPrepare)`, including the comparators and swaps in between;
+  - the composite unprepares, each preceded by its prepare: `OuterPrepare` → `OuterUnprepare` and `InnerPrepare` → `InnerUnprepare`, including the comparators and swaps in between;
   - if Q-1 variant (b) is adopted, `OuterPrepare` → junk measurement → `OuterUnprepareFromOutcomes`, and likewise for the inner pair, with $\xi$ ranging over the concatenated target and junk outcomes.
 - **The $p = 1/2$ check** of strict mode stays as a precondition check only.
 - **End-to-end schedules are smoke tests:** S0 (every outcome 0), S1 (every outcome 1) and seeded random schedules, used per tier as in §12.6.
@@ -1428,7 +1444,7 @@ The report never adjusts measured numbers.
    - *Mitigation:* explicit ancilla arguments (§7.4, rule 1).
    - *Canary:* `test_allocating_rule_is_excluded`.
 2. **L-2: Measurement rules are skipped inside adjoint or control regions.** Rules that declare measurements are skipped when they would be wrapped in such a region, on both the Catalyst side and the PennyLane side ([pennylane#9629](https://github.com/PennyLaneAI/pennylane/pull/9629)). Explicit `Adjoint(Op)` rules taking `base`, and plain explicit `C(Op)` rules, are kept. `C(Adjoint(Op))` skips the measuring adjoint rule; the solver then controls the unitary inverse of `Op`'s base rule if one exists, and has no path otherwise (observed 2026-11-11).
-   - *Mitigation:* §7.4, rules 5 and 6.
+   - *Mitigation:* §7.4, rules 5 and 6. Since G0 it is structural: no program wraps a dfthc composite in an adjoint or a control (rule 6), so no measuring rule is wrapped, and the expected "Skipped ..." warning appears only in tests that wrap an erase on purpose.
    - *Canary:* `test_measuring_adjoint_rule_has_no_controlled_path`.
 3. **L-3: Rule selection is cost-based.** With unweighted counts, the solver preferred an auto-derived unitary inverse over an explicit measured adjoint rule. A Toffoli-weighted gate set or `fixed_decomps` fixed it.
    - *Mitigation:* §7.3, §7.5, T6.
@@ -1440,16 +1456,16 @@ The report never adjusts measured numbers.
    - *Mitigation:* compilable structure arguments (§7.4, rule 3); the FeMoco-size compile check in Phase 0 (K-1).
    - *Canaries:* `test_rule_branch_on_dynamic_value_is_not_specialized` (abstract specialization). The per-variant compile and large-table compile-time claims are pinned by L-21's canary and benchmark.
 6. **L-6: Adjoint lowering can crash.** It hits an `IRMapping` assertion on nested `for_loop` or `cond` inside adjoint regions ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)). The canary's reproducer compiled on 2026-11-11 (not reproduced; regression sentinel); the issue is open, so the mitigation stays. The canary fails if the crash returns; it cannot detect a fix.
-   - *Mitigation:* no loops or conditionals in auto-adjointed bodies (§7.4, rule 4).
+   - *Mitigation:* no loops or conditionals in auto-adjointed bodies (§7.4, rule 4). Since G0 the looped `QROAMRead` and `ControlledWalkPower` are never adjointed or controlled by construction (§7.4 rule 6), so no loop sits under an adjoint or control region; the inventory test (§12.1, T6) checks it per program.
    - *Canary:* `test_auto_adjoint_with_nested_control_flow` (subprocess).
 7. **L-7: `C(ChangeOpBasis)` loses its saving under capture.** The "control only the middle" saving is lost ([pennylane#10357](https://github.com/PennyLaneAI/pennylane/issues/10357)).
-   - *Mitigation:* explicit `C(DFTHCWalk)` and `C(DFTHCBlockEncoding)` rules.
+   - *Mitigation:* the explicit controlled classes `ControlledDFTHCWalk` and `ControlledDFTHCBlockEncoding` (§7.4 rule 6).
    - *Canary:* `test_controlled_change_op_basis_controls_everything`.
 8. **L-8: Generic controlled wrapping adds Xs.** It counts one `PauliX` per control wire ([pennylane#10080](https://github.com/PennyLaneAI/pennylane/issues/10080)).
-   - *Mitigation:* explicit `C(...)` rules with control value 1.
+   - *Mitigation:* explicit controlled classes with control value 1 (§7.4 rule 6); `C(ZeroReflection)`, the one `C(...)` rule left, also has control value 1.
    - *Canary:* `test_generic_ctrl_adds_paulix_per_control`.
 9. **L-9: Function calls inside control regions are not decomposed.** On 2026-11-11 a controlled `qp.capture.subroutine` leaves `C(PauliX)` undecomposed at `level="user"`, and compiling for execution fails ([catalyst#3330](https://github.com/PennyLaneAI/catalyst/pull/3330), [catalyst#3384](https://github.com/PennyLaneAI/catalyst/issues/3384)).
-   - *Mitigation:* no `Subroutine`; explicit `C(...)` rules.
+   - *Mitigation:* no `Subroutine`; explicit controlled classes (§7.4 rule 6).
    - *Canary:* `test_function_call_in_ctrl_region_raises`.
 10. **L-10: Whether a circuit compiles can depend on gate order** ([catalyst#3431](https://github.com/PennyLaneAI/catalyst/issues/3431)).
     - *Mitigation:* an occurrence is a compiler blocker. Work on the affected task stops, a minimal reproducer is preserved under `tests/canary/reproducers/`, and the orchestrator escalates. Reordering is allowed only with a proof that the reordered operations commute, recorded in the ledger together with a semantic test of the reordered block.
@@ -1567,9 +1583,10 @@ The implementation plan specifies tasks, prompts and acceptance checks. This sec
 
      The whole programs expose rule compiles and whole-module IR growth, which per-block compiles cannot predict. Under the load policy (§15) the spike compiles them at a small shape and at two mid shapes ($N = 10$ and $N = 14$), each within 15 minutes and below 3.75 GB (a 4 GB watchdog cap), and projects the FeMoco-54 walk and controlled walk from these measurements, with the emitted gate count (from the resource functions, without compiling) as the size measure. Budget at FeMoco-54: 60 minutes and the 8 GB cap each, which the watchdog enforces at 7.5 GB. The FeMoco-54 programs are compiled under the watchdog only if the projection is within 60 minutes and 7.5 GB, by the sampled peak and by the getrusage upper bound, and each at most once per hash of the code, the watchdog, the toolchain versions and the lock file. Separate `InnerPrepare` and `InnerSelect` stand-in compiles at the larger mid shape are kept as diagnostics that locate the cost. The plan-time calibration projects the FeMoco-54 walk to 12 to 18 GB, above the budget.
    - *Remedies, applied in order. All keep the walk one compiled program, and each is evaluated at the mid shapes first:*
-     1. pass the bulk tables of never-adjointed operators (`QROAMRead`, the angle loads, the erases) as dynamic arrays, with `qp.for_loop` and `qp.cond` (Toffoli counts stay exact; Clifford counts become hinted);
+     1. pass the bulk tables of never-adjointed operators (`QROAMRead`, the angle loads, the erases) as dynamic arrays, with `qp.for_loop` and `qp.cond` (Toffoli counts stay exact; CNOT counts become upper bounds). Adopted at G0 for `QROAMRead` in its per-leaf form (§9.3: one loop per unary leaf over a `(num_leaves, K, ceil(width/32))` array); the erases keep their compilable tables;
      2. pack the parity constants.
    - *If the projection or the compile still exceeds the budget,* the orchestrator escalates to the user at G0 with the measurements, the projection and its method, and options: compile the FeMoco-size programs (and any other compile projected above 7.5 GB) on a larger machine or in an approved idle-time window with a higher cap, a redesigned table representation, or an upstream Catalyst fix. Until the answer, work continues except on the operators whose table representation remedy 1 would change. Per-block compiles may be used as diagnostics, but never as the deliverable; D-3 requires the complete programs.
+   - *Outcome at G0 (decision "K-1 at G0").* Tasks 0.9b to 0.9e measured remedy 1 and two further levers on the one-compile pipeline (L-27): per-leaf read loads (§9.3) and explicit adjoint and controlled classes (§7.4 rule 6). With both, the FeMoco-54 controlled-walk stand-in compiled once, in 51 s at 2,648 MB (projected 2,566 MB), with exact counts. Both levers are in the design (§4.4 items 12 and 13); a machine with at least 32 GB stays the fallback for Task 4.5's production compile only.
 2. **K-2: Correctness of the √L phase fixup.**
    - *Resolution, Phase 1 (workstream C):* T3 tests of `PhaseFixup` and of the round trips.
    - *Fallback:* `onehot_bits = 0` (§9.4), with the delta reported.
@@ -1608,9 +1625,9 @@ The implementation plan specifies tasks, prompts and acceptance checks. This sec
   - *What it is.* Each read's junk is X-measured right after its swap network. That frees about 460 qubits at FeMoco-54 (72 outer and 390 inner junk wires), which can then hold the angle registers as in the paper's 1,131-qubit count.
   - *No Toffoli penalty.* The outcomes are XORed into the parities of the later erase, so no extra fixup is needed. That outcomes survive nested `Operator2` calls inside one rule was verified on 2026-11-11, on the compiled path and the tape path.
   - *Variant (a): a composite owns the measurements.* The measurement and its fixup sit in one rule. For each inner round, `InnerPrepare` and its adjoint (steps 5–8 and 19–22) merge into one composite with `InnerSigns` and `InnerSelect`, and `DFTHCBlockEncoding` owns the outer junk. The separately pinned prepare and unprepare operators disappear.
-  - *Variant (b): outcomes passed to dedicated unprepare operators.* Explicit symbolic adjoint rules take only `(base)`, so `Adjoint(OuterPrepare)` and `Adjoint(InnerPrepare)` cannot receive outcomes. Variant (b) therefore adds two base operators, `OuterUnprepareFromOutcomes` and `InnerUnprepareFromOutcomes`:
+  - *Variant (b): outcomes passed to dedicated unprepare operators.* The baseline unprepares `OuterUnprepare` and `InnerUnprepare` (§7.4 rule 6) take no outcomes, and an `Operator2` has one signature, so variant (b) adds two sibling classes, `OuterUnprepareFromOutcomes` and `InnerUnprepareFromOutcomes`. They follow the same pattern as the baseline unprepares (base classes with one pinned rule, never adjointed or controlled), so their docstrings, T2–T6 tests and certificates reuse the baseline's scaffolding; this does not decide Q-1:
     - *Signature.* Wires: the matching prepare's wires except its junk register. Compilable: the prepare's compilable arguments. Dynamic: `junk_outcomes`, a boolean array with one entry per junk qubit ($(K_1 - 1)d_1$ outer, $(K_2 - 1)d_2$ inner), in the order of `QROAMRead.junk_layout`.
-    - *Rule.* As the pinned adjoint of §9.7 or §9.8, with the erase split:
+    - *Rule.* As the base rule of `OuterUnprepare` or `InnerUnprepare` (§9.7, §9.8), with the erase split:
       1. the alias `CSWAP`s;
       2. the adjoint comparator;
       3. X-measure the target qubits only;
@@ -1620,7 +1637,7 @@ The implementation plan specifies tasks, prompts and acceptance checks. This sec
 
       $T$ and the total $M$ are unchanged. The junk's share of $M$ moves into the block-encoding rule.
     - *Pins and use.* Both rules are pinned in `FIXED_DECOMPS`. The operators are never adjointed or controlled. `DFTHCBlockEncoding`'s rule X-measures each prepare's junk right after the prepare and passes the outcomes to the matching unprepare operator. `WalkLayout` then lets the angle registers reuse the freed junk wires.
-    - *Catalog and tests.* If adopted, both operators get §9 entries, T2–T6 tests and §12.5 certificates (outcome vectors over target and junk). The adjoint prepares remain for the baseline. Block boundaries stay as they are. Feasibility is decided by K-10.
+    - *Catalog and tests.* If adopted, both operators get §9 entries, T2–T6 tests and §12.5 certificates (outcome vectors over target and junk). `OuterUnprepare` and `InnerUnprepare` remain for the baseline. Block boundaries stay as they are. Feasibility is decided by K-10.
   - *Trade-off.* Implementation complexity, and for (a) changed block boundaries, against about 460 qubits.
   - *Status.* Open. The user decides after K-10 (Phase 0) and the Phase 4 resource report, preferring variant (b) if K-10 passes. The baseline keeps the junk until the erase.
 - **Q-2: Generating dfthcbe reference fixtures. Decided: yes.** Agents may install Qualtran and dfthcbe into the separate `.venv-ref` to generate the reference fixtures (§8.6). The skip path of §8.6 remains for machines where `.venv-ref` cannot be created.

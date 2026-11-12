@@ -57,11 +57,11 @@ GATE_SET = {
 **Rules for operators and decomposition rules (spec 7.4, one line each)**
 1. No allocation inside rules: no `qp.allocate`, no `work_wires=` in `qp.register_resources`; every ancilla is an explicit wire argument; every operator exposes `required_wires(**compilable_args) -> dict[str, int]`.
 2. Resource-function keys are `Operator2` abstract instances built through `dfthc.compile.resource_key`; every emitted operator is declared; counts are Python integers; resource functions never raise.
-3. Every argument that determines circuit structure is in `compilable_argnames`; `static_argnames` are not used; `dynamic_argnames` only for runtime data (`PhaseFixup` parities, `QPERound` earlier bits, K-1 remedy tables).
-4. Bodies of auto-adjointed operators contain no `qp.for_loop` or `qp.cond`; `qp.cond` only on mid-circuit measurement outcomes in erase operators and the QPE wrapper; `qp.for_loop` only in `ControlledWalkPower`.
-5. Measurement-based uncompute lives only in `QROAMErase`, `AngleErase` and explicit `Adjoint(Op)` rules with signature `(base)`; an operator that contains a measurement is never placed under `qp.ctrl`.
-6. Controlled versions come only from explicit `C(Op)` rules with signature `(base, control_wires, control_values, work_wires, work_wire_type)`.
-7. One base rule per operator; explicit adjoint and controlled rules are pinned (§7.5).
+3. Every argument that determines circuit structure is in `compilable_argnames`; `static_argnames` are not used; `dynamic_argnames` only for runtime data (`PhaseFixup` parities, `QPERound` earlier bits, `QROAMRead`'s per-leaf table words).
+4. Bodies of auto-adjointed operators contain no `qp.for_loop` or `qp.cond`; `qp.cond` on mid-circuit measurement outcomes only in erase operators and the QPE wrapper; `qp.for_loop` only in `QROAMRead` (one loop per unary leaf, with `qp.cond` on table bits) and `ControlledWalkPower`, both never adjointed or controlled.
+5. Measurement-based uncompute lives only in `QROAMErase`, `AngleErase` and the base rules of `OuterUnprepare` and `InnerUnprepare`; an operator that contains a measurement is never placed under `qp.ctrl`.
+6. Adjoint and controlled forms of composites are explicit operator classes (`OuterUnprepare`, `InnerUnprepare`, `InnerSelectDagger`, `GivensLadderDagger`, `ControlledRefT2`, `ControlledRefAB`, `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk` and `ControlledToyWalk`); no rule or program calls `qp.adjoint` or `qp.ctrl` on a dfthc composite; the one `C(Op)` rule left is `C(ZeroReflection)`, with signature `(base, control_wires, control_values, work_wires, work_wire_type)`.
+7. One base rule per operator; every class's base rule is pinned, the adjoint and controlled classes of rule 6 included, and so are the remaining symbolic rules (§7.5).
 8. Unique class names; a test asserts that PennyLane registers none of our names.
 9. Rules run in both capture and tape mode; mode-specific classical code is confined to helpers (`dfthc.compile.mcm_parities`).
 10. Exact swaps only (`CSWAP`).
@@ -128,6 +128,7 @@ This is a **rolling-wave** plan. It lists every task of Phases 0 to 5 with its i
 | Load limits (user, 2026-11-11: "Keep large-scale compilations to a minimum"; "Try to not run heavy processes throughout") | **A sampled 8 GB memory cap per process tree (killed at the first sample above 7.5 GB); heavy processes only by the orchestrator, one at a time, under the watchdog; 2 test workers at lowered priority; about six FeMoco-scale compiles for the whole project** | section 12.9; HANDOFF 3.5; spec 12.6, 15 |
 | Agent models (user, 2026-11-11) | **Tier A implementers and the Opus reviewer use `inherit`,** the orchestrator's own model | section 12.1 |
 | Where compiles above the cap run | **Open.** If the K-1 projection exceeds 7.5 GB (the watchdog's effective limit) or 60 minutes after any remedy (Tasks 0.9, 0.9b), the user decides at G0: a larger machine, or an approved idle-time window with a higher cap. The one decision covers every FeMoco-size compile, including Task 4.5's, and every other compile projected above the cap (for example Task 4.3's `fe4s4` walks). | G0; Tasks 0.9, 0.9b, 4.3, 4.5 |
+| K-1 compile memory (decision "K-1 at G0") | **Both levers adopted:** per-leaf read loads (spec 9.3) and explicit adjoint and controlled classes (spec 7.4 rule 6). With both, the FeMoco-54 controlled-walk stand-in compiled in 51 s at 2,648 MB with exact counts, so FeMoco compiles run on this machine; a machine with at least 32 GB stays the fallback for Task 4.5 only | Tasks 1C.3 to 1C.5 (revised by Task G0.1), the Phase 2 plan, Tasks 3.1 to 3.4 and 4.1; section 3, items 19 and 20 |
 
 Baseline (spec 9.24, FeMoco-54):
 - Toffolis: walk 9,793; controlled walk 9,795; block encoding 9,749.
@@ -172,6 +173,8 @@ These shape the later tasks and are recorded in HANDOFF and in the Phase 0 canar
 16. **Controlled compiles cost two to four times their uncontrolled ones at the same size** (Phase 1 C dry-run): `C(ZeroReflection)` on 46 wires compiles in 7.8 s against 2.4 s, on 6 wires in 6.1 s against 1.9 s. This matches Task 0.9b's diagnostic that Catalyst traces the generic adjoint and controlled candidates of every pinned target.
 17. **The outer erase covers the outer read's loaded set** (Phase 1 C plan review, I4). Its fixup must reach dead positions beyond `X_o` in the read's last block, so its high range is `[0, ceil(ceil(X_o / K1) K1 / 2**ke1))`; spec 9.24 had `ceil(X_o / 2**ke1)`, which undercounts when `ke1 < k1` and `K1` does not divide `X_o` (counterexample `X_o = 5`, `k1 = 2`, `ke1 = 0`). No preset is affected. Task 1A.7 implements the corrected range and minimizes `(k1, ke1)` jointly; Task 1C.5's `QROAMErase.fixup_high_ranges` is the oracle a test compares it with.
 18. **Analyze-only programs disable the decoration-time compile (L-27, Task 0.2c).** `qp.qjit` compiles a fully annotated function, including one without parameters, to a linked binary at decoration, and `qp.analyze` then compiles it again, holding the first capture. `dfthc.compile.compiled_resources` passes `enable_aot_compilation=False`; every other program that is only analyzed does the same (in tests too), while programs that are executed keep the default, because the call reuses the binary. Task 0.2c cut the per-commit tier from 351 s to 165 s (load not controlled) and the K-1 small walk compile from 9.7 s and 489 MB to 5.3 s and 396 MB (same counts); K-1 numbers measured before it are two compiles in one process.
+19. **Per-leaf read loads (K-1 lever P; decision "K-1 at G0").** `QROAMRead` loads each unary leaf with one `qp.for_loop` over its K·width bits from a dynamic `int64` array `(num_leaves, K, ceil(width / 32))`, which the caller builds from its compilable table (spec 9.3). In the K-1 stand-in (Task 0.9d) the per-leaf body is 77 captured equations against 46 per table entry, at every K; at FeMoco-54 945 loops replace 8,208 and the read loads shrink by 81%, with identical T, M and A. The CNOT count (the X count for the flagless leaf of a fully low address) is an upper bound (`exact=False`): T4 asserts T, M and A exactly and the analyzed CNOT or X count equal to the declared one. The array holds the entries in wire order, so the compiled loop body is the measured one and the registers stay big-endian (spec 6.7). Task 1C.3 adds a compiled read check at K = 16 and width 40 > 32 (Task 0.9d, Opus finding M-2); its dry run took 4.2 s at 264 MB.
+20. **Explicit adjoint and controlled classes, stray modifiers, and the inventory test (K-1 lever X; decision "K-1 at G0").** For every requested modified target, Catalyst synthesizes the generic distributed `Adjoint`/`C` candidate of the target and of its whole subtree, and captures and lowers it although the pinned rule is used (upstream issue drafted; reproducer: same counts, 4 copies of the large rule body instead of 1). The design therefore gives every adjoint and controlled composite its own class (spec 7.4 rule 6 and 7.5) and never calls `qp.adjoint` or `qp.ctrl` on a composite. Task 0.9d: 95–99% of the distributed IR removed, and the controlled walk costs the same as the walk; with lever P the FeMoco-54 controlled-walk stand-in compiled in 51 s at 2,648 MB. A stray modifier brings the cascade back for its program: loudly if an erase is inside and no rule exists (as for `qp.ctrl(DFTHCWalk)`, which has no rule), silently in memory otherwise. Task 3.4 therefore adds an inventory test: no captured `Adjoint(...)` or `C(...)` target whose base is a dfthc composite or `QROAMRead`, in the walk, controlled-walk and QPE programs at a test preset. Synergy, without deciding Q-1: variant (b)'s `OuterUnprepareFromOutcomes` and `InnerUnprepareFromOutcomes` are siblings of `OuterUnprepare` and `InnerUnprepare`.
 
 ---
 
@@ -207,19 +210,19 @@ Tier A uses `inherit` (the orchestrator's own model), Tier B uses `claude-sonnet
 | 1C.4 | `PhaseFixup` and `emit_phase_fixup` | A | 1C.3 | phase1-primitives |
 | 1C.5 | `QROAMErase` and round-trip certificates | A | 1C.4, 1B.2 | phase1-primitives |
 | 1C.6 | `ZeroReflection` | B | 1C.1 | phase1-primitives |
-| 2D.1 | `OuterPrepare` and its pinned adjoint | A | G1 | phase2-blocks |
-| 2D.2 | `InnerPrepare`, its pinned adjoint, `InnerSigns` | A | 2D.1 | phase2-blocks |
+| 2D.1 | `OuterPrepare` and `OuterUnprepare` | A | G1 | phase2-blocks |
+| 2D.2 | `InnerPrepare`, `InnerUnprepare`, `InnerSigns` | A | 2D.1 | phase2-blocks |
 | 2E.1 | `TailAngleLoad`, `SFAngleLoad` | B | G1 | phase2-blocks |
 | 2E.2 | `AngleErase` | A | 2E.1 | phase2-blocks |
 | 2E.3 | `SpinMux`, `SpinSwap` | B | G1 | phase2-blocks |
-| 2E.4 | `GivensRotation`, `GivensLadder` | A | G1 | phase2-blocks |
+| 2E.4 | `GivensRotation`, `GivensLadder`, `GivensLadderDagger` | A | G1 | phase2-blocks |
 | 2E.5 | `MajoranaGate` | A | G1 | phase2-blocks |
-| 3.1 | `InnerSelect` and its pinned adjoint | A | G2 | phase3-assembly |
-| 3.2 | `RefT2`, `RefAB` and controlled versions | B | G2 | phase3-assembly |
-| 3.3 | `DFTHCBlockEncoding` and `C(DFTHCBlockEncoding)` | A | 3.1, 3.2 | phase3-assembly |
-| 3.4 | `DFTHCWalk`, `C(DFTHCWalk)`, whole-program counts at the test and mid presets | A | 3.3 | phase3-assembly |
+| 3.1 | `InnerSelect` and `InnerSelectDagger` | A | G2 | phase3-assembly |
+| 3.2 | `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB` | B | G2 | phase3-assembly |
+| 3.3 | `DFTHCBlockEncoding` and `ControlledDFTHCBlockEncoding` | A | 3.1, 3.2 | phase3-assembly |
+| 3.4 | `DFTHCWalk`, `ControlledDFTHCWalk`, whole-program counts at the test and mid presets, the inventory test | A | 3.3 | phase3-assembly |
 | 3.5 | End-to-end checks E-1 to E-4 and tier budgets | A | 3.4 | phase3-assembly |
-| 4.1 | QPE: `ControlledWalkPower`, `QPERound`, driver, energies, `ToyWalk` | A | G3 | phase4-application |
+| 4.1 | QPE: `ControlledWalkPower`, `QPERound`, driver, energies, `ToyWalk`, `ControlledToyWalk` | A | G3 | phase4-application |
 | 4.2 | QPE resource counts (compiled at the test presets) | B | 4.1 | phase4-application |
 | 4.3 | Resource report and `dfthc.costs_reference` | B | 4.1 | phase4-application |
 | 4.4 | Documentation set and docstring audit | B | 4.1, 4.2, 4.3 | phase4-application |
@@ -641,6 +644,8 @@ All Phase 1 tasks consume the Phase 0 interfaces (`dfthc.compile`, `dfthc.testin
 Code-level steps: `2026-11-11-dfthc-phase1-primitives.md`. Every rule emits its gates through
 `dfthc.ops.unary.Emitter`, whose counting mode is the rule's resource function; registers and table
 entries are big-endian (spec 6.7); constructors validate through `dfthc.ops._validate` (spec 9.0).
+`QROAMRead` loads each unary leaf with one `qp.for_loop` over a dynamic per-leaf array (spec 9.3;
+section 3, item 19); the code-level plan's revision 2 (Task G0.1) holds it.
 
 #### Task 1C.1: Unary iteration helper and `PhaseGradientRotation`
 - **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1A.7, 1B.1. **Branch:** `phase1/1C.1`.
@@ -673,14 +678,14 @@ entries are big-endian (spec 6.7); constructors validate through `dfthc.ops._val
 - **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 1C.1, 1B.2. **Branch:** `phase1/1C.3`.
 - **Files:** `src/dfthc/ops/qroam.py` (`QROAMRead` part), `tests/ops/test_qroam_read.py`.
 - **Interfaces produced:**
-  - `QROAMRead(table, address_widths, live_ranges, width, block_bits, control_value, address, target, junk, work, control)`, where `table` is a tuple of `(address, words)` pairs (entries of `width` bits as 32-bit words, least significant first, L-24; every address live), `address_widths` one or two widths (a two-register address has a nonempty first register), `control_value` `None` (0-wire `control`) or 0/1;
-  - static `required_wires(...)`, `visited_ranges(address_widths, live_ranges, block_bits)` (the `ranges` of `costs.qroam_read`), `loaded_ranges(...)` (the loaded set as one `(lo, hi)` per register), `loaded_set(address_widths, live_ranges, block_bits) -> list[int]`, `junk_layout(block_bits, low) -> list[int]`, `loaded_bits(table, address, *, address_widths, live_ranges, width, block_bits) -> int` (big-endian `target ‖ junk`) and `loaded_contents(table, addresses, *, ...) -> list[int]`;
-  - `QROAMEmitter`, the emitter of `qroam.py`.
-- **Acceptance tests** (35 per commit, 2 slow):
-  - T3, exhaustive failed-address tests item 1 (spec 12.1) for (B+1, k2) ∈ {(3,1), (5,1), (6,2), (7,0), (28,4)} and outer reads with k = 0..3 (sparse simulator): for every computational address, `target ‖ junk` equals `loaded_bits`, `work` is `|0>` and the amplitude is +1/sqrt N (the read adds no phase), including failed x_o >= X_o, failed b >= B+1, one-body rows and dead positions; an enable in `|+>` loads only on its value; two compiled lightning cases (exact state).
-  - T4: T = U(visited blocks) + (2^k − 1) width and A = U at both test presets (outer and inner), with an enable, and at `MID_NAPHTHALENE` (slow); the FeMoco outer read (156) and inner read (933) on the closed forms.
-  - The auto adjoint undoes the read on lightning and costs the read's T (test reference).
-  - `junk_layout`, `loaded_bits` and the range helpers by hand; T2 at two sizes; T5; constructor validation.
+  - `QROAMRead(leaf_words, address_widths, live_ranges, width, block_bits, control_value, address, target, junk, work, control)`, where `leaf_words` is dynamic: an `int64` array `(num_leaves, K, ceil(width / 32))` of 32-bit words in wire order, zero at padding and dead positions (spec 9.3, section 3 item 19); `address_widths` one or two widths (a two-register address has a nonempty first register), `control_value` `None` (0-wire `control`) or 0/1; the rule is registered with `exact=False`, and the read is never adjointed or controlled;
+  - static `required_wires(address_widths, live_ranges, width, block_bits, control_value)`, `visited_ranges(address_widths, live_ranges, block_bits)` (the `ranges` of `costs.qroam_read`), `loaded_ranges(...)` (the loaded set as one `(lo, hi)` per register), `loaded_set(address_widths, live_ranges, block_bits) -> list[int]`, `junk_layout(block_bits, low) -> list[int]`, `leaf_blocks(...)` (the leaves in visiting order), `leaf_words_shape(...)`, `leaf_words_from_table(table, *, address_widths, live_ranges, width, block_bits) -> np.ndarray` (`table`: `(address, words)` pairs, entries of `width` bits as 32-bit words, least significant first, L-24; every address live), `loaded_bits(table, address, *, address_widths, live_ranges, width, block_bits) -> int` (big-endian `target ‖ junk`) and `loaded_contents(table, addresses, *, ...) -> list[int]`;
+  - `QROAMEmitter`, the emitter of `qroam.py`, with the per-leaf `load`.
+- **Acceptance tests** (44 per commit, 2 slow):
+  - T3, exhaustive failed-address tests item 1 (spec 12.1) for (B+1, k2) ∈ {(3,1), (5,1), (6,2), (7,0), (28,4)} and outer reads with k = 0..3 (sparse simulator): for every computational address, `target ‖ junk` equals `loaded_bits`, `work` is `|0>` and the amplitude is +1/sqrt N (the read adds no phase), including failed x_o >= X_o, failed b >= B+1, one-body rows, dead positions and the flagless leaf of a fully low address; an enable in `|+>` loads only on its value; three compiled lightning cases (exact state; k = 3 compiles the flagless leaf and also asserts its T, M and A and the analyzed X count equal to the declared upper bound).
+  - A compiled read check at K = 16 and width 40 (two words per entry), the 640 target and junk wires aliased onto 7 lightning wires, on every address of its domain; a word-order and a bit-order mutant of the array are detected (Task 0.9d, Opus finding M-2).
+  - T4: T = U(visited blocks) + (2^k − 1) width, A = U, and the analyzed CNOT count equal to the declared upper bound plus two per `CSWAP`, at both test presets (outer and inner), with an enable, and at `MID_NAPHTHALENE` (slow); the FeMoco outer read (156) and inner read (933) on the closed forms; the leaf-array shapes of the four FeMoco reads (945 leaves).
+  - `junk_layout`, `loaded_bits`, `leaf_words_from_table` and the range and leaf helpers by hand; T2 at two sizes (with `exact=False`); T5; constructor validation, including the leaf-word data contract (integers in [0, 2**32), checked before the `int64` cast; zero at padding and dead positions and beyond `width`).
 - **Definition of done:** tests green.
 
 #### Task 1C.4: `PhaseFixup` and `emit_phase_fixup`
@@ -727,34 +732,34 @@ entries are big-endian (spec 6.7); constructors validate through `dfthc.ops._val
 
 ## 8. Phase 2 tasks: paper blocks
 
-Common to all: the operator interface is exactly the spec 9.x table (wire names, compilable arguments, rules, pins); T2 to T6 at two or more sizes, with compiled T4 at the test presets and `MID_NAPHTHALENE`; FeMoco-54 T4 values asserted on `dfthc.costs` without compiling (section 7, "FeMoco values in tests").
+Common to all: the operator interface is exactly the spec 9.x table (wire names, compilable arguments, rules, pins); T2 to T6 at two or more sizes, with compiled T4 at the test presets and `MID_NAPHTHALENE`; FeMoco-54 T4 values asserted on `dfthc.costs` without compiling (section 7, "FeMoco values in tests"). Adjoint and controlled forms are explicit classes with the spec 9.0 docstring and their own T2 to T6 (spec 7.4 rule 6; section 3, item 20); no rule calls `qp.adjoint` or `qp.ctrl` on a dfthc composite. Composites pass each child only the registers it needs (spec 9.0, wire passing). Callers of `QROAMRead` build its `leaf_words` in their rules from their compilable tables.
 
-#### Task 2D.1: `OuterPrepare` and its pinned adjoint
+#### Task 2D.1: `OuterPrepare` and `OuterUnprepare`
 - **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** G1. **Branch:** `phase2/2D.1`.
-- **Files:** `src/dfthc/ops/prepare.py` (`OuterPrepare` part), `tests/ops/test_outer_prepare.py`, `tests/ops/test_certificates_prepare.py` (outer part, `slow`).
-- **Interfaces produced:** `OuterPrepare(X_o, alt, keep, b_k1, k1, ke1, s_u, x_o, succ_x_o, succ_work_x_o, sigma_1, m_x_o, less_than_x_o, cmp_work_x_o, alt_x_o, keep_x_o, junk_x_o, phase_grad, work)` and the pinned `Adjoint(OuterPrepare)` per spec 9.7.
+- **Files:** `src/dfthc/ops/prepare.py` (`OuterPrepare` and `OuterUnprepare`), `tests/ops/test_outer_prepare.py`, `tests/ops/test_certificates_prepare.py` (outer part, `slow`).
+- **Interfaces produced:** `OuterPrepare(X_o, alt, keep, b_k1, k1, ke1, s_u, x_o, succ_x_o, succ_work_x_o, sigma_1, m_x_o, less_than_x_o, cmp_work_x_o, alt_x_o, keep_x_o, junk_x_o, phase_grad, work)` and `OuterUnprepare` with the same arguments, whose pinned base rule is the measured unprepare of spec 9.7. `OuterPrepare`'s rule builds its read's `leaf_words` from `alt` and `keep`; `OuterUnprepare`'s erase keeps the compilable table. Neither is adjointed or controlled.
 - **Acceptance tests:**
   - T4: prepare T = 210; unprepare T = 69 with M = 96 at FeMoco.
   - T3: the succ = 1 part carries √p̃(x) with p̃ from `alias_probabilities` (lightning at the H2 test shape).
   - T6 signature: M = d1 + (K1 − 1) d1 and A as expected.
-  - Certificate `OuterPrepare` → `Adjoint(OuterPrepare)`.
+  - Certificate `OuterPrepare` → `OuterUnprepare`.
 - **Definition of done:** tests green.
 
-#### Task 2D.2: `InnerPrepare`, its pinned adjoint, and `InnerSigns`
+#### Task 2D.2: `InnerPrepare`, `InnerUnprepare` and `InnerSigns`
 - **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 2D.1 (same module, `prepare.py`, and the same certificate test file; reuses the alias-sampling rule skeleton that 2D.1 introduces). **Branch:** `phase2/2D.2`.
 - **Files:** `src/dfthc/ops/prepare.py` (inner part), `tests/ops/test_inner_prepare.py`, `tests/ops/test_certificates_prepare.py` (inner part).
-- **Interfaces produced:** `InnerPrepare(N, R, B, C, alt, keep, sgn_table, d_sgn_table, b_k2, k2, ke2, s_u, x_o, b, succ_b, succ_work_b, sigma_0, m_b, less_than_b, cmp_work_b, alt_b, keep_b, sgn, d_sgn, r, junk_b, phase_grad, work)`; `Adjoint(InnerPrepare)` (pinned); `InnerSigns(sgn, d_sgn, less_than_b)` with pinned self-adjoint.
+- **Interfaces produced:** `InnerPrepare(N, R, B, C, alt, keep, sgn_table, d_sgn_table, b_k2, k2, ke2, s_u, x_o, b, succ_b, succ_work_b, sigma_0, m_b, less_than_b, cmp_work_b, alt_b, keep_b, sgn, d_sgn, r, junk_b, phase_grad, work)`; `InnerUnprepare` with the same arguments (pinned base rule, the measured unprepare of spec 9.8); `InnerSigns(sgn, d_sgn, less_than_b)` with pinned self-adjoint. `InnerPrepare`'s rule builds its read's `leaf_words` from the inner tables; `InnerUnprepare`'s erase keeps the compilable tables.
   - The spec's table names `sgn` and `d_sgn` are the wire registers' names too, so the table arguments are `sgn_table` and `d_sgn_table`; the docstring says so.
 - **Acceptance tests:**
   - T4 at FeMoco: 971 / 217 / M 416; `InnerSigns` costs 0.
   - Exhaustive failed-address tests items 2 and 3 (spec 12.1).
-  - Certificate `InnerPrepare` → `Adjoint(InnerPrepare)`.
+  - Certificate `InnerPrepare` → `InnerUnprepare`.
 - **Definition of done:** tests green.
 
 #### Task 2E.1: `TailAngleLoad`, `SFAngleLoad`
 - **Tier:** B. **Reviewers:** GPT-5.6. **Depends on:** G1. **Branch:** `phase2/2E.1`.
 - **Files:** `src/dfthc/ops/angle_data.py` (loads), `tests/ops/test_angle_loads.py`.
-- **Interfaces produced:** `TailAngleLoad(tail_angles, n_plus, RC, X_o, x_o, angles, G0, G1, work)` and `SFAngleLoad(sf_angles, R, B, r, b, G0, angles, b_neq_B, work)`, where the SF load is enabled on G0 = 0.
+- **Interfaces produced:** `TailAngleLoad(tail_angles, n_plus, RC, X_o, x_o, angles, G0, G1, work)` and `SFAngleLoad(sf_angles, R, B, r, b, G0, angles, b_neq_B, work)`, where the SF load is enabled on G0 = 0. Each builds its read's `leaf_words` in its rule from its compilable angle table (spec 9.3); at FeMoco-54 the tail read has 54 leaves and the SF read 270, each with 25 words per entry.
 - **Acceptance tests:**
   - T4: 61 and 291 at FeMoco.
   - T3: loaded angles and flags for every address of the H2 test shape. Tail rows have G0 = 1 and G1 = [x_o − RC ≥ N+]. SF branches are untouched by the tail load and vice versa.
@@ -780,15 +785,15 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
   - T2 with `check_matrix=True`.
 - **Definition of done:** tests green.
 
-#### Task 2E.4: `GivensRotation`, `GivensLadder`
+#### Task 2E.4: `GivensRotation`, `GivensLadder`, `GivensLadderDagger`
 - **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** G1. **Branch:** `phase2/2E.4`.
 - **Files:** `src/dfthc/ops/givens.py`, `tests/ops/test_givens.py`.
-- **Interfaces produced:** `GivensRotation(q_i, q_j, angle, phase_grad, work)` and `GivensLadder(b_rot, system, angles, phase_grad, work)`, both with auto-derived adjoints. The ladder's rungs run in time order `k = N - 2, ..., 0` (rung 0 last), as dfthcbe's `GivensRotationLadder`; the test against `ladder_matrix` (Task 1A.4) pins it.
+- **Interfaces produced:** `GivensRotation(q_i, q_j, angle, phase_grad, work)` with an auto-derived adjoint; `GivensLadder(b_rot, system, angles, phase_grad, work)`, whose rungs run in time order `k = N - 2, ..., 0` (rung 0 last, so `U = G_0 G_1 ... G_{N-2}`), as dfthcbe's `GivensRotationLadder`; and `GivensLadderDagger` with the ladder's arguments, whose rungs run in time order `k = 0, ..., N - 2`, each `qp.adjoint(GivensRotation(...))` (spec 9.15). Nothing adjoints `GivensLadder` itself. The tests against `ladder_matrix` (Task 1A.4) pin both orders; the opposite forward order fails for N ≥ 3. The K-1 stand-in's placeholder ladder (Task 0.9d) ran the opposite orders (forward `k = 0, ..., N - 2`, dagger `k = N - 2, ..., 0`); the order changes no gate count and no captured-equation count, so its measurements carry over.
 - **Acceptance tests:**
   - The dense rung matrix equals [[cos θ, −sin θ], [sin θ, cos θ]] on {|01⟩, |10⟩} and the identity on {|00⟩, |11⟩}, for every x < 2^(b_rot−1) at b_rot ≤ 4, with sign and no leakage into the ancillas. This is the check the spec's 2026-11-11 probe ran: the 4 × 4 action on the mode qubits from all four basis inputs, with the angle and phase-gradient registers projected out.
   - The ladder equals `ladder_matrix` for N ≤ 4.
   - T4: 2(b_rot − 1) per rung; 1,484 per ladder at FeMoco.
-  - The adjoint compiles (L-6 watch).
+  - `GivensLadderDagger` is the ladder's inverse: densely for N ≤ 4 against `ladder_matrix`, and after the ladder on lightning; its T equals the ladder's, 1,484 at FeMoco.
 - **Definition of done:** tests green.
 
 #### Task 2E.5: `MajoranaGate`
@@ -804,29 +809,38 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
 
 ## 9. Phase 3 tasks: assembly and end-to-end checks
 
-#### Task 3.1: `InnerSelect` and its pinned adjoint
+Common to Tasks 3.1 to 3.4: the operator interface is exactly the spec 9.x table (wire names, compilable arguments, rules, pins), and composites pass each child only the registers it needs (spec 9.0, wire passing). Every operator class these tasks add has its own T2 to T6 (spec 9.0, spec 12.1), the explicit adjoint and controlled classes `InnerSelectDagger`, `ControlledRefT2`, `ControlledRefAB`, `ControlledDFTHCBlockEncoding` and `ControlledDFTHCWalk` included (spec 7.4 rule 6; section 3, item 20):
+- T2: `assert_valid_decomp_rule` for every base rule, at two or more sizes;
+- T3: the action against its reference; for a controlled class with the control in |0⟩, |1⟩ and |+⟩, so that a wrong global phase on the controlled branch is detected;
+- T4: exact T, M and A against `dfthc.costs`, compiled at the test presets and `MID_NAPHTHALENE`, and on the closed forms at FeMoco-54;
+- T5: gate-set closure for every class, the controlled classes included, at `level="device"` as well;
+- T6: count signatures that show the pinned base rule was chosen, and the inventory test of Task 3.4, whose walk and controlled-walk programs contain every Phase 3 class.
+
+The code-level plans count these tests in each task's total. The inventory test's capture hook wraps a private Catalyst frontend function (`catalyst.from_plxpr.qfunc_interpreter._convert_decomp_target_spec`), so it is a compatibility canary to re-check at every nightly bump: it stays in the per-commit tier, which the bump procedure runs (`docs/environment.md`, "Bumping the nightlies", step 2); a rename or signature change of the hook fails it, and its assertion that the program's own top-level target was seen keeps a hook that no longer sees targets from passing. A bump that breaks the hook ports `captured_targets` before the bump merges.
+
+#### Task 3.1: `InnerSelect` and `InnerSelectDagger`
 - **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** G2. **Branch:** `phase3/3.1`.
 - **Files:** `src/dfthc/ops/select.py`, `tests/ops/test_inner_select.py`.
-- **Interfaces produced:** `InnerSelect(tail_angles, sf_angles, N, R, B, C, n_plus, b_rot, fixup_bits, select, outer, inner, system, phase_grad, work)`, with grouped wires split through `WalkLayout.split_group`. `Adjoint(InnerSelect)` is pinned and uses the adjoint Majorana gate.
+- **Interfaces produced:** `InnerSelect(tail_angles, sf_angles, N, R, B, C, n_plus, b_rot, fixup_bits, select, outer, inner, system, phase_grad, work)`, with grouped wires split through `WalkLayout.split_group`. `InnerSelectDagger`, with the same arguments and a pinned base rule, uses the adjoint Majorana gate; both call `GivensLadderDagger`.
 - **Acceptance tests:**
   - T4: T = 3,537, M = 798 at FeMoco.
   - T3 on valid branches: V† Maj V for the H2 test shape (sparse simulator).
-  - The adjoint is load first, erase last.
+  - `InnerSelectDagger` loads first and erases last, and on valid branches it is the inverse of `InnerSelect` (sparse simulator).
 - **Definition of done:** tests green.
 
-#### Task 3.2: `RefT2`, `RefAB` and controlled versions
+#### Task 3.2: `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB`
 - **Tier:** B. **Reviewers:** GPT-5.6. **Depends on:** G2. **Branch:** `phase3/3.2`.
 - **Files:** `src/dfthc/ops/reflections.py` (`RefT2`, `RefAB`), `tests/ops/test_ref_t2_ab.py`.
-- **Interfaces produced:** `RefT2(outer, inner, work)` and `RefAB(outer, inner, work)`, with pinned self-adjoints and `C(...)` rules that call `C(ZeroReflection)`.
+- **Interfaces produced:** `RefT2(outer, inner, work)` and `RefAB(outer, inner, work)`, with pinned self-adjoints, and the classes `ControlledRefT2(control, outer, inner, work)` and `ControlledRefAB(control, outer, inner, work)`, whose base rules emit the multi-controlled Z over the control and the pattern, then `Z` on the control, with the helper of `C(ZeroReflection)` (Task 1C.6), so no `C(...)` key is requested (spec 7.4 rule 6).
 - **Acceptance tests:**
   - T4 at FeMoco: 20 / 21 and 44 / 45.
   - Exact action, including the global sign, at the H2 shape: controlled with the control in |+⟩.
 - **Definition of done:** tests green.
 
-#### Task 3.3: `DFTHCBlockEncoding` and its controlled version
+#### Task 3.3: `DFTHCBlockEncoding` and `ControlledDFTHCBlockEncoding`
 - **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 3.1, 3.2. **Branch:** `phase3/3.3`.
 - **Files:** `src/dfthc/ops/walk.py` (block encoding), `tests/ops/test_block_encoding.py`, `tests/test_work_pool.py`.
-- **Interfaces produced:** `DFTHCBlockEncoding(params, tables, outer, inner, select, system, phase_grad, work)`, with compilable `params = WalkParams.as_compilable()` and `tables = WalkTables.as_compilable()`; the rules rebuild both with `from_compilable` and split the wire groups with `WalkLayout.split_group`. `C(DFTHCBlockEncoding)` is pinned and controls only `RefT2`.
+- **Interfaces produced:** `DFTHCBlockEncoding(params, tables, outer, inner, select, system, phase_grad, work)`, with compilable `params = WalkParams.as_compilable()` and `tables = WalkTables.as_compilable()`; the rules rebuild both with `from_compilable` and split the wire groups with `WalkLayout.split_group`. `ControlledDFTHCBlockEncoding(params, tables, control, outer, inner, select, system, phase_grad, work)` controls only the T2 reflection, through `ControlledRefT2`. Both rules call `OuterUnprepare`, `InnerUnprepare` and `InnerSelectDagger`, and pass each child only the registers it needs (spec 9.0).
 - **Acceptance tests:**
   - T4: the closed forms give T = 9,749 (controlled +1) and M = 2,524 at FeMoco, asserted without compiling.
   - The compiled counts equal the closed forms at the test presets (per commit) and at `MID_NAPHTHALENE` (nightly).
@@ -834,15 +848,17 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
   - The prepare/unprepare part (E-4 precursor) passes on the sparse simulator.
 - **Definition of done:** tests green.
 
-#### Task 3.4: `DFTHCWalk`, `C(DFTHCWalk)` and whole-program counts at the test and mid presets
+#### Task 3.4: `DFTHCWalk`, `ControlledDFTHCWalk`, whole-program counts at the test and mid presets, and the inventory test
 - **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** 3.3. **Branch:** `phase3/3.4`.
 - **Files:** `src/dfthc/ops/walk.py` (walk), `tests/ops/test_walk.py`, `tests/integration/test_walk_counts.py` (the `MID_NAPHTHALENE` cases marked `slow`).
-- **Interfaces produced:** `DFTHCWalk(params, tables, outer, inner, select, system, phase_grad, work)`, with the same arguments as `DFTHCBlockEncoding`. `C(DFTHCWalk)` is pinned: the controlled block encoding, then the controlled `RefAB`.
+- **Interfaces produced:** `DFTHCWalk(params, tables, outer, inner, select, system, phase_grad, work)`, with the same arguments as `DFTHCBlockEncoding`. `ControlledDFTHCWalk(params, tables, control, outer, inner, select, system, phase_grad, work)`: `ControlledDFTHCBlockEncoding`, then `ControlledRefAB`; there is no `C(DFTHCWalk)` rule (spec 7.4 rule 6). `dfthc.testing.resources.captured_targets(qfunc, num_wires) -> list[str]`: the names of every rule target the frontend converts for one compile, a port of Task 0.9d's capture instrument (it wraps a private frontend function, so it asserts that it saw the program's own top-level target).
 - **Acceptance tests:**
   - The walk and controlled walk compile each as one program on `null.qubit` at the test presets and at `MID_NAPHTHALENE`. T, M and A equal the closed forms exactly, and `is_symbolic == False`.
   - At FeMoco-54 the closed forms give T = 9,793 and 9,795, M = 2,524, A = 8,675 and 8,677, asserted without compiling. The FeMoco compile is Task 4.5's (D-3).
   - T5 at `level="device"` for the H2 walk: no dfthc name survives.
-  - Compile time and memory at `MID_NAPHTHALENE` (through `run_watched`) are recorded and compared with the Task 0.9 stand-in at `mid10`, the same sizes (the stand-in's block bits are `k1 = 2`, `k2 = 1`; the preset's are `k1 = 1`, `k2 = 2`).
+  - Inventory test (spec 12.1 T6; section 3, item 20): at `H2_STO3G_TEST` the walk and the controlled walk capture no `Adjoint(...)` or `C(...)` target whose base is a dfthc composite or `QROAMRead`; the only modified dfthc targets are the leaf adjoints of spec 7.4 rule 6.
+  - `qp.ctrl(DFTHCWalk(...))` at `H2_STO3G_TEST` fails to compile with a `CompileError` naming `C(DFTHCWalk)`, after the expected measuring-rule warning (Task G0.1 probe).
+  - Compile time and memory at `MID_NAPHTHALENE` (through `run_watched`) are recorded and compared with the Task 0.9 stand-in at `mid10`, the same sizes (the stand-in's block bits are `k1 = 2`, `k2 = 1`; the preset's are `k1 = 1`, `k2 = 2`), and with Task 0.9d's PX arm at `mid10` (walk 802 MB, controlled walk 806 MB).
 - **Definition of done:** tests green, the slow `MID_NAPHTHALENE` cases included (run targeted; each a few minutes and below 3.75 GB); the numbers in the ledger.
 
 #### Task 3.5: End-to-end checks E-1 to E-4 and tier budgets
@@ -862,16 +878,18 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
 
 ## 10. Phase 4 tasks: application, report and documentation
 
+Common to the operator classes of Phase 4: `ControlledToyWalk`, the one explicit controlled class Phase 4 adds (spec 7.4 rule 6, spec 11.4), has its own T2 to T6 as in section 9's common text: T2 for its base rule; T3 against the dense controlled toy walk with the control in |0⟩, |1⟩ and |+⟩; T4 exact T, M and A; T5 gate-set closure, at `level="device"` as well; T6 its pinned base rule chosen. `ControlledWalkPower`, `QPERound` and `ToyControlledWalkPower` call only explicit classes and are never adjointed or controlled; the inventory test covers the QPE program in Task 4.2. Task 4.1's code-level plan counts these tests.
+
 #### Task 4.1: QPE operators, driver, energies and the toy walk
 - **Tier:** A. **Reviewers:** GPT-5.6, Opus. **Depends on:** G3. **Branch:** `phase4/4.1`.
 - **Files:** `src/dfthc/qpe.py`, `src/dfthc/testing/toy_walk.py`, `tests/integration/test_qpe_toy.py`, `tests/test_qpe.py`.
 - **Interfaces produced:**
-  - `ControlledWalkPower(power, params, tables, control, outer, inner, select, system, phase_grad, work)`: `qp.for_loop` with the static bound `power` over `qp.ctrl(DFTHCWalk(params, tables, ...), control)`; never adjointed.
+  - `ControlledWalkPower(power, params, tables, control, outer, inner, select, system, phase_grad, work)`: `qp.for_loop` with the static bound `power` over `ControlledDFTHCWalk(params, tables, control, ...)`; never adjointed or controlled.
   - `WalkPowerSpec(op_name: str, compilable: tuple, wire_sizes: tuple[int, ...], wires: Wires)`, a named tuple naming the walk-power operator (`"ControlledWalkPower"` or `"ToyControlledWalkPower"`), its compilable arguments after `power`, and its wire groups after `control` as one flat register with group sizes.
   - `QPERound(j, num_bits, earlier_bits, walk_op, walk_compilable, walk_wire_sizes, control, qpe_grad, correction_wires, walk_wires)`, with dynamic `earlier_bits` of shape (t,) (spec 11.1). An `Operator2` cannot take a Python callable, and it cannot mix compilable with hybrid (nested) wire arguments. So `walk_wires` is one flat register split by `walk_wire_sizes`, and the rule looks up `walk_op` in a registry of walk-power classes and calls it with `(2**j, *walk_compilable, control, *groups)`. The final form is fixed by the K-10 result in the Phase 4 plan.
   - `iterative_phase_estimation(walk_power_factory, control, num_bits, qpe_grad, correction_wires) -> list`, the measured bits m_{t−1} … m_0, with `walk_power_factory() -> WalkPowerSpec`. It is a plain quantum function (Q-3) and raises `ValueError` if `num_bits > len(qpe_grad)`.
   - `energy_from_phase(phi, Lambda, shift=1.0) -> float` and `physical_energy(E_SA, e_sos_phys, core_energy=0.0) -> float`.
-  - `ToyWalk(system, ancilla)` with a pinned `C(ToyWalk)`, and `ToyControlledWalkPower`.
+  - `ToyWalk(system, ancilla)`, `ControlledToyWalk(control, system, ancilla)` (control only the toy reflection; spec 11.4) and `ToyControlledWalkPower`, which loops over `ControlledToyWalk`.
 - **Acceptance tests:**
   - At t = 3 with input |0⟩: the exact distribution φ ∈ {1/8, 7/8} with probability cos²(π/8) and {3/8, 5/8} with sin²(π/8) (sparse simulator `BranchPolicy`).
   - The `lightning.qubit` smoke test with 2,000 shots agrees within five standard deviations.
@@ -885,6 +903,7 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
 - **Acceptance tests:**
   - The QPE program compiles at `H2_STO3G_TEST` and `H2_631G_TEST` for t ∈ {1, 2, 3}. Its worst-case T = (2^t − 1) T_C(W) + (t³ − t)/6 and M = (2^t − 1) M_W + t equal `dfthc.costs.iterative_qpe` exactly, with T_C(W) and M_W compiled at the same preset.
   - The hinted expected counts are recorded.
+  - The inventory test of Task 3.4 passes for the QPE program at `H2_STO3G_TEST` with t = 2.
   - It is not compiled at FeMoco-54 shape (spec 11.3). There the report evaluates the closed form with the controlled-walk counts of Task 4.5.
 - **Definition of done:** D-4, second half.
 
@@ -899,8 +918,8 @@ Common to all: the operator interface is exactly the spec 9.x table (wire names,
   - **Systems:** FeMoco-54 (`random_factors`, fixed seed); every vendored system with default precisions: `h2_sto3g_R2_B2_C1`, `h2_631g_R2_B2_C2`, `h2_631g_R2_B3_C3`, `naphthalene`, `fe2s2` and `fe4s4`.
   - **Programs** (the report rows), each compiled separately with `compiled_resources` on `null.qubit`:
     - L1: `PhaseGradientRotation`, `FlaggedUniformPrep` and its adjoint, `QROAMRead`, `PhaseFixup`, `QROAMErase`, `ZeroReflection` and its controlled version;
-    - L2: `OuterPrepare` and its adjoint, `InnerPrepare` and its adjoint, `InnerSigns`, `TailAngleLoad`, `SFAngleLoad`, `SpinMux`, `SpinSwap`, `GivensRotation`, `GivensLadder` and its adjoint, `MajoranaGate` and its adjoint, `AngleErase`, `InnerSelect` and its adjoint;
-    - L3: `RefT2` and `RefAB` with their controlled versions, `DFTHCBlockEncoding` and its controlled version, the walk, the controlled walk;
+    - L2: `OuterPrepare`, `OuterUnprepare`, `InnerPrepare`, `InnerUnprepare`, `InnerSigns`, `TailAngleLoad`, `SFAngleLoad`, `SpinMux`, `SpinSwap`, `GivensRotation`, `GivensLadder`, `GivensLadderDagger`, `MajoranaGate` and its adjoint, `AngleErase`, `InnerSelect`, `InnerSelectDagger`;
+    - L3: `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB`, `DFTHCBlockEncoding`, `ControlledDFTHCBlockEncoding`, the walk (`DFTHCWalk`), the controlled walk (`ControlledDFTHCWalk`);
     - L4: `ControlledWalkPower` with p = 1 and 2, and the QPE program with t = 1, 2, 3.
   - **What is compiled where** (spec 13.3 step 2; section 12.9):
     - the H2 systems and `naphthalene`: every program (the QPE programs at the H2 systems only); not heavy;
@@ -1246,7 +1265,7 @@ The watchdog works inside the agent sandbox (it reads memory through `libproc` a
 | Item | Resolved by | Feeds |
 | --- | --- | --- |
 | Q-1 early junk measurement | K-10 verdict (Task 0.8) at G0, then the user's decision after Task 4.4, from the resource report (Task 4.3) | Task Q1b (with the report and documentation regenerated) before G4 completes, or the baseline unchanged |
-| K-1 compile budget | Task 0.9 (and 0.9b) at G0: small and mid measurements and the FeMoco projection; the FeMoco compile only if projected within 7.5 GB and 60 min | whether bulk tables become dynamic arrays (then spec 7.4 rule 3's exception applies to Tasks 1C.3 to 1C.5, 2E.1, 2E.2); Tasks 1C.3 to 1C.5 wait for it |
+| K-1 compile budget | resolved at G0 (decision "K-1 at G0"): Tasks 0.9 to 0.9e measured, and the FeMoco-54 controlled-walk stand-in with both levers compiled in 51 s at 2,648 MB | per-leaf read loads (Task 1C.3; Task 2E.1 through `QROAMRead`) and explicit adjoint and controlled classes (Phases 2 to 4): section 3, items 19 and 20; Task 4.5's production compile |
 | Where compiles above the cap run | the user, at G0, if K-1 escalates: a larger machine, or an approved idle-time window with a higher cap | the K-1 FeMoco compile, Task 4.3's `fe4s4` walks if projected above 7.5 GB, Task 4.5, a Phase 5 recompile |
 | K-3 mode-agnostic erase | Task 0.7 | Task 1C.5: `mcm_parities` stays mode-agnostic or gains mode-specific branches |
 | K-7 comparator adjoints | Task 0.6 | Tasks 1C.2, 2D.1, 2D.2: PennyLane comparators or an own comparator |
@@ -1273,7 +1292,7 @@ The watchdog works inside the agent sandbox (it reads memory through `libproc` a
 | 5.4 delivery phases | sections 6 to 11 |
 | 6 conventions | 1A.2 (fermions), 1A.4 (angles, alias), 1C.1 (phase gradient), 3.2 (reflections), 1A.1 (registers) |
 | 7.1 environment and load limits | 0.1 (runner: 2 workers, lowered priority), 0.2 (watchdog), HANDOFF |
-| 7.2 to 7.6 compilation model, gate set, rules, pins, accounting | 0.2; rules enforced by reviews and HANDOFF |
+| 7.2 to 7.6 compilation model, gate set, rules, pins, accounting | 0.2; rules enforced by reviews and HANDOFF; rule 6 (explicit classes) by the inventory test of 3.4 and 4.2 |
 | 8.1 vendored data | 0.5 |
 | 8.2 to 8.4 data model, parameters (presets including `MID_NAPHTHALENE`), tables | 1A.1, 1A.2, 1A.4 |
 | 8.5 encoded model | 1A.5 |

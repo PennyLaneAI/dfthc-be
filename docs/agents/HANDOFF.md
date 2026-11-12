@@ -90,7 +90,9 @@ From spec 7.1:
   `C(...)` candidates of operators with pinned rules and drops the measuring ones; the pinned rules
   are used. A needed modified operator without a remaining rule fails with a `CompileError`; a
   remaining non-measuring rule is chosen silently, which exact T4 counts and T5 closure catch
-  (spec 7.4 rule 12).
+  (spec 7.4 rule 12). Since G0 no walk program requests a modified dfthc composite (spec 7.4
+  rule 6), so the warning appears only in tests that wrap a measuring operator on purpose
+  (Tasks 1C.5 and 3.4).
 - **"the rules file could not be parsed" alone proves nothing.** A successful verbose compile also
   prints it (spike T6). In a failed compile the real cause, `Decomposition rule not found for
   operator '<op>'`, is in the same error message; assert on that and the exception type.
@@ -231,18 +233,26 @@ Spec 7.4. Each rule exists because of a confirmed limitation (section 7 below).
 3. **Arguments.** Everything structural is in `compilable_argnames` (sizes, ranges, block bits,
    tables). Never use `static_argnames`, and never mix compilable and hybrid arguments.
    `dynamic_argnames` only for runtime data: `PhaseFixup` parities, `QPERound` earlier bits, and
-   the K-1 remedy tables if activated. Convert list-valued dynamic arguments to arrays in
-   `__init__` (L-23).
+   `QROAMRead`'s per-leaf table words (`int64`, built by the caller from its compilable table).
+   Convert list-valued dynamic arguments to arrays in `__init__` (L-23).
 4. **Control flow.** Bodies of auto-adjointed operators contain no `qp.for_loop` or `qp.cond`;
-   unroll loops in Python with static bounds. `qp.cond` appears only on measurement outcomes,
-   inside erase operators and the QPE wrapper. `qp.for_loop` appears only in
-   `ControlledWalkPower` (plus the K-1 remedy exception).
-5. **Measurement-based uncompute** lives only in `QROAMErase`, `AngleErase` and explicit
-   `Adjoint(Op)` rules with signature `(base)`. Never place a measuring operator under `qp.ctrl`.
+   unroll loops in Python with static bounds. `qp.cond` on measurement outcomes appears only
+   inside erase operators and the QPE wrapper. `qp.for_loop` appears only in `QROAMRead` (one
+   loop per unary leaf, with `qp.cond` on table bits; spec 9.3) and `ControlledWalkPower`, both
+   never adjointed or controlled (rule 6).
+5. **Measurement-based uncompute** lives only in `QROAMErase`, `AngleErase` and the base rules
+   of `OuterUnprepare` and `InnerUnprepare`. Never place a measuring operator under `qp.ctrl`.
    Catalyst would silently control a unitary inverse instead (L-2).
-6. **Controlled versions** come only from explicit `C(Op)` rules with signature
-   `(base, control_wires, control_values, work_wires, work_wire_type)`, for `ZeroReflection`,
-   `RefT2`, `RefAB`, `DFTHCBlockEncoding`, `DFTHCWalk` and `ToyWalk`.
+6. **Adjoint and controlled forms of composites are explicit classes** (spec 7.4 rule 6, G0):
+   `OuterUnprepare`, `InnerUnprepare`, `InnerSelectDagger`, `GivensLadderDagger`,
+   `ControlledRefT2`, `ControlledRefAB`, `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk`
+   and `ControlledToyWalk`, each with one pinned base rule. Never write `qp.adjoint(...)` or
+   `qp.ctrl(...)` of a dfthc composite: Catalyst would capture and lower the generic candidate
+   of its whole subtree (the K-1 memory cost), and `qp.ctrl(DFTHCWalk(...))` does not compile.
+   Leaf adjoints stay auto-derived (`PhaseGradientRotation`, `FlaggedUniformPrep`,
+   `GivensRotation`, `MajoranaGate`). The one `C(Op)` rule left is `C(ZeroReflection)`, with
+   signature `(base, control_wires, control_values, work_wires, work_wire_type)`. The inventory
+   test (Task 3.4) catches a stray modifier.
 7. **One rule per key, pinned.** Register every rule with
    `dfthc.compile.register_rule(OpClass | "Adjoint(Name)" | "C(Name)", rule)`; never call
    `qp.add_decomps` directly for a dfthc operator, and never pin a PennyLane operator (L-4).
@@ -258,6 +268,8 @@ Spec 7.4. Each rule exists because of a confirmed limitation (section 7 below).
     with no remaining rule fails the compile with a `CompileError`; a substitute rule is caught by
     the exact counts (T4).
 13. **Adjoints use the instance form** `qp.adjoint(Op(...))` (L-25).
+14. **Pass each child only the registers it needs** (spec 9.0): an operator bind costs 2
+    captured equations per wire passed as a list and 4 per wire passed as an array register.
 
 The canonical minimal example of an operator with a pinned measured adjoint rule is
 `CompileTestLoad` in `tests/test_compile.py`. Production operators add the spec 9.0 docstring,
@@ -315,14 +327,14 @@ differs from the spec's original claim (observed 2026-11-11).
 | Id | Limitation | Mitigation |
 | --- | --- | --- |
 | L-1 | Rules declaring `work_wires=` are excluded, even pinned | explicit ancillas |
-| L-2 | Measuring adjoint rules are skipped under control; **changed**: a unitary inverse is controlled instead | never control measuring ops |
+| L-2 | Measuring adjoint rules are skipped under control; **changed**: a unitary inverse is controlled instead | never control measuring ops; no modifier of a composite (rule 6) |
 | L-3 | Unweighted solver prefers the auto inverse over the measured rule | weighted gate set, pins, T6 |
 | L-4 | Pins apply to nested same-name operators | pin dfthc names only |
 | L-5 | Rules see dynamic arguments as tracers | structure in compilable arguments |
-| L-6 | Adjoint lowering can crash on nested control flow; **changed**: not reproduced | no control flow in auto-adjointed bodies |
-| L-7 | `C(ChangeOpBasis)` controls compute and uncompute under capture | explicit `C(...)` rules |
-| L-8 | Generic control adds PauliX gates | explicit `C(...)` rules |
-| L-9 | Controlled function calls; **changed**: left undecomposed, execution fails | no `Subroutine` |
+| L-6 | Adjoint lowering can crash on nested control flow; **changed**: not reproduced | no control flow in auto-adjointed bodies; the looped `QROAMRead` is never adjointed (rule 6, inventory test) |
+| L-7 | `C(ChangeOpBasis)` controls compute and uncompute under capture | explicit controlled classes (rule 6) |
+| L-8 | Generic control adds PauliX gates | explicit controlled classes (rule 6) |
+| L-9 | Controlled function calls; **changed**: left undecomposed, execution fails | no `Subroutine`; explicit controlled classes |
 | L-10 | Compilation can depend on gate order | compiler blocker: reproducer and escalate |
 | L-11 | Resource functions run with capture on | `resource_key` pauses capture |
 | L-12 | Select-swap `QROM` is not self-inverse; symbolic counts | `QROAMRead` with CSWAPs, `PhaseFixup` |
@@ -370,8 +382,9 @@ differs from the spec's original claim (observed 2026-11-11).
 - [ ] Declared resource keys equal the emitted operators (types, compilable arguments, wire
       sizes); rules registered with `register_rule` only.
 - [ ] None of the forbidden constructs of section 5 (allocation, loops or conditionals in
-      auto-adjointed bodies, measurements under control, `Subroutine`, `qp.pow`, positional
-      `qp.adjoint(Op)(...)`, compilable ints of 64 bits or more).
+      auto-adjointed bodies, measurements under control, `qp.adjoint` or `qp.ctrl` of a dfthc
+      composite, `Subroutine`, `qp.pow`, positional `qp.adjoint(Op)(...)`, compilable ints of
+      64 bits or more).
 - [ ] Files match the brief's file list; no file grew beyond its responsibility.
 
 ## 10. Reporting back
