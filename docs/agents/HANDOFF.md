@@ -67,15 +67,21 @@ From spec 7.1:
 - **Keep the lock file.** `--pre` with TestPyPI also pulls dev builds of `termcolor` and `urllib3`.
 - **No editable install.** pytest's `pythonpath = ["src"]` makes every worktree test its own
   sources against the shared `.venv`.
-- **Built-in warning noise is filtered** by `dfthc.testing.resources`:
+- **Built-in warning noise is filtered** by `dfthc.testing.resources`. The autouse pytest fixture
+  records every `RuleLoweringWarning`, fails the test on one that names a dfthc operator, and only
+  then drops the noise below (Task 0.2). Scripts outside pytest see the noise; the spikes classify
+  it with `spikes/prototypes.classify_warnings`.
   - `Excluded the <rule> decomposition rule for <op> since --decompose-lowering cannot work with
-    multiple registers yet` (for `_*_ppm`, `_toffoli_elbow`, `_cphase_to_single_phase`,
+    multiple registers yet` (for `_ppm`, `_*_ppm`, `_toffoli_elbow`, `_cphase_to_single_phase`,
     `use_allocation(...)` and the MCX `*_worker(s)` rules);
   - `Skipped the _adjoint_temporary_and... rule for C(Adjoint(TemporaryAND))`;
-  - the `qp.analyze` UserWarning "unable to determine the branch", which PennyLane's own
-    `SemiAdder` triggers.
-- **"the rules file could not be parsed" means no decomposition path.** The real cause,
-  `Decomposition rule not found for operator '<op>'`, is in the same error message.
+  - the `qp.analyze` UserWarning "unable to determine the branch". PennyLane's own `SemiAdder`
+    triggers it, and so does our measured erase's fixup (`qp.cond` on measurement parities).
+    `qp.analyze` then counts the larger branch, so a conditional Toffoli would be counted without
+    a visible signal; exact T4 counts are the backstop.
+- **"the rules file could not be parsed" alone proves nothing.** A successful verbose compile also
+  prints it (spike T6). In a failed compile the real cause, `Decomposition rule not found for
+  operator '<op>'`, is in the same error message; assert on that and the exception type.
 
 Found while dry-running the Phase 0 plan (canaries L-24 and L-25 pin the first two):
 - **Compilable integers must fit in signed 64 bits.** Store wide table entries as tuples of 32-bit
