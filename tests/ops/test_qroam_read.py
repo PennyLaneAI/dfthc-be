@@ -68,17 +68,21 @@ def value_of(state, register, row):
 # (one-body rows 2..4), and (B + 1, k2) as listed; widths w_b + 4 as d2 with b_k2 = 2, w_r = 0.
 INNER = [inner_shape(2, 5, B1, k, lg(B1) + 4) for B1, k in [(3, 1), (5, 1), (6, 2), (7, 0),
                                                             (28, 4)]]
-OUTER = [outer_shape(5, k, 5) for k in (0, 1, 2, 3)]
+# Outer shapes: x_o over [2, 6) with k = 0, a nonzero lower live bound like the tail read's
+# [RC, X_o) (spec 9.10), so addresses 0 and 1 load nothing; then x_o over [0, 5) with k = 1, with
+# k = 2 and 37-bit entries (two words on the operator path), and with k = 3 (the flagless leaf).
+OUTER = [((3,), ((2, 6),), 5, 0)] + [outer_shape(5, k, 37 if k == 2 else 5) for k in (1, 2, 3)]
+OUTER_IDS = ["outer-nonzero-lo-k0", "outer-k1", "outer-k2-two-words", "outer-k3"]
 
 
 @pytest.mark.parametrize("shape", INNER + OUTER,
-                         ids=[f"inner-{s[1][1][1]}-{s[3]}" for s in INNER]
-                         + [f"outer-k{s[3]}" for s in OUTER])
+                         ids=[f"inner-{s[1][1][1]}-{s[3]}" for s in INNER] + OUTER_IDS)
 def test_every_address_loads_loaded_bits(shape):
     """T3, exhaustive (sparse simulator): on H|0> over the whole address register, every
     computational address ends with target ‖ junk == loaded_bits, work in |0>, amplitude +1/sqrt N.
-    Includes failed x_o >= X_o, failed b >= B + 1, one-body rows, dead block positions, and
-    (outer-k3) the flagless leaf of a fully low address."""
+    Includes failed x_o >= X_o, failed b >= B + 1, one-body rows, dead block positions, a nonzero
+    lower live bound (outer-nonzero-lo-k0), two-word entries (outer-k2-two-words), and (outer-k3)
+    the flagless leaf of a fully low address."""
     widths, live, width, k = shape
     table = random_table(widths, live, width)
     wires, num_wires = layout(widths, live, width, k)
@@ -303,7 +307,9 @@ def test_toffoli_count_at_mid_naphthalene(shape):
 
 def test_femoco_counts_on_the_closed_form():
     """FeMoco-54 is asserted on the closed forms; no FeMoco table is compiled (12.9). The four
-    reads of a walk have 81 + 540 + 54 + 270 = 945 leaves (Task 0.9d)."""
+    reads of a walk have 81 + 540 + 54 + 270 = 945 leaves (Task 0.9d). The loaded ranges of the
+    outer and inner reads are the covered sets of their erases (Tasks 1C.4 and 1C.5); the outer
+    read's end 324 is block-aligned."""
     p = FEMOCO54
     outer, inner = preset_shapes(p)
     assert QROAMRead.visited_ranges(*outer[:2], outer[3]) == [(0, 81, 7)]
@@ -319,6 +325,8 @@ def test_femoco_counts_on_the_closed_form():
     shapes = [QROAMRead.leaf_words_shape(*s) for s in (outer, inner, tail, sf)]
     assert shapes == [(81, 4, 1), (540, 16, 1), (54, 1, 25), (270, 1, 25)]
     assert sum(s[0] for s in shapes) == 945
+    assert QROAMRead.loaded_ranges(*outer[:2], outer[3]) == ((0, 324),)
+    assert QROAMRead.loaded_ranges(*inner[:2], inner[3]) == ((0, 270), (0, 32))
 
 
 @pytest.mark.compiled
@@ -358,7 +366,9 @@ def test_loaded_bits_by_hand():
 def test_leaf_words_by_hand():
     """Wire order (spec 6.7 on the wires): bit i of the word stream is entry bit width - 1 - i.
     X_o = 5, k = 1, width 2: entries 1 = 0b01 -> 0b10, 2 -> 0b01, 3 -> 0b11; address 5 is dead.
-    Width 33: the top entry bit lands in word 0, bit 0, and bit 0 in word 1, bit 0."""
+    Width 33: the top entry bit lands in word 0, bit 0, and bit 0 in word 1, bit 0. The
+    constructor rejects a negative word, and an abstract array with the right shape but a
+    non-integer dtype."""
     table = tuple((a, (v,)) for a, v in enumerate([1, 2, 3, 1, 2]))
     args = {"address_widths": (3,), "live_ranges": ((0, 5),), "width": 2, "block_bits": 1}
     words = QROAMRead.leaf_words_from_table(table, **args)
@@ -367,6 +377,11 @@ def test_leaf_words_by_hand():
     wide = {"address_widths": (1,), "live_ranges": ((0, 2),), "width": 33, "block_bits": 1}
     words = QROAMRead.leaf_words_from_table(((0, (0, 1)), (1, (1, 0))), **wide)
     assert words.tolist() == [[[1, 0], [0, 1]]]
+    with pytest.raises(ValueError, match=r"integers in \[0, 2\*\*32\), got -1"):
+        QROAMRead(**_read_args(leaf_words=_words(set={(0, 0): -1})))
+    with pytest.raises(ValueError, match=r"integer array of shape \(3, 2, 1\), got \(3, 2, 1\) "
+                                         r"of float64"):
+        QROAMRead(**_read_args(leaf_words=AbstractArray((3, 2, 1), np.float64)))
 
 
 def test_loaded_and_visited_sets():
@@ -378,6 +393,10 @@ def test_loaded_and_visited_sets():
     assert QROAMRead.leaf_blocks((3, 3), ((1, 3), (0, 5)), 2) == [2, 3, 4, 5]
     assert QROAMRead.leaf_blocks((3,), ((0, 5),), 3) == [0]
     assert QROAMRead.leaf_words_shape((3, 3), ((1, 3), (0, 5)), 33, 2) == (4, 4, 2)
+    # A split register with a nonzero lower bound, and a block-aligned upper end.
+    assert QROAMRead.visited_ranges((3,), ((3, 7),), 1) == [(1, 4, 2)]
+    assert QROAMRead.loaded_ranges((3,), ((3, 7),), 1) == ((2, 8),)
+    assert QROAMRead.loaded_set((2,), ((0, 4),), 1) == [0, 1, 2, 3]
 
 
 @pytest.mark.parametrize(("table", "match"), [
@@ -400,6 +419,14 @@ def _words(**changes):
     return words
 
 
+def _read_args(**changes):
+    """Valid QROAMRead arguments of the X_o = 5, k = 1, width-2 read, with ``changes``."""
+    return {"leaf_words": np.zeros((3, 2, 1), dtype=np.int64), "address_widths": (3,),
+            "live_ranges": ((0, 5),), "width": 2, "block_bits": 1, "control_value": None,
+            "address": [0, 1, 2], "target": [3, 4], "junk": [5, 6], "work": [7],
+            "control": []} | changes
+
+
 @pytest.mark.parametrize(("change", "match"), [
     ({"block_bits": 4}, r"block_bits must lie in \[0, 3\]"),
     ({"address_widths": (0, 3), "live_ranges": ((0, 1), (0, 5))}, "nonempty first register"),
@@ -415,9 +442,5 @@ def _words(**changes):
     ({"leaf_words": _words(set={(0, 0): 4})}, "bits beyond width 2"),
 ])
 def test_constructor_validates(change, match):
-    args = {"leaf_words": np.zeros((3, 2, 1), dtype=np.int64), "address_widths": (3,),
-            "live_ranges": ((0, 5),), "width": 2, "block_bits": 1, "control_value": None,
-            "address": [0, 1, 2], "target": [3, 4], "junk": [5, 6], "work": [7],
-            "control": []} | change
     with pytest.raises(ValueError, match=match):
-        QROAMRead(**args)
+        QROAMRead(**_read_args(**change))
