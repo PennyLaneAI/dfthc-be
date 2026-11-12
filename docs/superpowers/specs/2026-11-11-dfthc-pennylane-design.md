@@ -1369,7 +1369,7 @@ Toffolis per walk at FeMoco-54.
 | Outer read, keep test and swap | 177 | 175 | 180 | exact range boundaries (+5, `exact-iter`) |
 | Outer unprepare and erase | 61 | 57 | 45 | free comparator adjoint (`cmp-free`); exact boundaries (+3) |
 | Uniform preparation of $b$, two prepare/unprepare pairs | 80 | 84 | 68 | `cmp-free` |
-| Inner read, keep test and swap (×2) | 1,720 | 1,784 | 1,906 | $r$ carried through the swap (+60 per read, `flat-r`); exact boundaries (+5 per read) |
+| Inner read, keep test and swap (×2) | 1,720 | 1,784 | 1,906 | $r$ carried through the swap (+60 per read, `flat-r`); exact boundaries +5 per read, less dfthcbe's 4 stops on the zero D1/Q1 rows, which ours does not visit (net +1 per read) |
 | Inner unprepare and erase (×2) | 508 ¹ | 398 | 402 | one-hot over 128 positions instead of 112 (`onehot-pad`); free comparator adjoint |
 | Angle loads (×2) | 648 | 654 | 704 | exact boundaries instead of aligned-block pruning (`exact-iter`, `no-prune`) |
 | Angle erase (×2) | 74 ¹ | 180 | 204 | same, for the fixups |
