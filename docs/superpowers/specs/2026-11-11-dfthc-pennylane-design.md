@@ -524,7 +524,7 @@ from dfthc.compile import GATE_SET, FIXED_DECOMPS
 
 dev = qp.device("null.qubit", wires=layout.num_wires)  # resource counting; "lightning.qubit" for semantics
 
-@qp.qjit(capture=True)
+@qp.qjit(capture=True, enable_aot_compilation=False)  # analyze-only program (L-27)
 @qp.decompose(gate_set=GATE_SET, fixed_decomps=FIXED_DECOMPS)
 @qp.qnode(dev)
 def circuit():
@@ -542,6 +542,7 @@ Facts the design relies on:
   - returns a record with the Toffoli count, measurements, the full counts and the wire count;
   - asserts that the counts are not symbolic;
   - asserts gate-set closure (§12.1).
+- **`qp.qjit` AOT-compiles a fully annotated function at decoration, a function without parameters included; `qp.analyze` compiles the program again, so an analyze-only program disables AOT (L-27).** `qp.qjit` AOT-compiles at decoration when every parameter has a Catalyst-supported type annotation; a zero-argument function satisfies this rule vacuously. With `enable_aot_compilation=True` (the default), `QJIT.__init__` compiles a linked binary. `qp.analyze` creates a separate `QJIT` with AOT disabled and compiles through `mlir_opt`, so an analyze-only fully annotated program is compiled twice, and the first capture stays in memory during the second compile. Use `enable_aot_compilation=False` for analyze-only programs. D-3 needs only the analyze compile; a linked binary, if wanted, is compiled in a separate process.
 - **Two decomposition levels.** Executing on `lightning.qubit` runs a second decomposition pass to the device gate set ([catalyst#3275](https://github.com/PennyLaneAI/catalyst/pull/3275)). `level="user"` reports counts after our pass and is the level for all resource numbers. `level="device"` is used once per composite operator to check that no undecomposed operator remains: an undecomposed `OperatorOp` would run as a bare named gate ([catalyst#3430](https://github.com/PennyLaneAI/catalyst/pull/3430)).
 - **Devices.** `null.qubit` is used for resource counting at any size. `lightning.qubit` is used for semantics up to 25 wires.
 
@@ -1496,7 +1497,7 @@ The report never adjusts measured numbers.
 20. **L-20: An undecomposed `Operator2` is decomposed by the device pass or rejected.** On 2026-11-11 such an `Operator2` is decomposed by the device pass if it has a rule, and fails to compile for execution if it has none; it no longer reaches runtime as a bare named gate ([catalyst#3430](https://github.com/PennyLaneAI/catalyst/pull/3430)).
     - *Mitigation:* the `level="device"` closure test of every composite operator (T5) asserts that no `OperatorOp` survives.
     - *Canary:* `test_undecomposed_operator_op_reaches_runtime`: at `level="user"` an `Operator2` listed in the gate set remains named; with a rule the device pass decomposes it, and without a rule compiling for execution fails.
-21. **L-21: Each distinct compilable table is a distinct graph node and rule compile.** On 2026-11-11 each distinct table traces its rule exactly twice, identical tables in one program share those traces, compile time grows with table size, and each distinct table adds its own rule traces ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173)).
+21. **L-21: Each distinct compilable table is a distinct graph node and rule compile.** On 2026-11-12 each distinct table traces its rule exactly once per compile (the "twice" read on 2026-11-11 was the decoration-time compile of L-27), identical tables in one program share that trace, compile time grows with table size, and each distinct table adds its own rule trace ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173)).
     - *Mitigation:* few distinct table operators per walk (§9); the K-1 budget.
     - *Canary:* `test_each_distinct_table_is_a_separate_rule_compile`. *Benchmark:* `test_compile_time_scaling` records the CPU time of the compile and the peak memory (the summed physical footprint of the process tree, as the watchdog measures it) for 1, 2 and 4 distinct tables, and for one table at sizes 64, 1,024 and 8,640 entries. It fails if a measurement is more than twice the baseline stored in `tests/canary/compile_baseline.json` (CPU time: and more than 2 s above it), or if the 8,640-entry compile costs less than five times the 64-entry one; refresh the baseline at each nightly bump.
 22. **L-22: Unresolved loops produce symbolic counts.** Loops whose bounds are not concrete, including the inner loops of PennyLane's select-swap `QROM`, give symbolic `qp.analyze` counts.
@@ -1514,6 +1515,9 @@ The report never adjusts measured numbers.
 26. **L-26: Unsigned dynamic arguments get no decomposition rule.** On 2026-11-12 an `Operator2` whose dynamic argument is a `uint32` array warns "Failed to synthesize the distributed decomposition rules for <Op>: 'ui32'" and then fails with `CompileError` "Decomposition rule not found for operator '<Op>'", because Catalyst's `_MLIR_DTYPES_TO_PY_DTYPES` maps only `i1` to `i64` (and floats and complex numbers); the same operator with `int32` or `int64` data compiles.
     - *Mitigation:* compilable table words are `int64` holding 32 data bits each (ledger decision "Table words are `int64`").
     - *Canary:* `test_unsigned_dynamic_argument_has_no_rule` (subprocess).
+27. **L-27: `qp.qjit` compiles a fully annotated function ahead of time at decoration.** Found by the Opus review of Task 0.9c on 2026-11-12; zero arguments are the case `compiled_resources` hits. `qp.qjit` AOT-compiles at decoration when every parameter has a Catalyst-supported type annotation (`params_are_annotated` in `catalyst/tracing/type_signatures.py`); a zero-argument function satisfies this rule vacuously. With `enable_aot_compilation=True` (the default), `QJIT.__init__` compiles a linked binary. `qp.analyze` creates a separate `QJIT` with AOT disabled and compiles through `mlir_opt`, so an analyze-only fully annotated program is compiled twice, the binary is never used, and the first capture stays in memory during the second compile. Measured on the K-1 stand-in (mid10 controlled walk): 2,552 MB and 73 s with the double compile, 1,536 MB and 26 s with the first compile switched off, identical counts.
+    - *Mitigation:* analyze-only programs use `@qp.qjit(capture=True, enable_aot_compilation=False)` (`dfthc.compile.compiled_resources` does); programs that are executed keep the default, because the first call reuses the AOT binary.
+    - *Canary:* `test_zero_argument_qjit_compiles_at_decoration`, `test_fully_annotated_qjit_compiles_at_decoration` and `test_unannotated_parameter_is_not_compiled_at_decoration` (per-commit; they fail if Catalyst changes the default or the annotation rule).
 
 ## 15. Orchestration overview
 

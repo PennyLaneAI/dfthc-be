@@ -1,7 +1,8 @@
 """Canary L-21 and its benchmark: each distinct compilable table is a separate rule compile.
 
-The per-commit canary counts rule traces: on 2026-11-11 every distinct table traces its rule
-twice, and identical tables in one program share those traces. The nightly benchmark compiles
+The per-commit canary counts rule traces: every distinct table traces its rule once per compile
+(on 2026-11-11 it read twice, because the program was also compiled at decoration, L-27), and
+identical tables in one program share those traces. The nightly benchmark compiles
 each case in a fresh process under the watchdog and records wall time (informational), CPU time
 (Python plus the Catalyst compiler subprocess, measured across the compile only: the difference of
 ``getrusage`` for the process and its finished children before and after ``qp.analyze``) and peak
@@ -40,7 +41,7 @@ CASES = {
 CPU_SLACK_SECONDS = 2.0
 """Absolute CPU slack of the baseline check (sub-second cases are noise-dominated when loaded)."""
 SIZE_GROWTH_MIN = 5
-"""Least compile CPU-time ratio of the 8,640- to the 64-entry case (about 84 on 2026-11-12)."""
+"""Least compile CPU-time ratio of the 8,640- to the 64-entry case (about 55 on 2026-11-12)."""
 
 _RULE_TRACES: list[tuple[int, ...]] = []
 
@@ -69,11 +70,17 @@ def _l21_probe_rule(table, wires):
 qp.add_decomps(L21Probe, _l21_probe_rule)
 
 
-def _rule_traces(tables) -> Counter:
-    """How often the probe's rule is traced, per table, compiling one program over ``tables``."""
-    _RULE_TRACES.clear()
+def _rule_traces(tables, *, aot=False) -> Counter:
+    """How often the probe's rule is traced, per table, compiling one program over ``tables``.
 
-    @qp.qjit(capture=True)
+    ``aot=True`` passes no AOT option, so Catalyst's default decorator applies; it compiles the
+    zero-argument program at decoration as well (L-27), so every rule is traced once per compile:
+    twice in total.
+    """
+    _RULE_TRACES.clear()
+    options = {} if aot else {"enable_aot_compilation": False}
+
+    @qp.qjit(capture=True, **options)
     @qp.decompose(gate_set=GATE_SET)
     @qp.qnode(qp.device("null.qubit", wires=3))
     def circuit():
@@ -88,15 +95,18 @@ def _rule_traces(tables) -> Counter:
 def test_each_distinct_table_is_a_separate_rule_compile():
     """L-21 (catalyst#3173): every distinct table traces the rule, identical tables share it.
 
-    On 2026-11-11 each distinct table traces its rule exactly twice. A different count is a
-    change of Catalyst's behaviour: update the L-21 entries of docs/limitations.md and spec
-    section 14 before adjusting these numbers.
+    On 2026-11-12 each distinct table traces its rule exactly once per compile. (Task 0.4 read
+    "twice" on 2026-11-11, because its program was also AOT-compiled at decoration, L-27: the two
+    traces were two compiles, not two traces in one.) A different count is a change of Catalyst's
+    behaviour: update the L-21 entries of docs/limitations.md and spec section 14 before
+    adjusting these numbers.
     """
     first, second = (1, 2, 3), (3, 1, 2)
     note = "Catalyst's rule tracing changed: update the L-21 docs (limitations.md, spec section 14)"
-    assert _rule_traces([first]) == {first: 2}, note
-    assert _rule_traces([first, second]) == {first: 2, second: 2}, note
-    assert _rule_traces([first, first]) == {first: 2}, note
+    assert _rule_traces([first]) == {first: 1}, note
+    assert _rule_traces([first, second]) == {first: 1, second: 1}, note
+    assert _rule_traces([first, first]) == {first: 1}, note
+    assert _rule_traces([first, second], aot=True) == {first: 2, second: 2}, note
 
 
 _SNIPPET = """
@@ -129,7 +139,7 @@ rng = np.random.default_rng(21)
 tables = [tuple(int(v) for v in rng.integers(0, 16, size=SIZE)) for _ in range(COUNT)]
 
 
-@qp.qjit(capture=True)
+@qp.qjit(capture=True, enable_aot_compilation=False)
 @qp.decompose(gate_set=GATE_SET)
 @qp.qnode(qp.device("null.qubit", wires=5))
 def circuit():

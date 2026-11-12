@@ -86,7 +86,7 @@ def test_pauli_measure_postselect_ignored():
 def test_device_pass_runs():
     """L-16 (catalyst#3275): executing on lightning.qubit decomposes again to device gates."""
 
-    @qp.qjit(capture=True)
+    @qp.qjit(capture=True, enable_aot_compilation=False)
     @qp.decompose(gate_set=GATE_SET)
     @qp.qnode(qp.device("lightning.qubit", wires=3))
     def circuit():
@@ -155,7 +155,7 @@ def _branch_circuit(hinted):
         true_fn = qp.hint({"branch-prob": 0.25})(true_fn)
         false_fn = qp.hint({"branch-prob": 0.75})(false_fn)
 
-    @qp.qjit(capture=True)
+    @qp.qjit(capture=True, enable_aot_compilation=False)
     @qp.qnode(qp.device("null.qubit", wires=1))
     def circuit(pred: bool):
         qp.cond(pred, true_fn, false_fn)()
@@ -183,7 +183,7 @@ def test_branch_prob_hint_gives_expected_counts():
     pair = qp.analyze(_branch_circuit(hinted=True))(True).resources
     assert dict(pair.counts) == {"PauliX": 1, "PauliY": 1}
 
-    @qp.qjit(capture=True)
+    @qp.qjit(capture=True, enable_aot_compilation=False)
     @qp.qnode(qp.device("null.qubit", wires=2))
     def four_conditionals(first: bool, second: bool):
         for pred, wire in ((first, 0), (second, 1), (first, 0), (second, 1)):
@@ -203,7 +203,7 @@ def _loop_circuit(hinted):
     def body(_):
         qp.Z(0)
 
-    @qp.qjit(capture=True)
+    @qp.qjit(capture=True, enable_aot_compilation=False)
     @qp.qnode(qp.device("null.qubit", wires=1))
     def circuit(n: int):
         loop = qp.for_loop(n)(body)

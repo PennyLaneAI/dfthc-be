@@ -131,9 +131,11 @@ file.
   test of every composite operator (T5).
 - **L-21, distinct tables add rule traces and compile cost grows with table size**
   (catalyst#3173). Canary: `test_each_distinct_table_is_a_separate_rule_compile` (per commit).
-  On 2026-11-11 each distinct table traces its rule exactly twice, and identical tables in one
-  program share those traces: compile time grows with table size, and each distinct table adds
-  its own rule traces.
+  On 2026-11-12 each distinct table traces its rule exactly once per compile, and identical
+  tables in one program share that trace: compile time grows with table size, and each distinct
+  table adds its own rule trace. (Task 0.4 read "twice" on 2026-11-11; the second trace was the
+  decoration-time compile of L-27. The canary now keeps that compile off and pins the doubled
+  count separately.)
   Benchmark: `test_compile_time_scaling` (nightly) compiles 1, 2 and 4 distinct 64-entry tables
   and single tables of 64, 1,024 and 8,640 entries, each in a fresh process under the watchdog.
   It fails at more than twice `tests/canary/compile_baseline.json` in CPU time (across the compile
@@ -141,9 +143,28 @@ file.
   sub-second cases are noise-dominated) or peak memory (`peak_mb`: the summed physical footprint
   of the process tree, as the watchdog measures it), or if the 8,640-entry case costs less than 5
   times the CPU time of the 64-entry case. Wall time is recorded for information.
-  On the development laptop (2026-11-12, under memory pressure) the ratio was 84, and one
-  8,640-entry table took 37 s wall, 36 s CPU and 1.5 GB. Mitigation: few distinct table operators
+  The benchmark programs disable the decoration-time compile (L-27). On the development laptop
+  (2026-11-12, after Task 0.2c) the ratio was 55, and one 8,640-entry table took 25 s wall, 25 s
+  CPU and 973 MB (Task 0.4, with the decoration-time compile and under memory pressure: ratio 84,
+  37 s wall, 36 s CPU, 1.5 GB). Mitigation: few distinct table operators
   per walk; the K-1 budget.
 - **L-22, unresolved loops give symbolic counts.** Shared with L-12 and L-17
   (`test_select_swap_qrom_counts_are_symbolic`, `test_dynamic_loop_counts_are_symbolic`).
   Mitigation: loops unrolled in Python or with static bounds; T4 asserts `is_symbolic == False`.
+- **L-27, `qp.qjit` compiles a fully annotated function ahead of time at decoration** (new, found
+  by the Opus review of Task 0.9c; zero arguments are the case `compiled_resources` hits).
+  `qp.qjit` AOT-compiles at decoration when every parameter has a Catalyst-supported type
+  annotation (`params_are_annotated` in `catalyst/tracing/type_signatures.py`); a zero-argument
+  function satisfies this rule vacuously. With `enable_aot_compilation=True` (the default,
+  `catalyst/jit.py`), `QJIT.__init__` compiles a linked binary. `qp.analyze` creates a separate
+  `QJIT` with AOT disabled and compiles through `mlir_opt`, so an analyze-only fully annotated
+  program is compiled twice, the binary is never used, and the first capture stays in memory
+  during the second compile. On the K-1 stand-in the mid10 controlled walk fell from 2,552 MB and
+  73 s to 1,536 MB and 26 s, with identical counts, when the first compile was switched off.
+  Canaries: `test_zero_argument_qjit_compiles_at_decoration`,
+  `test_fully_annotated_qjit_compiles_at_decoration`,
+  `test_unannotated_parameter_is_not_compiled_at_decoration`. Mitigation: use
+  `@qp.qjit(capture=True, enable_aot_compilation=False)` for analyze-only programs
+  (`compiled_resources` does). D-3 needs only the analyze compile; a linked binary, if wanted, is
+  compiled in a separate process. Programs that are executed keep the default, because the call
+  reuses the AOT binary.

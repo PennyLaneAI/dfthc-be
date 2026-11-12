@@ -61,7 +61,7 @@ def test_auto_adjoint_with_nested_control_flow():
 
         qp.add_decomps(L06Outer, _l06_outer)
 
-        @qp.qjit(capture=True)
+        @qp.qjit(capture=True, enable_aot_compilation=False)
         @qp.decompose(gate_set=GATE_SET)
         @qp.qnode(qp.device("null.qubit", wires=1))
         def circuit():
@@ -83,7 +83,7 @@ def test_controlled_change_op_basis_controls_everything():
     def target():
         qp.Z(1)
 
-    @qp.qjit(capture=True)
+    @qp.qjit(capture=True, enable_aot_compilation=False)
     @qp.decompose(gate_set=GATE_SET)
     @qp.qnode(qp.device("null.qubit", wires=3))
     def circuit():
@@ -116,7 +116,7 @@ def test_generic_ctrl_adds_paulix_per_control():
     An explicit C(...) rule would emit one Toffoli and nothing else.
     """
 
-    @qp.qjit(capture=True)
+    @qp.qjit(capture=True, enable_aot_compilation=False)
     @qp.decompose(gate_set=GATE_SET)
     @qp.qnode(qp.device("null.qubit", wires=3))
     def circuit():
@@ -208,7 +208,7 @@ def test_resource_function_runs_with_capture_enabled():
     """L-11 (pennylane#10162): Catalyst evaluates resource functions with capture enabled."""
     _L11_CAPTURE_STATES.clear()
 
-    @qp.qjit(capture=True)
+    @qp.qjit(capture=True, enable_aot_compilation=False)
     @qp.decompose(gate_set=GATE_SET)
     @qp.qnode(qp.device("null.qubit", wires=1))
     def circuit():

@@ -10,6 +10,7 @@ import jax.numpy as jnp
 import numpy as np
 import pennylane as qp
 import pytest
+from catalyst import QJIT
 from catalyst.decomposition.rule_lowering_warning import RuleLoweringWarning
 from catalyst.utils.exceptions import CompileError
 from pennylane.core import Operator2
@@ -127,6 +128,29 @@ def test_pinned_measured_adjoint_is_selected():
     }
     assert_resources(resources, toffoli=0, measurements=1, measured_and_uncomputes=0)
     assert resources.physical_measurements == 1
+
+
+@pytest.mark.compiled
+def test_compiled_resources_compiles_the_program_once(monkeypatch):
+    """Task 0.2c: one ``QJIT.aot_compile`` per resource count, the one inside ``qp.analyze``.
+
+    A fully annotated ``qp.qjit`` function, such as this zero-argument one, is AOT-compiled to a
+    linked binary at decoration (L-27), and ``qp.analyze`` then compiles the program again; the
+    binary is never used. Counted on ``main`` (before the fix): two calls, one from the decorator
+    and one from ``qp.analyze``.
+    """
+    calls = []
+    original = QJIT.aot_compile
+
+    def spy(self, *args, **kwargs):
+        calls.append(self.compile_options.target)
+        return original(self, *args, **kwargs)
+
+    monkeypatch.setattr(QJIT, "aot_compile", spy)
+    resources = compiled_resources(lambda: qp.H(0), num_wires=1)
+    assert calls == ["mlir_opt"]
+    assert resources.counts == {"Hadamard": 1}
+    assert resources.num_wires == 1
 
 
 @pytest.mark.compiled

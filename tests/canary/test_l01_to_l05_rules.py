@@ -38,7 +38,7 @@ def test_allocating_rule_is_excluded():
         qp.add_decomps(L01Op, _l01_declares_work, _l01_plain)
 
         def build(pins):
-            @qp.qjit(capture=True)
+            @qp.qjit(capture=True, enable_aot_compilation=False)
             @qp.decompose(gate_set=GATE_SET, fixed_decomps=pins)
             @qp.qnode(qp.device("null.qubit", wires=1))
             def circuit():
@@ -88,7 +88,7 @@ def test_measuring_adjoint_rule_has_no_controlled_path():
         qp.add_decomps(L02Load, _l02_load)
         qp.add_decomps("Adjoint(L02Load)", _l02_unload)
 
-        @qp.qjit(capture=True)
+        @qp.qjit(capture=True, enable_aot_compilation=False)
         @qp.decompose(gate_set=GATE_SET, fixed_decomps={"Adjoint(L02Load)": _l02_unload})
         @qp.qnode(qp.device("null.qubit", wires=3))
         def circuit():
@@ -132,7 +132,7 @@ def test_unweighted_solver_prefers_unitary_inverse():
     """L-3: with unweighted counts the solver picks the auto inverse over the measured rule."""
     unweighted = {"CNOT", "CZ", "Hadamard", "PauliZ", "PauliX", "MidMeasure", "GlobalPhase"}
 
-    @qp.qjit(capture=True)
+    @qp.qjit(capture=True, enable_aot_compilation=False)
     @qp.decompose(gate_set=unweighted)
     @qp.qnode(qp.device("null.qubit", wires=2))
     def circuit():
@@ -155,7 +155,7 @@ def test_pin_applies_to_nested_instances():
         bits = np.array([[0], [1], [1], [0], [1], [0], [0], [1]])
 
         def build(pins):
-            @qp.qjit(capture=True)
+            @qp.qjit(capture=True, enable_aot_compilation=False)
             @qp.decompose(gate_set=GATE_SET, fixed_decomps=pins)
             @qp.qnode(qp.device("null.qubit", wires=9))
             def circuit():
@@ -198,7 +198,7 @@ qp.add_decomps(L05Flagged, _l05_branching)
 def test_rule_branch_on_dynamic_value_is_not_specialized():
     """L-5: rules see dynamic arguments as abstract values, so value branches never specialize."""
 
-    @qp.qjit(capture=True)
+    @qp.qjit(capture=True, enable_aot_compilation=False)
     @qp.decompose(gate_set={"PauliX", "PauliY", "PauliZ"})
     @qp.qnode(qp.device("null.qubit", wires=1))
     def circuit():

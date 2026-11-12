@@ -9,7 +9,7 @@ pytestmark = [pytest.mark.canary, pytest.mark.compiled, pytest.mark.subprocess]
 _COUNT_RULE_WARNINGS = """
 from catalyst.decomposition.rule_lowering_warning import RuleLoweringWarning
 
-@qp.qjit(capture=True)
+@qp.qjit(capture=True, enable_aot_compilation=False)
 @qp.decompose(gate_set=GATE_SET)
 @qp.qnode(qp.device("null.qubit", wires=3))
 def circuit():
@@ -48,7 +48,7 @@ def test_unreachable_op_reports_missing_rule():
     """
     result = run_snippet(
         """
-        @qp.qjit(capture=True)
+        @qp.qjit(capture=True, enable_aot_compilation=False)
         @qp.decompose(gate_set=GATE_SET)
         @qp.qnode(qp.device("null.qubit", wires=4))
         def circuit():
