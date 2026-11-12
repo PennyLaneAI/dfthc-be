@@ -60,7 +60,7 @@ marked `merged` is never re-dispatched after a loss of context.
 | 1C.3 | `QROAMRead` | A | in review | `phase1/1C.3` | | `d9c0505`: byte-identical to the brief; 46 targeted (17.6 s, 509 MB peak), per-commit 517 + the watchdog flake (passed alone) = 518 | GPT-5.6 / Opus running | critical path; brief notes the 1C.1 contracts |
 | 1C.4 | `PhaseFixup` and `emit_phase_fixup` | A | not started | `phase1/1C.4` | | | / | after 1C.3 (same module `qroam.py`) |
 | 1C.5 | `QROAMErase` and round-trip certificates | A | not started | `phase1/1C.5` | | | / | after 1C.4 (same module `qroam.py`) |
-| 1C.6 | `ZeroReflection` | B | not started | `phase1/1C.6` | | | / n/a | after 1C.1 (which creates `dfthc/ops/__init__.py`) |
+| 1C.6 | `ZeroReflection` | B | in progress | `phase1/1C.6` | | dispatched from `5ff5580`, lane-a; expect 33 targeted, 521 per-commit (489 + 32) | / n/a | |
 
 ### Phase 2: paper blocks
 
