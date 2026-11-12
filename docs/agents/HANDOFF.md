@@ -299,6 +299,12 @@ The canonical minimal example of an operator with a pinned measured adjoint rule
   dfthcbe (Global Constraints). Composite operators take grouped wires (`outer`, `inner`,
   `select`, `system`, `phase_grad`, `work`) and split them only through
   `WalkLayout.split_group`.
+- **Test tolerances.** Every `np.allclose`, `np.isclose` and `np.testing.assert_allclose` states
+  both tolerances: `rtol=0` with the contract's absolute `atol` (1e-12 for dense and simulator
+  comparisons unless the brief names another), or an explicit `rtol` with `atol=0` where a
+  relative bound is meant. NumPy's default `rtol=1e-5` silently loosens a 1e-12 check to about
+  1e-5 near amplitudes of order one. Plan code written before this rule often omits `rtol`; fix it
+  when you copy the code and list it under deviations.
 
 ## 7. Known limitations (spec 14, condensed)
 
@@ -354,6 +360,7 @@ differs from the spec's original claim (observed 2026-11-11).
 - [ ] TDD evidence: the failing run (command, key output) and the passing run.
 - [ ] Task tests green; the fast suite green (`scripts/test.sh -m "not slow and not release"`,
       once at commit time); `ruff check .` clean; test output free of warnings.
+- [ ] Every numerical comparison in the tests states both tolerances (section 6, test tolerances).
 - [ ] No heavy process started (section 3.5); any heavy run the brief needs is named in the report.
 - [ ] For each operator: the spec 9.0 docstring sections in order; `required_wires`; constructor
       validation with `ValueError`; T2 (`assert_valid_decomp_rule`), T3 (semantics), T4 (exact
