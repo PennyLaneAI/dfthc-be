@@ -50,7 +50,9 @@ def test_compilable_int_must_fit_int64():
         """
     )
     assert outcome(result, "INT64_MAX") == 'OK {"PauliX": "1"}'
-    assert outcome(result, "ABOVE").startswith("ERROR CompileError")
+    above = outcome(result, "ABOVE")
+    assert above.startswith("ERROR CompileError")
+    assert "Large integer attributes currently not supported in MLIR" in above
 
 
 class L25Repeat(Operator2):

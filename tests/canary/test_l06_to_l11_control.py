@@ -23,7 +23,8 @@ REPRODUCERS = Path(__file__).parent / "reproducers"
 def test_auto_adjoint_with_nested_control_flow():
     """L-6 (catalyst#3217, open): an auto-adjointed rule with nested for_loop and cond.
 
-    On 2026-11-11 this reproducer compiles; the IRMapping crash of the issue was not reproduced.
+    Regression sentinel: the crash reported in catalyst#3217 did not reproduce on 2026-11-11 (it
+    compiles to `{"PauliX": "4"}`). This test fails if the crash returns; it cannot detect a fix.
     The mitigation (no control flow in auto-adjointed bodies) stays while the issue is open.
     """
     result = run_snippet(

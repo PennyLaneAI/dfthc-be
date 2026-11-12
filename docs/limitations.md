@@ -3,7 +3,8 @@
 One entry per limitation of spec section 14, with the behaviour the canary in `tests/canary/`
 pins today. A flipped canary is a signal to revisit the mitigation, not a failure to hide. All
 observations are from 2026-11-11 (PennyLane 0.46.0.dev151, Catalyst 0.16.0.dev140). Entries marked
-**changed** differ from the spec's original wording; spec section 14 is updated to match.
+**changed** differ from the spec's original wording; Task 0.4 updates spec section 14 to match,
+and until then this file is authoritative where the two differ.
 
 ## Decomposition rules, pins, control and templates
 
@@ -26,9 +27,10 @@ observations are from 2026-11-11 (PennyLane 0.46.0.dev151, Catalyst 0.16.0.dev14
   dynamic argument sees a tracer and never specializes. Canary:
   `test_rule_branch_on_dynamic_value_is_not_specialized`. Mitigation: structure-determining data
   in `compilable_argnames` (spec 7.4 rule 3).
-- **L-6, adjoint lowering with nested control flow** (catalyst#3217, open), **changed**. The
-  canary's reproducer (an auto-adjointed rule with nested `for_loop`, `cond` and a nested
-  operator) compiles; the IRMapping crash was not reproduced. Canary:
+- **L-6, adjoint lowering with nested control flow** (catalyst#3217, open), **changed**: not
+  reproduced; regression sentinel. The canary's reproducer (an auto-adjointed rule with nested
+  `for_loop`, `cond` and a nested operator) compiles to `{"PauliX": "4"}`; the IRMapping crash was
+  not reproduced. The canary fails if the crash returns; it cannot detect a fix. Canary:
   `test_auto_adjoint_with_nested_control_flow`. Mitigation kept: no control flow in auto-adjointed
   bodies (spec 7.4 rule 4).
 - **L-7, `C(ChangeOpBasis)` loses its saving under capture** (pennylane#10357). Controlling
