@@ -147,3 +147,16 @@ file.
 - **L-22, unresolved loops give symbolic counts.** Shared with L-12 and L-17
   (`test_select_swap_qrom_counts_are_symbolic`, `test_dynamic_loop_counts_are_symbolic`).
   Mitigation: loops unrolled in Python or with static bounds; T4 asserts `is_symbolic == False`.
+- **L-27, `qp.qjit` compiles a zero-argument function ahead of time at decoration** (new, found by
+  the Opus review of Task 0.9c). Catalyst's `params_are_annotated`
+  (`catalyst/tracing/type_signatures.py`) treats a function without parameters as fully annotated,
+  and `enable_aot_compilation` defaults to `True` (`catalyst/jit.py`), so the `QJIT.__init__` AOT
+  branch compiles the program to a linked binary at decoration. `qp.analyze` builds its own `QJIT`
+  with AOT disabled and compiles the program again up to the user-transform stage, so an
+  analyze-only program is compiled twice, the binary is never used, and the first capture stays in
+  memory during the second compile. On the K-1 stand-in the mid10 controlled walk fell from
+  2,552 MB and 73 s to 1,536 MB and 26 s, with identical counts, when the first compile was
+  switched off. Canary: `test_zero_argument_qjit_compiles_at_decoration`. Mitigation:
+  `@qp.qjit(capture=True, enable_aot_compilation=False)` for analyze-only programs
+  (`compiled_resources` does); a linked binary, if wanted, is compiled in a separate process.
+  Programs that are executed keep the default, because the call reuses the AOT binary.

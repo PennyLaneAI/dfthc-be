@@ -524,7 +524,7 @@ from dfthc.compile import GATE_SET, FIXED_DECOMPS
 
 dev = qp.device("null.qubit", wires=layout.num_wires)  # resource counting; "lightning.qubit" for semantics
 
-@qp.qjit(capture=True)
+@qp.qjit(capture=True, enable_aot_compilation=False)  # analyze-only program (L-27)
 @qp.decompose(gate_set=GATE_SET, fixed_decomps=FIXED_DECOMPS)
 @qp.qnode(dev)
 def circuit():
@@ -542,6 +542,7 @@ Facts the design relies on:
   - returns a record with the Toffoli count, measurements, the full counts and the wire count;
   - asserts that the counts are not symbolic;
   - asserts gate-set closure (§12.1).
+- **`qp.qjit` AOT-compiles a function without parameters at decoration; `qp.analyze` compiles the program again, so an analyze-only program disables AOT (L-27).** Catalyst treats a function with no parameters as fully annotated and `enable_aot_compilation` defaults to `True`, so the decorator builds a linked binary that `qp.analyze` never uses, and the first capture stays in memory during the second compile. D-3 needs the analyze compile only; a linked binary, if wanted, is compiled in a separate process.
 - **Two decomposition levels.** Executing on `lightning.qubit` runs a second decomposition pass to the device gate set ([catalyst#3275](https://github.com/PennyLaneAI/catalyst/pull/3275)). `level="user"` reports counts after our pass and is the level for all resource numbers. `level="device"` is used once per composite operator to check that no undecomposed operator remains: an undecomposed `OperatorOp` would run as a bare named gate ([catalyst#3430](https://github.com/PennyLaneAI/catalyst/pull/3430)).
 - **Devices.** `null.qubit` is used for resource counting at any size. `lightning.qubit` is used for semantics up to 25 wires.
 
@@ -1514,6 +1515,9 @@ The report never adjusts measured numbers.
 26. **L-26: Unsigned dynamic arguments get no decomposition rule.** On 2026-11-12 an `Operator2` whose dynamic argument is a `uint32` array warns "Failed to synthesize the distributed decomposition rules for <Op>: 'ui32'" and then fails with `CompileError` "Decomposition rule not found for operator '<Op>'", because Catalyst's `_MLIR_DTYPES_TO_PY_DTYPES` maps only `i1` to `i64` (and floats and complex numbers); the same operator with `int32` or `int64` data compiles.
     - *Mitigation:* compilable table words are `int64` holding 32 data bits each (ledger decision "Table words are `int64`").
     - *Canary:* `test_unsigned_dynamic_argument_has_no_rule` (subprocess).
+27. **L-27: `qp.qjit` compiles a zero-argument function ahead of time at decoration.** Found by the Opus review of Task 0.9c on 2026-11-12. Catalyst's `params_are_annotated` treats a function without parameters as fully annotated, and `enable_aot_compilation` defaults to `True`, so decorating a zero-argument program compiles it to a linked binary at once (the `QJIT.__init__` AOT branch). `qp.analyze` builds its own `QJIT` with AOT disabled and compiles the program again up to the user-transform stage, so an analyze-only program is compiled twice, the binary is never used, and the first capture stays in memory during the second compile. Measured on the K-1 stand-in (mid10 controlled walk): 2,552 MB and 73 s with the double compile, 1,536 MB and 26 s with the first compile switched off, identical counts.
+    - *Mitigation:* analyze-only programs use `@qp.qjit(capture=True, enable_aot_compilation=False)` (`dfthc.compile.compiled_resources` does); programs that are executed keep the default, because the first call reuses the AOT binary.
+    - *Canary:* `test_zero_argument_qjit_compiles_at_decoration` (per-commit; fails if Catalyst changes the default).
 
 ## 15. Orchestration overview
 
