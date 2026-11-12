@@ -1510,6 +1510,9 @@ The report never adjusts measured numbers.
 25. **L-25: `qp.adjoint(OpClass)(*args)` traces positional arguments under capture,** so a compilable argument passed positionally is rejected.
     - *Mitigation:* apply adjoints as `qp.adjoint(Op(...))` (§7.4, rule 13).
     - *Canary:* `test_adjoint_of_class_traces_positional_arguments`.
+26. **L-26: Unsigned dynamic arguments get no decomposition rule.** On 2026-11-12 an `Operator2` whose dynamic argument is a `uint32` array warns "Failed to synthesize the distributed decomposition rules for <Op>: 'ui32'" and then fails with `CompileError` "Decomposition rule not found for operator '<Op>'", because Catalyst's `_MLIR_DTYPES_TO_PY_DTYPES` maps only `i1` to `i64` (and floats and complex numbers); the same operator with `int32` or `int64` data compiles.
+    - *Mitigation:* compilable table words are `int64` holding 32 data bits each (ledger decision "Table words are `int64`").
+    - *Canary:* `test_unsigned_dynamic_argument_has_no_rule` (subprocess).
 
 ## 15. Orchestration overview
 
