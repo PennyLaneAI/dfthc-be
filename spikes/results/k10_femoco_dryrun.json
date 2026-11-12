@@ -1,0 +1,9 @@
+{
+  "status": "quoted, not reproduced: a dry-run measurement taken while writing the plan; the large-compile policy (master plan section 12.9) forbids repeating it",
+  "source": "docs/superpowers/plans/2026-11-11-dfthc-phase0-spikes.md at commit 994f7aa: the preamble and Task 0.8, Step 3",
+  "what": "K-10 parts 1 and 2 compiled at the FeMoco-54 inner-erase shape: 8640 addresses (270 rows x 32 b positions), 416 outcomes, 390 of them junk",
+  "conditions": "development laptop (10 cores, 16 GB), other compiles running at the same time; peak memory not recorded",
+  "part1_packed_parities_seconds": "199 to 274",
+  "part2_masks_as_compilable_data_seconds": 1517,
+  "conclusion": "masks are derived inside rules from the table and never passed as compilable data"
+}
