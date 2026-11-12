@@ -7,6 +7,7 @@ import pytest
 from dfthc import costs
 from dfthc.compile import FIXED_DECOMPS, GATE_SET, compiled_resources
 from dfthc.ops.phase_gradient import PhaseGradientRotation, _phase_gradient_rotation
+from dfthc.testing.resources import chosen_rules, verbose_program
 
 
 def _gradient(b):
@@ -105,12 +106,16 @@ def test_toffoli_count_matches_the_closed_form(k, m, adjoint):
 
 
 @pytest.mark.compiled
-def test_no_dfthc_operator_survives_at_device_level():
-    """T5 at level="device" (L-20)."""
+def test_pinned_rule_is_chosen_and_nothing_survives_at_device_level(capfd):
+    """T6: the solver's verbose listing names the pinned rule for a nonzero instance; T5 at
+    level="device" (L-20)."""
 
     def program():
         PhaseGradientRotation(5, 3, [0], [1, 2, 3], [4, 5, 6], [7, 8])
 
+    qp.analyze(verbose_program(program, num_wires=9), level="user")()
+    captured = capfd.readouterr()
+    assert "_phase_gradient_rotation" in chosen_rules(captured.out + captured.err)
     compiled_resources(program, num_wires=9, level="device")
 
 

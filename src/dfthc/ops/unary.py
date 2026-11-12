@@ -15,10 +15,11 @@ one ``TemporaryAND`` on a work wire:
   measured uncompute with the same control values.
 
 Negative controls use ``TemporaryAND``'s ``control_values``, a dynamic argument, so they keep a
-single resource key. Two places have no AND to carry a control value and use X conjugation: an
-uncontrolled root, whose children use the most significant address bit itself as their flag
-(X-conjugated for the left child), and ``control_value=0``, which X-conjugates the control wire
-around the whole iteration.
+single resource key. X conjugation appears in two places: at an uncontrolled root, which has no
+AND, the children use the most significant address bit itself as their flag (X-conjugated for the
+left child); and for ``control_value=0`` the control wire is X-conjugated around the whole
+iteration, which a zero-width address needs (its leaf flag is the control itself) and every width
+uses.
 
 The iteration is exact: an address outside ``[lo, hi)`` raises no flag. Qualtran's and dfthcbe's
 truncated iteration, which routes some out-of-range addresses onto live leaves, is a later
@@ -76,7 +77,11 @@ class Emitter:
 
 
 def as_resources(counts: Counter) -> dict:
-    """Resource keys for the gate names an :class:`Emitter` counts (zero counts dropped)."""
+    """Resource keys for the gate names an :class:`Emitter` counts (zero counts dropped).
+
+    A name outside this table raises ``KeyError``; an emitter subclass that counts a new gate name
+    adds its key here.
+    """
     keys = {
         "PauliX": lambda: qp.X, "PauliZ": lambda: qp.Z, "Hadamard": lambda: qp.H,
         "CNOT": lambda: qp.CNOT, "CZ": lambda: qp.CZ, "CSWAP": lambda: qp.CSWAP,
@@ -122,9 +127,17 @@ def iterate_nested(registers: Sequence, work, leaf: Callable, control=None,
 
     The first register is outermost; under each of its leaves the next register is iterated with
     that leaf's flag as its control. ``leaf(flag, values)`` receives the tuple of register values.
-    Work: :func:`work_required` of the register widths.
+    A leaf's ``flag`` is ``None`` only if every register has zero width and there is no control.
+    Work: :func:`work_required` of the register widths. Raises ``ValueError`` for no registers,
+    an empty or out-of-range range, too few work wires, or a control value other than 0 or 1.
     """
     emit = Emitter() if emit is None else emit
+    # Under capture, rules receive registers as traced arrays; indexing them at every tree node
+    # would add captured equations, so they are unpacked into lists of wires once.
+    registers = [(list(wires), lo, hi) for wires, lo, hi in registers]
+    work = list(work)
+    if not registers:
+        raise ValueError("iterate_nested needs at least one register")
     widths = [len(wires) for wires, _, _ in registers]
     for (_, lo, hi), n in zip(registers, widths, strict=True):
         if not 0 <= lo < hi <= 2**n:

@@ -14,6 +14,7 @@ from pennylane.core import Operator2
 
 from dfthc import costs
 from dfthc.compile import FIXED_DECOMPS, GATE_SET, compiled_resources, register_rule
+from dfthc.ops._validate import canonical_ints, check_int
 from dfthc.ops.unary import Emitter, as_resources, iterate, iterate_nested, work_required
 from dfthc.testing.sparse_sim import SparseSimulator, SparseState
 
@@ -122,45 +123,67 @@ CASES = [
 ]
 
 
-def _simulate_iterate(n, lo, hi, control_value):
-    """Record iterate() directly with integer wires and run it on H|0> in the sparse simulator."""
-    address = list(range(n))
-    flags = list(range(n, n + hi - lo))
-    control = [] if control_value is None else [n + hi - lo]
-    work = list(range(n + hi - lo + len(control),
-                      n + hi - lo + len(control) + work_required([n], bool(control))))
+def _ranges(n):
+    return list(itertools.combinations(range(2**n + 1), 2))
 
-    def leaf(flag, value):
+
+SHAPES = [((n,), (r,)) for n in range(5) for r in _ranges(n)]
+SHAPES += [((n1, n2), (r1, r2)) for n1, n2 in itertools.product(range(3), repeat=2)
+           for r1 in _ranges(n1) for r2 in _ranges(n2)]
+"""Every range of a register of 0 to 4 bits, and every pair of ranges of two nested registers of
+0 to 2 bits each (zero widths included)."""
+
+
+def _simulate(widths, ranges, control_value):
+    """Record iterate() (one register) or iterate_nested() with integer wires and exactly
+    work_required work wires, check the leaf order, and run it on H|0> in the sparse simulator."""
+    (address, flags, work, control), num_wires = _layout(widths, ranges, control_value)
+    registers, start = [], 0
+    for n, (lo, hi) in zip(widths, ranges, strict=True):
+        registers.append((address[start:start + n], lo, hi))
+        start += n
+    visited = []
+
+    def leaf(flag, values):
+        index = 0
+        for v, (lo, hi) in zip(values, ranges, strict=True):
+            index = index * (hi - lo) + (v - lo)
+        visited.append(index)
         if flag is None:
-            qp.X(flags[value - lo])
+            qp.X(flags[index])
         else:
-            qp.CNOT([flag, flags[value - lo]])
+            qp.CNOT([flag, flags[index]])
 
+    ctrl = control[0] if control else None
+    value = 1 if control_value is None else control_value
     with qp.queuing.AnnotatedQueue() as queue:
         for wire in address + control:
             qp.H(wire)
-        iterate(address, lo, hi, work, leaf, control[0] if control else None,
-                1 if control_value is None else control_value)
-    num_wires = n + hi - lo + len(control) + len(work)
+        if len(widths) == 1:
+            iterate(address, *ranges[0], work, lambda flag, v: leaf(flag, (v,)), ctrl, value)
+        else:
+            iterate_nested(registers, work, leaf, ctrl, value)
+    assert visited == list(range(len(flags))), (widths, ranges, visited)
     final = SparseSimulator(num_wires).run(queue.queue, SparseState.basis(num_wires, 0))
     return final, address, flags, control, work
 
 
 @pytest.mark.parametrize("control_value", [None, 0, 1])
 def test_every_basis_address_raises_exactly_its_flag(control_value):
-    """T3, exhaustive for n <= 4: every range [lo, hi), every address, sparse simulator."""
-    for n in range(5):
-        for lo, hi in itertools.combinations(range(2**n + 1), 2):
-            final, address, flags, control, work = _simulate_iterate(n, lo, hi, control_value)
-            assert len(final.amps) == 2 ** (n + len(control))
-            assert np.allclose(final.amps, 1 / np.sqrt(len(final.amps)), rtol=0, atol=1e-12)
-            for row in range(len(final.amps)):
-                a = sum(int(final.bits(w)[row]) << (n - 1 - i) for i, w in enumerate(address))
-                c = int(final.bits(control[0])[row]) if control else 0
-                raised = [i for i, w in enumerate(flags) if final.bits(w)[row]]
-                expected = _expected_flags((n,), ((lo, hi),), control_value, a, c)
-                assert raised == ([] if expected is None else [expected]), (n, lo, hi, a, c)
-                assert not any(final.bits(w)[row] for w in work), (n, lo, hi, a)
+    """T3, exhaustive: every shape of SHAPES, every address, leaves in increasing order, exactly
+    work_required work wires; sparse simulator."""
+    for widths, ranges in SHAPES:
+        final, address, flags, control, work = _simulate(widths, ranges, control_value)
+        n = len(address)
+        assert len(final.amps) == 2 ** (n + len(control))
+        assert np.allclose(final.amps, 1 / np.sqrt(len(final.amps)), rtol=0, atol=1e-12)
+        for row in range(len(final.amps)):
+            a = sum(int(final.bits(w)[row]) << (n - 1 - i) for i, w in enumerate(address))
+            c = int(final.bits(control[0])[row]) if control else 0
+            raised = [i for i, w in enumerate(flags) if final.bits(w)[row]]
+            expected = _expected_flags(widths, ranges, control_value, a, c)
+            assert raised == ([] if expected is None else [expected]), (widths, ranges, a, c)
+            assert not any(final.bits(w)[row] for w in work), (widths, ranges, a)
 
 
 def test_counts_equal_the_closed_form_on_the_grid():
@@ -177,18 +200,27 @@ def test_counts_equal_the_closed_form_on_the_grid():
 
 
 def test_nested_counts_equal_the_closed_form():
+    """T4 without compiling: 300 random nested cases with exactly work_required work wires (zero
+    widths included) against costs.unary_nested, and a zero-width outer register by hand."""
+    counter = Emitter(counting=True)
+    iterate_nested([(range(0), 0, 1), (range(3), 0, 8)], range(2),
+                   lambda flag, values: None, emit=counter)
+    expected = costs.unary_nested((0, 1, 0), (0, 8, 3), False)
+    assert counter.counts["TemporaryAND"] == expected == 6
+    assert counter.counts["Adjoint(TemporaryAND)"] == expected
     rng = np.random.default_rng(93)
     for _ in range(300):
-        n1, n2 = int(rng.integers(1, 5)), int(rng.integers(0, 5))
+        n1, n2 = int(rng.integers(0, 5)), int(rng.integers(0, 5))
         lo1, hi1 = sorted(int(v) for v in rng.choice(2**n1 + 1, 2, replace=False))
         lo2, hi2 = sorted(int(v) for v in rng.choice(2**n2 + 1, 2, replace=False))
         controlled = bool(rng.integers(2))
         counter = Emitter(counting=True)
-        iterate_nested([(range(n1), lo1, hi1), (range(n1, n1 + n2), lo2, hi2)], range(12),
-                       lambda flag, values: None, control=-1 if controlled else None,
-                       emit=counter)
+        iterate_nested([(range(n1), lo1, hi1), (range(n1, n1 + n2), lo2, hi2)],
+                       range(work_required([n1, n2], controlled)), lambda flag, values: None,
+                       control=-1 if controlled else None, emit=counter)
         expected = costs.unary_nested((lo1, hi1, n1), (lo2, hi2, n2), controlled)
-        assert counter.counts["TemporaryAND"] == expected
+        assert counter.counts["TemporaryAND"] == expected, (n1, lo1, hi1, n2, lo2, hi2)
+        assert counter.counts["Adjoint(TemporaryAND)"] == expected
 
 
 def test_work_required():
@@ -200,9 +232,13 @@ def test_work_required():
 
 
 def test_invalid_arguments_are_rejected():
+    """The helper's rejected arguments, and the shared validators check_int and canonical_ints."""
+
     def leaf(flag, value):
         return None
 
+    with pytest.raises(ValueError, match="at least one register"):
+        iterate_nested([], range(0), leaf)
     with pytest.raises(ValueError, match="nonempty range"):
         iterate(range(3), 4, 4, range(3), leaf)
     with pytest.raises(ValueError, match="nonempty range"):
@@ -211,6 +247,12 @@ def test_invalid_arguments_are_rejected():
         iterate(range(3), 0, 8, range(2), leaf, control=-1)
     with pytest.raises(ValueError, match="control_value must be 0 or 1"):
         iterate(range(3), 0, 8, range(3), leaf, control=-1, control_value=2)
+    with pytest.raises(ValueError, match="k must be an int, got True"):
+        check_int("k", True)
+    canonical = canonical_ints("ranges", [[np.int64(1), 2], (3, 4)])
+    assert canonical == ((1, 2), (3, 4)) and type(canonical[0][0]) is int
+    with pytest.raises(ValueError, match="ranges must be an int, got 2.0"):
+        canonical_ints("ranges", [(1, 2.0)])
 
 
 @pytest.mark.compiled

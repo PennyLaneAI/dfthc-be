@@ -33,6 +33,9 @@ def test_unary_iteration_rows():
     assert costs.unary(270, 324, 9, controlled=False) == 61  # tail range
     assert costs.unary(0, 10, 4, True) + 10 * costs.unary(0, 27, 5, True) == 291  # SF
     assert costs.unary(0, 1, 0, controlled=True) == 0
+    # A zero-width outer register without control gives the inner root no flag: c2 = 0.
+    assert costs.unary_nested((0, 1, 0), (0, 8, 3), controlled=False) == costs.unary(0, 8, 3, False)
+    assert costs.unary_nested((0, 1, 0), (0, 8, 3), controlled=True) == costs.unary(0, 8, 3, True)
 
 
 def test_unary_equals_the_prototype_on_a_grid():

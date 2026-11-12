@@ -1,4 +1,8 @@
-"""``PhaseGradientRotation``: a Z rotation by phase-gradient addition (spec section 9.1)."""
+"""``PhaseGradientRotation``: a Z rotation by phase-gradient addition (spec section 9.1).
+
+The rule and its resource function run one body through :class:`dfthc.ops.unary.Emitter`, so the
+declared resources are the counts of the gates the rule emits.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +12,7 @@ from pennylane.typing import Wire
 
 from dfthc.compile import register_rule, resource_key
 from dfthc.ops._validate import check_int, check_wires
+from dfthc.ops.unary import Emitter, as_resources
 
 
 class PhaseGradientRotation(Operator2):
@@ -86,26 +91,36 @@ class PhaseGradientRotation(Operator2):
         return {"target": 1, "phase_grad": m, "scratch": m, "work": m - 1}
 
 
-def _fan_out(k, m, target, scratch):
+def _fan_out(emit, k, m, target, scratch):
     for j in range(m):
         if (k >> (m - 1 - j)) & 1:
-            qp.CNOT([target[0], scratch[j]])
+            emit.cnot(target[0], scratch[j])
+
+
+def _phase_gradient_rotation_body(emit, k, m, target, phase_grad, scratch, work):
+    if k == 0:
+        return
+    _fan_out(emit, k, m, target, scratch)
+    emit.gate("SemiAdder", lambda: qp.SemiAdder(scratch, phase_grad[:m], work if m > 1 else None))
+    _fan_out(emit, k, m, target, scratch)
 
 
 def _phase_gradient_rotation_resources(k, m, target, phase_grad, scratch, work):
-    if k == 0:
-        return {}
-    adder = resource_key(lambda: qp.SemiAdder(Wire[m], Wire[m], Wire[m - 1] if m > 1 else None))
-    return {qp.CNOT: 2 * bin(k).count("1"), adder: 1}
+    counter = Emitter(counting=True)
+    _phase_gradient_rotation_body(counter, k, m, range(len(target)), range(len(phase_grad)),
+                                  range(len(scratch)), range(len(work)))
+    adders = counter.counts.pop("SemiAdder", 0)
+    resources = as_resources(counter.counts)
+    if adders:
+        adder = resource_key(
+            lambda: qp.SemiAdder(Wire[m], Wire[m], Wire[m - 1] if m > 1 else None))
+        resources[adder] = adders
+    return resources
 
 
 @qp.register_resources(_phase_gradient_rotation_resources)
 def _phase_gradient_rotation(k, m, target, phase_grad, scratch, work):
-    if k == 0:
-        return
-    _fan_out(k, m, target, scratch)
-    qp.SemiAdder(scratch, phase_grad[:m], work if m > 1 else None)
-    _fan_out(k, m, target, scratch)
+    _phase_gradient_rotation_body(Emitter(), k, m, target, phase_grad, scratch, work)
 
 
 register_rule(PhaseGradientRotation, _phase_gradient_rotation)
