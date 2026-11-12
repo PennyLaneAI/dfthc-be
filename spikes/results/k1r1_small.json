@@ -4,10 +4,10 @@
     "shape": "small",
     "remedy": 1,
     "num_wires": 83,
-    "seconds": 8.5,
-    "cpu_seconds": 8.8,
-    "rusage_sum_mb": 635.5,
-    "compiled_gates": 2446,
+    "seconds": 8.0,
+    "cpu_seconds": 8.4,
+    "rusage_sum_mb": 650.9,
+    "analyzed_gates_upper_bound": 2446,
     "toffoli": 236,
     "measurements": 68,
     "measured_and_uncomputes": 175,
@@ -27,12 +27,12 @@
       "Toffoli": 61
     },
     "diagnostics": {
-      "compile_seconds": 8.5,
-      "rule_capture_seconds": 3.26,
+      "compile_seconds": 8.0,
+      "rule_capture_seconds": 3.05,
       "rule_targets": 420,
       "rule_equations": 27350,
       "modified_target_lowerings": 228,
-      "modified_target_seconds": 1.16,
+      "modified_target_seconds": 1.06,
       "modified_target_equations": 4482,
       "modified_target_signatures": 65,
       "modified_target_ids": [
@@ -134,12 +134,18 @@
       "cnot_set_bits": 981,
       "retained": true
     },
-    "peak_mb": 502.6,
+    "projection_size": {
+      "projection_size_gates": 1982,
+      "skeleton_gates": 1926,
+      "erase_conditional_z": 56,
+      "baseline_gates": 2161
+    },
+    "peak_mb": 506.3,
     "within_budget": true,
-    "watched_seconds": 10.6,
-    "compressor_mb_before": 11004.3,
-    "compressor_mb_after": 11046.9,
-    "compressor_mb_delta": 42.6,
+    "watched_seconds": 10.2,
+    "compressor_mb_before": 11035.7,
+    "compressor_mb_after": 11672.9,
+    "compressor_mb_delta": 637.2,
     "gate": {
       "ok": true,
       "problems": []
@@ -150,10 +156,10 @@
     "shape": "small",
     "remedy": 1,
     "num_wires": 83,
-    "seconds": 23.7,
+    "seconds": 23.2,
     "cpu_seconds": 24.0,
-    "rusage_sum_mb": 918.3,
-    "compiled_gates": 2454,
+    "rusage_sum_mb": 930.6,
+    "analyzed_gates_upper_bound": 2454,
     "toffoli": 238,
     "measurements": 68,
     "measured_and_uncomputes": 177,
@@ -172,12 +178,12 @@
       "Toffoli": 61
     },
     "diagnostics": {
-      "compile_seconds": 23.7,
-      "rule_capture_seconds": 9.51,
+      "compile_seconds": 23.2,
+      "rule_capture_seconds": 8.53,
       "rule_targets": 1040,
       "rule_equations": 35406,
       "modified_target_lowerings": 682,
-      "modified_target_seconds": 6.33,
+      "modified_target_seconds": 5.66,
       "modified_target_equations": 15258,
       "modified_target_signatures": 223,
       "modified_target_ids": [
@@ -449,12 +455,18 @@
       "cnot_set_bits": 981,
       "retained": true
     },
-    "peak_mb": 794.9,
+    "projection_size": {
+      "projection_size_gates": 1988,
+      "skeleton_gates": 1932,
+      "erase_conditional_z": 56,
+      "baseline_gates": 2167
+    },
+    "peak_mb": 821.6,
     "within_budget": true,
-    "watched_seconds": 26.3,
-    "compressor_mb_before": 11046.7,
-    "compressor_mb_after": 11300.4,
-    "compressor_mb_delta": 253.7,
+    "watched_seconds": 25.7,
+    "compressor_mb_before": 11671.0,
+    "compressor_mb_after": 11909.9,
+    "compressor_mb_delta": 238.9,
     "gate": {
       "ok": true,
       "problems": []
@@ -465,10 +477,10 @@
     "shape": "small",
     "remedy": 1,
     "num_wires": 83,
-    "seconds": 4.7,
-    "cpu_seconds": 6.0,
-    "rusage_sum_mb": 478.9,
-    "compiled_gates": 322,
+    "seconds": 7.6,
+    "cpu_seconds": 8.6,
+    "rusage_sum_mb": 482.4,
+    "analyzed_gates_upper_bound": 322,
     "toffoli": 35,
     "measurements": 14,
     "measured_and_uncomputes": 24,
@@ -484,12 +496,12 @@
       "Toffoli": 11
     },
     "diagnostics": {
-      "compile_seconds": 4.7,
-      "rule_capture_seconds": 1.81,
+      "compile_seconds": 7.6,
+      "rule_capture_seconds": 3.29,
       "rule_targets": 334,
       "rule_equations": 9206,
       "modified_target_lowerings": 190,
-      "modified_target_seconds": 0.87,
+      "modified_target_seconds": 1.61,
       "modified_target_equations": 2078,
       "modified_target_signatures": 50,
       "modified_target_ids": [
@@ -566,12 +578,18 @@
       "cnot_set_bits": 100,
       "retained": true
     },
-    "peak_mb": 318.9,
+    "projection_size": {
+      "projection_size_gates": 223,
+      "skeleton_gates": 207,
+      "erase_conditional_z": 16,
+      "baseline_gates": 265
+    },
+    "peak_mb": 312.9,
     "within_budget": true,
-    "watched_seconds": 7.8,
-    "compressor_mb_before": 11300.2,
-    "compressor_mb_after": 10998.5,
-    "compressor_mb_delta": -301.7,
+    "watched_seconds": 10.5,
+    "compressor_mb_before": 11890.0,
+    "compressor_mb_after": 12177.2,
+    "compressor_mb_delta": 287.2,
     "gate": {
       "ok": true,
       "problems": []
@@ -583,9 +601,9 @@
     "remedy": 1,
     "num_wires": 83,
     "seconds": 4.3,
-    "cpu_seconds": 5.6,
-    "rusage_sum_mb": 491.4,
-    "compiled_gates": 771,
+    "cpu_seconds": 5.8,
+    "rusage_sum_mb": 493.0,
+    "analyzed_gates_upper_bound": 771,
     "toffoli": 66,
     "measurements": 15,
     "measured_and_uncomputes": 53,
@@ -605,11 +623,11 @@
     },
     "diagnostics": {
       "compile_seconds": 4.3,
-      "rule_capture_seconds": 1.56,
+      "rule_capture_seconds": 1.54,
       "rule_targets": 306,
       "rule_equations": 11970,
       "modified_target_lowerings": 158,
-      "modified_target_seconds": 0.58,
+      "modified_target_seconds": 0.56,
       "modified_target_equations": 1068,
       "modified_target_signatures": 42,
       "modified_target_ids": [
@@ -682,12 +700,18 @@
       "cnot_set_bits": 361,
       "retained": true
     },
-    "peak_mb": 318.9,
+    "projection_size": {
+      "projection_size_gates": 671,
+      "skeleton_gates": 663,
+      "erase_conditional_z": 8,
+      "baseline_gates": 711
+    },
+    "peak_mb": 316.9,
     "within_budget": true,
-    "watched_seconds": 6.7,
-    "compressor_mb_before": 10998.4,
-    "compressor_mb_after": 10536.7,
-    "compressor_mb_delta": -461.7,
+    "watched_seconds": 7.0,
+    "compressor_mb_before": 12172.0,
+    "compressor_mb_after": 11756.5,
+    "compressor_mb_delta": -415.5,
     "gate": {
       "ok": true,
       "problems": []
@@ -715,7 +739,7 @@
     "cap_mb": 4096
   },
   "memory_method": "peak_mb: sampled peak of the summed physical footprint of the compile's process tree (dfthc.testing.watchdog), the gate metric; the watchdog kills the tree above the limit. rusage_sum_mb: the getrusage companion, ru_maxrss of the compile process plus ru_maxrss of its finished children. It is not an upper bound: under memory pressure the resident size drops compressed pages that the footprint keeps counting, so it can fall below peak_mb",
-  "code_hash": "0bfbe26ee33d822825454188dc3500eda781ed39a4b27371604e1131c218ab7f",
+  "code_hash": "f82222862e99abca4a82636dcc3eb79883bf9964d0d66344b07c6f9e251b796c",
   "environment": {
     "python": "3.12.7",
     "platform": "macOS-27.0.1-arm64-arm-64bit",
