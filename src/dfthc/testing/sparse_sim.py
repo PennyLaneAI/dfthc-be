@@ -15,11 +15,15 @@ simulator's policy: :class:`ForcedPolicy` (a schedule, for the outcome certifica
 :class:`SeededPolicy` (random) or :class:`BranchPolicy` (both outcomes on listed wires, through
 :meth:`SparseSimulator.run_branches`). Each outcome is recorded under its ``MidMeasure`` operator,
 which is what ``MeasurementValue.concretize`` looks up.
+
+:func:`nonlinear_conditionals` lists the conditionals of a tape that break the premise of the
+outcome certificates (spec 12.5): a diagonal base and a GF(2)-linear predicate.
 """
 
 from __future__ import annotations
 
 import copy
+import itertools
 from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass
 
@@ -253,13 +257,18 @@ class SparseSimulator:
                      initial_state: SparseState | None = None) -> list[Branch]:
         """Every branch of the measurements on branch wires, with its probability.
 
-        Each branch consumes its own copy of the policy, so a forced schedule for the other
-        measurements restarts in every branch. A postselected measurement drops the branches
-        that cannot pass it and weights the others by their success probability, so the returned
-        probabilities are conditional on every postselection succeeding, as with ``default.qubit``
-        and deferred measurements. Raises ``ValueError`` if no branch passes a postselection.
+        Each branch path consumes its own copy of the policy: at a split both children continue
+        from the parent's position, so the i-th delegated measurement on every path reads
+        ``schedule[i]`` of a forced ``otherwise``, and a :class:`SeededPolicy` replays the same
+        draws in both children. Outcomes chosen by ``otherwise`` are not weighted; in strict mode
+        each has probability 1/2 in every branch, so the branch probabilities are unaffected.
+        A postselected measurement drops the branches that cannot pass it and weights the others
+        by their success probability, so the returned probabilities are conditional on every
+        postselection succeeding, as with ``default.qubit`` and deferred measurements. Raises
+        ``ValueError`` if no branch passes a postselection. It leaves ``state``, ``record`` and
+        ``policy`` as they were.
         """
-        policy = self.policy
+        policy, state, record = self.policy, self.state, self.record
         branches = [(Branch({}, self._start(initial_state), 1.0), copy.deepcopy(policy))]
         try:
             for op in operations:
@@ -291,7 +300,7 @@ class SparseSimulator:
                     raise ValueError(f"no branch can pass the postselection {op}")
                 branches = following
         finally:
-            self.policy = policy
+            self.policy, self.state, self.record = policy, state, record
         total = sum(branch.probability for branch, _ in branches)
         for branch, _ in branches:
             branch.probability /= total
@@ -416,7 +425,7 @@ class SparseSimulator:
         else:
             if self.policy is None:
                 raise ValueError(f"no policy chooses the outcome of {op}")
-            if self.strict and abs(probability_one - 0.5) > MEASUREMENT_TOLERANCE:
+            if self.strict and not abs(probability_one - 0.5) <= MEASUREMENT_TOLERANCE:
                 raise AssertionError(f"strict mode: {op} has P(1) = {probability_one}, not 1/2 "
                                      "(spec 12.3)")
             outcome = self.policy.choose(op, probability_one)
@@ -425,13 +434,18 @@ class SparseSimulator:
     def _project(self, op, wire: int, outcome: int) -> float:
         """Keep the terms with ``wire == outcome``, normalize them, record the outcome and reset
         if asked; return the outcome's probability. Normalizing by the kept weight itself, not by
-        ``1 - P(1)``, keeps rounding errors from compounding over many measurements."""
+        ``1 - P(1)``, keeps rounding errors from compounding over many measurements. Measurements
+        that compare equal (hand-built ones without a ``meas_uid``) would share one record entry,
+        so a second one raises."""
+        if op in self.record:
+            raise ValueError(f"{op} is already recorded: every measurement needs its own "
+                             "meas_uid (qp.measure sets one)")
         state = self.state
         keep = state.bits(wire) == bool(outcome)
         weights = np.abs(state.amps) ** 2
         kept = weights[keep].sum()
         probability = float(kept / weights.sum())
-        if probability < MEASUREMENT_TOLERANCE:
+        if not probability >= MEASUREMENT_TOLERANCE:
             raise ValueError(f"{op} cannot give outcome {outcome}: it has probability "
                              f"{probability:.3g}")
         state.keys, state.amps = state.keys[keep], state.amps[keep] / np.sqrt(kept)
@@ -439,3 +453,33 @@ class SparseSimulator:
             state.flip(wire)
         self.record[op] = outcome
         return probability
+
+
+def nonlinear_conditionals(operations: Iterable, *, exhaustive_up_to: int = 12,
+                           samples: int = 256, seed: int = 0) -> list:
+    """The conditionals that break the premise of spec 12.5's GF(2) conclusion.
+
+    The conclusion from the zero and unit outcome vectors to every outcome vector holds only if
+    each conditional of the certified block is diagonal (``PauliZ`` or ``CZ``) and its predicate
+    is GF(2)-linear in its outcomes: f(0) = 0 and f(x ^ y) = f(x) ^ f(y). The predicate is
+    checked on every outcome vector up to ``exhaustive_up_to`` outcomes, else on ``samples``
+    random ones against the unit-vector responses.
+    """
+    rng = np.random.default_rng(seed)
+    flagged = []
+    for op in operations:
+        if not isinstance(op, Conditional):
+            continue
+        value, size = op.meas_val, len(op.meas_val.measurements)
+
+        def predicate(bits, value=value):
+            return bool(value.processing_fn(*bits))
+
+        mask = [predicate(tuple(int(i == j) for j in range(size))) for i in range(size)]
+        points = (itertools.product((0, 1), repeat=size) if size <= exhaustive_up_to else
+                  (tuple(int(b) for b in rng.integers(0, 2, size)) for _ in range(samples)))
+        linear = all(predicate(x) == bool(sum(m & b for m, b in zip(mask, x, strict=True)) % 2)
+                     for x in points)
+        if op.base.name not in {"PauliZ", "CZ"} or not linear:
+            flagged.append(op)
+    return flagged

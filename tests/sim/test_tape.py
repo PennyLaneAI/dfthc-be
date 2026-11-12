@@ -9,7 +9,7 @@ import pytest
 from pennylane.ops import Conditional, MidMeasure
 
 from dfthc.compile import GATE_SET
-from dfthc.testing.sparse_sim import ForcedPolicy, SparseSimulator
+from dfthc.testing.sparse_sim import ForcedPolicy, SparseSimulator, nonlinear_conditionals
 from dfthc.testing.tape import decompose_for_simulation
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "spikes"))
@@ -37,11 +37,16 @@ def test_arguments_are_forwarded_and_measurements_kept():
 
 
 def test_graph_flag_and_capture_are_restored():
+    """The graph flag comes back disabled or enabled, as it was, and capture stays enabled."""
     graph_was_enabled = qp.decomposition.enabled_graph()
     qp.decomposition.disable_graph()
     try:
         decompose_for_simulation(round_trip)
         assert not qp.decomposition.enabled_graph()
+        qp.decomposition.enable_graph()
+        decompose_for_simulation(round_trip)
+        assert qp.decomposition.enabled_graph()
+        qp.decomposition.disable_graph()
         qp.capture.enable()
         try:
             tape = decompose_for_simulation(round_trip)
@@ -56,14 +61,17 @@ def test_graph_flag_and_capture_are_restored():
 
 @pytest.mark.parametrize("unit", [None, 0, 1, 2, 3])
 def test_k3_round_trip_restores_its_state_exactly(unit):
-    """Zero schedule and the four unit schedules (spec 12.5 basis runs), strict mode on."""
+    """Zero schedule and the four unit schedules (spec 12.5 basis runs), strict mode on. Every
+    conditional of the tape is diagonal with a GF(2)-linear predicate, which the basis runs'
+    conclusion for all outcome vectors needs."""
     schedule = [int(i == unit) for i in range(NUM_MEASUREMENTS)]
     policy = ForcedPolicy(schedule)
-    state = SparseSimulator(NUM_WIRES, policy=policy).run(
-        decompose_for_simulation(round_trip).operations)
+    operations = decompose_for_simulation(round_trip).operations
+    assert not nonlinear_conditionals(operations)
+    state = SparseSimulator(NUM_WIRES, policy=policy).run(operations)
     expected = np.zeros(2**NUM_WIRES, dtype=complex)
     address_bits = len(HIGH + LOW)
     for address in range(2**address_bits):
         expected[address << (NUM_WIRES - address_bits)] = 1 / np.sqrt(2**address_bits)
     assert policy.position == NUM_MEASUREMENTS
-    assert np.allclose(state.to_dense(), expected, atol=1e-12)
+    assert np.allclose(state.to_dense(), expected, rtol=0, atol=1e-12)

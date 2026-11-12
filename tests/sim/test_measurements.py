@@ -7,7 +7,7 @@ Branch-resolved simulations are compared with default.qubit under deferred measu
 import numpy as np
 import pennylane as qp
 import pytest
-from pennylane.ops import Conditional
+from pennylane.ops import Conditional, MidMeasure
 
 from dfthc.testing.sparse_sim import (
     Branch,
@@ -16,6 +16,7 @@ from dfthc.testing.sparse_sim import (
     SeededPolicy,
     SparseSimulator,
     SparseState,
+    nonlinear_conditionals,
 )
 
 
@@ -23,6 +24,16 @@ def _tape(build):
     with qp.queuing.AnnotatedQueue() as queue:
         build()
     return qp.tape.QuantumScript.from_queue(queue)
+
+
+def _one_qubit(probability_one):
+    """``sqrt(1 - p)|0> + sqrt(p)|1>``: measuring it gives 1 with probability ``p``."""
+    return SparseState.from_dense([np.sqrt(1 - probability_one), np.sqrt(probability_one)])
+
+
+def _zero_norm_state():
+    """A one-wire state without terms: every outcome probability is 0/0 = NaN."""
+    return SparseState(1, np.zeros((0, 1), dtype=np.uint64), np.zeros(0, dtype=complex))
 
 
 def _deferred_density_matrix(operations, num_wires):
@@ -67,15 +78,22 @@ def test_mid_measure_and_conditional_are_supported():
 
 @pytest.mark.parametrize("seed", range(8))
 def test_branches_match_default_qubit_with_deferred_measurements(seed):
+    """The mixture of all branches equals the deferred density matrix, from a random start state.
+    From |0...0>, every branch outcome of these Clifford-plus-Toffoli circuits has probability 1/2
+    or 1, so the final normalization would hide a missing outcome weight; a random start makes the
+    outcome probabilities generic."""
     rng = np.random.default_rng(seed)
     num_wires = 5
     operations = _random_circuit(rng, num_wires, 30)
+    vector = rng.normal(size=2**num_wires) + 1j * rng.normal(size=2**num_wires)
+    vector /= np.linalg.norm(vector)
     sim = SparseSimulator(num_wires, policy=BranchPolicy(range(num_wires)), strict=False)
-    branches = sim.run_branches(operations)
-    assert sum(b.probability for b in branches) == pytest.approx(1.0, abs=1e-12)
+    branches = sim.run_branches(operations, initial_state=SparseState.from_dense(vector))
+    assert sum(b.probability for b in branches) == pytest.approx(1.0, rel=0, abs=1e-12)
     assert all(isinstance(b, Branch) for b in branches)
-    assert np.allclose(_mixture(branches), _deferred_density_matrix(operations, num_wires),
-                       atol=1e-12)
+    expected = _deferred_density_matrix(
+        [qp.StatePrep(vector, wires=range(num_wires)), *operations], num_wires)
+    assert np.allclose(_mixture(branches), expected, rtol=0, atol=1e-12)
 
 
 def test_reset_and_postselect_match_default_qubit():
@@ -95,13 +113,14 @@ def test_reset_and_postselect_match_default_qubit():
         assert len(branches) == 1 and branches[0].record[operations[3]] == postselect
         assert branches[0].state.probability(0, 1) == 0.0  # reset
         assert np.allclose(_mixture(branches), _deferred_density_matrix(operations, 4),
-                           atol=1e-12)
+                           rtol=0, atol=1e-12)
 
 
 def test_postselection_after_branching_conditions_the_branches():
     """Wire 1 = (w0 and w2) or (w3 and w4) passes the postselection with probability 0, 1/2, 1/2
     and 3/4 in the branches (w0, w3) = 00, 01, 10, 11: branch 00 is dropped, and the others carry
-    p q / sum(p q) = 2/7, 2/7, 3/7, as default.qubit gives under the same postselection."""
+    p q / sum(p q) = 2/7, 2/7, 3/7, as default.qubit gives under the same postselection. Wire 1
+    is also a branch wire: its postselection takes precedence over branching."""
     outcomes = {}
 
     def build():
@@ -116,7 +135,7 @@ def test_postselection_after_branching_conditions_the_branches():
         qp.measure(1, postselect=1)
 
     operations = _tape(build).operations
-    branches = SparseSimulator(7, policy=BranchPolicy([0, 3]), strict=False).run_branches(
+    branches = SparseSimulator(7, policy=BranchPolicy([0, 1, 3]), strict=False).run_branches(
         operations)
     measured = [op for op in operations if op.name == "MidMeasure"][:2]
     probabilities = np.zeros(4)
@@ -127,21 +146,37 @@ def test_postselection_after_branching_conditions_the_branches():
                                                    qp.density_matrix(wires=range(7))])
     [deferred], _ = qp.defer_measurements(reference)
     probs, rho = qp.devices.DefaultQubit().execute(deferred)
-    assert np.allclose(probabilities, [0, 2 / 7, 2 / 7, 3 / 7], atol=1e-12)
-    assert np.allclose(probabilities, probs, atol=1e-12)
-    assert np.allclose(_mixture(branches), rho, atol=1e-12)
+    assert np.allclose(probabilities, [0, 2 / 7, 2 / 7, 3 / 7], rtol=0, atol=1e-12)
+    assert np.allclose(probabilities, probs, rtol=0, atol=1e-12)
+    assert np.allclose(_mixture(branches), rho, rtol=0, atol=1e-12)
     impossible = _tape(lambda: (qp.H(0), qp.measure(0), qp.measure(1, postselect=1))).operations
     with pytest.raises(ValueError, match="no branch can pass the postselection"):
         SparseSimulator(2, policy=BranchPolicy([0]), strict=False).run_branches(impossible)
 
 
 def test_a_postselected_outcome_of_probability_zero_raises():
+    """A postselected outcome below MEASUREMENT_TOLERANCE (1e-12) raises in ``run`` and drops its
+    branch in ``run_branches``; just above the tolerance it is kept and renormalized."""
     operations = _tape(lambda: qp.measure(0, postselect=1)).operations
     with pytest.raises(ValueError, match="probability 0"):
         SparseSimulator(1, policy=ForcedPolicy([0]), strict=False).run(operations)
+    below, above = _one_qubit(0.5e-12), _one_qubit(2e-12)
+    sim = SparseSimulator(1, strict=False)
+    with pytest.raises(ValueError, match="probability 5e-13"):
+        sim.run(operations, initial_state=below)
+    assert np.allclose(sim.run(operations, initial_state=above).to_dense(), [0, 1], rtol=0,
+                       atol=1e-12)
+    with pytest.raises(ValueError, match="no branch can pass the postselection"):
+        sim.run_branches(operations, initial_state=below)
+    [branch] = sim.run_branches(operations, initial_state=above)
+    assert branch.probability == 1.0
+    assert np.allclose(branch.state.to_dense(), [0, 1], rtol=0, atol=1e-12)
 
 
 def test_forced_schedule_is_honoured_and_recorded():
+    """The schedule's outcomes are applied and recorded, and an exhausted schedule raises. Two
+    measurements that compare equal (hand-built, without a ``meas_uid``) would share one record
+    entry, so the second raises."""
     def build():
         for wire in range(3):
             qp.H(wire)
@@ -153,30 +188,67 @@ def test_forced_schedule_is_honoured_and_recorded():
     state = sim.run(operations)
     measurements = [op for op in operations if op.name == "MidMeasure"]
     assert [sim.record[m] for m in measurements] == [1, 0, 1]
-    assert np.allclose(state.to_dense(), SparseState.basis(3, 0).to_dense())  # all reset
+    assert np.array_equal(state.to_dense(), SparseState.basis(3, 0).to_dense())  # all reset
     assert policy.position == 3
     with pytest.raises(ValueError, match="schedule of 3 outcomes is exhausted"):
         sim.run(operations + operations[:2])
     with pytest.raises(ValueError, match="0 or 1"):
         ForcedPolicy([2])
+    twins = [qp.H(0), MidMeasure(0, reset=True), qp.H(0), MidMeasure(0, reset=True)]
+    with pytest.raises(ValueError, match="already recorded"):
+        SparseSimulator(1, policy=ForcedPolicy([0, 0])).run(twins)
 
 
 def test_a_forced_outcome_of_probability_zero_raises():
+    """A forced outcome below MEASUREMENT_TOLERANCE (1e-12) raises, and so does a NaN probability
+    (a state of norm 0); in ``run_branches`` a branch outcome below the tolerance is dropped. Just
+    above the tolerance, both are kept."""
     operations = _tape(lambda: qp.measure(0)).operations
     with pytest.raises(ValueError, match="probability 0"):
         SparseSimulator(1, policy=ForcedPolicy([1]), strict=False).run(operations)
+    with pytest.raises(ValueError, match="probability 5e-13"):
+        SparseSimulator(1, policy=ForcedPolicy([1]), strict=False).run(
+            operations, initial_state=_one_qubit(0.5e-12))
+    state = SparseSimulator(1, policy=ForcedPolicy([1]), strict=False).run(
+        operations, initial_state=_one_qubit(2e-12))
+    assert np.allclose(state.to_dense(), [0, 1], rtol=0, atol=1e-12)
+    with np.errstate(invalid="ignore"), pytest.raises(ValueError, match="probability nan"):
+        SparseSimulator(1, policy=ForcedPolicy([0]), strict=False).run(
+            operations, initial_state=_zero_norm_state())
+    branching = SparseSimulator(1, policy=BranchPolicy([0]), strict=False)
+    assert len(branching.run_branches(operations, initial_state=_one_qubit(0.5e-12))) == 1
+    kept = branching.run_branches(operations, initial_state=_one_qubit(2e-12))
+    assert sorted(b.probability for b in kept) == pytest.approx([2e-12, 1 - 2e-12], rel=0,
+                                                                abs=1e-15)
 
 
 def test_strict_mode_asserts_uniform_erasure_outcomes():
+    """Strict mode accepts |P(1) - 1/2| up to MEASUREMENT_TOLERANCE (1e-12) and rejects a larger
+    bias or a NaN probability (a state of norm 0). It checks the measurements a BranchPolicy
+    delegates to ``otherwise`` and exempts branch and postselected measurements."""
     unbalanced = _tape(lambda: (qp.H(0), qp.S(0), qp.CNOT([0, 1]), qp.measure(1))).operations
     assert SparseSimulator(2, policy=ForcedPolicy([0])).run(unbalanced) is not None
     biased = _tape(lambda: qp.measure(0)).operations
     with pytest.raises(AssertionError, match="P\\(1\\) = 0.0"):
         SparseSimulator(1, policy=ForcedPolicy([0])).run(biased)
-    # Branch wires and postselected measurements are exempt.
+    for bias in (0.5e-12, -0.5e-12):
+        assert SparseSimulator(1, policy=ForcedPolicy([0])).run(
+            biased, initial_state=_one_qubit(0.5 + bias)) is not None
+    for bias in (2e-12, -2e-12):
+        with pytest.raises(AssertionError, match="strict mode"):
+            SparseSimulator(1, policy=ForcedPolicy([0])).run(
+                biased, initial_state=_one_qubit(0.5 + bias))
+    with np.errstate(invalid="ignore"), pytest.raises(AssertionError, match="P\\(1\\) = nan"):
+        SparseSimulator(1, policy=ForcedPolicy([0])).run(biased,
+                                                         initial_state=_zero_norm_state())
+    # Branch wires and postselected measurements are exempt; delegated measurements are not.
     assert len(SparseSimulator(1, policy=BranchPolicy([0])).run_branches(biased)) == 1
     postselected = _tape(lambda: qp.measure(0, postselect=0)).operations
     assert SparseSimulator(1, policy=ForcedPolicy([])).run(postselected) is not None
+    delegated = _tape(lambda: (qp.H(0), qp.measure(0), qp.measure(1))).operations
+    with pytest.raises(AssertionError, match="P\\(1\\) = 0.0"):
+        SparseSimulator(2, policy=BranchPolicy([0], otherwise=ForcedPolicy([0]))).run_branches(
+            delegated)
 
 
 def test_measurements_renormalize_instead_of_compounding_norm_errors():
@@ -192,7 +264,7 @@ def test_measurements_renormalize_instead_of_compounding_norm_errors():
     start.amps *= np.sqrt(1 - 1e-6)
     state = SparseSimulator(20, policy=ForcedPolicy([0, 1] * 10)).run(_tape(build).operations,
                                                                      initial_state=start)
-    assert np.sum(np.abs(state.amps) ** 2) == pytest.approx(1.0, abs=1e-14)
+    assert np.sum(np.abs(state.amps) ** 2) == pytest.approx(1.0, rel=0, abs=1e-14)
 
 
 def test_seeded_policy_is_reproducible_and_follows_the_probabilities():
@@ -213,13 +285,20 @@ def test_seeded_policy_is_reproducible_and_follows_the_probabilities():
 
 
 def test_branch_policy_delegates_other_wires_and_each_branch_restarts_the_schedule():
+    """Measurements off the branch wires go to ``otherwise``. Each branch path consumes its own
+    copy of the policy: both children of a split continue from the parent's position (here 0,
+    since the split comes first), and the caller's policy is not advanced. Afterwards the
+    simulator's state, record and policy are as before, not aliases of a returned branch."""
     operations = _tape(lambda: (qp.H(0), qp.H(1), qp.measure(0), qp.measure(1))).operations
     policy = BranchPolicy([0], otherwise=ForcedPolicy([1]))
-    branches = SparseSimulator(2, policy=policy).run_branches(operations)
+    sim = SparseSimulator(2, policy=policy)
+    branches = sim.run_branches(operations)
     assert sorted(b.record[operations[2]] for b in branches) == [0, 1]
     assert all(b.record[operations[3]] == 1 for b in branches)
-    assert [b.probability for b in branches] == pytest.approx([0.5, 0.5])
+    assert [b.probability for b in branches] == pytest.approx([0.5, 0.5], rel=0, abs=1e-12)
     assert policy.otherwise.position == 0  # the branches consumed copies
+    assert sim.policy is policy and sim.record == {}
+    assert all(sim.state is not b.state and sim.record is not b.record for b in branches)
     with pytest.raises(ValueError, match="run_branches"):
         SparseSimulator(2, policy=policy).run(operations)
     with pytest.raises(ValueError, match="no policy"):
@@ -229,13 +308,19 @@ def test_branch_policy_delegates_other_wires_and_each_branch_restarts_the_schedu
 
 
 def test_nested_conditionals_dispatch_recursively():
+    """Nested conditionals dispatch recursively, and ``qp.cond(a | b, Z)`` applies its phase.
+    ``nonlinear_conditionals`` flags the nested conditionals (their bases are not diagonal) and
+    the OR (its predicate is not GF(2)-linear): both break the premise of spec 12.5."""
     def build():
         qp.X(0)
         qp.X(1)
         a, b = qp.measure(0), qp.measure(1)
         Conditional(a, Conditional(b, qp.X(2)))
         Conditional(a, Conditional(b ^ a, qp.X(3)))
+        qp.cond(a | b, qp.Z)(2)
 
     operations = _tape(build).operations
     state = SparseSimulator(4, policy=ForcedPolicy([1, 1]), strict=False).run(operations)
     assert np.flatnonzero(state.to_dense()).tolist() == [0b1110]
+    assert state.to_dense()[0b1110] == -1
+    assert nonlinear_conditionals(operations) == operations[4:]
