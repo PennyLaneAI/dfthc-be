@@ -753,7 +753,7 @@ Only the walk-frame offset is involved; the physical-frame offset never enters $
 ### 8.6 Checks against dfthcbe
 
 1. **Scalars against `summary.json`, relative tolerance $10^{-10}$.**
-   - $\Lambda$ from the factors equals `lambda_sos`.
+   - $\Lambda$ from the factors equals `lambda_sos`. The one exception is `fe4s4`, at relative $2 \cdot 10^{-10}$: its stored `lambda_h1` exceeds $\sum w_+ + \sum w_-$ by $5.96 \cdot 10^{-9}$, so $\Lambda$ from its factors is $1.18 \cdot 10^{-10}$ (relative) below `lambda_sos`. Every other system agrees to $10^{-13}$.
    - $\lambda_{\mathrm{eff}}$ from $\Lambda$ and `e_gap` equals `lambda_eff`.
    - The data satisfy `e_sos == e_upper - e_gap`, and $E_{\mathrm{SoS}}^{\mathrm{phys}}$ is read from `e_sos` (§3.2.1).
 2. **Walk frame, full Fock space, H2 instances ($N \le 4$).**
