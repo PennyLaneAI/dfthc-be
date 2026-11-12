@@ -1067,7 +1067,7 @@ $$U(lo, hi, n, c) = \sum_{m=1}^{n}\Big(\big\lfloor (hi - 1)/2^m \big\rfloor - \b
 
 - *Why.* Each term counts the visited internal nodes at height $m$. Every visited internal node costs one `TemporaryAND`: with two visited children, one AND plus a CNOT to switch children; with one visited child, one AND with the appropriate control value. Each AND is uncomputed by `Adjoint(TemporaryAND)`. An uncontrolled root needs no AND.
 - *Nested iteration* (outer register over $[lo_1, hi_1)$, inner register iterated under every outer leaf): $U_2 = U(lo_1, hi_1, n_1, c) + (hi_1 - lo_1)\, U(lo_2, hi_2, n_2, 1)$.
-- *Truncated iteration*, for comparison only (Qualtran and dfthcbe; §4.4 item 8): $L + c - 2$ for $[0, L)$.
+- *Truncated iteration*, for comparison only (Qualtran and dfthcbe; §4.4 item 8): $\max(L + c - 2, 0)$ for $[0, L)$ with $L \ge 1$. A single leaf needs no AND: the root control, if any, is its flag.
 
 **One-hot register over ob bits** (§9.4): $O(\mathrm{ob}) = 2^{\mathrm{ob}} - 2$ for $\mathrm{ob} \ge 1$, and $O(0) = 0$.
 
