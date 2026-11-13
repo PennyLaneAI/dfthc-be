@@ -29,6 +29,8 @@ Counts move from 34 to 38 tests for 2E.1 (36 per commit) and from 27 to 28 for 2
 
 **Revision 5** (2026-11-13, after Task 2E.4's reviews: GPT-5.6 `.superpowers/sdd/task-2E.4-review-1.md`, Approved, no findings; Opus `.superpowers/sdd/task-2E.4-review-opus.md`, Approved, 0 Critical, 0 Important, 3 Minor; applied on `phase2/2E.4` and here). Deleting `GivensLadderDagger`'s wire check passed every test, so `test_givens.py` gains a seventh constructor violation, an oversized `angles` register on the dagger (M-1, + 1); the N = 3 ladder angles become `[1, 3]`, whose `u` has a nonzero odd component, so the γ₀ identity also sees a flipped rung sign (M-3, no count change); the `GivensRotation` and `GivensLadder` docstrings state the paper's Table III cost, 30 per rung and 1,590 per ladder at FeMoco-54 (M-2). Task 2E.4 counts 36 tests, all per commit; the per-commit tier with all of Workstream E is 793.
 
+**Revision 6** (2026-11-13, after Task 2E.5's reviews: GPT-5.6 `.superpowers/sdd/task-2E.5-review-1.md`, Approved, no findings; Opus `.superpowers/sdd/task-2E.5-review-opus.md`, Needs fixes, tests only, 0 Critical, 1 Important, 2 Minor; applied on `phase2/2E.5` and here). On lightning the device pass runs `TemporaryAND` and its measured uncompute both as a `Toffoli`, and T and A are symmetric under exchanging them, so a rule (or a hand-written adjoint) with the two AND forms exchanged passed every test. `test_majorana.py` gains a tape-path run on the sparse simulator, gate and adjoint on all 128 inputs, whose handlers assert each AND's precondition (I-1, + 2), and asserts the rule's pin in `FIXED_DECOMPS` (M-1); the `MajoranaGate` docstring cites arXiv:2502.15882v1 App. B.6 and Eqs. (29) and (30), and says that D1 and Q1 stay on where `succ_b = 0`, unlike Fig. 4 (M-2). Task 2E.5 counts 16 tests, all per commit; the per-commit tier with all of Workstream E is 795.
+
 ---
 
 ## Changes from the master plan and the spec
@@ -393,7 +395,7 @@ Within wave 2-a (master plan section 5) the file lists of 2E.1, 2E.3, 2E.4 and 2
 | 2E.1 | 2-a | 656 | 36 | 692 | 2 |
 | 2E.3 | 2-a | 656 | 24 | 680 | 0 |
 | 2E.4 | 2-a | 656 | 36 | 692 | 0 |
-| 2E.5 | 2-a | 656 | 14 | 670 | 0 |
+| 2E.5 | 2-a | 656 | 16 | 672 | 0 |
 | 2E.2 | 2-b | 656 + 36 (2E.1) = 692 | 27 | 719 | 12 |
 
 With all five tasks merged and nothing else, the per-commit tier counts 656 + 36 + 23 + 24 + 35 + 14 = 788 tests, and Workstream E adds 14 nightly tests. Dry run on the replica with all five tasks (revision 2): 788 collected, 787 passed plus the replica-only failure described under "Code provenance", in a pytest session of 303 s with 2 workers (log `stages/2E/2e-per-commit-tier.log`; round 1's 783 tests took 423 s). The process took 21 min of wall time to exit, against 425 s in round 1, on a machine shared with the Workstream D dry run; the session time is the comparable figure. Workstream E's 132 per-commit tests took 62 s together with 2 workers in the final replay. Its ten slowest (`stages/2E/2e-durations.log`, `--durations=10` of that run) took 2.98 to 4.90 s each: the verbose-listing and device-level compiles of `test_givens.py`, `test_angle_loads.py`, `test_spin.py` and `test_majorana.py` (4.90, 4.55, 4.39 and 4.04 s), the erase's hinted-conditional test (4.31 s), the compiled loads at their two shapes (4.25 s), and four Givens ladder and dagger tests (2.98 to 3.98 s). No E test needs the `slow` tier.
@@ -3664,13 +3666,14 @@ git commit -m "Add GivensRotation, GivensLadder and GivensLadderDagger"
   - `MajoranaGate(succ_x_o, succ_b, G0, G1, b_neq_B, flavour, target, work)`: one wire each and `work` of 2; no compilable arguments; with `a = succ_x_o AND G0` and `s = succ_x_o AND NOT G0 AND succ_b`, in order: `-Z` on `target` if `s AND b_neq_B`; `X` on `target` if `a`; `Z` on `target` if `a AND flavour`; `Z` on `flavour` if `a AND G1` (spec 9.16). In the walk `flavour = sigma_0` and `target = psi_dn[0]`;
   - `required_wires() -> dict`; the rule `_majorana_gate`; adjoint auto-derived (`InnerSelectDagger`'s `Maj^dag`, Task 3.1).
 
-**Acceptance tests** (14 tests in `tests/ops/test_majorana.py`):
+**Acceptance tests** (16 tests in `tests/ops/test_majorana.py`):
 - T3: the compiled 128 x 128 matrix of the gate (one lightning run, each wire entangled with a reference wire, the work wires required back in `|00>`) equals spec 9.16's four steps on every basis input, and the auto-derived adjoint equals its transpose (2 tests).
+- The same on the tape path (spec 7.4 rule 9) on the sparse simulator, gate and adjoint, whose handlers assert that every `TemporaryAND` target is 0 and every `Adjoint(TemporaryAND)` target equals its AND: lightning runs both forms as a `Toffoli`, so only this test sees a compute and a measured uncompute exchanged (2 tests).
 - The flavour convention (spec 6.2): with `flavour` projected onto `|+>` before and after, on each of the 32 control branches the compiled gate acts on `target` as `i gamma_0 gamma_1 = -Z` (valid SF, `b != B`), `a = (X + iY)/2` (valid D1), `a^dag` (valid Q1) or the identity (failed `x_o`, failed SF `b`, `b = B`), with `gamma_f` and `a` from `dfthc.data.fermion`; the adjoint gives the adjoint actions (2 tests).
 - T4: T = 5 with three `Toffoli` and two `TemporaryAND` (A = 2), M = 0, for the gate and its adjoint (2 tests); FeMoco on the closed form.
-- T5 at `level="device"` (gate and adjoint) and T6 (the verbose listing names `_majorana_gate`); T2 at two wire labelings (the gate has one size), the rule the only one registered under its name; `required_wires`; three constructor violations.
+- T5 at `level="device"` (gate and adjoint) and T6 (the verbose listing names `_majorana_gate`); T2 at two wire labelings (the gate has one size), the rule pinned in `FIXED_DECOMPS` and the only one registered under its name; `required_wires`; three constructor violations.
 
-**Definition of done:** `14 passed`; the per-commit tier passes; `ruff check .` clean; one commit.
+**Definition of done:** `16 passed`; the per-commit tier passes; `ruff check .` clean; one commit.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3690,6 +3693,8 @@ from dfthc.compile import FIXED_DECOMPS, GATE_SET, compiled_resources
 from dfthc.data.fermion import annihilation, majorana
 from dfthc.ops.majorana import MajoranaGate, _majorana_gate
 from dfthc.testing.resources import chosen_rules, verbose_program
+from dfthc.testing.sparse_sim import SparseSimulator
+from dfthc.testing.tape import decompose_for_simulation
 
 # Wire order of the 7 one-wire registers, as in the operator: wire 0 is the most significant bit
 # of a basis index |succ_x_o, succ_b, G0, G1, b_neq_B, flavour, target>.
@@ -3743,6 +3748,29 @@ def test_action_on_every_basis_input(adjoint):
     expected = reference_matrix()
     assert np.allclose(compiled_matrix(adjoint), expected.T if adjoint else expected, rtol=0,
                        atol=1e-10)
+
+
+@pytest.mark.parametrize("adjoint", [False, True], ids=["gate", "adjoint"])
+def test_tape_path_keeps_the_and_contracts(adjoint):
+    """The tape path (spec 7.4 rule 9), as the sparse simulator runs it, on all 128 inputs at
+    once (as in T3): spec 9.16's four steps with clean work wires. The simulator checks on every
+    term that each TemporaryAND target is 0 and each Adjoint(TemporaryAND) target equals its AND;
+    lightning runs both as a Toffoli, so T3 and T4 cannot tell a compute from a measured
+    uncompute."""
+    system, reference, work = list(range(7)), list(range(7, 14)), [14, 15]
+
+    def qfunc():
+        for s, r in zip(system, reference, strict=True):
+            qp.H(r)
+            qp.CNOT([r, s])
+        program(adjoint, system + work)()
+
+    state = SparseSimulator(16).run(decompose_for_simulation(qfunc).operations)
+    amplitudes = state.to_dense().reshape(2**7, 2**7, 4)
+    expected = reference_matrix()
+    assert np.allclose(amplitudes[:, :, 1:], 0, rtol=0, atol=1e-10)
+    assert np.allclose(amplitudes[:, :, 0] * np.sqrt(2**7), expected.T if adjoint else expected,
+                       rtol=0, atol=1e-10)
 
 
 PLUS = np.array([1, 1]) / np.sqrt(2)
@@ -3822,8 +3850,9 @@ def test_pinned_rule_is_chosen_and_nothing_survives_at_device_level(capfd):
 @pytest.mark.parametrize("wires", [list(range(9)), [8, 3, 5, 0, 7, 1, 6, 2, 4]],
                          ids=["ordered", "permuted"])
 def test_rule_is_valid(wires):
-    """T2 (tape mode). The gate has one size; the second case relabels the wires. The pinned
-    rule is the only rule registered under the class name (spec 7.4 rule 8)."""
+    """T2 (tape mode). The gate has one size; the second case relabels the wires. The rule is
+    pinned and the only rule registered under the class name (spec 7.4 rules 7 and 8)."""
+    assert FIXED_DECOMPS["MajoranaGate"] is _majorana_gate
     assert list(qp.list_decomps(MajoranaGate)) == [_majorana_gate]
     op = MajoranaGate(*([w] for w in wires[:7]), work=wires[7:])
     qp.testing.assert_valid_decomp_rule(op, _majorana_gate, check_matrix=False)
@@ -3932,9 +3961,12 @@ class MajoranaGate(Operator2):
     **Cost.** :func:`dfthc.costs.majorana_gate`: :math:`T = 5`, two ``TemporaryAND`` and three
     ``Toffoli`` (``A = 2``); ``M = 0``. The adjoint costs the same.
 
-    **Paper and dfthcbe.** Step 15; the Majorana gate of the paper's Fig. 4 (PRX), with the
-    success flags combined with :math:`G_0` into two ANDs (7 Toffolis there, 5 here) and the
-    SF sign of dfthcbe. dfthcbe: ``Maj`` (``dfthcbe/majorana.py``).
+    **Paper and dfthcbe.** Step 15; the Majorana gate of the paper's Fig. 4 (PRX;
+    arXiv:2502.15882v1 App. B.6), which applies the generators of its Eqs. (29) and (30) (v1
+    numbering) on one qubit. Fig. 4 controls all four gates by one AND of both success flags (7
+    Toffolis); ours, as dfthcbe's, folds the flags into the two ANDs with :math:`G_0` (5), which
+    also leaves D1 and Q1 on where :math:`\mathrm{succ}_b = 0`, and takes dfthcbe's SF sign.
+    dfthcbe: ``Maj`` (``dfthcbe/majorana.py``).
 
     **Example.**
 
@@ -3997,12 +4029,12 @@ register_rule(MajoranaGate, _majorana_gate)
 - [ ] **Step 4: Run the tests**
 
 Run: `scripts/test.sh tests/ops/test_majorana.py -q`
-Expected: `14 passed` (11 to 16 s with 2 workers).
+Expected: `16 passed` (11 to 16 s with 2 workers).
 
 - [ ] **Step 5: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `670 passed` (656 + 14).
+Expected: `672 passed` (656 + 16).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
