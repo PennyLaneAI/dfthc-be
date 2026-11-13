@@ -364,6 +364,7 @@ dfthc-be/
     testing/
       sparse_sim.py           sparse-state simulator (§12.3)
       tape.py                 tape-path decomposition for simulation
+      walk_sim.py             sparse-simulator harness of the block encoding and walk, Phase 3 test shapes (§12.4)
       toy_walk.py             ToyWalk, ControlledToyWalk and ToyControlledWalkPower for QPE tests (§11.4)
       fixtures.py             small parameter sets, loaders for reference fixtures
       resources.py            assertions on compiled resources, warning filters
@@ -1037,8 +1038,8 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 
 | | |
 | --- | --- |
-| Wires | Grouped: `outer`, `inner`, `select`, `system`, `phase_grad`, `work` (§10) |
-| Compilable | `WalkParams` fields and `WalkTables.as_compilable()` |
+| Wires | Grouped: `outer`, `inner`, `select`, `system`, `phase_grad`, `work`, exactly `WalkLayout`'s groups (§10; `required_wires(params, tables)` gives their sizes). The rule splits them once with `WalkLayout.split_group` and gives each child the registers its §9 table names and the prefix of `work` of its need; the prepares take the whole `phase_grad` |
+| Compilable | `params` = `WalkParams.as_compilable()` and `tables` = `WalkTables.as_compilable()`, rebuilt in the rules with `from_compilable`; the constructor checks them against the children's domains and that `WalkLayout.work_size` covers every child of the walk |
 | Base rule | `OuterPrepare`; [`InnerPrepare`, `InnerSigns`, `InnerSelect`, `InnerUnprepare`]; `RefT2`; [`InnerPrepare`, `InnerSelectDagger`, `InnerSigns`, `InnerUnprepare`]; `OuterUnprepare` |
 | Action | $\langle 0_{\mathrm{anc}}\vert\mathrm{BE}\vert 0_{\mathrm{anc}}\rangle = \tilde H_{\mathrm{SA}}/\tilde\Lambda - I$ |
 | Adjoint | Not provided; not used |
@@ -1308,13 +1309,13 @@ In strict mode the simulator also asserts $p = 1/2$ (absolute tolerance $10^{-12
 
 ### 12.4 End-to-end checks
 
-All checks run on `H2_STO3G_TEST` with all ancillas in $\lvert 0\rangle$. Which inputs and schedules each tier uses is set in §12.6. `H2_631G_TEST` runs E-1 in the release tier, on its 28 two-electron inputs.
+All checks run on `H2_STO3G_TEST` with all ancillas in $\lvert 0\rangle$. Which inputs and schedules each tier uses is set in §12.6. `H2_631G_TEST` runs E-1 in the release tier, on its 28 two-electron inputs. E-1 and E-2 also run on the shape `FAILS_C3` of `dfthc.testing.walk_sim` ($X_o = 11$ and $B + 1 = 3$ both fail their uniform preparation, $k_2 = 0$ makes dfthcbe's failure signs differ from ours, $C = 3$), which the test presets cannot show; there too the oracle is our `encoded_block`.
 
 | ID | Check |
 | --- | --- |
 | E-1 | $\langle 0_{\mathrm{anc}}\vert\mathrm{BE}\vert 0_{\mathrm{anc}}\rangle = \tilde H_{\mathrm{SA}}/\tilde\Lambda - I$ to $10^{-10}$, built column by column from the simulated outputs |
 | E-2 | $\langle 0\vert W^k\vert 0\rangle = T_k(\tilde H_{\mathrm{SA}}/\tilde\Lambda - I)$ for $k = 1, 2$, with $T_k$ the Chebyshev polynomials |
-| E-3 | $C(W)$: control $\lvert 0\rangle$ gives the identity; control $\lvert 1\rangle$ gives $W$; control $\lvert +\rangle$ gives $(\lvert 0\rangle\lvert\psi\rangle + \lvert 1\rangle W\lvert\psi\rangle)/\sqrt2$. The last case detects global-phase errors in the controlled reflections. |
+| E-3 | $C(W)$: control $\lvert 0\rangle$ gives the identity; control $\lvert 1\rangle$ gives $W$; control $\lvert +\rangle$ gives $(\lvert 0\rangle\lvert\psi\rangle + \lvert 1\rangle W\lvert\psi\rangle)/\sqrt2$. The last case detects global-phase errors in the controlled reflections. After one uncontrolled step $W$, control $\lvert +\rangle$ gives $(\lvert 0\rangle W\lvert\psi\rangle + \lvert 1\rangle W^2\lvert\psi\rangle)/\sqrt2$; there the index registers of $\mathcal A\cup\mathcal B$ are not $\lvert 0\rangle$, as between QPE rounds, so an uncontrolled $\mathrm{REF}_{\mathcal A\cup\mathcal B}$ fails it. |
 | E-4 | Prepare followed by unprepare, $U^\dagger U$, returns every ancilla to $\lvert 0\rangle$ and the system unchanged |
 
 ### 12.5 Outcome certificates for measured erasure
@@ -1344,7 +1345,7 @@ Correctness for every outcome of an erase block is proved with GF(2) linearity, 
 | Tier | Command | Content | Budget |
 | --- | --- | --- | --- |
 | Per commit | `scripts/test.sh -m "not slow and not release"` | T1; T2; T3, T4 and T6 at small sizes; T5; non-subprocess canaries; simulator differential tests | 15 min |
-| Nightly (phase gates) | `scripts/test.sh -m "slow and not release"` | the §12.5 certificates; E-1 under S0 on all 16 inputs and under S1 on 4 fixed inputs ($\lvert 00\rangle\lvert 00\rangle$, $\lvert 10\rangle\lvert 00\rangle$, $\lvert 10\rangle\lvert 10\rangle$, $\lvert 11\rangle\lvert 11\rangle$ in $\psi_\uparrow \otimes \psi_\downarrow$); E-2 ($k = 1, 2$) and E-3 (three control states) under S0 on the 4 fixed inputs; E-4 on all 16 inputs; T4 at `MID_NAPHTHALENE` for the composite operators, walk and controlled walk; subprocess canaries; the compile-time benchmark | 4 h |
+| Nightly (phase gates) | `scripts/test.sh -m "slow and not release"` | the §12.5 certificates; E-1 under S0 on all 16 inputs and under S1 on 4 fixed inputs ($\lvert 00\rangle\lvert 00\rangle$, $\lvert 10\rangle\lvert 00\rangle$, $\lvert 10\rangle\lvert 10\rangle$, $\lvert 11\rangle\lvert 11\rangle$ in $\psi_\uparrow \otimes \psi_\downarrow$); E-2 ($k = 1, 2$) and E-3 (three control states) under S0 on the 4 fixed inputs; E-4 on all 16 inputs under the alternating and a seeded schedule; E-1 under S0 on all 16 inputs and E-2 under S0 on the 4 fixed inputs of `FAILS_C3`; T4 at `MID_NAPHTHALENE` for the composite operators, walk and controlled walk; subprocess canaries; the compile-time benchmark | 4 h |
 | Release (once, Phase 5) | `scripts/test.sh` | everything, plus E-1 and E-3 on all 16 inputs under S1, E-1 and E-3 under one seeded random schedule on the 4 fixed inputs, `H2_631G_TEST` E-1 on its 28 two-electron inputs under S0, and the FeMoco-54 counts from the cache while the code hash matches (§13.3) | 8 h |
 
 The release tier is reduced from the original plan (12 h with every core; E-1 and E-3 under two seeded schedules on all 16 inputs; FeMoco compiles). The §12.5 certificates already prove every erase outcome, so end-to-end schedules are smoke tests, and the nightly runs at the gates already cover the rest. Phase 3 projects the release run from per-input timings; if the projection exceeds 8 h, the orchestrator escalates with options before Phase 5.
