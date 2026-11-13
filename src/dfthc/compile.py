@@ -192,6 +192,20 @@ def mcm_parities(outcomes: Sequence, masks: Sequence[int]) -> list:
     return [_tape_parity(outcomes, mask) for mask in masks]
 
 
+class ParityPredicate:
+    """The predicate of a tape-mode parity: ``fns[i]`` applied to outcome bit ``i``, summed mod 2.
+
+    :func:`dfthc.testing.sparse_sim.nonlinear_conditionals` relies on this structure, a parity of
+    single-outcome functions, to decide GF(2)-linearity exactly at any number of outcomes.
+    """
+
+    def __init__(self, fns: Iterable[Callable]):
+        self.fns = tuple(fns)
+
+    def __call__(self, *bits):
+        return sum(fn(bit) for fn, bit in zip(self.fns, bits, strict=True)) % 2
+
+
 def _tape_parity(outcomes: Sequence, mask: int):
     """One flat ``MeasurementValue`` over the chosen outcomes' measurements.
 
@@ -207,10 +221,9 @@ def _tape_parity(outcomes: Sequence, mask: int):
                 f"outcome {i} depends on {len(outcomes[i].measurements)} measurements; "
                 "each outcome must depend on exactly one"
             )
-    fns = [outcomes[i].processing_fn for i in indices]
     return qp.ops.MeasurementValue(
         [outcomes[i].measurements[0] for i in indices],
-        lambda *bits: sum(fn(bit) for fn, bit in zip(fns, bits, strict=True)) % 2,
+        ParityPredicate(outcomes[i].processing_fn for i in indices),
     )
 
 

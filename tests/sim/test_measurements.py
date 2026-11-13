@@ -9,6 +9,7 @@ import pennylane as qp
 import pytest
 from pennylane.ops import Conditional, MidMeasure
 
+from dfthc.compile import ParityPredicate, mcm_parities
 from dfthc.testing.sparse_sim import (
     Branch,
     BranchPolicy,
@@ -324,3 +325,42 @@ def test_nested_conditionals_dispatch_recursively():
     assert np.flatnonzero(state.to_dense()).tolist() == [0b1110]
     assert state.to_dense()[0b1110] == -1
     assert nonlinear_conditionals(operations) == operations[4:]
+
+
+@pytest.mark.parametrize("predicate", [
+    lambda *bits: (sum(bits) % 2) ^ int(all(bits)),
+    lambda *bits: sum(bits) % 2,
+], ids=["xor-and-all", "xor"])
+def test_untagged_predicates_beyond_the_exhaustive_limit_are_flagged(predicate):
+    """A 20-outcome predicate that is not a ``ParityPredicate`` cannot be checked exhaustively, so
+    ``nonlinear_conditionals`` flags it (fail closed), even the linear XOR. XOR(all) XOR AND(all)
+    differs from XOR only on the all-ones vector, which no zero or unit schedule reaches."""
+    def build():
+        outcomes = [qp.measure(w) for w in range(20)]
+        value = qp.ops.MeasurementValue([m.measurements[0] for m in outcomes], predicate)
+        Conditional(value, qp.Z(20))
+
+    operations = _tape(build).operations
+    assert isinstance(operations[-1], Conditional)
+    assert nonlinear_conditionals(operations) == operations[-1:]
+
+
+@pytest.mark.parametrize("inverted", [False, True], ids=["linear", "affine"])
+def test_tape_parities_are_decided_exactly(inverted):
+    """``mcm_parities`` over 20 outcomes tags every tape parity as a ``ParityPredicate``, which
+    ``nonlinear_conditionals`` decides exactly at any size: parities of plain outcomes are linear,
+    and a parity that includes an inverted outcome ``~m`` is affine (f(0) = 1) and is flagged."""
+    masks = [2**20 - 1, 0b1011 << 9, 1 << 19]
+
+    def build():
+        outcomes = [qp.measure(w) for w in range(20)]
+        if inverted:
+            outcomes[3] = ~outcomes[3]
+        for parity in mcm_parities(outcomes, masks):
+            qp.cond(parity, qp.Z)(20)
+
+    conditionals = _tape(build).operations[20:]
+    assert len(conditionals) == len(masks)
+    assert all(isinstance(op.meas_val.processing_fn, ParityPredicate) for op in conditionals)
+    expected = conditionals[:1] if inverted else []
+    assert nonlinear_conditionals(conditionals) == expected
