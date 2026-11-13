@@ -171,6 +171,8 @@ FeMoco-scale compiles against the budget of about six; more need the user's appr
 | 2026-11-12 | K-1 FeMoco-54 stand-in, PX controlled walk (`spikes/k1_whole_program.py --shape femoco --all --arm PX --program controlled_walk`, Task 0.9e path, token-gated) | orchestrator | 54.1 s watched (51.4 s compile) | 2,648 MB; 2,703 MB (predicted 2,566 MB, range 1,987-3,145; equations 390,949 against 384,382) | no | 1 (K-1 FeMoco slot 1 of 2) |
 | 2026-11-12 | G0 nightly tier (`python -m dfthc.testing.watchdog --timeout-min 60 -- scripts/test.sh -m "not release" -q`), alone | orchestrator | 101.6 s (226 passed in 99 s) | 1,877 MB | no | 0 |
 | 2026-11-13 | G1 nightly tier (`PYTHONPATH=src python -m dfthc.testing.watchdog --timeout-min 60 -- scripts/test.sh -m "not release" -q -p no:cacheprovider`) on `68c5a07`, alone | orchestrator | 347.8 s (673 passed in 345 s; L-21 compile-time canary included, passed) | 1,875 MB | no | 0 |
+| 2026-11-13 | **Breach (not a planned run).** Phase 3 select plan writer 414112e0: an unwatched scratch micro-benchmark of the sparse simulator (Hadamards on random wires of a random 100,000-term state), not part of the plan | plan writer | about 2 min | about 14.4 GB (writer's estimate) | yes, by the writer | 0 |
+| 2026-11-13 | **Breach (minor).** Same writer: a 40 s targeted pytest run overlapped its background mutation check, 4 pytest workers for that time | plan writer | 40 s | not recorded | no | 0 |
 
 ## Gate log
 
