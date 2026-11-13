@@ -11,6 +11,8 @@ from dfthc.compile import FIXED_DECOMPS, GATE_SET, compiled_resources
 from dfthc.data.fermion import annihilation, majorana
 from dfthc.ops.majorana import MajoranaGate, _majorana_gate
 from dfthc.testing.resources import chosen_rules, verbose_program
+from dfthc.testing.sparse_sim import SparseSimulator
+from dfthc.testing.tape import decompose_for_simulation
 
 # Wire order of the 7 one-wire registers, as in the operator: wire 0 is the most significant bit
 # of a basis index |succ_x_o, succ_b, G0, G1, b_neq_B, flavour, target>.
@@ -64,6 +66,29 @@ def test_action_on_every_basis_input(adjoint):
     expected = reference_matrix()
     assert np.allclose(compiled_matrix(adjoint), expected.T if adjoint else expected, rtol=0,
                        atol=1e-10)
+
+
+@pytest.mark.parametrize("adjoint", [False, True], ids=["gate", "adjoint"])
+def test_tape_path_keeps_the_and_contracts(adjoint):
+    """The tape path (spec 7.4 rule 9), as the sparse simulator runs it, on all 128 inputs at
+    once (as in T3): spec 9.16's four steps with clean work wires. The simulator checks on every
+    term that each TemporaryAND target is 0 and each Adjoint(TemporaryAND) target equals its AND;
+    lightning runs both as a Toffoli, so T3 and T4 cannot tell a compute from a measured
+    uncompute."""
+    system, reference, work = list(range(7)), list(range(7, 14)), [14, 15]
+
+    def qfunc():
+        for s, r in zip(system, reference, strict=True):
+            qp.H(r)
+            qp.CNOT([r, s])
+        program(adjoint, system + work)()
+
+    state = SparseSimulator(16).run(decompose_for_simulation(qfunc).operations)
+    amplitudes = state.to_dense().reshape(2**7, 2**7, 4)
+    expected = reference_matrix()
+    assert np.allclose(amplitudes[:, :, 1:], 0, rtol=0, atol=1e-10)
+    assert np.allclose(amplitudes[:, :, 0] * np.sqrt(2**7), expected.T if adjoint else expected,
+                       rtol=0, atol=1e-10)
 
 
 PLUS = np.array([1, 1]) / np.sqrt(2)
@@ -143,8 +168,9 @@ def test_pinned_rule_is_chosen_and_nothing_survives_at_device_level(capfd):
 @pytest.mark.parametrize("wires", [list(range(9)), [8, 3, 5, 0, 7, 1, 6, 2, 4]],
                          ids=["ordered", "permuted"])
 def test_rule_is_valid(wires):
-    """T2 (tape mode). The gate has one size; the second case relabels the wires. The pinned
-    rule is the only rule registered under the class name (spec 7.4 rule 8)."""
+    """T2 (tape mode). The gate has one size; the second case relabels the wires. The rule is
+    pinned and the only rule registered under the class name (spec 7.4 rules 7 and 8)."""
+    assert FIXED_DECOMPS["MajoranaGate"] is _majorana_gate
     assert list(qp.list_decomps(MajoranaGate)) == [_majorana_gate]
     op = MajoranaGate(*([w] for w in wires[:7]), work=wires[7:])
     qp.testing.assert_valid_decomp_rule(op, _majorana_gate, check_matrix=False)

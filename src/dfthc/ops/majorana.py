@@ -76,9 +76,12 @@ class MajoranaGate(Operator2):
     **Cost.** :func:`dfthc.costs.majorana_gate`: :math:`T = 5`, two ``TemporaryAND`` and three
     ``Toffoli`` (``A = 2``); ``M = 0``. The adjoint costs the same.
 
-    **Paper and dfthcbe.** Step 15; the Majorana gate of the paper's Fig. 4 (PRX), with the
-    success flags combined with :math:`G_0` into two ANDs (7 Toffolis there, 5 here) and the
-    SF sign of dfthcbe. dfthcbe: ``Maj`` (``dfthcbe/majorana.py``).
+    **Paper and dfthcbe.** Step 15; the Majorana gate of the paper's Fig. 4 (PRX;
+    arXiv:2502.15882v1 App. B.6), which applies the generators of its Eqs. (29) and (30) (v1
+    numbering) on one qubit. Fig. 4 controls all four gates by one AND of both success flags (7
+    Toffolis); ours, as dfthcbe's, folds the flags into the two ANDs with :math:`G_0` (5), which
+    also leaves D1 and Q1 on where :math:`\mathrm{succ}_b = 0`, and takes dfthcbe's SF sign.
+    dfthcbe: ``Maj`` (``dfthcbe/majorana.py``).
 
     **Example.**
 
