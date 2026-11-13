@@ -118,8 +118,9 @@ def test_auto_derived_rung_adjoint_rotates_back(b_rot):
 # (b_rot, integer angles below 2**(b_rot - 1)) per N. At b_rot = 4 the rungs turn by multiples
 # of 45 degrees; N = 4 uses b_rot = 3 (90 degrees) to stay at 18 lightning wires. The angles are
 # distinct, and for N >= 3 both the opposite rung order and the reversed register order give
-# different unitaries (asserted below), so the test pins both.
-LADDERS = {2: (4, [3]), 3: (4, [1, 6]), 4: (3, [1, 3, 2])}
+# different unitaries (asserted below), so the test pins both. At N = 3, u has a nonzero odd
+# component, so the gamma_0 identity also sees a flipped rung sign (u_j -> (-1)^j u_j).
+LADDERS = {2: (4, [3]), 3: (4, [1, 3]), 4: (3, [1, 3, 2])}
 B_ROT = 4
 
 
@@ -317,6 +318,8 @@ def test_required_wires():
     (lambda: GivensLadder(3, [0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10]),
      "'angles' has 3 wires; expected 6"),
     (lambda: GivensLadderDagger(1, [0, 1], [2], [3], []), r"b_rot must lie in \[2,"),
+    (lambda: GivensLadderDagger(2, [0, 1], [2, 3, 9], [4, 5], [6]),
+     "'angles' has 3 wires; expected 2"),
 ])
 def test_constructors_validate(build, match):
     with pytest.raises(ValueError, match=match):

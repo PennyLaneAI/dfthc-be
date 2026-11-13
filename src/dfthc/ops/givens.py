@@ -72,7 +72,9 @@ class GivensRotation(Operator2):
 
     **Cost.** :func:`dfthc.costs.givens_rotation`: :math:`T = 2(b_{rot} - 1)`, two
     :math:`b_{rot}`-bit ``SemiAdder``\ s, all ``TemporaryAND`` with measured uncomputes
-    (``A = T``); ``M = 0``. The adjoint costs the same. At FeMoco-54: 28.
+    (``A = T``); ``M = 0``. The adjoint costs the same. At FeMoco-54: 28, as dfthcbe's; the
+    paper counts :math:`b_{rot}` Toffolis per :math:`R_z`, so 30 per rung (PRX Table III;
+    ``rz-addsub`` in spec 13.1).
 
     **Paper and dfthcbe.** One rung of the paper's :math:`U_{Rot}` (PRX Eq. (B20)), steps 14 and
     16; dfthcbe's ``GivensRotationByPhaseGradient`` (``dfthcbe/givens.py``), whose two
@@ -229,7 +231,8 @@ class GivensLadder(Operator2):
     operator.
 
     **Cost.** :func:`dfthc.costs.givens_ladder`: :math:`T = 2(b_{rot} - 1)(N - 1)`, ``A = T``,
-    ``M = 0``. At FeMoco-54: 1,484.
+    ``M = 0``. At FeMoco-54: 1,484, as dfthcbe's; the paper's Table III gives 1,590
+    (:math:`2 b_{rot}` per rung, ``rz-addsub``).
 
     **Paper and dfthcbe.** The paper's :math:`U_{Rot}` (PRX Eq. (B20)), step 14; dfthcbe's
     ``GivensRotationLadder`` (``dfthcbe/rotations.py``).
