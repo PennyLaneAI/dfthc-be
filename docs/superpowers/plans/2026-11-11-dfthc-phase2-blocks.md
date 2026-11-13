@@ -25,6 +25,8 @@ Counts move from 34 to 38 tests for 2E.1 (36 per commit) and from 27 to 28 for 2
 
 **Revision 3** (2026-11-13, after Task 2E.1's GPT-5.6 review `.superpowers/sdd/task-2E.1-review-1.md`, 0 Critical, 0 Important, 2 Minor; applied on `phase2/2E.1` and here): the module docstring of `angle_data.py` states the composed load (every `G0 = 0` branch, failed `x_o` included, holds the SF entry where `(r, b)` is in range), and `TailAngleLoad`'s docstring says that `AngleErase` erases `angles`, `b_neq_B`, `G0` and `G1`. Docstrings only, in the 2E.1 and 2E.2 blocks of `angle_data.py`; no count changes.
 
+**Revision 4** (2026-11-13, after Task 2E.2's reviews: GPT-5.6 `.superpowers/sdd/task-2E.2-review-1.md`, Approved, no findings; Opus `.superpowers/sdd/task-2E.2-review-opus.md`, Approved, 0 Critical, 0 Important, 4 Minor; applied on `phase2/2E.2` and here). Four mutants (the SF mask without `b_neq_B`, the flags measured `G1` first, a stray `b_neq_B` bit in the tail masks, the SF address reversed) survived the per-commit tier and died only in the nightly certificates, so `test_angle_erase.py` gains a per-commit forced-schedule round trip at three shapes (M-1, + 3), compares the masks the rule builds with the independently built ones (M-2), and checks the SF rung count in the constructor (M-3, + 1); the `AngleErase` docstring names dfthcbe's one-hot over `B + 1` positions among the differences (M-4). Task 2E.2 counts 32 tests (27 per commit); the per-commit tier with all of Workstream E is 792. The timings and the dry-run figures below are revision 2's.
+
 ---
 
 ## Changes from the master plan and the spec
@@ -390,7 +392,7 @@ Within wave 2-a (master plan section 5) the file lists of 2E.1, 2E.3, 2E.4 and 2
 | 2E.3 | 2-a | 656 | 24 | 680 | 0 |
 | 2E.4 | 2-a | 656 | 35 | 691 | 0 |
 | 2E.5 | 2-a | 656 | 14 | 670 | 0 |
-| 2E.2 | 2-b | 656 + 36 (2E.1) = 692 | 23 | 715 | 12 |
+| 2E.2 | 2-b | 656 + 36 (2E.1) = 692 | 27 | 719 | 12 |
 
 With all five tasks merged and nothing else, the per-commit tier counts 656 + 36 + 23 + 24 + 35 + 14 = 788 tests, and Workstream E adds 14 nightly tests. Dry run on the replica with all five tasks (revision 2): 788 collected, 787 passed plus the replica-only failure described under "Code provenance", in a pytest session of 303 s with 2 workers (log `stages/2E/2e-per-commit-tier.log`; round 1's 783 tests took 423 s). The process took 21 min of wall time to exit, against 425 s in round 1, on a machine shared with the Workstream D dry run; the session time is the comparable figure. Workstream E's 132 per-commit tests took 62 s together with 2 workers in the final replay. Its ten slowest (`stages/2E/2e-durations.log`, `--durations=10` of that run) took 2.98 to 4.90 s each: the verbose-listing and device-level compiles of `test_givens.py`, `test_angle_loads.py`, `test_spin.py` and `test_majorana.py` (4.90, 4.55, 4.39 and 4.04 s), the erase's hinted-conditional test (4.31 s), the compiled loads at their two shapes (4.25 s), and four Givens ladder and dagger tests (2.98 to 3.98 s). No E test needs the `slow` tier.
 
@@ -1212,15 +1214,16 @@ git commit -m "Add TailAngleLoad and SFAngleLoad"
   - static `required_wires(tail_angles, sf_angles, n_plus, N, R, B, C, b_rot, sf_onehot_bits) -> dict` (`work`: the larger of the two fix-ups' needs), `sf_fixup_high_ranges(R, B, sf_onehot_bits)` and `tail_fixup_high_ranges(N, R, C)` (the `high_ranges` of `costs.phase_fixup` for the two fix-ups);
   - the rule `_angle_erase`. It is never adjointed or controlled.
 
-**Acceptance tests** (28 tests in `tests/ops/test_angle_erase.py`, 5 of them `slow`; 7 `slow` tests in `tests/ops/test_certificates_angles.py`):
+**Acceptance tests** (32 tests in `tests/ops/test_angle_erase.py`, 5 of them `slow`; 7 `slow` tests in `tests/ops/test_certificates_angles.py`):
 - T4: T and M against `costs.angle_erase` at both test presets (vendored tables; M = 7 and 15) and at `MID_NAPHTHALENE` (`slow`; T = 26, M = 138), A = T; three shapes off the walk's ob = `w_b` against the fix-ups' closed forms (the ob = 0 fallback, a split one-hot ob = 1, and R = 1); `costs.angle_erase` equals the two fix-ups' closed forms over `sf_fixup_high_ranges` and `tail_fixup_high_ranges` at the four presets and on 576 shapes (N 2 to 5, R 1 to 6, B 1 to 8, C 1 to 3); FeMoco-54 on the closed form, `Cost(102, 798)`, and `required_wires` at FeMoco (work 8).
 - T6: M counts every erased qubit, T differs from re-running both loads, the R B conditional `CZ`s and N conditional `Z`s count their hinted expectations `ceil(R B / 2)` and `ceil(N / 2)` (ledger "K-10 consequences": no zero mask, so every covered address has a conditional), the verbose listing names `_angle_erase`; `qp.adjoint` and `qp.ctrl` of the erase fail with `CompileError` "Decomposition rule not found" after the expected measuring-rule warning (2 tests).
 - Lightning smoke runs: loads then erase at `H2_STO3G_TEST` restore a phased state of `x_o`, `r`, `b` for seed 0 (per commit) and seeds 1 to 4 (`slow`).
-- `mcm_parities` on the erase's masks: every mask is nonzero, and the capture core at the FeMoco-54 shapes (270 SF masks over 796 outcomes, 54 tail masks over 798; random tables with zero angle entries; classical) and the tape implementation at `H2_631G_TEST` are GF(2)-linear (100 random pairs each).
-- T5 at `level="device"`; T2 in tape mode at three sizes (ob = 2, 1, 0), the rule the only one registered under its name; `required_wires`; six constructor violations, each a `ValueError`, a scalar `tail_angles` among them.
+- Forced-schedule round trips (3 tests, per commit): loads then erase on the sparse simulator in strict mode at the T2 shapes `sto3g` (ob = 2), `random-R3` (ob = 1, failed `x_o` and `r >= R`) and `random-R1` (ob = 0), from a random complex state of `x_o`, `r` and `b`, under the all-ones schedule and two seeded random ones; each consumes exactly M outcomes and restores the state exactly.
+- `mcm_parities` on the erase's masks: the masks the rule's body passes to `mcm_parities` (recorded by a counting emitter, ob = `w_b`) equal the independently built ones at FeMoco-54 and `H2_631G_TEST`, every mask is nonzero, and the capture core at the FeMoco-54 shapes (270 SF masks over 796 outcomes, 54 tail masks over 798; random tables with zero angle entries; classical) and the tape implementation at `H2_631G_TEST` are GF(2)-linear (100 random pairs each).
+- T5 at `level="device"`; T2 in tape mode at three sizes (ob = 2, 1, 0), the rule the only one registered under its name; `required_wires`; seven constructor violations, each a `ValueError`, a scalar `tail_angles` and SF entries without exactly `N - 1` angles among them.
 - Certificates (spec 12.5; `slow`, 6 cases and a check of the case design, 3 to 7 s together): `sto3g` and `631g` (vendored tables, ob = `w_b`), `R3-zero-blocks` (a zero tail row and a zero SF entry), `R3-ob0` (the fallback), `R3-ob1` (split one-hot) and `R1` (SF address `b` alone). Each run is `TailAngleLoad`, `SFAngleLoad`, `AngleErase` on the sparse simulator in strict mode under the zero schedule and every unit schedule (M + 1 runs, M = (N - 1) b_rot + 3 = 7 to 15), from a seeded random complex amplitude on every value of `x_o`, `r` and `b`; it must consume exactly M forced outcomes and return exactly that state with every ancilla in `|0>`. Each test first asserts, on the decomposed tape it certifies, that it has conditionals, all `PauliZ` or `CZ`, and that `nonlinear_conditionals(operations)` is empty (the premise of spec 12.5). The suite includes partly covered SF fix-up leaves: every case with ob > 0 has a leaf holding both a covered `b < B` and the never covered `b = B` or a failed `b`, while `R3-ob0` exercises the fallback, which has no one-hot leaf; `test_certificate_cases_cover_the_branches` asserts this, the all-zero tail row and SF entry of `R3-zero-blocks`, and the branch types. Mutation check: `.scratch/plan-check/stages/2E/mutate_2e.py` (log `stages/2E/2e-mutants.log`); each of the six erase mutants (flags measured before the SF fix-up, the SF fix-up not enabled, the SF mask without `b_neq_B`, the tail mask without `G0`, outcomes in wire order, the tail fix-up one row short) fails all six certificates.
 
-**Definition of done:** `28 passed` targeted (23 in the per-commit tier) and the certificates `7 passed` run targeted; the 2E.1 tests still pass; the per-commit tier passes; `ruff check .` clean; one commit.
+**Definition of done:** `32 passed` targeted (27 in the per-commit tier) and the certificates `7 passed` run targeted; the 2E.1 tests still pass; the per-commit tier passes; `ruff check .` clean; one commit.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1257,9 +1260,13 @@ from dfthc.ops.angle_data import (
     SFAngleLoad,
     TailAngleLoad,
     _angle_erase,
+    _erase_body,
 )
+from dfthc.ops.qroam import QROAMEmitter
 from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE, WalkParams
 from dfthc.testing.resources import chosen_rules, classify_rule_warning, verbose_program
+from dfthc.testing.sparse_sim import ForcedPolicy, SparseSimulator, SparseState
+from dfthc.testing.tape import decompose_for_simulation
 
 
 def random_tables(p, seed=3):
@@ -1477,6 +1484,44 @@ def test_lightning_smoke_run(seed):
     assert np.allclose(program(True), program(False), rtol=0, atol=1e-10)
 
 
+def sorted_terms(state):
+    order = np.lexsort(state.keys.T[::-1])
+    return state.keys[order], state.amps[order]
+
+
+@pytest.mark.parametrize(("name", "ob"), [("sto3g", 2), ("random-R3", 1), ("random-R1", 0)])
+def test_round_trip_under_forced_schedules(name, ob):
+    """Per-commit semantics (the nightly certificates prove every outcome): loads then erase on
+    the sparse simulator in strict mode restore a random complex state of x_o, r and b exactly,
+    every ancilla in |0>, under the all-ones schedule and two seeded random schedules. The shapes
+    hold D1 and Q1 rows, b = B and a failed b (sto3g, random-R1), failed x_o and r >= R
+    (random-R3), at ob = w_b, a split one-hot and the fallback."""
+    p, (tail, sf) = SHAPES[name]
+    wires, num_wires, works = layout(p, tail, sf, ob)
+
+    def round_trip():
+        loads(p, tail, sf, wires, works)
+        make_erase(p, tail, sf, ob, wires, works)
+
+    operations = decompose_for_simulation(round_trip).operations
+    inputs = wires["x_o"] + wires["r"] + wires["b"]
+    rng = np.random.default_rng(17)
+    size = 2 ** len(inputs)
+    keys = np.concatenate([SparseState.basis(num_wires, sum(
+        ((v >> (len(inputs) - 1 - i)) & 1) << (num_wires - 1 - wire)
+        for i, wire in enumerate(inputs))).keys for v in range(size)])
+    amps = rng.normal(size=size) + 1j * rng.normal(size=size)
+    initial = SparseState(num_wires, keys, amps / np.linalg.norm(amps))
+    expected_keys, expected_amps = sorted_terms(initial)
+    num_measured = (p.N - 1) * p.b_rot + 3
+    for schedule in [[1] * num_measured, *rng.integers(0, 2, (2, num_measured)).tolist()]:
+        simulator = SparseSimulator(num_wires, policy=ForcedPolicy(schedule), strict=True)
+        keys, amps = sorted_terms(simulator.run(operations, initial_state=initial))
+        assert simulator.policy.position == num_measured
+        assert np.array_equal(keys, expected_keys), schedule
+        assert np.allclose(amps, expected_amps, rtol=0, atol=1e-12), schedule
+
+
 def erase_masks(p, tail, sf):
     """The two fix-ups' masks as the erase builds them: SF over angles ‖ b_neq_B, tail over
     angles ‖ b_neq_B ‖ G0 ‖ G1 (big-endian)."""
@@ -1487,16 +1532,42 @@ def erase_masks(p, tail, sf):
     return [(sf_masks, (p.N - 1) * p.b_rot + 1), (tail_masks, (p.N - 1) * p.b_rot + 3)]
 
 
+class MaskRecorder(QROAMEmitter):
+    """A counting emitter that records the masks and the outcome count of every parities call."""
+
+    def __init__(self):
+        super().__init__(counting=True)
+        self.calls = []
+
+    def parities(self, outcomes, masks):
+        self.calls.append((list(masks), len(outcomes)))
+        return super().parities(outcomes, masks)
+
+
+def rule_masks(p, tail, sf):
+    """The masks the rule's body passes to mcm_parities at ob = w_b (classical, counting)."""
+    recorder = MaskRecorder()
+    sizes = AngleErase.required_wires(tail, sf, p.n_plus, p.N, p.R, p.B, p.C, p.b_rot, p.w_b)
+    starts = itertools.accumulate(sizes.values(), initial=0)
+    wires = {name: range(start, start + n)
+             for (name, n), start in zip(sizes.items(), starts, strict=False)}
+    _erase_body(recorder, tail, sf, p.n_plus, p.N, p.R, p.B, p.C, p.b_rot, p.w_b, **wires)
+    return recorder.calls
+
+
 def test_no_mask_is_zero_and_parities_are_linear():
     """Spec 12.5's linearity for the erase's masks, which are never zero (the b_neq_B and G0
-    bits): the capture core at the FeMoco-54 shapes (270 SF masks over 796 outcomes, 54 tail
-    masks over 798, random tables with a zero angle entry in each; classical, nothing compiled)
-    and the tape implementation at H2_631G_TEST, both with f(0) = 0 and f(x ^ y) = f(x) ^ f(y)
-    for 100 random pairs."""
+    bits): the masks the rule builds equal erase_masks, then the capture core at the FeMoco-54
+    shapes (270 SF masks over 796 outcomes, 54 tail masks over 798, random tables with a zero
+    angle entry in each; classical, nothing compiled) and the tape implementation at
+    H2_631G_TEST, both with f(0) = 0 and f(x ^ y) = f(x) ^ f(y) for 100 random pairs."""
     p = FEMOCO54
     tail, sf = random_tables(p, seed=8)
     tail = ((0,) * 53,) + tail[1:]
     sf = (((0,) * 53,) + sf[0][1:],) + sf[1:]
+    assert rule_masks(p, tail, sf) == erase_masks(p, tail, sf)
+    assert rule_masks(H2_631G_TEST, *SHAPES["631g"][1]) == erase_masks(H2_631G_TEST,
+                                                                         *SHAPES["631g"][1])
     rng = np.random.default_rng(12)
     for masks, num_outcomes in erase_masks(p, tail, sf):
         assert all(masks) and len(masks) in (270, 54)
@@ -1564,6 +1635,7 @@ def test_required_wires():
       "sf_angles": (((1,), (0,)), ((0,), (1,)))}, "needs 4 wires, more than the 3 reset angle"),
     ({"N": 3}, "tail_angles must have N = 3 rows"),
     ({"tail_angles": 3}, "tail_angles must have N = 2 rows"),
+    ({"sf_angles": (((1, 1), (2, 2)), ((3, 3), (0, 0)))}, "sf_angles N - 1 = 1 angles per entry"),
     ({"sf_angles": (((1,), (4,)), ((3,), (0,)))}, r"angles must lie in \[0, 2\*\*\(b_rot - 1\)"),
     ({"work": []}, "'work' has 0 wires; expected 1"),
 ])
@@ -2202,8 +2274,9 @@ class AngleErase(Operator2):
     **Paper and dfthcbe.** Step 18; the fix-ups of the paper's (B47) (the ``(b, r)`` table) and
     the :math:`N` term of (B50) (the D1/Q1 angles), PRX App. B, as dfthcbe's README attributes
     them. dfthcbe: ``RotDataErase`` (``dfthcbe/rot_data.py``, 90 at FeMoco-54), whose SF fix-up is
-    not enabled (a ``Z`` on ``G0`` removes the tail branches' ``(0, 0)`` phase) and whose
-    iterations are truncated and pruned.
+    not enabled (a ``Z`` on ``G0`` removes the tail branches' ``(0, 0)`` phase), whose iterations
+    are truncated and pruned, and whose one-hot over ``b`` has ``B + 1`` positions where ours has
+    ``2**w_b`` (FeMoco-54: 26 against 30).
 
     **Example.**
 
@@ -2319,7 +2392,7 @@ register_rule(AngleErase, _angle_erase)
 - [ ] **Step 4: Run the tests**
 
 Run: `scripts/test.sh tests/ops/test_angle_erase.py -q`
-Expected: `28 passed` (18 to 32 s with 2 workers, including the five-seed smoke runs, 3.5 to 4 s each, and the `MID_NAPHTHALENE` compile, 1.4 s and 266 MB alone under `run_watched`).
+Expected: `32 passed` (18 to 32 s with 2 workers, including the five-seed smoke runs, 3.5 to 4 s each, and the `MID_NAPHTHALENE` compile, 1.4 s and 266 MB alone under `run_watched`).
 
 Run: `scripts/test.sh tests/ops/test_certificates_angles.py -q`
 Expected: `7 passed` (3 to 7 s; nightly tier, run targeted here).
@@ -2330,7 +2403,7 @@ Expected: `38 passed`.
 - [ ] **Step 5: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `715 passed` (692 + 23).
+Expected: `719 passed` (692 + 27).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
