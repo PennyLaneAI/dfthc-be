@@ -449,8 +449,9 @@ class AngleErase(Operator2):
     **Paper and dfthcbe.** Step 18; the fix-ups of the paper's (B47) (the ``(b, r)`` table) and
     the :math:`N` term of (B50) (the D1/Q1 angles), PRX App. B, as dfthcbe's README attributes
     them. dfthcbe: ``RotDataErase`` (``dfthcbe/rot_data.py``, 90 at FeMoco-54), whose SF fix-up is
-    not enabled (a ``Z`` on ``G0`` removes the tail branches' ``(0, 0)`` phase) and whose
-    iterations are truncated and pruned.
+    not enabled (a ``Z`` on ``G0`` removes the tail branches' ``(0, 0)`` phase), whose iterations
+    are truncated and pruned, and whose one-hot over ``b`` has ``B + 1`` positions where ours has
+    ``2**w_b`` (FeMoco-54: 26 against 30).
 
     **Example.**
 

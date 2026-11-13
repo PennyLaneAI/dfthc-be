@@ -28,9 +28,13 @@ from dfthc.ops.angle_data import (
     SFAngleLoad,
     TailAngleLoad,
     _angle_erase,
+    _erase_body,
 )
+from dfthc.ops.qroam import QROAMEmitter
 from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE, WalkParams
 from dfthc.testing.resources import chosen_rules, classify_rule_warning, verbose_program
+from dfthc.testing.sparse_sim import ForcedPolicy, SparseSimulator, SparseState
+from dfthc.testing.tape import decompose_for_simulation
 
 
 def random_tables(p, seed=3):
@@ -248,6 +252,44 @@ def test_lightning_smoke_run(seed):
     assert np.allclose(program(True), program(False), rtol=0, atol=1e-10)
 
 
+def sorted_terms(state):
+    order = np.lexsort(state.keys.T[::-1])
+    return state.keys[order], state.amps[order]
+
+
+@pytest.mark.parametrize(("name", "ob"), [("sto3g", 2), ("random-R3", 1), ("random-R1", 0)])
+def test_round_trip_under_forced_schedules(name, ob):
+    """Per-commit semantics (the nightly certificates prove every outcome): loads then erase on
+    the sparse simulator in strict mode restore a random complex state of x_o, r and b exactly,
+    every ancilla in |0>, under the all-ones schedule and two seeded random schedules. The shapes
+    hold D1 and Q1 rows, b = B and a failed b (sto3g, random-R1), failed x_o and r >= R
+    (random-R3), at ob = w_b, a split one-hot and the fallback."""
+    p, (tail, sf) = SHAPES[name]
+    wires, num_wires, works = layout(p, tail, sf, ob)
+
+    def round_trip():
+        loads(p, tail, sf, wires, works)
+        make_erase(p, tail, sf, ob, wires, works)
+
+    operations = decompose_for_simulation(round_trip).operations
+    inputs = wires["x_o"] + wires["r"] + wires["b"]
+    rng = np.random.default_rng(17)
+    size = 2 ** len(inputs)
+    keys = np.concatenate([SparseState.basis(num_wires, sum(
+        ((v >> (len(inputs) - 1 - i)) & 1) << (num_wires - 1 - wire)
+        for i, wire in enumerate(inputs))).keys for v in range(size)])
+    amps = rng.normal(size=size) + 1j * rng.normal(size=size)
+    initial = SparseState(num_wires, keys, amps / np.linalg.norm(amps))
+    expected_keys, expected_amps = sorted_terms(initial)
+    num_measured = (p.N - 1) * p.b_rot + 3
+    for schedule in [[1] * num_measured, *rng.integers(0, 2, (2, num_measured)).tolist()]:
+        simulator = SparseSimulator(num_wires, policy=ForcedPolicy(schedule), strict=True)
+        keys, amps = sorted_terms(simulator.run(operations, initial_state=initial))
+        assert simulator.policy.position == num_measured
+        assert np.array_equal(keys, expected_keys), schedule
+        assert np.allclose(amps, expected_amps, rtol=0, atol=1e-12), schedule
+
+
 def erase_masks(p, tail, sf):
     """The two fix-ups' masks as the erase builds them: SF over angles ‖ b_neq_B, tail over
     angles ‖ b_neq_B ‖ G0 ‖ G1 (big-endian)."""
@@ -258,16 +300,42 @@ def erase_masks(p, tail, sf):
     return [(sf_masks, (p.N - 1) * p.b_rot + 1), (tail_masks, (p.N - 1) * p.b_rot + 3)]
 
 
+class MaskRecorder(QROAMEmitter):
+    """A counting emitter that records the masks and the outcome count of every parities call."""
+
+    def __init__(self):
+        super().__init__(counting=True)
+        self.calls = []
+
+    def parities(self, outcomes, masks):
+        self.calls.append((list(masks), len(outcomes)))
+        return super().parities(outcomes, masks)
+
+
+def rule_masks(p, tail, sf):
+    """The masks the rule's body passes to mcm_parities at ob = w_b (classical, counting)."""
+    recorder = MaskRecorder()
+    sizes = AngleErase.required_wires(tail, sf, p.n_plus, p.N, p.R, p.B, p.C, p.b_rot, p.w_b)
+    starts = itertools.accumulate(sizes.values(), initial=0)
+    wires = {name: range(start, start + n)
+             for (name, n), start in zip(sizes.items(), starts, strict=False)}
+    _erase_body(recorder, tail, sf, p.n_plus, p.N, p.R, p.B, p.C, p.b_rot, p.w_b, **wires)
+    return recorder.calls
+
+
 def test_no_mask_is_zero_and_parities_are_linear():
     """Spec 12.5's linearity for the erase's masks, which are never zero (the b_neq_B and G0
-    bits): the capture core at the FeMoco-54 shapes (270 SF masks over 796 outcomes, 54 tail
-    masks over 798, random tables with a zero angle entry in each; classical, nothing compiled)
-    and the tape implementation at H2_631G_TEST, both with f(0) = 0 and f(x ^ y) = f(x) ^ f(y)
-    for 100 random pairs."""
+    bits): the masks the rule builds equal erase_masks, then the capture core at the FeMoco-54
+    shapes (270 SF masks over 796 outcomes, 54 tail masks over 798, random tables with a zero
+    angle entry in each; classical, nothing compiled) and the tape implementation at
+    H2_631G_TEST, both with f(0) = 0 and f(x ^ y) = f(x) ^ f(y) for 100 random pairs."""
     p = FEMOCO54
     tail, sf = random_tables(p, seed=8)
     tail = ((0,) * 53,) + tail[1:]
     sf = (((0,) * 53,) + sf[0][1:],) + sf[1:]
+    assert rule_masks(p, tail, sf) == erase_masks(p, tail, sf)
+    assert rule_masks(H2_631G_TEST, *SHAPES["631g"][1]) == erase_masks(H2_631G_TEST,
+                                                                         *SHAPES["631g"][1])
     rng = np.random.default_rng(12)
     for masks, num_outcomes in erase_masks(p, tail, sf):
         assert all(masks) and len(masks) in (270, 54)
@@ -335,6 +403,7 @@ def test_required_wires():
       "sf_angles": (((1,), (0,)), ((0,), (1,)))}, "needs 4 wires, more than the 3 reset angle"),
     ({"N": 3}, "tail_angles must have N = 3 rows"),
     ({"tail_angles": 3}, "tail_angles must have N = 2 rows"),
+    ({"sf_angles": (((1, 1), (2, 2)), ((3, 3), (0, 0)))}, "sf_angles N - 1 = 1 angles per entry"),
     ({"sf_angles": (((1,), (4,)), ((3,), (0,)))}, r"angles must lie in \[0, 2\*\*\(b_rot - 1\)"),
     ({"work": []}, "'work' has 0 wires; expected 1"),
 ])
