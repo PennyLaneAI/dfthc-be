@@ -308,10 +308,11 @@ The canonical minimal example of an operator with a pinned measured adjoint rule
 - **Reflections.** Exact including the global sign: `GlobalPhase(π)` uncontrolled, `Z` on the
   control when controlled. Never generic `C(GlobalPhase)`.
 - **Wires.** Big-endian integers (the first wire is the most significant). Register names follow
-  dfthcbe (Global Constraints). `InnerSelect` and `InnerSelectDagger` (spec 9.18) and the
-  assembly operators (spec 9.21 to 9.23) take grouped wires (`outer`, `inner`, `select`,
-  `system`, `phase_grad`, `work`) and split them only through `WalkLayout.split_group`; the
-  blocks they call take the registers their spec 9 tables list (spec 9.0, wire passing).
+  dfthcbe (Global Constraints). The assembly operators (spec 9.21 to 9.23) take grouped wires
+  (`outer`, `inner`, `select`, `system`, `phase_grad`, `work`) and split them only through
+  `WalkLayout.split_group`; the blocks they call, `InnerSelect`, `InnerSelectDagger` and the
+  reflections included, take the registers their spec 9 tables list by name (spec 9.0, wire
+  passing).
 - **Test tolerances.** Every `np.allclose`, `np.isclose`, `np.testing.assert_allclose` and
   `pytest.approx` states both tolerances: `rtol=0` (`rel=0`) with the contract's absolute `atol`
   (`abs`; 1e-12 for dense and simulator comparisons unless the brief names another), or an
