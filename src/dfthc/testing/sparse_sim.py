@@ -17,7 +17,10 @@ simulator's policy: :class:`ForcedPolicy` (a schedule, for the outcome certifica
 which is what ``MeasurementValue.concretize`` looks up.
 
 :func:`nonlinear_conditionals` lists the conditionals of a tape that break the premise of the
-outcome certificates (spec 12.5): a diagonal base and a GF(2)-linear predicate.
+outcome certificates (spec 12.5): a diagonal base and a GF(2)-linear predicate. It decides the
+tape parities of :func:`dfthc.compile.mcm_parities` exactly (each is a
+:class:`~dfthc.compile.ParityPredicate`), checks any other predicate exhaustively up to 12
+outcomes, and flags it beyond.
 """
 
 from __future__ import annotations
@@ -29,6 +32,8 @@ from dataclasses import dataclass
 
 import numpy as np
 from pennylane.ops import Conditional
+
+from dfthc.compile import ParityPredicate
 
 PRUNE_THRESHOLD = 1e-14
 MAX_DENSE_WIRES = 25
@@ -455,31 +460,46 @@ class SparseSimulator:
         return probability
 
 
-def nonlinear_conditionals(operations: Iterable, *, exhaustive_up_to: int = 12,
-                           samples: int = 256, seed: int = 0) -> list:
+def nonlinear_conditionals(operations: Iterable, *, exhaustive_up_to: int = 12) -> list:
     """The conditionals that break the premise of spec 12.5's GF(2) conclusion.
 
     The conclusion from the zero and unit outcome vectors to every outcome vector holds only if
     each conditional of the certified block is diagonal (``PauliZ`` or ``CZ``) and its predicate
-    is GF(2)-linear in its outcomes: f(0) = 0 and f(x ^ y) = f(x) ^ f(y). The predicate is
-    checked on every outcome vector up to ``exhaustive_up_to`` outcomes, else on ``samples``
-    random ones against the unit-vector responses.
+    is GF(2)-linear in its outcomes: f(0) = 0 and f(x ^ y) = f(x) ^ f(y). A predicate that is a
+    :class:`~dfthc.compile.ParityPredicate` with one function per outcome (the tape parities of
+    :func:`~dfthc.compile.mcm_parities`) is a parity of single-outcome functions, so it is affine
+    if each function maps 0 and 1 to bits, and linear if they also sum to 0 at the zero vector;
+    this is decided exactly at any size. Any other predicate is checked on every outcome vector
+    up to ``exhaustive_up_to`` outcomes and flagged beyond (fail closed).
     """
-    rng = np.random.default_rng(seed)
     flagged = []
     for op in operations:
         if not isinstance(op, Conditional):
             continue
-        value, size = op.meas_val, len(op.meas_val.measurements)
-
-        def predicate(bits, value=value):
-            return bool(value.processing_fn(*bits))
-
-        mask = [predicate(tuple(int(i == j) for j in range(size))) for i in range(size)]
-        points = (itertools.product((0, 1), repeat=size) if size <= exhaustive_up_to else
-                  (tuple(int(b) for b in rng.integers(0, 2, size)) for _ in range(samples)))
-        linear = all(predicate(x) == bool(sum(m & b for m, b in zip(mask, x, strict=True)) % 2)
-                     for x in points)
-        if op.base.name not in {"PauliZ", "CZ"} or not linear:
+        if op.base.name not in {"PauliZ", "CZ"} or not _linear(op.meas_val, exhaustive_up_to):
             flagged.append(op)
     return flagged
+
+
+def _linear(value, exhaustive_up_to: int) -> bool:
+    """Whether the predicate of the ``MeasurementValue`` ``value`` is GF(2)-linear in its
+    outcomes, decided as :func:`nonlinear_conditionals` describes."""
+    fn, size = value.processing_fn, len(value.measurements)
+    if isinstance(fn, ParityPredicate) and len(fn.fns) == size:
+        images = [(f(0), f(1)) for f in fn.fns]
+        return (all(_is_bit(bit) for pair in images for bit in pair)
+                and sum(int(zero) for zero, _ in images) % 2 == 0)
+    if size > exhaustive_up_to:
+        return False
+
+    def predicate(bits):
+        return bool(fn(*bits))
+
+    mask = [predicate(tuple(int(i == j) for j in range(size))) for i in range(size)]
+    return all(predicate(x) == bool(sum(m & b for m, b in zip(mask, x, strict=True)) % 2)
+               for x in itertools.product((0, 1), repeat=size))
+
+
+def _is_bit(value) -> bool:
+    """Whether ``value`` is the integer 0 or 1 (Python or NumPy, booleans included)."""
+    return isinstance(value, (int, np.integer, np.bool_)) and value in (0, 1)
