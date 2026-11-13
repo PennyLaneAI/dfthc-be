@@ -766,9 +766,10 @@ class InnerUnprepare(Operator2):
 
     **Paper and dfthcbe.** Steps 19 to 22 of dfthcbe's README circuit, the adjoint of its
     ``InnerPrepare`` with the measured erase; arXiv:2502.15882v1 App. B.7.2, steps 8 and 9,
-    Eqs. (121) to (123) and (125) (Table 8). Our comparator adjoint costs no Toffoli (the
-    paper's and dfthcbe's ``b_k2`` term): the comparator's ``b_k2 - 1`` work wires stay dirty
-    until here, the saving the paper notes after Eq. (127).
+    Eqs. (121) to (123) and (125) (Table 8). Eq. (123)'s ``N`` term, the fix-up of the tail
+    rows, is :class:`~dfthc.ops.angle_data.AngleErase`'s here (spec 13.1). Our comparator
+    adjoint costs no Toffoli (the paper's and dfthcbe's ``b_k2`` term): the comparator's
+    ``b_k2 - 1`` work wires stay dirty until here, the saving the paper notes after Eq. (127).
 
     **Example.**
 

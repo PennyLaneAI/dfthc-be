@@ -146,8 +146,10 @@ def test_every_basis_input_gets_the_sign_of_its_selected_weight(name):
     equal dfthcbe's exactly when 2**w_b <= ceil((B + 1) / K2) K2, else differ as documented. At
     5-1 ``phase_grad`` has two wires more than ``s_u``, as Phase 3 passes it, so the amplitudes
     pin which wires the rotations add into. Then InnerPrepare and InnerUnprepare under the
-    all-ones outcome schedule (every fix-up applied) leave ``x_o`` in its uniform superposition
-    and every other register in |0> (the certificates prove every outcome)."""
+    all-ones outcome schedule (every fix-up applied) and the alternating one (which also sees a
+    permutation of the erase masks' bits, to which the all-ones parity is blind) leave ``x_o`` in
+    its uniform superposition and every other register in |0> (the certificates prove every
+    outcome)."""
     p, factors, tables = case(name)
     sizes = InnerPrepare.required_wires(*structure(p))
     sizes["phase_grad"] += 2 if name == "5-1" else 0
@@ -214,13 +216,14 @@ def test_every_basis_input_gets_the_sign_of_its_selected_weight(name):
         prepare()
         InnerUnprepare(*inner_args(p, tables), **wires)
 
-    policy = ForcedPolicy([1] * (p.K2 * p.d2))
-    final = SparseSimulator(num_wires, policy=policy, strict=True).run(
-        decompose_for_simulation(round_trip).operations)
-    _, restored = terms_without_gradient(final, wires)
-    rest = (0,) * (len(names) - 1)
-    assert names[0] == "x_o" and sorted(restored) == [(x, *rest) for x in range(2**p.w_x)]
-    assert all(abs(amp - 2 ** (-p.w_x / 2)) < 1e-12 for amp in restored.values())
+    operations = decompose_for_simulation(round_trip).operations
+    measured, rest = p.K2 * p.d2, (0,) * (len(names) - 1)
+    for schedule in ([1] * measured, [i % 2 for i in range(measured)]):
+        final = SparseSimulator(num_wires, policy=ForcedPolicy(schedule), strict=True).run(
+            operations)
+        _, restored = terms_without_gradient(final, wires)
+        assert names[0] == "x_o" and sorted(restored) == [(x, *rest) for x in range(2**p.w_x)]
+        assert all(abs(amp - 2 ** (-p.w_x / 2)) < 1e-12 for amp in restored.values())
 
 
 def expected_and_uncomputes(p, unprepare):
@@ -411,6 +414,10 @@ def test_read_shape_table_and_required_wires():
     assert InnerPrepare.read_table(1, 2, 1, 1, ((1, 0), (0, 1)), ((2, 3), (0, 1)),
                                    ((1, 0), (0, 1)), ((1, 1), (0, 0)), 2) == (
         (0, (54,)), (1, (26,)), (2, (1,)), (3, (45,)))
+    # C = 3 (FeMoco has C = 27): r = x // C is not a bit field of x_o, unlike at C = 1 and 2
+    zeros = ((0, 0),) * 9
+    assert InnerPrepare.read_table(1, 3, 1, 3, zeros, zeros, zeros, zeros, 1) == tuple(
+        ((x << 1) | b, (x // 3,)) for x in range(9) for b in range(2))
     assert InnerPrepare.required_wires(2, 2, 2, 1, 2, 1, 1, 3) == {
         "x_o": 2, "b": 2, "succ_b": 1, "succ_work_b": 1, "sigma_0": 1, "m_b": 2,
         "less_than_b": 1, "cmp_work_b": 1, "alt_b": 2, "keep_b": 2, "sgn": 1, "d_sgn": 1, "r": 1,
