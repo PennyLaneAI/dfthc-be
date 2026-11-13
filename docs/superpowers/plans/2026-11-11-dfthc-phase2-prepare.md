@@ -91,6 +91,16 @@ After Task 2D.1's code reviews (2026-11-13): GPT-5.6, `.superpowers/sdd/task-2D.
 
 No count changes (44 and 48 per commit, 700 and 748). Re-run for revision 3 with one worker (log `stages/2D/2d-rev3-replay.log`): Task 2D.2's per-commit inner tests (`48 passed`), the inner certificates (`4 passed`) and Task 2D.1's T3 (`5 passed`). Task 2D.1's whole outer file with these tests passed in the Opus review (`48 passed` with the certificates, without the two `MID_NAPHTHALENE` compiles). The other "Expected" lines are revision 2's replay; revision 3 changes only the two T3 tests, one by-hand assertion and two docstrings. GPT-5.6's finding 2, the sampled premise check in `nonlinear_conditionals`, is fixed in `dfthc.testing.sparse_sim` by the Task 2D.1 fix round; the call `nonlinear_conditionals(operations)` in the certificates is unchanged.
 
+## Revision 4
+
+After Task 2D.2's code reviews (2026-11-13): GPT-5.6, `.superpowers/sdd/task-2D.2-review-1.md` (Approved, no findings), and Opus, `.superpowers/sdd/task-2D.2-review-opus.md` (0 Critical, 1 Important, 2 Minor). Applied on `phase2/2D.2` and here:
+
+1. **The rank at a `C` that is not a power of two** (Opus I-1). Every T3 shape and certificate has `C` = 1 or 2, where `x_o // C` equals `x_o >> lg(C)`, so a rule that took `r` from the top bits of `x_o` (the paper's shortcut for a power-of-two `C`) or truncated it passed every test; FeMoco has `C` = 27. The inner by-hand test asserts `read_table` at `R = C = 3`, which every T3 term is tied to through `loaded_bits`.
+2. **Mask-bit permutations per commit** (Opus M-1). The all-ones schedule sees only each address's mask parity, so an erase table built with `sgn_table` and `d_sgn_table` swapped passed every per-commit test. The inner T3 round trip also runs the alternating schedule.
+3. **The paper's tail fix-up** (Opus M-2). The `InnerUnprepare` docstring says that Eq. (123)'s `N` term is `AngleErase`'s here.
+
+No count changes (48 per commit). Task 2D.2's inner file and the certificates passed with these edits (`58 passed`, two workers). Task 2D.1's outer round trip has the same all-ones blind spot; its certificates cover it.
+
 ## Global Constraints
 
 Every task's requirements implicitly include this section. Values are copied verbatim from the
@@ -179,7 +189,7 @@ GATE_SET = {
 | `tests/ops/test_certificates_prepare.py` | 2D.1, replaced whole by 2D.2 | the spec 12.5 certificates of both pairs (`slow`) |
 | `src/dfthc/costs.py` | 2D.2 (one function) | `inner_signs()` |
 
-Task 2D.2 replaces `prepare.py` with a version that contains every line of Task 2D.1's, in order: it only inserts the module docstring's "Inner read" and "Signs" paragraphs and the three inner sections at the end (checked with `difflib`: insertions only, 482 lines become 914). It replaces the certificate file with a version whose outer part is unchanged; the docstring gains a paragraph, the import line names the inner classes, and the inner certificate is appended. In wave 2-a, Task 2D.1's files are disjoint from Workstream E's; in wave 2-b, Task 2D.2 edits `costs.py`, which no Workstream E task of the master plan lists.
+Task 2D.2 replaces `prepare.py` with a version that contains every line of Task 2D.1's, in order: it only inserts the module docstring's "Inner read" and "Signs" paragraphs and the three inner sections at the end (checked with `difflib`: insertions only, 482 lines become 915). It replaces the certificate file with a version whose outer part is unchanged; the docstring gains a paragraph, the import line names the inner classes, and the inner certificate is appended. In wave 2-a, Task 2D.1's files are disjoint from Workstream E's; in wave 2-b, Task 2D.2 edits `costs.py`, which no Workstream E task of the master plan lists.
 
 **Shell conventions.** Run commands from the worktree root of your lane. `VENV="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.venv"` locates the shared environment, as in the earlier plans.
 
@@ -1316,12 +1326,12 @@ git commit -m "Add OuterPrepare and OuterUnprepare with the outer certificates"
   - `InnerSigns(sgn, d_sgn, less_than_b)` with `required_wires()`, the rule `_inner_signs` and the pinned `"Adjoint(InnerSigns)"` rule `_adjoint_inner_signs` (the operator itself).
 
 **Acceptance tests** (50 tests in `tests/ops/test_inner_prepare.py`, 2 of them `slow`; 4 more `slow` tests in `tests/ops/test_certificates_prepare.py`):
-- Spec 12.1 T3 items 2 and 3 on the sparse simulator (6 tests): (B+1, k2) = (3, 1), (5, 1), (6, 2), (7, 0) with a 3-bit `x_o` (SF rows [0, 2), one-body rows 2 to 4, failed values 5 to 7; `ke2 = 0` at (7, 0), where 16 one-hot wires would exceed the 8 target wires), and both test presets, tables from `WalkTables.from_factors`. With `H` on `x_o`, the uniform preparation drawing every `b_0` and the Hadamards on `m_b`, every basis input (x_o, b_0, m_b) appears once per `sigma_0`, with `succ_b = [b_0 <= B]`. After the read, keep test, swap and `InnerSigns`, each term decodes as the read loaded it (`r = x_o // C` where a live entry was loaded, 0 elsewhere), and its amplitude equals the uniform preparation's for `b_0` over `sqrt(2**(w_x + b_k2 + 1))` times the sign of the selected weight (from the factors) for a valid `b_0` on an SF row, and +1 otherwise. The per-row signed weights equal the encoded model's `a_b` (`inner_weights(encoded_factors(...)) / sqrt(4 Lambda p~_rc)`, the failed weight on `b = B`); the failure signs equal `our_failure_signs` (+1), and equal `dfthcbe_failure_signs` where `2**w_b <= ceil((B + 1) / K2) K2` ((3, 1), (6, 2), presets) and differ from them by more than 1e-2 at (5, 1) and (7, 0). At (5, 1) `phase_grad` has two wires more than `s_u`, as Phase 3 passes it, so the amplitudes pin which wires the rotations add into. Then `InnerPrepare` and `InnerUnprepare` under the all-ones outcome schedule (every fix-up applied, strict mode) leave `x_o` in its uniform superposition and every other register in `|0>`.
+- Spec 12.1 T3 items 2 and 3 on the sparse simulator (6 tests): (B+1, k2) = (3, 1), (5, 1), (6, 2), (7, 0) with a 3-bit `x_o` (SF rows [0, 2), one-body rows 2 to 4, failed values 5 to 7; `ke2 = 0` at (7, 0), where 16 one-hot wires would exceed the 8 target wires), and both test presets, tables from `WalkTables.from_factors`. With `H` on `x_o`, the uniform preparation drawing every `b_0` and the Hadamards on `m_b`, every basis input (x_o, b_0, m_b) appears once per `sigma_0`, with `succ_b = [b_0 <= B]`. After the read, keep test, swap and `InnerSigns`, each term decodes as the read loaded it (`r = x_o // C` where a live entry was loaded, 0 elsewhere), and its amplitude equals the uniform preparation's for `b_0` over `sqrt(2**(w_x + b_k2 + 1))` times the sign of the selected weight (from the factors) for a valid `b_0` on an SF row, and +1 otherwise. The per-row signed weights equal the encoded model's `a_b` (`inner_weights(encoded_factors(...)) / sqrt(4 Lambda p~_rc)`, the failed weight on `b = B`); the failure signs equal `our_failure_signs` (+1), and equal `dfthcbe_failure_signs` where `2**w_b <= ceil((B + 1) / K2) K2` ((3, 1), (6, 2), presets) and differ from them by more than 1e-2 at (5, 1) and (7, 0). At (5, 1) `phase_grad` has two wires more than `s_u`, as Phase 3 passes it, so the amplitudes pin which wires the rotations add into. Then `InnerPrepare` and `InnerUnprepare` under the all-ones outcome schedule (every fix-up applied, strict mode) and the alternating one (which also sees a permutation of the erase masks' bits) leave `x_o` in its uniform superposition and every other register in `|0>`.
 - T4 (4 per commit, 2 `slow`): T and M equal `costs.inner_prepare` and `costs.inner_unprepare`, M = `K2 d2`, A as derived, at both test presets and at `MID_NAPHTHALENE` (`slow`; 185 and 53 with M = 92, each compile under 2.3 s and 320 MB); FeMoco on the closed forms: 971 = 18 + 933 + 15 + 5 with A = 559 = 16 + 543, 217 = 5 + 196 + 16 with M = 416 and A = 229 = 15 + 196 + 18 (the pair's A is its T less `2 w_b + (K2 - 1) d2` = 400), `inner_signs()` = 0 (its A = 0 is the compiled `InnerSigns` count, the same at every size), `required_wires` summing to spec 10.3's 455-wire inner group (1 test).
 - T6 and T5 (1 test): the verbose listing of `InnerPrepare`, `InnerSigns`, `InnerUnprepare` names `_inner_prepare`, `_inner_signs`, `_inner_unprepare`, `_qroam_read`, `_qroam_erase`; `level="device"` leaves no dfthc operator.
 - T2 (7 tests): both rules at the `H2_STO3G_TEST` shape (with a `phase_grad` two wires longer than `s_u`), the (7, 0) shape (`k2 = 0`) and `R = 1`, `B + 1 = 4`, `b_k2 = 1` (empty `r`, odd part 1, no comparator work); `InnerSigns`' base and adjoint rules.
 - `InnerSigns` (3 tests): the phase `(-1)**(sgn XOR (less_than_b AND d_sgn))` on every basis input on lightning, plain and through the adjoint; T = M = A = 0 against `costs.inner_signs()` with one `PauliZ` and one `CZ` per application, both rules chosen, `level="device"` closure.
-- `read_shape`, `read_table` and `required_wires` by hand (1 test); 12 constructor violations for each prepare class (24 tests) and one for `InnerSigns`.
+- `read_shape`, `read_table` and `required_wires` by hand, including `read_table` at `C = 3`, where `r = x_o // C` is not a bit field of `x_o` (1 test); 12 constructor violations for each prepare class (24 tests) and one for `InnerSigns`.
 - Certificates (`slow`, 4 tests, under 4 s together): both presets' inner shapes, rows [0, 3) with (B+1, k2) = (6, 2) and row 0 zero (rank 0, so its masks are zero; the last fix-up leaf, `x_o` in {2, 3}, is partly covered), and rows [0, 2) with (B+1, k2) = (5, 1) (dead position `b = 5`; every fix-up leaf covers `b < 6` only); random tables; each run starts from a random complex amplitude on every value of `x_o`. Same assertions as Task 2D.1's.
 
 **Definition of done:** `50 passed` targeted (48 in the per-commit tier), the certificates `8 passed`, Task 2D.1's per-commit tests still `44 passed`; the per-commit tier passes; `ruff check .` clean; the spec 9.0 docstring sections in order for the three classes; one commit.
@@ -1479,8 +1489,10 @@ def test_every_basis_input_gets_the_sign_of_its_selected_weight(name):
     equal dfthcbe's exactly when 2**w_b <= ceil((B + 1) / K2) K2, else differ as documented. At
     5-1 ``phase_grad`` has two wires more than ``s_u``, as Phase 3 passes it, so the amplitudes
     pin which wires the rotations add into. Then InnerPrepare and InnerUnprepare under the
-    all-ones outcome schedule (every fix-up applied) leave ``x_o`` in its uniform superposition
-    and every other register in |0> (the certificates prove every outcome)."""
+    all-ones outcome schedule (every fix-up applied) and the alternating one (which also sees a
+    permutation of the erase masks' bits, to which the all-ones parity is blind) leave ``x_o`` in
+    its uniform superposition and every other register in |0> (the certificates prove every
+    outcome)."""
     p, factors, tables = case(name)
     sizes = InnerPrepare.required_wires(*structure(p))
     sizes["phase_grad"] += 2 if name == "5-1" else 0
@@ -1547,13 +1559,14 @@ def test_every_basis_input_gets_the_sign_of_its_selected_weight(name):
         prepare()
         InnerUnprepare(*inner_args(p, tables), **wires)
 
-    policy = ForcedPolicy([1] * (p.K2 * p.d2))
-    final = SparseSimulator(num_wires, policy=policy, strict=True).run(
-        decompose_for_simulation(round_trip).operations)
-    _, restored = terms_without_gradient(final, wires)
-    rest = (0,) * (len(names) - 1)
-    assert names[0] == "x_o" and sorted(restored) == [(x, *rest) for x in range(2**p.w_x)]
-    assert all(abs(amp - 2 ** (-p.w_x / 2)) < 1e-12 for amp in restored.values())
+    operations = decompose_for_simulation(round_trip).operations
+    measured, rest = p.K2 * p.d2, (0,) * (len(names) - 1)
+    for schedule in ([1] * measured, [i % 2 for i in range(measured)]):
+        final = SparseSimulator(num_wires, policy=ForcedPolicy(schedule), strict=True).run(
+            operations)
+        _, restored = terms_without_gradient(final, wires)
+        assert names[0] == "x_o" and sorted(restored) == [(x, *rest) for x in range(2**p.w_x)]
+        assert all(abs(amp - 2 ** (-p.w_x / 2)) < 1e-12 for amp in restored.values())
 
 
 def expected_and_uncomputes(p, unprepare):
@@ -1744,6 +1757,10 @@ def test_read_shape_table_and_required_wires():
     assert InnerPrepare.read_table(1, 2, 1, 1, ((1, 0), (0, 1)), ((2, 3), (0, 1)),
                                    ((1, 0), (0, 1)), ((1, 1), (0, 0)), 2) == (
         (0, (54,)), (1, (26,)), (2, (1,)), (3, (45,)))
+    # C = 3 (FeMoco has C = 27): r = x // C is not a bit field of x_o, unlike at C = 1 and 2
+    zeros = ((0, 0),) * 9
+    assert InnerPrepare.read_table(1, 3, 1, 3, zeros, zeros, zeros, zeros, 1) == tuple(
+        ((x << 1) | b, (x // 3,)) for x in range(9) for b in range(2))
     assert InnerPrepare.required_wires(2, 2, 2, 1, 2, 1, 1, 3) == {
         "x_o": 2, "b": 2, "succ_b": 1, "succ_work_b": 1, "sigma_0": 1, "m_b": 2,
         "less_than_b": 1, "cmp_work_b": 1, "alt_b": 2, "keep_b": 2, "sgn": 1, "d_sgn": 1, "r": 1,
@@ -2766,9 +2783,10 @@ class InnerUnprepare(Operator2):
 
     **Paper and dfthcbe.** Steps 19 to 22 of dfthcbe's README circuit, the adjoint of its
     ``InnerPrepare`` with the measured erase; arXiv:2502.15882v1 App. B.7.2, steps 8 and 9,
-    Eqs. (121) to (123) and (125) (Table 8). Our comparator adjoint costs no Toffoli (the
-    paper's and dfthcbe's ``b_k2`` term): the comparator's ``b_k2 - 1`` work wires stay dirty
-    until here, the saving the paper notes after Eq. (127).
+    Eqs. (121) to (123) and (125) (Table 8). Eq. (123)'s ``N`` term, the fix-up of the tail
+    rows, is :class:`~dfthc.ops.angle_data.AngleErase`'s here (spec 13.1). Our comparator
+    adjoint costs no Toffoli (the paper's and dfthcbe's ``b_k2`` term): the comparator's
+    ``b_k2 - 1`` work wires stay dirty until here, the saving the paper notes after Eq. (127).
 
     **Example.**
 
