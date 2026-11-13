@@ -188,6 +188,11 @@ def inner_unprepare(p: WalkParams) -> Cost:
     return Cost(p.w_b) + erase + flagged_uniform_unprep(p.B + 1, p.s_u)
 
 
+def inner_signs() -> Cost:
+    """``InnerSigns`` (spec 9.24 row): ``T = 0``, ``M = 0``."""
+    return Cost(0)
+
+
 def tail_angle_load(p: WalkParams) -> Cost:
     """``TailAngleLoad`` (spec 9.24 row): ``U(RC, X_o, w_x, 0)``."""
     return Cost(unary(p.RC, p.X_o, p.w_x, controlled=False))

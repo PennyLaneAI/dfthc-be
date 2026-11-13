@@ -22,6 +22,12 @@ pair's other children on its one legal input. The tables are random, the shapes 
 nontrivial uniform preparation (failure branches and its phase), dead positions in the read's
 last block and a partly covered fix-up leaf; one shape has a ``phase_grad`` longer than ``s_u``,
 whose extra wires must end unchanged.
+
+InnerPrepare -> InnerUnprepare: ``x_o`` is the read-only address, so each run starts from a
+random complex amplitude on every value of ``x_o``, SF rows, one-body rows and failed values
+alike; any permutation or relative phase of the rows is caught. The tables are random, with a
+zero row (so zero erase masks) where the rank column is zero too; the shapes include dead
+positions, failed ``b`` and partly covered fix-up leaves.
 """
 
 import numpy as np
@@ -29,7 +35,7 @@ import pennylane as qp
 import pytest
 from pennylane.ops import Conditional
 
-from dfthc.ops.prepare import OuterPrepare, OuterUnprepare
+from dfthc.ops.prepare import InnerPrepare, InnerUnprepare, OuterPrepare, OuterUnprepare
 from dfthc.params import H2_631G_TEST, H2_STO3G_TEST, lg
 from dfthc.testing.sparse_sim import (
     ForcedPolicy,
@@ -127,3 +133,41 @@ def test_outer_prepare_unprepare_certificate(name):
     wires, num_wires = layout(sizes)
     certify(lambda: OuterPrepare(*args, **wires), lambda: OuterUnprepare(*args, **wires), wires,
             num_wires, inputs=[], num_measured=2**k1 * (lg(X_o) + b_k1))
+
+
+# (N, R, B, C, b_k2, k2, ke2, s_u): both test presets ((B + 1, k2) = (3, 1), l_b = 3); rows
+# [0, 3) of a 3-bit x_o with (B + 1, k2) = (6, 2), row 0 zero (rank 0 as well, so its masks are
+# zero) and the last fix-up leaf (x_o in {2, 3}) partly covered; rows [0, 2) with
+# (B + 1, k2) = (5, 1): b = 5 is a dead position, and every fix-up leaf covers b in [0, 6) only.
+INNER = {
+    "sto3g": (2, 2, 2, 1, 2, 1, 1, 3),
+    "631g": (4, 2, 2, 2, 2, 1, 1, 3),
+    "inner-6-2-zero-row": (2, 3, 5, 1, 2, 2, 1, 3),
+    "inner-5-1": (3, 2, 4, 1, 2, 1, 1, 3),
+}
+assert INNER["sto3g"] == tuple(getattr(H2_STO3G_TEST, f) for f in ("N", "R", "B", "C", "b_k2",
+                                                                     "k2", "ke2", "s_u"))
+assert INNER["631g"] == tuple(getattr(H2_631G_TEST, f) for f in ("N", "R", "B", "C", "b_k2",
+                                                                  "k2", "ke2", "s_u"))
+
+
+def random_inner_tables(R, B, C, b_k2, seed=5, zero_rows=()):
+    """Random alt, keep, sgn and d_sgn of shape (R C, B + 1), zero on the rows ``zero_rows``."""
+    rng = np.random.default_rng(seed)
+    shape = (R * C, B + 1)
+    columns = [rng.integers(0, B + 1, shape), rng.integers(0, 2**b_k2, shape),
+               rng.integers(0, 2, shape), rng.integers(0, 2, shape)]
+    return tuple(tuple(tuple(0 if x in zero_rows else int(v) for v in row)
+                       for x, row in enumerate(column)) for column in columns)
+
+
+@pytest.mark.parametrize("name", list(INNER))
+def test_inner_prepare_unprepare_certificate(name):
+    N, R, B, C, b_k2, k2, ke2, s_u = INNER[name]
+    zero_rows = (0,) if name.endswith("zero-row") else ()
+    args = (N, R, B, C, *random_inner_tables(R, B, C, b_k2, zero_rows=zero_rows), b_k2, k2, ke2,
+            s_u)
+    wires, num_wires = layout(InnerPrepare.required_wires(N, R, B, C, b_k2, k2, ke2, s_u))
+    certify(lambda: InnerPrepare(*args, **wires), lambda: InnerUnprepare(*args, **wires), wires,
+            num_wires, inputs=wires["x_o"],
+            num_measured=2**k2 * (lg(B + 1) + b_k2 + 2 + lg(R)))
