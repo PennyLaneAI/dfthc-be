@@ -27,6 +27,8 @@ Counts move from 34 to 38 tests for 2E.1 (36 per commit) and from 27 to 28 for 2
 
 **Revision 4** (2026-11-13, after Task 2E.2's reviews: GPT-5.6 `.superpowers/sdd/task-2E.2-review-1.md`, Approved, no findings; Opus `.superpowers/sdd/task-2E.2-review-opus.md`, Approved, 0 Critical, 0 Important, 4 Minor; applied on `phase2/2E.2` and here). Four mutants (the SF mask without `b_neq_B`, the flags measured `G1` first, a stray `b_neq_B` bit in the tail masks, the SF address reversed) survived the per-commit tier and died only in the nightly certificates, so `test_angle_erase.py` gains a per-commit forced-schedule round trip at three shapes (M-1, + 3), compares the masks the rule builds with the independently built ones (M-2), and checks the SF rung count in the constructor (M-3, + 1); the `AngleErase` docstring names dfthcbe's one-hot over `B + 1` positions among the differences (M-4). Task 2E.2 counts 32 tests (27 per commit); the per-commit tier with all of Workstream E is 792. The timings and the dry-run figures below are revision 2's.
 
+**Revision 5** (2026-11-13, after Task 2E.4's reviews: GPT-5.6 `.superpowers/sdd/task-2E.4-review-1.md`, Approved, no findings; Opus `.superpowers/sdd/task-2E.4-review-opus.md`, Approved, 0 Critical, 0 Important, 3 Minor; applied on `phase2/2E.4` and here). Deleting `GivensLadderDagger`'s wire check passed every test, so `test_givens.py` gains a seventh constructor violation, an oversized `angles` register on the dagger (M-1, + 1); the N = 3 ladder angles become `[1, 3]`, whose `u` has a nonzero odd component, so the γ₀ identity also sees a flipped rung sign (M-3, no count change); the `GivensRotation` and `GivensLadder` docstrings state the paper's Table III cost, 30 per rung and 1,590 per ladder at FeMoco-54 (M-2). Task 2E.4 counts 36 tests, all per commit; the per-commit tier with all of Workstream E is 793.
+
 ---
 
 ## Changes from the master plan and the spec
@@ -390,7 +392,7 @@ Within wave 2-a (master plan section 5) the file lists of 2E.1, 2E.3, 2E.4 and 2
 | --- | --- | --- | ---: | ---: | ---: |
 | 2E.1 | 2-a | 656 | 36 | 692 | 2 |
 | 2E.3 | 2-a | 656 | 24 | 680 | 0 |
-| 2E.4 | 2-a | 656 | 35 | 691 | 0 |
+| 2E.4 | 2-a | 656 | 36 | 692 | 0 |
 | 2E.5 | 2-a | 656 | 14 | 670 | 0 |
 | 2E.2 | 2-b | 656 + 36 (2E.1) = 692 | 27 | 719 | 12 |
 
@@ -2910,13 +2912,13 @@ git commit -m "Add SpinMux and SpinSwap with pinned self-adjoints"
   - `GivensLadder(b_rot, system, angles, phase_grad, work)`: compilable `b_rot >= 2`, `N = len(system) >= 2`; rungs in time order `k = N - 2, ..., 0` on `(system[k], system[k + 1])` with angle register `angles[k b_rot:(k + 1) b_rot]`; `required_wires(b_rot, N) -> {"system": N, "angles": (N - 1) b_rot, "phase_grad": b_rot, "work": b_rot - 1}`; the rule `_givens_ladder`;
   - `GivensLadderDagger(b_rot, system, angles, phase_grad, work)`: the same arguments; rungs in time order `k = 0, ..., N - 2`, each `qp.adjoint(GivensRotation(...))`; `required_wires(b_rot, N)`; the rule `_givens_ladder_dagger`. Nothing adjoints `GivensLadder` itself.
 
-**Acceptance tests** (35 tests in `tests/ops/test_givens.py`), dense actions from one compiled lightning program per case with the angle and the basis input as runtime arguments, each column projected onto `|x>|gradient>|0>` of the angle, phase-gradient and work registers and required to be a unit vector (no leakage):
+**Acceptance tests** (36 tests in `tests/ops/test_givens.py`), dense actions from one compiled lightning program per case with the angle and the basis input as runtime arguments, each column projected onto `|x>|gradient>|0>` of the angle, phase-gradient and work registers and required to be a unit vector (no leakage):
 - The rung's 4 x 4 action from all four basis inputs equals `[[cos t, -sin t], [sin t, cos t]]` on `{|01>, |10>}` and the identity on `|00>`, `|11>`, with `t = 4 pi x / 2**b_rot`, for every `x < 2**b_rot` at b_rot = 2, 3, 4 (the stored angles use `x < 2**(b_rot - 1)`), with no global phase (3 tests); the auto-derived adjoint is the transpose for every `x` at b_rot = 3, 4 (2 tests).
-- The ladder equals `ladder_matrix(x, b_rot, N)` for N = 2, 3, 4 (b_rot = 4, 4, 3) and satisfies U† γ_{0,f} U = Σ_j u_j γ_{j,f} with `u = vector_from_angles(x, b_rot)` (spec 6.3, Majoranas from `dfthc.data.fermion`); for N >= 3 the opposite rung order fails both and the reversed register order differs, at the test's angles (3 tests). The dagger equals `ladder_matrix(x)^dag` for N = 2, 3, 4 (3 tests), and the ladder then the dagger restores a phased system state on lightning with the ancillas clean.
+- The ladder equals `ladder_matrix(x, b_rot, N)` for N = 2, 3, 4 (b_rot = 4, 4, 3) and satisfies U† γ_{0,f} U = Σ_j u_j γ_{j,f} with `u = vector_from_angles(x, b_rot)` (spec 6.3, Majoranas from `dfthc.data.fermion`); for N >= 3 the opposite rung order fails both and the reversed register order differs, at the test's angles, and at N = 3 a flipped rung sign fails the identity too (3 tests). The dagger equals `ladder_matrix(x)^dag` for N = 2, 3, 4 (3 tests), and the ladder then the dagger restores a phased system state on lightning with the ancillas clean.
 - T4: the rung T = 2 (b_rot - 1) and its adjoint at b_rot = 4 and 15 (4 tests); the ladder and the dagger T = 2 (b_rot - 1)(N - 1) at both test presets, `MID_NAPHTHALENE` and FeMoco-54's widths (8 tests; 1,484 at FeMoco, table-free, about 1.5 s each); A = T, M = 0; FeMoco on the closed forms (28, 1,484) and `required_wires` at FeMoco.
-- T5 at `level="device"` and T6 (the verbose listing names `_givens_rotation`, `_givens_ladder`, `_givens_ladder_dagger`); T2 for the three rules at two sizes, each rule the only one registered under its name; `required_wires`; six constructor violations.
+- T5 at `level="device"` and T6 (the verbose listing names `_givens_rotation`, `_givens_ladder`, `_givens_ladder_dagger`); T2 for the three rules at two sizes, each rule the only one registered under its name; `required_wires`; seven constructor violations, among them the dagger's own wire check.
 
-**Definition of done:** `35 passed`; the per-commit tier passes; `ruff check .` clean; one commit.
+**Definition of done:** `36 passed`; the per-commit tier passes; `ruff check .` clean; one commit.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3043,8 +3045,9 @@ def test_auto_derived_rung_adjoint_rotates_back(b_rot):
 # (b_rot, integer angles below 2**(b_rot - 1)) per N. At b_rot = 4 the rungs turn by multiples
 # of 45 degrees; N = 4 uses b_rot = 3 (90 degrees) to stay at 18 lightning wires. The angles are
 # distinct, and for N >= 3 both the opposite rung order and the reversed register order give
-# different unitaries (asserted below), so the test pins both.
-LADDERS = {2: (4, [3]), 3: (4, [1, 6]), 4: (3, [1, 3, 2])}
+# different unitaries (asserted below), so the test pins both. At N = 3, u has a nonzero odd
+# component, so the gamma_0 identity also sees a flipped rung sign (u_j -> (-1)^j u_j).
+LADDERS = {2: (4, [3]), 3: (4, [1, 3]), 4: (3, [1, 3, 2])}
 B_ROT = 4
 
 
@@ -3242,6 +3245,8 @@ def test_required_wires():
     (lambda: GivensLadder(3, [0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10]),
      "'angles' has 3 wires; expected 6"),
     (lambda: GivensLadderDagger(1, [0, 1], [2], [3], []), r"b_rot must lie in \[2,"),
+    (lambda: GivensLadderDagger(2, [0, 1], [2, 3, 9], [4, 5], [6]),
+     "'angles' has 3 wires; expected 2"),
 ])
 def test_constructors_validate(build, match):
     with pytest.raises(ValueError, match=match):
@@ -3332,7 +3337,9 @@ class GivensRotation(Operator2):
 
     **Cost.** :func:`dfthc.costs.givens_rotation`: :math:`T = 2(b_{rot} - 1)`, two
     :math:`b_{rot}`-bit ``SemiAdder``\ s, all ``TemporaryAND`` with measured uncomputes
-    (``A = T``); ``M = 0``. The adjoint costs the same. At FeMoco-54: 28.
+    (``A = T``); ``M = 0``. The adjoint costs the same. At FeMoco-54: 28, as dfthcbe's; the
+    paper counts :math:`b_{rot}` Toffolis per :math:`R_z`, so 30 per rung (PRX Table III;
+    ``rz-addsub`` in spec 13.1).
 
     **Paper and dfthcbe.** One rung of the paper's :math:`U_{Rot}` (PRX Eq. (B20)), steps 14 and
     16; dfthcbe's ``GivensRotationByPhaseGradient`` (``dfthcbe/givens.py``), whose two
@@ -3489,7 +3496,8 @@ class GivensLadder(Operator2):
     operator.
 
     **Cost.** :func:`dfthc.costs.givens_ladder`: :math:`T = 2(b_{rot} - 1)(N - 1)`, ``A = T``,
-    ``M = 0``. At FeMoco-54: 1,484.
+    ``M = 0``. At FeMoco-54: 1,484, as dfthcbe's; the paper's Table III gives 1,590
+    (:math:`2 b_{rot}` per rung, ``rz-addsub``).
 
     **Paper and dfthcbe.** The paper's :math:`U_{Rot}` (PRX Eq. (B20)), step 14; dfthcbe's
     ``GivensRotationLadder`` (``dfthcbe/rotations.py``).
@@ -3624,12 +3632,12 @@ register_rule(GivensLadderDagger, _givens_ladder_dagger)
 - [ ] **Step 4: Run the tests**
 
 Run: `scripts/test.sh tests/ops/test_givens.py -q`
-Expected: `35 passed` (29 to 50 s with 2 workers; the slowest test, the verbose and device-level compile, took 4.90 s in the durations record, `.scratch/plan-check/stages/2E/2e-durations.log`; the FeMoco-width ladder compiled in 1.6 s at 276 MB alone under the watchdog).
+Expected: `36 passed` (29 to 50 s with 2 workers; the slowest test, the verbose and device-level compile, took 4.90 s in the durations record, `.scratch/plan-check/stages/2E/2e-durations.log`; the FeMoco-width ladder compiled in 1.6 s at 276 MB alone under the watchdog).
 
 - [ ] **Step 5: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `691 passed` (656 + 35).
+Expected: `692 passed` (656 + 36).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
