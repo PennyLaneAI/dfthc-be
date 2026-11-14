@@ -1195,7 +1195,7 @@ The `H2_STO3G_TEST` configuration needs about 60 wires, exactly as computed by `
 
 ### 11.1 Algorithm
 
-`dfthc.qpe.iterative_phase_estimation(walk_power_factory, control, num_bits, qpe_grad, correction_wires)` is the QPE driver. It is a quantum function, not an `Operator2`, because it returns mid-circuit measurement results to the caller. This is the documented exemption from R-4 (§16, Q-3).
+`dfthc.qpe.iterative_phase_estimation(walk_power_factory, control, num_bits, qpe_grad, spare_wires=())` is the QPE driver. It is a quantum function, not an `Operator2`, because it returns mid-circuit measurement results to the caller. This is the documented exemption from R-4 (§16, Q-3).
 
 Rounds run for $j = t-1, \dots, 0$, with $t$ = `num_bits`. Round $j$ is one `Operator2`, `QPERound(j, earlier_bits, ...)`, followed by $m_j$ = `qp.measure(control, reset=True)` in the driver. The `QPERound` rule:
 

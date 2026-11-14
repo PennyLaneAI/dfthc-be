@@ -24,6 +24,8 @@ This file holds Tasks 4.1 and 4.2 of the master plan (`docs/superpowers/plans/20
 
 **Revision 3** (2026-11-14, by the orchestrator, after Task 3.4's reviews). Task 3.4 gained two per-commit tests in `tests/ops/test_walk.py` (the controlled walk's control width and a test of `captured_targets` itself) and docstring changes in `walk.py` (assembly plan revision 5; both files copied into `repo-phase4q`). Every per-commit count here is two higher: 1055 on `main` with Tasks 3.3 to 3.5, 1109 after Task 4.1, 1110 after Task 4.2. The measured dry runs quoted (`1108 passed`, the stage copy's collection counts) predate this; nothing in this plan's code or tests changes.
 
+**Revision 4** (2026-11-14, by the orchestrator, after Task 4.1's reviews: GPT-5.6 `.superpowers/sdd/task-4.1-review-1.md`, Approved, 0 Critical, 0 Important, 0 Minor; Opus `.superpowers/sdd/task-4.1-review-opus.md`, Approved, 0 Critical, 0 Important, 3 Minor). `tests/integration/test_qpe_toy.py` gained two per-commit tests, `test_compiled_feed_forward_leaves_an_eigenvector` on two postselected paths (phi = 3/8 and 1/8, analytic `lightning.qubit`): two mutants of the compiled feed-forward alone had died only in the sampled smoke test. `tests/integration/test_qpe_walk.py`'s real-walk QPE checks also assert that the walk's `phase_grad` and `qpe_grad` end in the gradient state (a last-round correction on the walk's `phase_grad` passed every nightly check). `ControlledWalkPower`'s "Paper and dfthcbe" section cites the paper's control model (App. B.7.2, Eq. (128)) and the p Toffolis more per power. Task 4.2's RED patch moves down five lines (`@@ -406,4 +406,4 @@`). Every per-commit count from Task 4.1 on is two higher: 56 for Task 4.1, 1111 after Task 4.1, 1112 after Task 4.2. The measured dry runs quoted predate this.
+
 ---
 
 ## Changes from the master plan, the spec and HANDOFF
@@ -487,7 +489,7 @@ Revision 2 changed the round's wiring and some of these tests, so the check was 
 1. **The hinted counts' reading.** Change 9 reads "the hinted expected counts are recorded" as the expected `CZ` and `PauliZ` totals, in which the erase fix-ups' hinted conditionals count at their expectation (beside the deterministic gates; fix-up-only values are not separated). If the master plan meant the QPE's expected T (the correction term halved), it is (t³ − t)/12 from the closed form, never compiled: hinting the corrections would make the compiled T differ from the worst case that the same task must match.
 2. **The corrections rely on the walk power's scratch group being |0⟩** (change 4). `ControlledWalkPower` declares `work`, which the controlled walk returns to |0⟩ on every erase outcome (Task 3.4's T3 compares whole states; here `ControlledWalkPower`'s T3 and every branch of QPE of the walk assert it, and the t = 2 checks would fail if a correction started from a dirty pool). A future walk power whose last group is not returned clean must declare `scratch_argname = None` and pay 2t − 1 spare wires; `register_walk_power` refuses a scratch group that is not the last group, but cannot check cleanliness. If a later walk change made `work` smaller than 2t − 1, `qpe_program` would add spare wires by itself (`spare_wires_needed`).
 3. **QPE of the walk at two key words is slow.** `H2_STO3G_TEST` t = 2 takes 487 s (release only); spec 12.6 mitigation 2 (a byte-view `np.unique`, ledger row 1B.1) would cut it if the release tier needs room. `FAILS_C3` fits one key word up to t = 2 and carries the two-round check nightly.
-4. **The lightning test is statistical** with a fixed seed (`qp.qjit(seed=2026)`): deterministic for one toolchain; a nightly bump that changes the random stream still passes each five-standard-deviation bound with probability above 1 − 10⁻⁶. Its mutation-killing power rests on the exact test, not on it.
+4. **The lightning test is statistical** with a fixed seed (`qp.qjit(seed=2026)`): deterministic for one toolchain; a nightly bump that changes the random stream still passes each five-standard-deviation bound with probability above 1 − 10⁻⁶. The exact test runs on the tape path; the compiled feed-forward (`.at[j].set` on `earlier_bits` and `qp.cond` on traced bits) is checked deterministically by `test_compiled_feed_forward_leaves_an_eigenvector` (revision 4), so the smoke test is no longer the only check of it.
 5. **Cross-module private names.** `dfthc.qpe` imports `dfthc.ops.walk._validate`, and the tests build on `walk_sim`, which uses `walk.py`'s private helpers. Public helpers are a Task 5.1 cleanup.
 6. **Phase 3 under review.** This plan builds on the assembly plan's code for Tasks 3.3 to 3.5 (section "Phase 3 interfaces this plan depends on"). Task 3.3 is merged (`main` at `e447e53`) with its review's changes, which the assembly plan's revision 4 carries; if Task 3.4's review changes those interfaces, the orchestrator reconciles this plan's code before dispatching Task 4.1.
 7. **No open question blocks the plan.** Change 4 follows spec 11.1's reuse with the one interface that compiles (the review's option 1, chosen by the orchestrator), change 5 is forced by the toy walk's algebra, and change 7 adds a check that only tightens D-4.
@@ -595,8 +597,8 @@ GATE_SET = {
 
 | Task | Base | Own per-commit | Expected per-commit tier | Own nightly and release tests |
 | --- | ---: | ---: | ---: | --- |
-| 4.1 | 1055 | 54 (`test_qpe.py` 32 of 35, `test_qpe_toy.py` 21, `test_qpe_walk.py` 1 of 6) | 1109 = 1055 + 54 | 7 `slow` (`test_qpe.py` 3, `test_qpe_walk.py` 4), 1 `release` (`test_qpe_walk.py`) |
-| 4.2 | 1109 | 1 (`test_qpe_counts.py` 1 of 8) | 1110 = 1109 + 1 | 7 `slow` |
+| 4.1 | 1055 | 56 (`test_qpe.py` 32 of 35, `test_qpe_toy.py` 23, `test_qpe_walk.py` 1 of 6) | 1111 = 1055 + 56 | 7 `slow` (`test_qpe.py` 3, `test_qpe_walk.py` 4), 1 `release` (`test_qpe_walk.py`) |
+| 4.2 | 1111 | 1 (`test_qpe_counts.py` 1 of 8) | 1112 = 1111 + 1 | 7 `slow` |
 
 Dry run on the replica with both tasks: `1108 passed in 553.71s`, peak 1,871 MB (`stages/4Q/4q-per-commit-tier.log`; run with `TMPDIR` outside the workspace, so `tests/test_infrastructure.py` passes in the replica too; another lane ran its tests part of the time), within the tier's budget of 15 minutes and 4 GB for the two-worker process tree. The per-test gate of about 1 GB and a few seconds binds each test: see "Load".
 
@@ -630,12 +632,12 @@ Dry run on the replica with both tasks: `1108 passed in 553.71s`, peak 1,871 MB 
   - `phase_from_bits(bits) -> float`, `energy_from_phase(phi, Lambda, shift=1.0) -> float`, `physical_energy(E_SA, e_sos_phys, core_energy=0.0) -> float`.
 - Produces, in `dfthc.testing.toy_walk`: `ToyWalk(system, ancilla)`, `ControlledToyWalk(control, system, ancilla)`, `ToyControlledWalkPower(power, control, system, ancilla)` (`scratch_argname = None`; rules `_toy_walk`, `_controlled_toy_walk`, `_toy_controlled_walk_power`), `toy_walk_matrix()`, `controlled_toy_walk_matrix()`, `toy_walk_cost(controlled) -> Cost`, `toy_walk_power_cost(power) -> Cost`, `toy_walk_power_spec(system, ancilla) -> WalkPowerSpec`, `toy_qpe_wires(num_bits) -> dict[str, list[int]]` (keys `control`, `qpe_grad`, `spare_wires`, `system`, `ancilla`), `toy_qpe(num_bits) -> list`. No new class is ever adjointed or controlled.
 
-**Acceptance tests** (62 tests: 54 per commit, 7 `slow`, 1 `release`):
-- `tests/integration/test_qpe_toy.py` (21, per commit). The reference W has the spec's block (Z + X)/2 and eigenphases ±π/4, ±3π/4. T3 on `lightning.qubit`: the whole compiled matrix (one Bell-pair run) of `ToyWalk` is W, of `ControlledToyWalk` and `ToyControlledWalkPower(3)` |0⟩⟨0| ⊗ I + |1⟩⟨1| ⊗ W^p, applied with the control in |0⟩, |1⟩ and |+⟩. T4: T = 0, 2 and 2p, A = 0, M = 0. T5 and T6 in one program (the toy QPE and a `ToyWalk`): the listing names `_toy_walk`, `_controlled_toy_walk`, `_toy_controlled_walk_power`, `_qpe_round` and `_phase_gradient_rotation`, nothing dfthc survives at `level="device"`. T2 and pins of the three rules; three constructor checks. The exact t = 3 distribution (strict sparse simulator, `BranchPolicy` on the control, no `otherwise`): φ ∈ {1/8, 7/8} with cos²(π/8)/2 each, {3/8, 5/8} with sin²(π/8)/2 each, nothing else, to 1e-12, every branch leaving the control and the spare wires in |0⟩, `qpe_grad` in the gradient state and the toy wires in an eigenvector of W with eigenvalue e^{2πiφ}. The lightning smoke test with 2,000 one-shot samples within five standard deviations, no other phase. `earlier_bits` of shape (t,) in every round in tape mode (False up to j, the earlier rounds' own `MeasurementValue`s after) and under capture (boolean). The toy QPE program's T, M, A for t = 1, 2, 3 (2 / 1 / 0, 7 / 2 / 1, 18 / 3 / 4). Its inventory: the rounds, walk powers, controlled toy walk and corrections converted, no `C(...)` target, no modified dfthc or template target.
+**Acceptance tests** (64 tests: 56 per commit, 7 `slow`, 1 `release`):
+- `tests/integration/test_qpe_toy.py` (23, per commit). The reference W has the spec's block (Z + X)/2 and eigenphases ±π/4, ±3π/4. T3 on `lightning.qubit`: the whole compiled matrix (one Bell-pair run) of `ToyWalk` is W, of `ControlledToyWalk` and `ToyControlledWalkPower(3)` |0⟩⟨0| ⊗ I + |1⟩⟨1| ⊗ W^p, applied with the control in |0⟩, |1⟩ and |+⟩. T4: T = 0, 2 and 2p, A = 0, M = 0. T5 and T6 in one program (the toy QPE and a `ToyWalk`): the listing names `_toy_walk`, `_controlled_toy_walk`, `_toy_controlled_walk_power`, `_qpe_round` and `_phase_gradient_rotation`, nothing dfthc survives at `level="device"`. T2 and pins of the three rules; three constructor checks. The exact t = 3 distribution (strict sparse simulator, `BranchPolicy` on the control, no `otherwise`): φ ∈ {1/8, 7/8} with cos²(π/8)/2 each, {3/8, 5/8} with sin²(π/8)/2 each, nothing else, to 1e-12, every branch leaving the control and the spare wires in |0⟩, `qpe_grad` in the gradient state and the toy wires in an eigenvector of W with eigenvalue e^{2πiφ}. The lightning smoke test with 2,000 one-shot samples within five standard deviations, no other phase. The compiled feed-forward on two postselected paths (phi = 3/8 and 1/8, analytic `lightning.qubit`): the control and the spare wires in |0⟩, `qpe_grad` in the gradient state and the toy wires in an eigenvector of W with eigenvalue e^{2πiφ}. `earlier_bits` of shape (t,) in every round in tape mode (False up to j, the earlier rounds' own `MeasurementValue`s after) and under capture (boolean). The toy QPE program's T, M, A for t = 1, 2, 3 (2 / 1 / 0, 7 / 2 / 1, 18 / 3 / 4). Its inventory: the rounds, walk powers, controlled toy walk and corrections converted, no `C(...)` target, no modified dfthc or template target.
 - `tests/test_qpe.py` (35: 32 per commit, 3 `slow`). `ControlledWalkPower`: T4 at p = 2 at `H2_STO3G_TEST` and `H2_631G_TEST` (per commit) and `MID_NAPHTHALENE` (`slow`), T, M against `costs.controlled_walk_power`, A = 2 A_C(W), the plain `Toffoli`s 2 `toffoli_only`; T3 on the tape path at p = 2 with the control in |0⟩, |1⟩ and |+⟩ against two `DFTHCWalk` steps, every output with only the index registers of A ∪ B nonzero (`slow`); T2 at three shapes and powers with the pin; validation and `required_wires`; FeMoco-54 closed forms. `QPERound`: T4 of round 0 of 2 bits at `H2_STO3G_TEST` (161 / 50 / 111, a measured bit as m_1); T2 on the toy (j = 0, 1, 2 of 3 bits) and the walk; T6, the listing of the 2-bit QPE program at `H2_STO3G_TEST` (`slow`); T5 at `level="device"` for that program; seven constructor checks. The registry: `scratch_argname` is `"work"` and `None`, a second registration, a scratch group that is not the last group and a class without the attribute are refused. `spare_wires_needed`: the toy 1, 3, 5; `H2_STO3G_TEST` 0 up to t = 4, then 1 and 3; FeMoco-54 0 up to t = 22, 1 at 23, 5 at 25. The driver's four checks (nothing queued before they raise; one is a wire bound twice). `walk_power_spec` flattens in `wire_argnames` order (not the layout's); `qpe_program`'s wires at t = 3 (67 wires, no spare) and t = 5 (70, one spare wire): every round's registers, and round 0's rotations' scratch and work wires sliced from the work pool on into the spare wire. `phase_from_bits`; `energy_from_phase` returns every eigenvalue of H̃_SA from both walk phases (shift 1) and the toy's ±1/√2 (shift 0); `physical_energy` is the physical frame.
-- `tests/integration/test_qpe_walk.py` (6: 1 per commit, 4 `slow`, 1 `release`). The reference formula reproduces the toy's distribution (per commit). QPE of the walk: `FAILS_C3` t = 1 (alternating and seeded schedules) and t = 2, `H2_STO3G_TEST` t = 1 (nightly), `H2_STO3G_TEST` t = 2 (release): the control bits' probabilities equal the encoded block's exact distribution to 1e-12, and every branch ends with only the index registers of A ∪ B nonzero.
+- `tests/integration/test_qpe_walk.py` (6: 1 per commit, 4 `slow`, 1 `release`). The reference formula reproduces the toy's distribution (per commit). QPE of the walk: `FAILS_C3` t = 1 (alternating and seeded schedules) and t = 2, `H2_STO3G_TEST` t = 1 (nightly), `H2_STO3G_TEST` t = 2 (release): the control bits' probabilities equal the encoded block's exact distribution to 1e-12, and every branch ends with only the index registers of A ∪ B nonzero and the walk's `phase_grad` and `qpe_grad` in the gradient state.
 
-**Definition of done:** `54 passed` per commit and `7 passed` nightly, targeted; the release check collected and not run; the per-commit tier passes; `ruff check .` clean; the spec 9.0 docstring sections in order for the five classes; one commit.
+**Definition of done:** `56 passed` per commit and `7 passed` nightly, targeted; the release check collected and not run; the per-commit tier passes; `ruff check .` clean; the spec 9.0 docstring sections in order for the five classes; one commit.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -645,8 +647,11 @@ Create `tests/integration/test_qpe_toy.py`:
 """The toy walk of spec 11.4 and iterative phase estimation on it (spec 11.1): ToyWalk,
 ControlledToyWalk and ToyControlledWalkPower (T2 to T6, the action against the dense reference
 with the control in |0>, |1> and |+>), the exact t = 3 distribution on the sparse simulator, the
-lightning.qubit smoke test, earlier_bits of shape (t,) in every round in both modes, the toy QPE
-program's counts and its inventory of captured targets."""
+lightning.qubit smoke test, the compiled feed-forward on one postselected path, earlier_bits of
+shape (t,) in every round in both modes, the toy QPE program's counts and its inventory of
+captured targets."""
+
+import itertools
 
 import numpy as np
 import pennylane as qp
@@ -881,6 +886,39 @@ def test_lightning_smoke_with_2000_shots():
     for group, p in checks.items():
         observed = sum(frequency.get(phi, 0.0) for phi in group)
         assert abs(observed - p) <= 5 * np.sqrt(p * (1 - p) / SHOTS), (group, observed, p)
+
+
+@pytest.mark.compiled
+@pytest.mark.parametrize("bits", [(1, 1, 0), (1, 0, 0)], ids=["phi=3/8", "phi=1/8"])
+def test_compiled_feed_forward_leaves_an_eigenvector(bits, monkeypatch):
+    """The compiled program's feed-forward, which the exact test runs only on the tape path: under
+    capture the driver sets earlier_bits with .at[j].set and each correction is a qp.cond on a
+    traced bit. With the control's outcomes postselected to ``bits`` = m_2, m_1, m_0 (analytic
+    lightning.qubit, spec 12.2), the control and the spare wires end in |0>, qpe_grad in the
+    gradient state and the toy wires in an eigenvector of W with eigenvalue e^{2 pi i phi}.
+    phi = 3/8 fires all three corrections; phi = 1/8 fires m_2's alone, at widths 2 and 3. A bit
+    stored at the wrong entry or never stored, or a correction of the wrong sign or width, leaves
+    no such eigenvector; without this test only the sampled smoke test above sees the first."""
+    measure, outcomes = qp.measure, itertools.cycle(bits)
+    monkeypatch.setattr(qp, "measure", lambda wire, reset=False: measure(
+        wire, reset=reset, postselect=next(outcomes)))
+
+    @qp.qjit(capture=True)
+    @qp.decompose(gate_set=GATE_SET, fixed_decomps=dict(FIXED_DECOMPS))
+    @qp.qnode(qp.device("lightning.qubit", wires=NUM_WIRES))
+    def circuit():
+        toy_qpe(T)
+        return qp.state()
+
+    state = np.asarray(circuit())
+    state = (state / np.linalg.norm(state)).reshape(2, 2**T, 2 ** (2 * T - 1), 4)
+    gradient = SparseSimulator(T).run([qp.PhaseGradientStatePrep(range(T))]).to_dense()
+    toy = gradient.conj() @ state[0, :, 0, :]
+    assert np.allclose(state[0, :, 0, :], np.outer(gradient, toy), rtol=0, atol=1e-12)
+    assert np.isclose(np.linalg.norm(toy), 1, rtol=0, atol=1e-12)
+    phi = phase_from_bits(bits)
+    assert np.allclose(toy_walk_matrix() @ toy, np.exp(2j * np.pi * phi) * toy, rtol=0,
+                       atol=1e-12)
 
 
 @pytest.mark.parametrize("mode", ["tape", pytest.param("capture", marks=pytest.mark.compiled)])
@@ -1392,6 +1430,20 @@ INPUTS = {"sto3g": 10, "fails-c3": 5}
 """Two-electron system inputs, psi_up's bits first: |10>|10> and |01>|01>."""
 
 
+def gradient_weight(state: SparseState, wires) -> float:
+    """The squared norm of ``state``'s projection onto (anything) (x) the phase-gradient state on
+    ``wires``: 1 exactly when those wires still hold it."""
+    value, rest = np.zeros(len(state.amps), dtype=np.int64), state.copy()
+    for wire in wires:
+        value = (value << 1) | rest.bits(wire)
+        rest.flip(wire, rest.bits(wire))
+    _, group = np.unique(rest.keys, axis=0, return_inverse=True)
+    terms = np.conj(walk_sim.gradient(len(wires))[value]) * state.amps
+    projected = (np.bincount(group.ravel(), terms.real)
+                 + 1j * np.bincount(group.ravel(), terms.imag))
+    return float(np.sum(np.abs(projected) ** 2))
+
+
 @pytest.mark.parametrize(("name", "num_bits", "kind"), [
     pytest.param("sto3g", 1, "seeded", marks=pytest.mark.slow),
     pytest.param("fails-c3", 1, "alternating", marks=pytest.mark.slow),
@@ -1404,7 +1456,9 @@ def test_qpe_of_the_walk_is_exact(name, num_bits, kind):
     corrections on wires of the walk's work pool, the walk's state carried between rounds) on
     the tape path: the probabilities of the control bits equal qpe_distribution of the encoded
     block H~_SA / Lambda~ - I to 1e-12, and every branch ends with only the index registers of
-    A u B nonzero (the work pool back in |0>). BranchPolicy follows both outcomes of each control
+    A u B nonzero (the work pool back in |0>) and with the walk's phase_grad and qpe_grad in the
+    gradient state (a last-round correction that disturbs another register leaves the bits
+    unchanged; only this sees it). BranchPolicy follows both outcomes of each control
     measurement; the erase measurements go to its `otherwise`, a forced schedule that every
     branch path reads from its own position, and strict mode asserts each has probability 1/2,
     so the unweighted forced outcomes leave the branch probabilities exact (spec 12.3, 12.5)."""
@@ -1426,6 +1480,8 @@ def test_qpe_of_the_walk_is_exact(name, num_bits, kind):
         bits = [branch.record[op] for op in controls]
         found[round(phase_from_bits(bits) * 2**num_bits)] += branch.probability
         assert walk_sim.nonzero_registers(c, branch.state) <= set(walk_sim.AB_REGISTERS)
+        for register in (layout.phase_grad, layout.qpe_grad):
+            assert np.isclose(gradient_weight(branch.state, register), 1, rtol=0, atol=1e-12)
     psi = walk_sim.basis(c, INPUTS[name])
     assert np.allclose(found, qpe_distribution(c.block(), psi, num_bits), rtol=0, atol=1e-12)
 ```
@@ -1596,9 +1652,14 @@ class ControlledWalkPower(Operator2):
     (controlled). At FeMoco-54 and ``p = 1``: 9,795, 2,524 and 8,677.
 
     **Paper and dfthcbe.** The walk powers :math:`W^{2^j}` of phase estimation on the
-    controlled walk, whose query count the paper estimates (PRX 15, 041016; arXiv:2502.15882v1;
-    spec 3.3 and 3.4). dfthcbe builds no phase estimation; its controlled walk is
-    ``DFTHCWalk(is_controlled=True)``.
+    controlled walk, whose query count the paper estimates (PRX 15, 041016; arXiv:2502.15882v1
+    Sec. II, after Eq. (11); spec 3.3 and 3.4). The paper's phase-estimation step controls only
+    :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}` (App. B.7.2, Eq. (128)), which gives
+    :math:`C(W^p)` only for even ``p`` because the block encoding is self-inverse. Each step here
+    also controls :math:`\mathrm{REF}_{T_2}` (spec 9.23), so every ``p`` works, round
+    :math:`j = 0` included, at ``p`` Toffolis more than that model: at FeMoco-54 ``9795 p``
+    against ``9794 p``, and the paper's Table III step is 9,997. dfthcbe builds no phase
+    estimation; its controlled walk is ``DFTHCWalk(is_controlled=True)``.
 
     **Example.**
 
@@ -2296,7 +2357,7 @@ def toy_qpe(num_bits: int) -> list:
 - [ ] **Step 5: Run the per-commit tests**
 
 Run: `scripts/test.sh tests/test_qpe.py tests/integration/test_qpe_toy.py tests/integration/test_qpe_walk.py -q -m "not slow and not release"`
-Expected: `54 passed` (dry run 28.3 s with 2 workers).
+Expected: `56 passed` (dry run 28.3 s with 2 workers, before the two review tests).
 
 - [ ] **Step 6: Run the nightly checks**
 
@@ -2306,7 +2367,7 @@ Expected: `7 passed` (dry run 163.5 s with 2 workers, while another lane ran its
 - [ ] **Step 7: Check the release placement (do not run it)**
 
 Run: `scripts/test.sh tests/test_qpe.py tests/integration/test_qpe_toy.py tests/integration/test_qpe_walk.py --collect-only -q -m release`
-Expected: `1/62 tests collected (61 deselected)` (`test_qpe_of_the_walk_is_exact[sto3g-2-seeded]`, about 8 minutes: it runs in the release tier, which only the orchestrator starts).
+Expected: `1/64 tests collected (63 deselected)` (`test_qpe_of_the_walk_is_exact[sto3g-2-seeded]`, about 8 minutes: it runs in the release tier, which only the orchestrator starts).
 
 - [ ] **Step 8: Run the guards**
 
@@ -2316,7 +2377,7 @@ Expected: `71 passed` (the tolerance guard covers `toy_walk.py`; the pins of the
 - [ ] **Step 9: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1109 passed` (1055 + 54; see "Expected test counts").
+Expected: `1111 passed` (1055 + 56; see "Expected test counts").
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -2512,7 +2573,7 @@ The code under test exists (Task 4.1), so the new assertions would pass at once;
 git apply <<'EOF'
 --- a/src/dfthc/qpe.py
 +++ b/src/dfthc/qpe.py
-@@ -401,4 +401,4 @@
+@@ -406,4 +406,4 @@
                                    corrections[d:2 * d - 1])
 -
 -        qp.cond(earlier_bits[later], correction)()
@@ -2538,7 +2599,7 @@ Restore it with the reverse of the same patch:
 git apply -R <<'EOF'
 --- a/src/dfthc/qpe.py
 +++ b/src/dfthc/qpe.py
-@@ -401,4 +401,4 @@
+@@ -406,4 +406,4 @@
                                    corrections[d:2 * d - 1])
 -
 -        qp.cond(earlier_bits[later], correction)()
@@ -2573,7 +2634,7 @@ Copy the eight `QPE_COMPILE` lines into the report. Each holds the compile's `se
 - [ ] **Step 7: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1110 passed` (1109 + 1).
+Expected: `1112 passed` (1111 + 1).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
