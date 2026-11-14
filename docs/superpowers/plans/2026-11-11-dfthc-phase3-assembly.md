@@ -22,6 +22,8 @@ This file holds Tasks 3.3 to 3.5 of the master plan (`docs/superpowers/plans/202
 
 **Revision 5** (2026-11-14, after Task 3.4's reviews: GPT-5.6 `.superpowers/sdd/task-3.4-review-1.md`, Needs fixes, 0 Critical, 1 Important; Opus `.superpowers/sdd/task-3.4-review-opus.md`, Approved, 0 Critical, 0 Important, 3 Minor). `tests/ops/test_walk.py` gained two per-commit tests: `test_controlled_walk_checks_the_control_width` (both reviews: removing `ControlledDFTHCWalk`'s control-width check passed every test) and `test_captured_targets_records_one_compile_and_restores_the_hook` (a hook left patched, or a name list that accumulates or is served from an earlier call, passed every test or failed only by one worker's test order). `walk.py`'s walk docstrings cite arXiv v1 Eq. (10), App. A.1 and A.2 (Eqs. (76), (77)), B.7 (Eqs. (96), (128)) with the -204 and +152 splits, and the controlled walk's action covers the walk's own states, as QPE uses it. Every per-commit count from Task 3.4 on is two higher: 1055 after Tasks 3.4 and 3.5; Task 3.4's four-file run is `84 passed`. The measured dry runs quoted predate this.
 
+**Revision 6** (2026-11-14, after Task 3.5's reviews: GPT-5.6 `.superpowers/sdd/task-3.5-review-1.md`, Approved, 0 Critical, 0 Important, 1 Minor; Opus `.superpowers/sdd/task-3.5-review-opus.md`, Approved, 0 Critical, 0 Important, 2 Minor). `tests/integration/test_end_to_end.py`: every E check compares to `ATOL` = 1e-10 (E-3 and E-4 had used `walk_sim`'s default 1e-12), E-1 and E-2 fail through `np.testing.assert_allclose`, and E-3 and E-4 through `assert_same`, which names the input and control state of a failure; `columns` drops its two unused parameters. `tests/ops/test_block_encoding.py`: the harness self-test also pins S0 and S1 to every outcome 0 and every outcome 1 (a schedule whose S1 returned zeros passed every test). No count changes.
+
 ---
 
 ## Changes from the master plan, the spec and HANDOFF
@@ -579,7 +581,7 @@ Dry run on the replica with all three tasks: `1045 passed in 432.98s`, peak 1,94
 - T4 (9 tests, 2 `slow`): compiled, each class alone, at `sto3g`, `631g` and `fails-c3`: T and M against `costs.block_encoding`, the plain `Toffoli` count `toffoli_only − 1` and A = T − (`toffoli_only` − 1); at `MID_NAPHTHALENE` (`slow`; 1,874 / 1,875, M = 502); FeMoco-54 on the closed forms (279 + 2 · 4,725 + 20 = 9,749, controlled 9,750, M = 2,524, A = 8,632 and 8,633) and `required_wires` there (143, 455, 799, 108, 15, 44; 1,564 wires).
 - T5 and T6 (4 tests): the verbose listing of a program holding both classes names `_block_encoding`, `_controlled_block_encoding`, `_ref_t2` and `_controlled_ref_t2` and not `_c_zero_reflection`; nothing dfthc survives at `level="device"`; `qp.adjoint` and `qp.ctrl` of `DFTHCBlockEncoding` fail with `CompileError` "Decomposition rule not found for operator 'Adjoint(DFTHCBlockEncoding)'" (`'C(DFTHCBlockEncoding)'`) after the expected measuring-rule warnings only.
 - T2 (3 tests): both rules at the three shapes, each pinned and the only rule under its class name.
-- `required_wires` by hand (1 test); constructor validation (18 tests: eight violations for each class, each a `ValueError`, among them an outer keep entry only the outer prepares reject and a tail angle only the selects reject; the pool check with `WalkLayout.work_size` shrunk; a two-wire `control`); the harness self-test (1 test: both schedule kinds force both outcomes, `assert_same_state` rejects a global and a relative −1, `project` reads an input exactly and 0 once an ancilla is flipped, `nonzero_registers` is empty and then `{"x_o"}`).
+- `required_wires` by hand (1 test); constructor validation (18 tests: eight violations for each class, each a `ValueError`, among them an outer keep entry only the outer prepares reject and a tail angle only the selects reject; the pool check with `WalkLayout.work_size` shrunk; a two-wire `control`); the harness self-test (1 test: S0 and S1 give every outcome 0 and every outcome 1, the alternating and seeded schedules force both outcomes, `assert_same_state` rejects a global and a relative −1, `project` reads an input exactly and 0 once an ancilla is flipped, `nonzero_registers` is empty and then `{"x_o"}`).
 - `tests/test_work_pool.py` (9 tests): at `sto3g`, `631g`, `mid` and `femoco` (tape mode), every call of both block-encoding rules gets exactly `required_wires` (`phase_grad` of the prepare classes the whole register), its `work` is the pool's prefix and disjoint from its other registers and the dirty comparator registers, no other register holds a pool wire, the dirty registers go only to their prepare and unprepare classes; the pool equals `ControlledRefAB`'s need and bounds every other; at 300 random valid shapes every child in `_children` (plain and controlled), `OuterUnprepare`, `InnerUnprepare` and `InnerSelectDagger` included, is given exactly its own class's `required_wires` work, and `WalkLayout.work_size` covers it and the walk's `RefAB` and `ControlledRefAB`.
 
 **Definition of done:** `52 passed` targeted (50 in the per-commit tier); the per-commit tier passes; `ruff check .` clean; the spec 9.0 docstring sections in order; one commit.
@@ -696,11 +698,13 @@ def test_prepare_then_unprepare_is_the_identity(name):
 
 
 def test_harness_sees_phases_outcomes_and_ancillas():
-    """The harness the semantic tests rely on (and Tasks 3.4 and 3.5): the alternating and seeded
-    schedules force both outcomes, assert_same_state compares complex amplitudes (a -1 on the
-    whole state or on one term fails it), project returns an input exactly and drops every term
-    with a nonzero ancilla, and nonzero_registers names that ancilla's register."""
+    """The harness the semantic tests rely on (and Tasks 3.4 and 3.5): S0 and S1 force every
+    outcome 0 and every outcome 1, the alternating and seeded schedules both outcomes,
+    assert_same_state compares complex amplitudes (a -1 on the whole state or on one term fails
+    it), project returns an input exactly and drops every term with a nonzero ancilla, and
+    nonzero_registers names that ancilla's register."""
     c = case("sto3g")
+    assert (walk_sim.schedule("S0", 8), walk_sim.schedule("S1", 8)) == ([0] * 8, [1] * 8)
     for kind in ("alternating", "seeded"):
         assert set(walk_sim.schedule(kind, 8)) == {0, 1}
     psi = walk_sim.superposition(c, SUPPORT["sto3g"], seed=1)
@@ -3503,18 +3507,26 @@ FIXED_INPUTS = (0b0000, 0b1000, 0b1010, 0b1111)
 TWO_ELECTRON_631G = tuple(v for v in range(256) if bin(v).count("1") == 2)
 """The 28 two-electron basis states of H2_631G_TEST (N = 4, 8 spin orbitals)."""
 ATOL = 1e-10
-"""Spec 12.4: E-1 and E-2 to 1e-10."""
+"""Spec 12.4 and the Task 3.5 brief: every E-check comparison to 1e-10."""
 
 nightly, release = pytest.mark.slow, pytest.mark.release
 
 
-def columns(c, ops, inputs, kind, control=None, row=0, seed=0):
-    """The projected output (``row``: control value) of every basis input, as columns, each run
-    with the forced schedule ``kind`` of exactly the program's measurements."""
+def columns(c, ops, inputs, kind, seed=0):
+    """The projected output of every basis input, as columns, each run with the forced schedule
+    ``kind`` of exactly the program's measurements."""
     outcomes = walk_sim.schedule(kind, walk_sim.num_measurements(ops), seed=seed)
     return np.array([walk_sim.project(c, walk_sim.simulate(
-        c, ops, walk_sim.input_state(c, walk_sim.basis(c, v), control), outcomes))[row]
+        c, ops, walk_sim.input_state(c, walk_sim.basis(c, v)), outcomes))[0]
         for v in inputs]).T
+
+
+def assert_same(state, expected, where):
+    """``walk_sim.assert_same_state``, naming the input and control state of a failure."""
+    try:
+        walk_sim.assert_same_state(state, expected, atol=ATOL)
+    except AssertionError as error:
+        raise AssertionError(f"{where}: largest difference {error}") from None
 
 
 E1 = [pytest.param("sto3g", "S0", ALL_INPUTS, marks=nightly, id="sto3g-S0-all"),
@@ -3535,7 +3547,7 @@ def test_e1_block_encoding(name, kind, inputs):
     c = walk_sim.case(name)
     ops = walk_sim.program(c, DFTHCBlockEncoding)
     measured = columns(c, ops, inputs, kind, seed=12)
-    assert np.allclose(measured, c.block()[:, list(inputs)], rtol=0, atol=ATOL)
+    np.testing.assert_allclose(measured, c.block()[:, list(inputs)], rtol=0, atol=ATOL)
 
 
 @nightly
@@ -3549,7 +3561,7 @@ def test_e2_walk_powers(name, k):
     chebyshev = {1: x, 2: 2 * x @ x - np.eye(len(x))}[k]
     ops = walk_sim.program(c, DFTHCWalk, repeat=k)
     measured = columns(c, ops, FIXED_INPUTS, "S0")
-    assert np.allclose(measured, chebyshev[:, list(FIXED_INPUTS)], rtol=0, atol=ATOL)
+    np.testing.assert_allclose(measured, chebyshev[:, list(FIXED_INPUTS)], rtol=0, atol=ATOL)
 
 
 E3 = [pytest.param("S0", FIXED_INPUTS, marks=nightly, id="S0-fixed"),
@@ -3586,12 +3598,13 @@ def test_e3_controlled_walk(kind, inputs):
         for label, control in (("0", [1, 0]), ("1", [0, 1]), ("+", [plus, plus])):
             out = walk_sim.simulate(c, controlled, walk_sim.input_state(c, psi, control),
                                     outcomes[:m])
-            walk_sim.assert_same_state(out, expected[label])
+            assert_same(out, expected[label], f"input {v:04b}, control |{label}>")
         stepped_twice = walk_sim.simulate(c, twice, walk_sim.input_state(c, psi), outcomes)
         out = walk_sim.simulate(c, then_controlled, walk_sim.input_state(c, psi, [plus, plus]),
                                 outcomes)
-        walk_sim.assert_same_state(out, walk_sim.superpose(
-            (plus, stepped), (plus, walk_sim.set_control(c, stepped_twice))))
+        assert_same(out, walk_sim.superpose(
+            (plus, stepped), (plus, walk_sim.set_control(c, stepped_twice))),
+            f"input {v:04b}, control |+> after a walk step")
 
 
 @nightly
@@ -3607,8 +3620,8 @@ def test_e4_prepare_then_unprepare(kind):
     for v in ALL_INPUTS:
         psi = walk_sim.basis(c, v)
         identity = walk_sim.simulate(c, walk_sim.operations(c), walk_sim.input_state(c, psi), [])
-        walk_sim.assert_same_state(walk_sim.simulate(c, ops, walk_sim.input_state(c, psi),
-                                                     outcomes), identity)
+        assert_same(walk_sim.simulate(c, ops, walk_sim.input_state(c, psi), outcomes), identity,
+                    f"input {v:04b}")
 ```
 
 - [ ] **Step 2: Check the tier placement**
@@ -3675,7 +3688,7 @@ EOF
 ```
 
 Run: `scripts/test.sh tests/integration/test_end_to_end.py -q -m "slow and not release" -k e3`
-Expected: FAIL, `1 failed`: `test_e3_controlled_walk[S0-fixed]`, at the comparison after one walk step (`AssertionError: 0.21496583928721302` from `assert_same_state`, about 0.21 away). The three control states before it pass: from ancillas in |0⟩ an uncontrolled `RefAB` on the control-|0⟩ branch acts as the identity, and only the state after a walk step has ancillas for it to reflect.
+Expected: FAIL, `1 failed`: `test_e3_controlled_walk[S0-fixed]`, at the comparison after one walk step (`AssertionError: input 0000, control |+> after a walk step: largest difference 0.21496583928721302`, about 0.21 away). The three control states before it pass: from ancillas in |0⟩ an uncontrolled `RefAB` on the control-|0⟩ branch acts as the identity, and only the state after a walk step has ancillas for it to reflect.
 
 Restore `walk.py`:
 
@@ -3712,7 +3725,7 @@ EOF
 ```
 
 Run: `scripts/test.sh tests/integration/test_end_to_end.py -q -m "slow and not release" -k e4`
-Expected: FAIL, `2 failed`: `test_e4_prepare_then_unprepare[alternating]` and `[seeded]`, each at the comparison with the input (`AssertionError: 0.1631672471881693` and `0.22634238599178114`): the inner unprepare, whose tables `x_o` addresses, runs after the outer unprepare has already uncomputed `x_o`, so the ancillas do not return to |0⟩.
+Expected: FAIL, `2 failed`: `test_e4_prepare_then_unprepare[alternating]` and `[seeded]`, each at the comparison with an input (`[alternating]`: `AssertionError: input 0000: largest difference 0.1631672471881693`; `[seeded]` about 0.23 away): the inner unprepare, whose tables `x_o` addresses, runs after the outer unprepare has already uncomputed `x_o`, so the ancillas do not return to |0⟩.
 
 Restore `walk.py`:
 
