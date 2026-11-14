@@ -31,6 +31,8 @@ Counts move from 34 to 38 tests for 2E.1 (36 per commit) and from 27 to 28 for 2
 
 **Revision 6** (2026-11-13, after Task 2E.5's reviews: GPT-5.6 `.superpowers/sdd/task-2E.5-review-1.md`, Approved, no findings; Opus `.superpowers/sdd/task-2E.5-review-opus.md`, Needs fixes, tests only, 0 Critical, 1 Important, 2 Minor; applied on `phase2/2E.5` and here). On lightning the device pass runs `TemporaryAND` and its measured uncompute both as a `Toffoli`, and T and A are symmetric under exchanging them, so a rule (or a hand-written adjoint) with the two AND forms exchanged passed every test. `test_majorana.py` gains a tape-path run on the sparse simulator, gate and adjoint on all 128 inputs, whose handlers assert each AND's precondition (I-1, + 2), and asserts the rule's pin in `FIXED_DECOMPS` (M-1); the `MajoranaGate` docstring cites arXiv:2502.15882v1 App. B.6 and Eqs. (29) and (30), and says that D1 and Q1 stay on where `succ_b = 0`, unlike Fig. 4 (M-2). Task 2E.5 counts 16 tests, all per commit; the per-commit tier with all of Workstream E is 795.
 
+**Revision 7** (2026-11-14, after Task 2E.3's GPT-5.6 review `.superpowers/sdd/task-2E.3-review-1.md`, Needs fixes, 0 Critical, 0 Important, 1 Minor; applied on `phase2/2E.3` and here). The `SpinMux` docstring cites App. B.3 ("Selecting between the spins") for computing $\sigma_{G_0}$, not App. B.2, the qubitization step (M-1). Docstring only; Task 2E.3 still counts 24 tests.
+
 ---
 
 ## Changes from the master plan and the spec
@@ -2720,7 +2722,7 @@ class SpinMux(Operator2):
     **Cost.** :func:`dfthc.costs.spin_mux`: :math:`T = 1`, one plain ``Toffoli`` (``A = 0``);
     ``M = 0``. Two per ``InnerSelect``.
 
-    **Paper and dfthcbe.** Steps 12 and 17; the paper computes :math:`\sigma_{G_0}` in App. B 2
+    **Paper and dfthcbe.** Steps 12 and 17; the paper computes :math:`\sigma_{G_0}` in App. B.3
     but has no Table III row for it. dfthcbe: ``InnerSelect._build_sigma``, two
     ``MultiControlX`` gates (2 Toffolis per application).
 
