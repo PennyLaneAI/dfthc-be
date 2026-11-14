@@ -89,7 +89,7 @@ marked `merged` is never re-dispatched after a loss of context.
 
 | Id | Title | Tier | Status | Branch | Merge commit | Test evidence | Reviews (GPT-5.6 / Opus) | Open issues |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 4.1 | QPE operators, driver, energies, `ToyWalk` and `ControlledToyWalk` | A | not started | `phase4/4.1` | | | / | plan `phase4-qpe` (revision 3); + 54 per commit (1,055 -> 1,109), 7 nightly, 1 release (real-walk QPE at `H2_STO3G_TEST`, t = 2, 487 s); after G3 |
+| 4.1 | QPE operators, driver, energies, `ToyWalk` and `ControlledToyWalk` | A | in progress | `phase4/4.1` | | lane-a from `bacd1f1`, implementer c9efbca2 (inherit), brief `task-4.1-brief.md` | / | plan `phase4-qpe` (revision 3); + 54 per commit (1,055 -> 1,109), 7 nightly, 1 release (real-walk QPE at `H2_STO3G_TEST`, t = 2, 487 s); after G3 |
 | 4.2 | QPE resource counts (compiled at the test presets) | B | not started | `phase4/4.2` | | | / n/a | plan `phase4-qpe` (revision 3); + 1 per commit (-> 1,110), 7 nightly; RED first with the hinted-correction mutant; after 4.1 |
 | 4.3 | Resource report and `dfthc.costs_reference` | B | not started | `phase4/4.3` | | | / n/a | the `fe2s2` and `fe4s4` compiles are heavy runs by the orchestrator; programs projected above 7.5 GB follow the G0 decision |
 | 4.4 | Documentation set and docstring audit | B | not started | `phase4/4.4` | | | / n/a | |
