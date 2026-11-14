@@ -79,7 +79,7 @@ marked `merged` is never re-dispatched after a loss of context.
 
 | Id | Title | Tier | Status | Branch | Merge commit | Test evidence | Reviews (GPT-5.6 / Opus) | Open issues |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 3.1 | `InnerSelect` and `InnerSelectDagger` | A | in progress | `phase3/3.1` | | lane-a from `898b754`, implementer db8564a1 (inherit) | / | plan `phase3-select`; + 37 (891 with 2E.3 -> 928); after G2 |
+| 3.1 | `InnerSelect` and `InnerSelectDagger` | A | in review | `phase3/3.1` | | `62707aa` from `898b754`, lane-a, implementer db8564a1 (inherit): byte-identical to the brief (checked by the orchestrator); 41 tests (37 per commit); per-commit 928 (432 s, alongside lane-b); ruff clean; slow tests alone under the watchdog: `MID_NAPHTHALENE` counts 3.0 s at 364 MB, `631g` T3 7.4 and 8.2 s at 276 MB | / | plan `phase3-select`; + 37 (891 with 2E.3 -> 928); after G2 |
 | 3.2 | `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB` | B | in review | `phase3/3.2` | | `d3a0c68` from `898b754`, lane-b, implementer 6e6d2a37 (Sonnet): byte-identical to the brief (checked by the orchestrator); 45 tests; per-commit 936 (424 s, alongside lane-a); ruff clean | / n/a | plan `phase3-select`; + 45 (891 with 2E.3 -> 936); after G2; parallel to 3.1 |
 | 3.3 | `DFTHCBlockEncoding` and `ControlledDFTHCBlockEncoding` | A | not started | `phase3/3.3` | | | / | plan `phase3-assembly`; + 44 (973 -> 1,017); after 3.1 and 3.2 |
 | 3.4 | `DFTHCWalk`, `ControlledDFTHCWalk`, whole-program counts at the test and mid presets, inventory test | A | not started | `phase3/3.4` | | | / | plan `phase3-assembly`; + 28 (1,017 -> 1,045); shared edit `dfthc.testing.resources` |
