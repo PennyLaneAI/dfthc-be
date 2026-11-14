@@ -1,6 +1,6 @@
 """DFTHCWalk and ControlledDFTHCWalk (spec 9.22): the walk against the block encoding and the
 encoded model on the tape path, the three control states, the children, rule selection, the
-inventory of captured targets, the failing qp.ctrl(DFTHCWalk), validation."""
+inventory of captured targets and its instrument, the failing qp.ctrl(DFTHCWalk), validation."""
 
 import re
 import warnings
@@ -220,6 +220,31 @@ def test_inventory_flags_a_stray_modifier():
 
 
 @pytest.mark.compiled
+def test_captured_targets_records_one_compile_and_restores_the_hook():
+    """captured_targets wraps Catalyst's private hook for one compile only: a second call of the
+    same program gives the same list and another program of the same width its own (nothing
+    accumulates or is served from an earlier call), and afterwards, also after a program that
+    raises, the module holds the original function again."""
+    import catalyst.from_plxpr.qfunc_interpreter as qfunc_interpreter
+
+    original = qfunc_interpreter._convert_decomp_target_spec
+    registers = {"sgn": [0], "d_sgn": [1], "less_than_b": [2]}
+    adjointed = list(captured_targets(lambda: qp.adjoint(InnerSigns(**registers)), 3))
+    assert qfunc_interpreter._convert_decomp_target_spec is original
+    assert captured_targets(lambda: qp.adjoint(InnerSigns(**registers)), 3) == adjointed
+    plain = captured_targets(lambda: InnerSigns(**registers), 3)
+    assert "Adjoint(InnerSigns)" in adjointed and "InnerSigns" in plain
+    assert "Adjoint(InnerSigns)" not in plain
+
+    def failing():
+        raise RuntimeError("the program fails to trace")
+
+    with pytest.raises(RuntimeError, match="fails to trace"):
+        captured_targets(failing, 3)
+    assert qfunc_interpreter._convert_decomp_target_spec is original
+
+
+@pytest.mark.compiled
 def test_controlled_walk_has_no_generic_controlled_rule():
     """Spec 7.4 rule 6 and 9.22, the Task G0.1 probe: qp.ctrl(DFTHCWalk(...)) at H2_STO3G_TEST
     fails to compile with a CompileError naming C(DFTHCWalk), after Catalyst's expected
@@ -275,3 +300,12 @@ def test_constructor_validates(kind, change, match):
     arguments = {"params": params, "tables": tables} | c.groups(kind == "controlled") | change
     with pytest.raises(ValueError, match=match):
         cls(**arguments)
+
+
+def test_controlled_walk_checks_the_control_width():
+    """ControlledDFTHCWalk checks its one-wire control like the groups (spec 9.0; its _validate
+    call passes the class's own wire_argnames, so the block encoding's test does not cover it)."""
+    c = walk_sim.case("sto3g")
+    with pytest.raises(ValueError, match="'control' has 2 wires; expected 1"):
+        ControlledDFTHCWalk(*c.compilable,
+                            **c.groups(True) | {"control": [*c.control, c.num_wires]})

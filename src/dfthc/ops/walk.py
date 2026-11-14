@@ -463,9 +463,19 @@ class DFTHCWalk(Operator2):
     ``M + A = 11199`` physical measurements (spec 9.24). ``CNOT`` and ``PauliX`` counts are
     upper bounds (spec 7.6).
 
-    **Paper and dfthcbe.** Steps 1 to 28 of spec 3.5, the walk of the paper's App. B and Table
-    III (9,997 Toffolis at FeMoco-54; ours is -204, spec 13.1). dfthcbe: ``DFTHCWalk``
-    (``dfthcbe/block_encoding.py``), 9,641; ours is +152 (spec 13.1).
+    **Paper and dfthcbe.** Steps 1 to 28 of spec 3.5: the walk
+    :math:`W = \mathrm{Ref}_{\mathrm{a}\mathcal{B}}\,U^\dagger\,\mathrm{Ref}_{\mathcal{B}}\,U`
+    with eigenphases :math:`\pm\arccos(E_k/\Lambda - 1)` (PRX 15, 041016; arXiv:2502.15882v1
+    Eq. (10), App. A.2 Eqs. (76) and (77), :math:`\mathrm{Ref} = 2|0\rangle\langle 0| - I` as in
+    App. A.1), whose reflection covers every ancilla of the linear combination and of the
+    qubitization signal (App. B); its Table 3 (PRX Table III) gives 9,997 Toffolis at FeMoco-54,
+    46 of them for :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}` with the phase-estimation
+    control (App. B.7, Eqs. (96) and (128)). Ours is -204: the block encoding's -202 and
+    ``RefAB``'s 44 against 46 (spec 13.1). dfthcbe: ``DFTHCWalk``
+    (``dfthcbe/block_encoding.py``), the same two children with the same sign (Qualtran's
+    ``reflection_around_zero`` with ``global_phase=-1``), :math:`9596 + 45 = 9641` by its call
+    graph; ours is +152: the block encoding's +153 and ``RefAB``'s 44 against 45 (dfthcbe's
+    uncontrolled reflection adds a phase target).
 
     **Example.**
 
@@ -525,8 +535,11 @@ class ControlledDFTHCWalk(Operator2):
     C(\mathrm{REF}_{T_2})\,U`.
 
     **Action.** :math:`|0\rangle\langle 0|_{control} \otimes I + |1\rangle\langle 1|_{control}
-    \otimes W` on inputs whose ancilla groups are in :math:`|0\rangle`, with :math:`W` the action
-    of :class:`DFTHCWalk` for the same arguments: control ``|0>`` returns the whole input,
+    \otimes W` on inputs whose ancilla groups are in :math:`|0\rangle` and on every state the walk
+    reaches from there, where only the six index registers of :math:`\mathcal{A}\cup\mathcal{B}`
+    are nonzero (as between QPE rounds; the prepares and unprepares run on both branches and
+    :math:`U^\dagger U = I` there too), with :math:`W` the action of :class:`DFTHCWalk` for the
+    same arguments: control ``|0>`` returns the whole input,
     control ``|1>`` gives :class:`DFTHCWalk`'s whole output, global sign included, and control
     ``|+>`` their superposition (spec 12.4, E-3). The output is the same for every outcome of the
     erase measurements.
@@ -564,8 +577,14 @@ class ControlledDFTHCWalk(Operator2):
     ``T = 9795``, ``M = 2524``, ``A = 8677``, ``M + A = 11201``.
 
     **Paper and dfthcbe.** The controlled walk of spec 3.3, the unit of the paper's phase
-    estimation. dfthcbe: ``DFTHCWalk(is_controlled=True)``, 9,642 Toffolis at FeMoco-54 (its
-    controlled ``ref_ab`` costs the same as the uncontrolled one); ours is +153.
+    estimation (arXiv:2502.15882v1 Sec. II, after Eq. (11)). The paper counts the phase-estimation
+    control on :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}` only (App. B.7.2, Eq. (128)),
+    which gives controlled even powers of :math:`W` because the block encoding is self-inverse;
+    this class also controls :math:`\mathrm{REF}_{T_2}` (+1), so every power works. dfthcbe:
+    ``DFTHCWalk(is_controlled=True)``, which also controls only the two reflections,
+    :math:`9597 + 45 = 9642` Toffolis at FeMoco-54 by its call graph (its controlled ``ref_ab``
+    uses the control as the phase target, so it costs the same as the uncontrolled one); ours is
+    +153.
 
     **Example.**
 
