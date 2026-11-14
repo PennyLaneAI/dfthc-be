@@ -1,8 +1,11 @@
 """The toy walk of spec 11.4 and iterative phase estimation on it (spec 11.1): ToyWalk,
 ControlledToyWalk and ToyControlledWalkPower (T2 to T6, the action against the dense reference
 with the control in |0>, |1> and |+>), the exact t = 3 distribution on the sparse simulator, the
-lightning.qubit smoke test, earlier_bits of shape (t,) in every round in both modes, the toy QPE
-program's counts and its inventory of captured targets."""
+lightning.qubit smoke test, the compiled feed-forward on one postselected path, earlier_bits of
+shape (t,) in every round in both modes, the toy QPE program's counts and its inventory of
+captured targets."""
+
+import itertools
 
 import numpy as np
 import pennylane as qp
@@ -237,6 +240,39 @@ def test_lightning_smoke_with_2000_shots():
     for group, p in checks.items():
         observed = sum(frequency.get(phi, 0.0) for phi in group)
         assert abs(observed - p) <= 5 * np.sqrt(p * (1 - p) / SHOTS), (group, observed, p)
+
+
+@pytest.mark.compiled
+@pytest.mark.parametrize("bits", [(1, 1, 0), (1, 0, 0)], ids=["phi=3/8", "phi=1/8"])
+def test_compiled_feed_forward_leaves_an_eigenvector(bits, monkeypatch):
+    """The compiled program's feed-forward, which the exact test runs only on the tape path: under
+    capture the driver sets earlier_bits with .at[j].set and each correction is a qp.cond on a
+    traced bit. With the control's outcomes postselected to ``bits`` = m_2, m_1, m_0 (analytic
+    lightning.qubit, spec 12.2), the control and the spare wires end in |0>, qpe_grad in the
+    gradient state and the toy wires in an eigenvector of W with eigenvalue e^{2 pi i phi}.
+    phi = 3/8 fires all three corrections; phi = 1/8 fires m_2's alone, at widths 2 and 3. A bit
+    stored at the wrong entry or never stored, or a correction of the wrong sign or width, leaves
+    no such eigenvector; without this test only the sampled smoke test above sees the first."""
+    measure, outcomes = qp.measure, itertools.cycle(bits)
+    monkeypatch.setattr(qp, "measure", lambda wire, reset=False: measure(
+        wire, reset=reset, postselect=next(outcomes)))
+
+    @qp.qjit(capture=True)
+    @qp.decompose(gate_set=GATE_SET, fixed_decomps=dict(FIXED_DECOMPS))
+    @qp.qnode(qp.device("lightning.qubit", wires=NUM_WIRES))
+    def circuit():
+        toy_qpe(T)
+        return qp.state()
+
+    state = np.asarray(circuit())
+    state = (state / np.linalg.norm(state)).reshape(2, 2**T, 2 ** (2 * T - 1), 4)
+    gradient = SparseSimulator(T).run([qp.PhaseGradientStatePrep(range(T))]).to_dense()
+    toy = gradient.conj() @ state[0, :, 0, :]
+    assert np.allclose(state[0, :, 0, :], np.outer(gradient, toy), rtol=0, atol=1e-12)
+    assert np.isclose(np.linalg.norm(toy), 1, rtol=0, atol=1e-12)
+    phi = phase_from_bits(bits)
+    assert np.allclose(toy_walk_matrix() @ toy, np.exp(2j * np.pi * phi) * toy, rtol=0,
+                       atol=1e-12)
 
 
 @pytest.mark.parametrize("mode", ["tape", pytest.param("capture", marks=pytest.mark.compiled)])
