@@ -177,13 +177,18 @@ class InnerSelect(Operator2):
 
     **Paper and dfthcbe.** Steps 10 to 18 (spec 3.5): the paper's inner SELECT,
     :math:`U_{Rot}^\dagger\,\mathrm{Maj}\,U_{Rot}` with its spin swap, data loads and erase (PRX
-    App. B; arXiv:2502.15882v1 App. B.6). dfthcbe: ``InnerSelect`` (``dfthcbe/select.py``),
-    3,502 Toffolis at FeMoco-54; ours is +35: the tail load +5 and the SF load +20 (exact
-    iteration), the erase +12 (one-hot over 32 positions, exact iteration), the spin multiplexer
-    -2 (one Toffoli per application where dfthcbe has two ``MultiControlX``). The paper's Table
-    III gives 3,710 per select with the tail fix-up its Eq. (B50) charges to the inner erase;
-    ours is -173: the Givens ladders -212 (``rz-addsub``), the loads +28 and the erase +11
-    (exact iteration), the multiplexer +2, the Majorana gate -2 (spec 13.1).
+    App. B; arXiv:2502.15882v1 App. B.3 for the spin selection, B.5 and Eqs. (93), (94) for the
+    rotations, B.6 and Fig. 4 for the Majorana gate, Table 9 for the loads and the erase).
+    dfthcbe: ``InnerSelect`` (``dfthcbe/select.py``), 3,502 Toffolis at FeMoco-54; ours is +35:
+    the tail load +5 and the SF load +20 (exact iteration), the erase +12 (one-hot over 32
+    positions +4, the SF fix-up enabled on :math:`G_0` +1, exact iteration +7), the spin
+    multiplexer -2 (one Toffoli per application where dfthcbe has two ``MultiControlX``). The
+    paper's Table III gives 3,710 per select with the tail fix-up its Eq. (B50) (v1 Eq. (123))
+    charges to the inner erase; ours is -173: the Givens ladders -212 (``rz-addsub``), the loads
+    +28 (exact iteration), the erase +11 (exact iteration, the one-hot over 32 positions), the
+    multiplexer +2 (Table III omits it; App. B.3 and B.7.1 count two per select, as we do),
+    the Majorana gate -2 (the success flags folded into its two ANDs, as in dfthcbe; spec
+    13.1).
 
     **Example.**
 

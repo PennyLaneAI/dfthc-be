@@ -93,9 +93,14 @@ def branch_classes(p):
     """(x_o, succ_x_o, sigma_1, b, succ_b, r) of the branches the T3 runs, as the prepares leave
     them: every SF row with every b <= B (both flags set, r = x_o // C), a failed b (succ_b = 0)
     and sigma_1 = 1 on SF rows, every tail row with sigma_1 = 0 and 1, a D1 row with succ_b = 0,
-    and failed x_o (succ_x_o = 0) on an SF row, a tail row and, if it exists, x_o = X_o."""
+    and failed x_o (succ_x_o = 0) on an SF row, a tail row and, if it exists, x_o = X_o. The
+    inner read loads a zero entry at a failed b, so the alias swap leaves (b, r) = (0, 0) there:
+    the SF load then writes sf_angles[0][0] and b_neq_B = 1, and only the Majorana gate's succ_b
+    control keeps the branch the identity (spec 8.5, ledger row 2D.2). That class sits on the
+    last SF row, whose own rank is not 0; a failed b at b = 2**w_b - 1 (nothing loaded) stays."""
     classes = [(x, 1, 0, b, 1, x // p.C) for x in range(p.RC) for b in range(p.B + 1)]
-    classes += [(0, 1, 0, 2**p.w_b - 1, 0, 0), (p.RC - 1, 1, 1, 0, 1, (p.RC - 1) // p.C)]
+    classes += [(0, 1, 0, 2**p.w_b - 1, 0, 0), (p.RC - 1, 1, 0, 0, 0, 0),
+                (p.RC - 1, 1, 1, 0, 1, (p.RC - 1) // p.C)]
     classes += [(p.RC + j, 1, s, 0, 1, 0) for j in range(p.N) for s in (0, 1)]
     classes += [(p.RC, 1, 0, 1, 0, 0), (0, 0, 0, 0, 1, 0), (p.RC, 0, 1, 1, 1, 0)]
     if p.X_o < 2**p.w_x:
@@ -409,20 +414,22 @@ def test_pinned_rules_are_chosen_and_nothing_survives_at_device_level(capfd):
 
 
 @pytest.mark.compiled
+@pytest.mark.parametrize("cls", [InnerSelect, InnerSelectDagger],
+                         ids=["select", "dagger"])
 @pytest.mark.parametrize("wrap", [qp.adjoint, lambda op: qp.ctrl(op, control=40)],
                          ids=["adjoint", "control"])
-def test_no_adjoint_or_controlled_path(wrap):
-    """Spec 7.4 rules 5 and 6: the adjoint is the class InnerSelectDagger, and nothing controls
-    the select. Wrapped anyway, Catalyst drops the measuring candidates with the expected warning
-    (rule 12), and the compile fails loudly."""
+def test_no_adjoint_or_controlled_path(wrap, cls):
+    """Spec 7.4 rules 5 and 6: the adjoint of the select is the class InnerSelectDagger, and
+    neither class is ever adjointed or controlled. Wrapped anyway, Catalyst drops the measuring
+    candidates with the expected warning (rule 12), and the compile fails loudly."""
     args = compilable("sto3g")
     wires, _ = layout(args)
-    key = "Adjoint(InnerSelect)" if wrap is qp.adjoint else "C(InnerSelect)"
+    key = f"Adjoint({cls.__name__})" if wrap is qp.adjoint else f"C({cls.__name__})"
     with warnings.catch_warnings(record=True) as records:
         warnings.simplefilter("always")
         with pytest.raises(CompileError, match=re.escape(
                 f"Decomposition rule not found for operator '{key}")):
-            compiled_resources(lambda: wrap(InnerSelect(*args, **wires)), num_wires=41)
+            compiled_resources(lambda: wrap(cls(*args, **wires)), num_wires=41)
     skipped = [str(r.message) for r in records if issubclass(r.category, RuleLoweringWarning)
                and str(r.message).startswith("Skipped the ")]
     named = [message for message in skipped if classify_rule_warning(message) != "noise"]
