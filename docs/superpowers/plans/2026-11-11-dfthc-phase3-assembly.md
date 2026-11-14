@@ -18,6 +18,8 @@ This file holds Tasks 3.3 to 3.5 of the master plan (`docs/superpowers/plans/202
 
 **Revision 3** (2026-11-14, after Task 3.1's reviews). Task 3.1 gained two per-commit tests (the adjoint and controlled compile test for `InnerSelectDagger`), so every per-commit count here is two higher: 975 on `main` with Tasks 3.1 and 3.2, 1019 after Task 3.3, 1047 after Tasks 3.4 and 3.5. The measured dry runs quoted (`1045 passed`) predate this.
 
+**Revision 4** (2026-11-14, after Task 3.3's Opus review `.superpowers/sdd/task-3.3-review-opus.md`, Approved, 0 Critical, 0 Important, 4 Minor). `tests/ops/test_block_encoding.py` gained six per-commit tests: an `outer-keep` and a `tail-angle` constructor case for each class (the only tables the outer prepares' and the selects' checks reject alone), a control-width test for the controlled class, and `test_harness_sees_phases_outcomes_and_ancillas`, a self-test of `walk_sim`'s schedules, state comparison, projection and register report (an all-zero schedule, a comparison by modulus or an empty register report each blinded the T3 without failing it). The T3's norm assertion is removed: the strict simulator renormalizes the kept branch at every measurement, so it could not fail. `walk.py`'s "Paper and dfthcbe" section (both Task 3.3's and Task 3.4's block) cites arXiv v1 Eq. (11), Fig. 1, App. B.1 Eq. (87), B.2 Eq. (88) and Table 3, gives dfthcbe's call-graph split and the full -202 breakdown. Every per-commit count from Task 3.3 on is six higher: 1025 after Task 3.3, 1053 after Tasks 3.4 and 3.5; Task 3.3's targeted run is `52 passed` (50 per commit). The measured dry runs quoted predate this.
+
 ---
 
 ## Changes from the master plan, the spec and HANDOFF
@@ -539,9 +541,9 @@ GATE_SET = {
 
 | Task | Base | Own per-commit | Expected per-commit tier | Own slow and release tests |
 | --- | ---: | ---: | ---: | --- |
-| 3.3 | 975 | 44 (`test_block_encoding.py` 35 of 37, `test_work_pool.py` 9) | 1019 = 975 + 44 | 2 `slow` (the `MID_NAPHTHALENE` counts) |
-| 3.4 | 1019 | 28 (`test_walk.py` 23, `test_walk_counts.py` 5 of 7; `test_work_pool.py` replaced, still 9) | 1047 = 1019 + 28 | 2 `slow` (the `MID_NAPHTHALENE` compiles) |
-| 3.5 | 1047 | 0 | 1047 | 10 `slow`, 32 `release` (`test_end_to_end.py`) |
+| 3.3 | 975 | 50 (`test_block_encoding.py` 41 of 43, `test_work_pool.py` 9) | 1025 = 975 + 50 | 2 `slow` (the `MID_NAPHTHALENE` counts) |
+| 3.4 | 1025 | 28 (`test_walk.py` 23, `test_walk_counts.py` 5 of 7; `test_work_pool.py` replaced, still 9) | 1053 = 1025 + 28 | 2 `slow` (the `MID_NAPHTHALENE` compiles) |
+| 3.5 | 1053 | 0 | 1053 | 10 `slow`, 32 `release` (`test_end_to_end.py`) |
 
 Dry run on the replica with all three tasks: `1045 passed in 432.98s`, peak 1,949 MB (`stages/3A/3a-per-commit-tier.log`; run with `TMPDIR` outside the workspace, so `tests/test_infrastructure.py` passes in the replica too).
 
@@ -569,16 +571,16 @@ Dry run on the replica with all three tasks: `1045 passed in 432.98s`, peak 1,94
   - module-private helpers that Task 3.4 and the tests use: `_rebuild`, `_children(p, t, controlled) -> list[(class, compilable args, work need)]`, `_group_sizes`, `_sizes`, `_check`, `_validate`, `_registers(p, outer, inner, select, system, phase_grad, control=())`, `_emit(children, registers, work)`, `_resources(children, p)`. Neither class is ever adjointed or controlled.
 - Produces, in `dfthc.testing.walk_sim`: `WalkCase` (`build(params, factors)`, `control`, `num_wires`, `system`, `compilable`, `groups(controlled)`, `block()`), `FAILS_C3`, `CASES`, `case(name)`, `operations(case, *calls)`, `program(case, cls, controlled=False, repeat=1)`, `prepare_unprepare(case)`, `num_measurements`, `schedule(kind, num, seed=0)` (`"S0"`, `"S1"`, `"alternating"`, `"seeded"`), `input_state(case, system, control=None)`, `basis`, `superposition`, `simulate(case, ops, initial, outcomes)`, `gradient`, `project(case, state) -> (2, 4**N)`, `nonzero_registers`, `reflect_ab`, `set_control`, `superpose`, `assert_same_state`, `AB_REGISTERS`, `ATOL`.
 
-**Acceptance tests** (46 tests, 2 of them `slow`), on the shapes `sto3g`, `631g` (the test presets with their vendored factors) and `fails-c3` (`walk_sim.FAILS_C3`, random factors):
-- T3 on the tape path (5 tests): at `sto3g` and `fails-c3`, from a superposition of two two-electron system states with every ancilla in |0⟩, the block of `DFTHCBlockEncoding` is `encoded_block`'s H̃_SA/Λ̃ − I applied to it, the control-1 part is zero, only the six index registers of 𝒜 ∪ ℬ are nonzero outside the block and the output has norm 1, under the alternating and a seeded schedule; `ControlledDFTHCBlockEncoding` at `sto3g` with the control in |0⟩ (the whole input), |1⟩ (the plain class's whole output) and |+⟩ (their superposition); the E-4 precursor, the rule's children without `RefT2` (U then U†), returns a superposition of two states and every ancilla exactly at both shapes, under the alternating and a seeded schedule.
+**Acceptance tests** (52 tests, 2 of them `slow`), on the shapes `sto3g`, `631g` (the test presets with their vendored factors) and `fails-c3` (`walk_sim.FAILS_C3`, random factors):
+- T3 on the tape path (5 tests): at `sto3g` and `fails-c3`, from a superposition of two two-electron system states with every ancilla in |0⟩, the block of `DFTHCBlockEncoding` is `encoded_block`'s H̃_SA/Λ̃ − I applied to it, the control-1 part is zero, only the six index registers of 𝒜 ∪ ℬ are nonzero outside the block, under the alternating and a seeded schedule; `ControlledDFTHCBlockEncoding` at `sto3g` with the control in |0⟩ (the whole input), |1⟩ (the plain class's whole output) and |+⟩ (their superposition); the E-4 precursor, the rule's children without `RefT2` (U then U†), returns a superposition of two states and every ancilla exactly at both shapes, under the alternating and a seeded schedule.
 - The children (2 tests, `sto3g`, `fails-c3`): both rules queue, in tape mode, spec 9.21's eleven children in order, each on the layout's registers of its own names (`work` the pool's prefix, `phase_grad` the whole register); the two rules differ only in the reflection, `ControlledRefT2` on the control with one more work wire; both `InnerPrepare` and both `InnerUnprepare` calls are equal, the selects' arguments are equal with `fixup_bits = w_b`, the outer prepare and unprepare get the outer tables.
 - T4 (9 tests, 2 `slow`): compiled, each class alone, at `sto3g`, `631g` and `fails-c3`: T and M against `costs.block_encoding`, the plain `Toffoli` count `toffoli_only − 1` and A = T − (`toffoli_only` − 1); at `MID_NAPHTHALENE` (`slow`; 1,874 / 1,875, M = 502); FeMoco-54 on the closed forms (279 + 2 · 4,725 + 20 = 9,749, controlled 9,750, M = 2,524, A = 8,632 and 8,633) and `required_wires` there (143, 455, 799, 108, 15, 44; 1,564 wires).
 - T5 and T6 (4 tests): the verbose listing of a program holding both classes names `_block_encoding`, `_controlled_block_encoding`, `_ref_t2` and `_controlled_ref_t2` and not `_c_zero_reflection`; nothing dfthc survives at `level="device"`; `qp.adjoint` and `qp.ctrl` of `DFTHCBlockEncoding` fail with `CompileError` "Decomposition rule not found for operator 'Adjoint(DFTHCBlockEncoding)'" (`'C(DFTHCBlockEncoding)'`) after the expected measuring-rule warnings only.
 - T2 (3 tests): both rules at the three shapes, each pinned and the only rule under its class name.
-- `required_wires` by hand (1 test); constructor validation (13 tests: six violations for each class, each a `ValueError`, and the pool check with `WalkLayout.work_size` shrunk).
+- `required_wires` by hand (1 test); constructor validation (18 tests: eight violations for each class, each a `ValueError`, among them an outer keep entry only the outer prepares reject and a tail angle only the selects reject; the pool check with `WalkLayout.work_size` shrunk; a two-wire `control`); the harness self-test (1 test: both schedule kinds force both outcomes, `assert_same_state` rejects a global and a relative −1, `project` reads an input exactly and 0 once an ancilla is flipped, `nonzero_registers` is empty and then `{"x_o"}`).
 - `tests/test_work_pool.py` (9 tests): at `sto3g`, `631g`, `mid` and `femoco` (tape mode), every call of both block-encoding rules gets exactly `required_wires` (`phase_grad` of the prepare classes the whole register), its `work` is the pool's prefix and disjoint from its other registers and the dirty comparator registers, no other register holds a pool wire, the dirty registers go only to their prepare and unprepare classes; the pool equals `ControlledRefAB`'s need and bounds every other; at 300 random valid shapes every child in `_children` (plain and controlled), `OuterUnprepare`, `InnerUnprepare` and `InnerSelectDagger` included, is given exactly its own class's `required_wires` work, and `WalkLayout.work_size` covers it and the walk's `RefAB` and `ControlledRefAB`.
 
-**Definition of done:** `46 passed` targeted (44 in the per-commit tier); the per-commit tier passes; `ruff check .` clean; the spec 9.0 docstring sections in order; one commit.
+**Definition of done:** `52 passed` targeted (50 in the per-commit tier); the per-commit tier passes; `ruff check .` clean; the spec 9.0 docstring sections in order; one commit.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -586,9 +588,10 @@ Create `tests/ops/test_block_encoding.py`:
 
 ```python
 """DFTHCBlockEncoding and ControlledDFTHCBlockEncoding (spec 9.21): the block against the encoded
-model on the tape path, the three control states, U then U-dagger, the children's order and
-registers, counts, rule selection, validation."""
+model on the tape path, the three control states, U then U-dagger, the harness, the children's
+order and registers, counts, rule selection, validation."""
 
+import dataclasses
 import re
 import warnings
 
@@ -638,7 +641,8 @@ def test_block_against_the_encoded_model(name):
     and a seeded schedule of the erases. fails-c3 has the failed uniform preparation of x_o (so
     Lambda~ != Lambda) and the dfthcbe failure-sign difference; sto3g is the H2 test preset.
     Outside the block, only the six index registers of A u B are nonzero (the postcondition that
-    makes RefAB the walk's reflection), and the output has norm 1."""
+    makes RefAB the walk's reflection). The output's norm is not asserted: the simulator
+    renormalizes the kept branch of every measurement to norm 1."""
     c = case(name)
     ops = walk_sim.program(c, DFTHCBlockEncoding)
     psi = walk_sim.superposition(c, SUPPORT[name], seed=3)
@@ -649,7 +653,6 @@ def test_block_against_the_encoded_model(name):
         assert np.allclose(block[0], c.block() @ psi, rtol=0, atol=1e-12)
         assert np.allclose(block[1], 0, rtol=0, atol=1e-12)
         assert walk_sim.nonzero_registers(c, out) <= set(walk_sim.AB_REGISTERS)
-        assert np.isclose(np.linalg.norm(out.amps), 1, rtol=0, atol=1e-12)
 
 
 def test_controlled_block_encoding_in_three_control_states():
@@ -688,6 +691,29 @@ def test_prepare_then_unprepare_is_the_identity(name):
         out = walk_sim.simulate(c, ops, walk_sim.input_state(c, psi),
                                 walk_sim.schedule(kind, walk_sim.num_measurements(ops), seed=6))
         walk_sim.assert_same_state(out, identity)
+
+
+def test_harness_sees_phases_outcomes_and_ancillas():
+    """The harness the semantic tests rely on (and Tasks 3.4 and 3.5): the alternating and seeded
+    schedules force both outcomes, assert_same_state compares complex amplitudes (a -1 on the
+    whole state or on one term fails it), project returns an input exactly and drops every term
+    with a nonzero ancilla, and nonzero_registers names that ancilla's register."""
+    c = case("sto3g")
+    for kind in ("alternating", "seeded"):
+        assert set(walk_sim.schedule(kind, 8)) == {0, 1}
+    psi = walk_sim.superposition(c, SUPPORT["sto3g"], seed=1)
+    state = walk_sim.simulate(c, walk_sim.operations(c), walk_sim.input_state(c, psi), [])
+    assert np.allclose(walk_sim.project(c, state)[0], psi, rtol=0, atol=1e-12)
+    relative = state.copy()
+    relative.amps = np.where(relative.bits(c.system[0]), -1, 1) * relative.amps
+    for wrong in (walk_sim.superpose((-1, state)), relative):
+        with pytest.raises(AssertionError):
+            walk_sim.assert_same_state(wrong, state)
+    assert walk_sim.nonzero_registers(c, state) == set()
+    dirty = state.copy()
+    dirty.flip(c.layout.x_o[0])
+    assert np.allclose(walk_sim.project(c, dirty), 0, rtol=0, atol=1e-12)
+    assert walk_sim.nonzero_registers(c, dirty) == {"x_o"}
 
 
 def children(rule, c, controlled):
@@ -882,26 +908,53 @@ def test_required_wires():
         "control": 1} | sizes
 
 
+def bad_outer_keep(c):
+    """The case's tables with the first outer keep value 2**b_k1, outside the outer prepares'
+    range; every other table stays valid."""
+    keep = (2**c.params.b_k1, *c.tables.outer_keep[1:])
+    return dataclasses.replace(c.tables, outer_keep=keep).as_compilable()
+
+
+def bad_tail_angle(c):
+    """The case's tables with the first tail angle 2**(b_rot - 1), outside the selects' range."""
+    rows = c.tables.tail_angles
+    rows = ((2 ** (c.params.b_rot - 1), *rows[0][1:]), *rows[1:])
+    return dataclasses.replace(c.tables, tail_angles=rows).as_compilable()
+
+
 @pytest.mark.parametrize(("name", "change", "match"), [
     ("sto3g", {"params": 7}, "params and tables must be"),
     ("sto3g", {"params": H2_631G_TEST.as_compilable()}, r"alt must be a table of ints of shape"),
     ("fails-c3", {"params": walk_sim.FAILS_C3.as_compilable()[:-1] + (3,)},
      r"the erase's one-hot over ke2 \+ lg\(B \+ 1\) = 5 bits needs 32 wires"),
     ("sto3g", {"tables": ()}, "WalkTables needs 8 fields; got 0"),
+    ("sto3g", {"tables": bad_outer_keep}, r"keep entries must lie in \[0, 4\), got 4"),
+    ("sto3g", {"tables": bad_tail_angle}, r"tail_angles angles must lie in \[0, 2\*\*\(b_rot"),
     ("sto3g", {"work": list(range(7))}, "'work' has 7 wires; expected 8"),
     ("sto3g", {"system": [0]}, "'system' has 1 wires; expected 4"),
-], ids=["params-type", "params-shape", "onehot", "tables", "work", "system"])
+], ids=["params-type", "params-shape", "onehot", "tables", "outer-keep", "tail-angle", "work",
+        "system"])
 @pytest.mark.parametrize("kind", CLASSES)
 def test_constructor_validates(kind, name, change, match):
     """Spec 9.0: a wrong argument type, tables of another shape, a one-hot register that does
-    not fit (ke2 = 3 needs 2**(3 + w_b) = 32 wires of the inner erase's 8), missing tables and
+    not fit (ke2 = 3 needs 2**(3 + w_b) = 32 wires of the inner erase's 8), missing tables, an
+    outer keep value only the outer prepares check, a tail angle only the selects check, and
     wrong group widths each raise ValueError."""
     c = case(name)
     cls, _ = CLASSES[kind]
     params, tables = c.compilable
+    change = {key: value(c) if callable(value) else value for key, value in change.items()}
     arguments = {"params": params, "tables": tables} | c.groups(kind == "controlled") | change
     with pytest.raises(ValueError, match=match):
         cls(**arguments)
+
+
+def test_controlled_constructor_checks_the_control_width():
+    """The controlled class checks its one-wire control like the groups (spec 9.0)."""
+    c = case("sto3g")
+    with pytest.raises(ValueError, match="'control' has 2 wires; expected 1"):
+        ControlledDFTHCBlockEncoding(*c.compilable,
+                                     **c.groups(True) | {"control": [*c.control, c.num_wires]})
 
 
 def test_constructor_checks_the_work_pool(monkeypatch):
@@ -1351,12 +1404,18 @@ class DFTHCBlockEncoding(Operator2):
     ``CNOT`` and ``PauliX`` counts are upper bounds (spec 7.6).
 
     **Paper and dfthcbe.** Steps 1 to 27 of spec 3.5: the sum-of-squares block encoding
-    :math:`U^\dagger\,\mathrm{REF}_{T_2}\,U` of the paper's App. B (PRX 15, 041016;
-    arXiv:2502.15882v1). dfthcbe: ``DFTHCBlockEncoding`` (``dfthcbe/block_encoding.py``), 9,596
-    Toffolis at FeMoco-54; ours is +153 (the inner prepare +58 and select +35 per round, the
-    inner unprepare -3 per round, the outer prepare -2 and unprepare -25; spec 13.1). The paper's
-    Table III gives 9,997 per walk, 46 of them for :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}`
-    (spec 13.1); without it ours is -202, mostly the Givens ladders' ``rz-addsub``.
+    :math:`U^\dagger\,\mathrm{REF}_{T_2}\,U` (PRX 15, 041016; arXiv:2502.15882v1 Eq. (11) and
+    Fig. 1), built in App. B: the prepare over :math:`x_o` (B.1, Eq. (87)) and the step of
+    oblivious amplitude amplification, whose reflection is controlled on the success of
+    :math:`x_o` (B.2, Eq. (88)); the costs are its Table 3 (PRX Table III). dfthcbe:
+    ``DFTHCBlockEncoding`` (``dfthcbe/block_encoding.py``), 9,596 Toffolis at FeMoco-54 by its
+    call graph, :math:`212 + 2 (913 + 220) + 2 \cdot 3502 + 20 + 94`; ours is +153 (the inner
+    prepare +58 and select +35 per round, the inner unprepare -3 per round, the outer prepare -2
+    and unprepare -25; spec 13.1). The paper gives 9,997 per walk, 46 of them for
+    :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}`; against the other 9,951 ours is -202: the
+    Givens ladders -424 (``rz-addsub``), the 26-bit inner entries against its 20-bit ones +186,
+    exact boundaries and one-hot padding +80 (``exact-iter``, ``no-prune``, ``onehot-pad``), the
+    free comparator adjoints -46 (``cmp-free``) and the rest +2 (spec 13.1).
 
     **Example.**
 
@@ -1811,7 +1870,7 @@ def assert_same_state(state: SparseState, other: SparseState, atol: float = ATOL
 - [ ] **Step 5: Run the tests**
 
 Run: `scripts/test.sh tests/ops/test_block_encoding.py tests/test_work_pool.py -q`
-Expected: `46 passed` (about 49 s with 2 workers, the 2 `slow` compiles included; alone under `run_watched` the `MID_NAPHTHALENE` counts took 5.9 and 6.9 s at 613 and 597 MB).
+Expected: `52 passed` (about 49 s with 2 workers, the 2 `slow` compiles included; alone under `run_watched` the `MID_NAPHTHALENE` counts took 5.9 and 6.9 s at 613 and 597 MB).
 
 Run: `scripts/test.sh tests/test_tolerance_hygiene.py tests/test_compile.py -q`
 Expected: `67 passed` (the tolerance guard covers `walk_sim.py`; the pins of the new keys).
@@ -1819,7 +1878,7 @@ Expected: `67 passed` (the tolerance guard covers `walk_sim.py`; the pins of the
 - [ ] **Step 6: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1019 passed` (975 + 44; see "Expected test counts").
+Expected: `1025 passed` (975 + 50; see "Expected test counts").
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -2717,12 +2776,18 @@ class DFTHCBlockEncoding(Operator2):
     ``CNOT`` and ``PauliX`` counts are upper bounds (spec 7.6).
 
     **Paper and dfthcbe.** Steps 1 to 27 of spec 3.5: the sum-of-squares block encoding
-    :math:`U^\dagger\,\mathrm{REF}_{T_2}\,U` of the paper's App. B (PRX 15, 041016;
-    arXiv:2502.15882v1). dfthcbe: ``DFTHCBlockEncoding`` (``dfthcbe/block_encoding.py``), 9,596
-    Toffolis at FeMoco-54; ours is +153 (the inner prepare +58 and select +35 per round, the
-    inner unprepare -3 per round, the outer prepare -2 and unprepare -25; spec 13.1). The paper's
-    Table III gives 9,997 per walk, 46 of them for :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}`
-    (spec 13.1); without it ours is -202, mostly the Givens ladders' ``rz-addsub``.
+    :math:`U^\dagger\,\mathrm{REF}_{T_2}\,U` (PRX 15, 041016; arXiv:2502.15882v1 Eq. (11) and
+    Fig. 1), built in App. B: the prepare over :math:`x_o` (B.1, Eq. (87)) and the step of
+    oblivious amplitude amplification, whose reflection is controlled on the success of
+    :math:`x_o` (B.2, Eq. (88)); the costs are its Table 3 (PRX Table III). dfthcbe:
+    ``DFTHCBlockEncoding`` (``dfthcbe/block_encoding.py``), 9,596 Toffolis at FeMoco-54 by its
+    call graph, :math:`212 + 2 (913 + 220) + 2 \cdot 3502 + 20 + 94`; ours is +153 (the inner
+    prepare +58 and select +35 per round, the inner unprepare -3 per round, the outer prepare -2
+    and unprepare -25; spec 13.1). The paper gives 9,997 per walk, 46 of them for
+    :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}`; against the other 9,951 ours is -202: the
+    Givens ladders -424 (``rz-addsub``), the 26-bit inner entries against its 20-bit ones +186,
+    exact boundaries and one-hot padding +80 (``exact-iter``, ``no-prune``, ``onehot-pad``), the
+    free comparator adjoints -46 (``cmp-free``) and the rest +2 (spec 13.1).
 
     **Example.**
 
@@ -3317,7 +3382,7 @@ Expected: `2 passed, 5 deselected`, after two `MID_COMPILE {...}` lines (the sec
 - [ ] **Step 7: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1047 passed` (1019 + 28).
+Expected: `1053 passed` (1025 + 28).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -3625,7 +3690,7 @@ Expected: `1 passed` (about 40 s; one input of the 28 of the release tier's 6-31
 - [ ] **Step 8: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1047 passed` (unchanged: the checks are nightly or release).
+Expected: `1053 passed` (unchanged: the checks are nightly or release).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
