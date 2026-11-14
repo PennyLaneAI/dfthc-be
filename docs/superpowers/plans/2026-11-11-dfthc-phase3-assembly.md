@@ -16,6 +16,8 @@ This file holds Tasks 3.3 to 3.5 of the master plan (`docs/superpowers/plans/202
 
 **Revision 2** (2026-11-13, after the GPT-5.6 plan review `.superpowers/sdd/phase3a-plan-review-1.md`, Needs fixes, 0 Critical, 2 Important, 1 Minor). I-1 (the per-commit load gate) clarified, not redesigned, by the orchestrator's decision: the gate is per test, and the paragraph "Load", the section "Simulation cost and the tier budgets", risk 3 and Task 3.5's report step now say so, with the one-worker per-test evidence above; no test changes tier. I-2 (the random work-pool test omitted children) applied: `test_work_size_covers_every_child_at_random_shapes` takes every child from the rules' own lists (`_children`, plain and controlled, and from Task 3.4 also `_walk_children`; tables of zeros in each random shape's sizes), checks that each is given exactly its own class's `required_wires(...)["work"]`, `OuterUnprepare`, `InnerUnprepare` and `InnerSelectDagger` included, and that the pool covers it, and that every class of the rules was seen; a watched probe gives each of those three classes one more work wire than its forward form, and the test fails for each (`work_pool_drift_probe.py`; revision 1's random test never consulted them). M-1 (Task 3.5's RED step proved only E-1 and E-2) applied: Task 3.5 has three RED steps, each a narrow diff of `walk.py` applied with `git apply` and restored with `git apply -R` of the same diff instead of `git checkout`: the first round's select as its dagger (E-1 and E-2: `7 failed`), the controlled walk's `RefAB` left uncontrolled (E-3: `1 failed`, at its comparison after one walk step), and the outer unprepare moved before the inner one (E-4: `2 failed`, both schedules); each run selected only its E checks, with 2 workers under the watchdog, and each restored `walk.py` byte for byte (`e_checks_red.sh`, `3a-e-red.log`; the failure messages in `3a-e-red-reasons.log`); the later steps are renumbered. The test counts are unchanged (973, 1017, 1045, 1045 per commit; Task 3.5 adds 10 nightly and 32 release tests), and so are the master-plan and spec edits.
 
+**Revision 3** (2026-11-14, after Task 3.1's reviews). Task 3.1 gained two per-commit tests (the adjoint and controlled compile test for `InnerSelectDagger`), so every per-commit count here is two higher: 975 on `main` with Tasks 3.1 and 3.2, 1019 after Task 3.3, 1047 after Tasks 3.4 and 3.5. The measured dry runs quoted (`1045 passed`) predate this.
+
 ---
 
 ## Changes from the master plan, the spec and HANDOFF
@@ -533,13 +535,13 @@ GATE_SET = {
 
 **Shell conventions.** Run commands from the worktree root of your lane. `VENV="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.venv"` locates the shared environment, as in the earlier plans.
 
-**Expected test counts.** Each task states its targeted count exactly. The per-commit tier (`scripts/test.sh -m "not slow and not release" -q`) counts **973 tests on `main` with Tasks 2E.3, 3.1 and 3.2 merged** (measured on the stage copy: `973/1021 tests collected (48 deselected)`; 867 on `main` at `7777bc1`, plus 2E.3's 24, 3.1's 37 and 3.2's 45). The tasks run in order, so each starts from the previous one's count. The pass criterion is "no failures, no errors, no warnings summary"; the number is a cross-check, and the orchestrator shifts the base if other tasks merge first.
+**Expected test counts.** Each task states its targeted count exactly. The per-commit tier (`scripts/test.sh -m "not slow and not release" -q`) counts **975 tests on `main` with Tasks 2E.3, 3.1 and 3.2 merged** (measured on the stage copy: `973/1021 tests collected (48 deselected)`; 867 on `main` at `7777bc1`, plus 2E.3's 24, 3.1's 37 and 3.2's 45; Task 3.1's review added 2, revision 3). The tasks run in order, so each starts from the previous one's count. The pass criterion is "no failures, no errors, no warnings summary"; the number is a cross-check, and the orchestrator shifts the base if other tasks merge first.
 
 | Task | Base | Own per-commit | Expected per-commit tier | Own slow and release tests |
 | --- | ---: | ---: | ---: | --- |
-| 3.3 | 973 | 44 (`test_block_encoding.py` 35 of 37, `test_work_pool.py` 9) | 1017 = 973 + 44 | 2 `slow` (the `MID_NAPHTHALENE` counts) |
-| 3.4 | 1017 | 28 (`test_walk.py` 23, `test_walk_counts.py` 5 of 7; `test_work_pool.py` replaced, still 9) | 1045 = 1017 + 28 | 2 `slow` (the `MID_NAPHTHALENE` compiles) |
-| 3.5 | 1045 | 0 | 1045 | 10 `slow`, 32 `release` (`test_end_to_end.py`) |
+| 3.3 | 975 | 44 (`test_block_encoding.py` 35 of 37, `test_work_pool.py` 9) | 1019 = 975 + 44 | 2 `slow` (the `MID_NAPHTHALENE` counts) |
+| 3.4 | 1019 | 28 (`test_walk.py` 23, `test_walk_counts.py` 5 of 7; `test_work_pool.py` replaced, still 9) | 1047 = 1019 + 28 | 2 `slow` (the `MID_NAPHTHALENE` compiles) |
+| 3.5 | 1047 | 0 | 1047 | 10 `slow`, 32 `release` (`test_end_to_end.py`) |
 
 Dry run on the replica with all three tasks: `1045 passed in 432.98s`, peak 1,949 MB (`stages/3A/3a-per-commit-tier.log`; run with `TMPDIR` outside the workspace, so `tests/test_infrastructure.py` passes in the replica too).
 
@@ -1817,7 +1819,7 @@ Expected: `67 passed` (the tolerance guard covers `walk_sim.py`; the pins of the
 - [ ] **Step 6: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1017 passed` (973 + 44; see "Expected test counts").
+Expected: `1019 passed` (975 + 44; see "Expected test counts").
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -3315,7 +3317,7 @@ Expected: `2 passed, 5 deselected`, after two `MID_COMPILE {...}` lines (the sec
 - [ ] **Step 7: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1045 passed` (1017 + 28).
+Expected: `1047 passed` (1019 + 28).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -3623,7 +3625,7 @@ Expected: `1 passed` (about 40 s; one input of the 28 of the release tier's 6-31
 - [ ] **Step 8: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1045 passed` (unchanged: the checks are nightly or release).
+Expected: `1047 passed` (unchanged: the checks are nightly or release).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`

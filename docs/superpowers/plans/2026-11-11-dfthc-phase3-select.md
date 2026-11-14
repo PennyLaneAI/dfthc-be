@@ -16,6 +16,8 @@ This file holds Tasks 3.1 and 3.2 of the master plan (`docs/superpowers/plans/20
 
 **Revision 2** (2026-11-13, after the GPT-5.6 plan review `.superpowers/sdd/phase3s-plan-review-1.md`, Needs fixes, 0 Critical, 1 Important, 1 Minor). M-1 applied: the rank-from-bits mutant fails the valid-branch tests only at `random-C3`, and the all-branch round trip also at `sto3g` (its load and the unchanged erase disagree on unreachable addresses); the ledger table and the mutation evidence say so. I-1 (compiled reflection counts at `MID_NAPHTHALENE` and FeMoco-54's widths per commit) not applied, by the orchestrator's decision: the reflections are table-free, and the master plan already compiles table-free blocks at FeMoco's widths per commit (Task 1C.2's `FlaggedUniformPrep` at L = 324 and 28, Task 2E.4's ladders; the merged `test_givens.py` and `test_spin.py` do so at `MID_NAPHTHALENE` and FeMoco's widths), each case 1.2 to 1.7 s and below 290 MB, with nothing table-bearing compiled at FeMoco. Spec 12.1's T4 row states the stricter rule for every operator; the orchestrator amends it to name the table-free exception in the next spec edit batch. No code or count changes.
 
+**Revision 3** (2026-11-14, after Task 3.1's reviews: GPT-5.6 `.superpowers/sdd/task-3.1-review-1.md`, Needs fixes, 0 Critical, 0 Important, 1 Minor; Opus `.superpowers/sdd/task-3.1-review-opus.md`, Approved, 0 Critical, 0 Important, 3 Minor; applied on `phase3/3.1` and here). The T3 adds the reachable failed-`b` class: the inner read loads a zero entry at a failed `b`, so `(b, r) = (0, 0)` on the last SF row, where the SF load writes `sf_angles[0][0]` and `b_neq_B = 1` and only the Majorana gate's `succ_b` control keeps the branch the identity; the former class (`b = 2**w_b - 1`, nothing loaded) stays. Gating the SF term on `b_neq_B` instead of `succ_b` passed every test before (Opus M-1, no count change). The adjoint and controlled compile test runs for both classes (GPT M-1, + 2). The select's docstring cites App. B.3, B.5 with Eqs. (93) and (94), B.6 and Table 9, and completes the causes of the erase's + 12 against dfthcbe and + 11 against the paper, the multiplexer's two paper figures and the Majorana gate's - 2 (Opus M-2). Opus M-3 (`_check` repeats `AngleErase`'s validation) waits for Task 5.1. Task 3.1 counts 43 tests, 39 per commit; the per-commit tier with both tasks is 975.
+
 ---
 
 ## Changes from the master plan, the spec and HANDOFF
@@ -278,7 +280,7 @@ Task 0.9d's instrument (`probes/p3s/capture_cost.py`: every converted rule targe
 
 1. **The named-register interfaces need the orchestrator's approval** (changes 2 and 3). They are the only interface changes; Task 3.3's writer must split the groups with `WalkLayout.split_group` and pass the registers on. If the grouped form were wanted after all, the select would need the thirteen `WalkParams` fields as a compilable argument (and still should not take the whole `outer` and `inner` groups).
 2. **The capture projection extrapolates** from 2,466 to 4,444 bound wires. The fit is linear to within 12 equations over 87 to 2,466 wires and the cost is a per-bind constant per wire (spec 9.0), so the projection is safe; the FeMoco compile of Task 4.5 measures it.
-3. **Per-commit time.** The two files add 82 per-commit tests: the select file's 41 run in 35 to 40 s and the reflections' 45 in 30 to 34 s with 2 workers; the slowest per-commit tests, each file's verbose and device-level compile and the failing controlled select compile, take 5 to 7 s. The replica's per-commit tier with both took 353 s.
+3. **Per-commit time.** The two files add 84 per-commit tests: the select file's 43 run in 35 to 40 s and the reflections' 45 in 30 to 34 s with 2 workers; the slowest per-commit tests, each file's verbose and device-level compile and the failing controlled select compile, take 5 to 7 s. The replica's per-commit tier with both took 353 s.
 4. **Cross-module use of private validators.** `select.py` calls `SFAngleLoad._check` and `TailAngleLoad._check`; a public validator in `angle_data.py` would be a later cleanup (Task 5.1), not done here to keep the merged modules untouched.
 5. **No open question blocks the plan.** The decisions above are the obvious choices: change 2 follows spec 9.18's own "needed registers" and spec 5.1's layering, change 3 the same rule.
 
@@ -377,10 +379,10 @@ Within wave 3 (master plan section 5) the two tasks' file lists are disjoint. `t
 
 | Task | Base | Own per-commit | Expected per-commit tier | Own slow tests |
 | --- | ---: | ---: | ---: | ---: |
-| 3.1 | 891 | 37 (`test_inner_select.py`, 41 tests) | 928 = 891 + 37 | 4 (the T3 at `H2_631G_TEST`, both classes; the `MID_NAPHTHALENE` counts, both classes) |
+| 3.1 | 891 | 39 (`test_inner_select.py`, 43 tests) | 930 = 891 + 39 | 4 (the T3 at `H2_631G_TEST`, both classes; the `MID_NAPHTHALENE` counts, both classes) |
 | 3.2 | 891 | 45 (`test_ref_t2_ab.py`) | 936 = 891 + 45 | 0 |
 
-With both tasks merged the per-commit tier counts 891 + 37 + 45 = 973. Dry run on the replica with both: `973 passed in 352.66s`, peak 1,976 MB (`stages/3S/3s-per-commit-tier.log`; run with `TMPDIR` outside the workspace, so `tests/test_infrastructure.py` passes in the replica too).
+With both tasks merged the per-commit tier counts 891 + 39 + 45 = 975. Dry run on the replica with both (before revision 3's two tests): `973 passed in 352.66s`, peak 1,976 MB (`stages/3S/3s-per-commit-tier.log`; run with `TMPDIR` outside the workspace, so `tests/test_infrastructure.py` passes in the replica too).
 
 **Design notes the tasks share.**
 - *Registers by name, unpacked once.* Every class takes the registers it uses, in `WalkLayout` order (changes 2 and 3). The select's rule turns every register into a list once and hands each child lists of wires and slices of lists, so a bind costs 2 captured equations per wire instead of 4 (spec 9.0; section "Captured equations"); the reflections splat their registers into the pattern lists.
@@ -405,15 +407,15 @@ With both tasks merged the per-commit tier counts 891 + 37 + 45 = 973. Dry run o
   - `InnerSelectDagger(...)` with the same arguments, `required_wires` and domains; the rule `_inner_select_dagger` (spec 9.18 with `qp.adjoint(MajoranaGate(...))`);
   - module-private helpers: `_check`, `_child_sizes`, `_required_wires`, `_validate`, `_select_body(dagger, ...)`, `_select_resources(dagger, ...)`. Neither class is ever adjointed or controlled.
 
-**Acceptance tests** (41 tests in `tests/ops/test_inner_select.py`, 4 of them `slow`), on the shapes `sto3g` and `631g` (the test presets with their vendored tables and encoded factors), `random-C3` (N = 3, R = 2, B = 2, C = 3, N+ = 2, b_rot = 3; random tables) and `random-R1` (N = 2, R = 1, B = 2, C = 2; `r` has no wires):
-- T3 on the tape path (6 tests, 2 `slow`): at `sto3g`, `random-C3` and `631g` (`slow`), for both classes, the sparse simulator in strict mode runs the decomposed class on a state over the branch classes the prepares leave (every SF row with every `b <= B`; failed `b`; `sigma_1 = 1` on an SF row; every tail row with `sigma_1 = 0` and 1; a D1 row with `succ_b = 0`; failed `x_o` on SF, tail and, at `random-C3`, `x_o = X_o`), with `sigma_0` in |+⟩, a random system state per class and the phase-gradient state; the final state equals the encoded model's action exactly (iγ̃₀γ̃₁ on the register `sigma_0` selects for SF with `b < B`; on the register `sigma_1` selects, flavour components a ± a† for D1 and a + a†, a† − a for Q1, whose ⟨+\| projection is a_ũ and a_ũ†; the identity elsewhere; adjoints for the dagger; ũ from `encoded_factors` at the presets), with every ancilla in |0⟩, under the all-ones, the alternating and a seeded forced schedule of the erase, each consuming exactly M outcomes.
+**Acceptance tests** (43 tests in `tests/ops/test_inner_select.py`, 4 of them `slow`), on the shapes `sto3g` and `631g` (the test presets with their vendored tables and encoded factors), `random-C3` (N = 3, R = 2, B = 2, C = 3, N+ = 2, b_rot = 3; random tables) and `random-R1` (N = 2, R = 1, B = 2, C = 2; `r` has no wires):
+- T3 on the tape path (6 tests, 2 `slow`): at `sto3g`, `random-C3` and `631g` (`slow`), for both classes, the sparse simulator in strict mode runs the decomposed class on a state over the branch classes the prepares leave (every SF row with every `b <= B`; failed `b`, both unloaded (`b = 2**w_b - 1`) and as the prepares leave it (`(b, r) = (0, 0)` on the last SF row: the SF load writes `sf_angles[0][0]`, and only the Majorana gate's `succ_b` control keeps the identity); `sigma_1 = 1` on an SF row; every tail row with `sigma_1 = 0` and 1; a D1 row with `succ_b = 0`; failed `x_o` on SF, tail and, at `random-C3`, `x_o = X_o`), with `sigma_0` in |+⟩, a random system state per class and the phase-gradient state; the final state equals the encoded model's action exactly (iγ̃₀γ̃₁ on the register `sigma_0` selects for SF with `b < B`; on the register `sigma_1` selects, flavour components a ± a† for D1 and a + a†, a† − a for Q1, whose ⟨+\| projection is a_ũ and a_ũ†; the identity elsewhere; adjoints for the dagger; ũ from `encoded_factors` at the presets), with every ancilla in |0⟩, under the all-ones, the alternating and a seeded forced schedule of the erase, each consuming exactly M outcomes.
 - The round trip (2 tests): `InnerSelect` then `InnerSelectDagger` returns a random complex state over every value of the index registers and `sigma_0` (times all 16 system states at `sto3g`, 2 random ones at `random-C3`) exactly, under the alternating and a seeded schedule of both erases.
 - The children (2 tests, `random-C3`, `random-R1`): both rules queue, in tape mode, exactly `TailAngleLoad`, `SFAngleLoad`, `SpinMux`, `SpinSwap`, `GivensLadder`, `MajoranaGate` (dagger: `Adjoint(MajoranaGate)`), `GivensLadderDagger`, `SpinSwap`, `SpinMux`, `AngleErase`, each on exactly its registers with the prefix of `work` of exactly its size; the two rules' children have identical hyperparameters and registers except the Majorana gate's wrapper; the tail load's and the erase's compilable arguments are the select's.
 - T4 (7 tests, 2 `slow`): compiled, each class alone: T, M against `costs.inner_select` at both test presets, against the closed form with the erase's `ob = 0` at `random-C3` and at `random-R1`; the plain `Toffoli` count 2N + 5 and A = T − (2N + 5); the hinted `CZ` and `Z` at their expectation; `MID_NAPHTHALENE` (`slow`, both classes: 625, M = 138, A = 600); FeMoco-54 on the closed forms (61 + 291 + 2 + 108 + 2,968 + 5 + 102 = 3,537, M = 798, A = 3,424) and `required_wires` at FeMoco (work 14).
-- T5 and T6 (3 tests): the verbose listing names `_inner_select` and `_inner_select_dagger`, and no dfthc operator survives at `level="device"` in a program holding both (`sto3g`); `qp.adjoint` and `qp.ctrl` of `InnerSelect` fail with `CompileError` "Decomposition rule not found" after the expected measuring-rule warning.
+- T5 and T6 (5 tests): the verbose listing names `_inner_select` and `_inner_select_dagger`, and no dfthc operator survives at `level="device"` in a program holding both (`sto3g`); `qp.adjoint` and `qp.ctrl` of each class fail with `CompileError` "Decomposition rule not found" after the expected measuring-rule warning.
 - T2 (4 tests): both rules at `sto3g` (ob = `w_b`), `631g` (ob = 1), `random-C3` (ob = 0) and `random-R1`, each pinned and the only rule under its class name; `required_wires` by hand (1 test); eight constructor violations for each class (16 tests), each a `ValueError`.
 
-**Definition of done:** `41 passed` targeted (37 in the per-commit tier); the per-commit tier passes; `ruff check .` clean; the spec 9.0 docstring sections in order; one commit.
+**Definition of done:** `43 passed` targeted (39 in the per-commit tier); the per-commit tier passes; `ruff check .` clean; the spec 9.0 docstring sections in order; one commit.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -515,9 +517,14 @@ def branch_classes(p):
     """(x_o, succ_x_o, sigma_1, b, succ_b, r) of the branches the T3 runs, as the prepares leave
     them: every SF row with every b <= B (both flags set, r = x_o // C), a failed b (succ_b = 0)
     and sigma_1 = 1 on SF rows, every tail row with sigma_1 = 0 and 1, a D1 row with succ_b = 0,
-    and failed x_o (succ_x_o = 0) on an SF row, a tail row and, if it exists, x_o = X_o."""
+    and failed x_o (succ_x_o = 0) on an SF row, a tail row and, if it exists, x_o = X_o. The
+    inner read loads a zero entry at a failed b, so the alias swap leaves (b, r) = (0, 0) there:
+    the SF load then writes sf_angles[0][0] and b_neq_B = 1, and only the Majorana gate's succ_b
+    control keeps the branch the identity (spec 8.5, ledger row 2D.2). That class sits on the
+    last SF row, whose own rank is not 0; a failed b at b = 2**w_b - 1 (nothing loaded) stays."""
     classes = [(x, 1, 0, b, 1, x // p.C) for x in range(p.RC) for b in range(p.B + 1)]
-    classes += [(0, 1, 0, 2**p.w_b - 1, 0, 0), (p.RC - 1, 1, 1, 0, 1, (p.RC - 1) // p.C)]
+    classes += [(0, 1, 0, 2**p.w_b - 1, 0, 0), (p.RC - 1, 1, 0, 0, 0, 0),
+                (p.RC - 1, 1, 1, 0, 1, (p.RC - 1) // p.C)]
     classes += [(p.RC + j, 1, s, 0, 1, 0) for j in range(p.N) for s in (0, 1)]
     classes += [(p.RC, 1, 0, 1, 0, 0), (0, 0, 0, 0, 1, 0), (p.RC, 0, 1, 1, 1, 0)]
     if p.X_o < 2**p.w_x:
@@ -831,20 +838,22 @@ def test_pinned_rules_are_chosen_and_nothing_survives_at_device_level(capfd):
 
 
 @pytest.mark.compiled
+@pytest.mark.parametrize("cls", [InnerSelect, InnerSelectDagger],
+                         ids=["select", "dagger"])
 @pytest.mark.parametrize("wrap", [qp.adjoint, lambda op: qp.ctrl(op, control=40)],
                          ids=["adjoint", "control"])
-def test_no_adjoint_or_controlled_path(wrap):
-    """Spec 7.4 rules 5 and 6: the adjoint is the class InnerSelectDagger, and nothing controls
-    the select. Wrapped anyway, Catalyst drops the measuring candidates with the expected warning
-    (rule 12), and the compile fails loudly."""
+def test_no_adjoint_or_controlled_path(wrap, cls):
+    """Spec 7.4 rules 5 and 6: the adjoint of the select is the class InnerSelectDagger, and
+    neither class is ever adjointed or controlled. Wrapped anyway, Catalyst drops the measuring
+    candidates with the expected warning (rule 12), and the compile fails loudly."""
     args = compilable("sto3g")
     wires, _ = layout(args)
-    key = "Adjoint(InnerSelect)" if wrap is qp.adjoint else "C(InnerSelect)"
+    key = f"Adjoint({cls.__name__})" if wrap is qp.adjoint else f"C({cls.__name__})"
     with warnings.catch_warnings(record=True) as records:
         warnings.simplefilter("always")
         with pytest.raises(CompileError, match=re.escape(
                 f"Decomposition rule not found for operator '{key}")):
-            compiled_resources(lambda: wrap(InnerSelect(*args, **wires)), num_wires=41)
+            compiled_resources(lambda: wrap(cls(*args, **wires)), num_wires=41)
     skipped = [str(r.message) for r in records if issubclass(r.category, RuleLoweringWarning)
                and str(r.message).startswith("Skipped the ")]
     named = [message for message in skipped if classify_rule_warning(message) != "noise"]
@@ -1083,13 +1092,18 @@ class InnerSelect(Operator2):
 
     **Paper and dfthcbe.** Steps 10 to 18 (spec 3.5): the paper's inner SELECT,
     :math:`U_{Rot}^\dagger\,\mathrm{Maj}\,U_{Rot}` with its spin swap, data loads and erase (PRX
-    App. B; arXiv:2502.15882v1 App. B.6). dfthcbe: ``InnerSelect`` (``dfthcbe/select.py``),
-    3,502 Toffolis at FeMoco-54; ours is +35: the tail load +5 and the SF load +20 (exact
-    iteration), the erase +12 (one-hot over 32 positions, exact iteration), the spin multiplexer
-    -2 (one Toffoli per application where dfthcbe has two ``MultiControlX``). The paper's Table
-    III gives 3,710 per select with the tail fix-up its Eq. (B50) charges to the inner erase;
-    ours is -173: the Givens ladders -212 (``rz-addsub``), the loads +28 and the erase +11
-    (exact iteration), the multiplexer +2, the Majorana gate -2 (spec 13.1).
+    App. B; arXiv:2502.15882v1 App. B.3 for the spin selection, B.5 and Eqs. (93), (94) for the
+    rotations, B.6 and Fig. 4 for the Majorana gate, Table 9 for the loads and the erase).
+    dfthcbe: ``InnerSelect`` (``dfthcbe/select.py``), 3,502 Toffolis at FeMoco-54; ours is +35:
+    the tail load +5 and the SF load +20 (exact iteration), the erase +12 (one-hot over 32
+    positions +4, the SF fix-up enabled on :math:`G_0` +1, exact iteration +7), the spin
+    multiplexer -2 (one Toffoli per application where dfthcbe has two ``MultiControlX``). The
+    paper's Table III gives 3,710 per select with the tail fix-up its Eq. (B50) (v1 Eq. (123))
+    charges to the inner erase; ours is -173: the Givens ladders -212 (``rz-addsub``), the loads
+    +28 (exact iteration), the erase +11 (exact iteration, the one-hot over 32 positions), the
+    multiplexer +2 (Table III omits it; App. B.3 and B.7.1 count two per select, as we do),
+    the Majorana gate -2 (the success flags folded into its two ANDs, as in dfthcbe; spec
+    13.1).
 
     **Example.**
 
@@ -1331,12 +1345,12 @@ register_rule(InnerSelectDagger, _inner_select_dagger)
 - [ ] **Step 4: Run the tests**
 
 Run: `scripts/test.sh tests/ops/test_inner_select.py -q`
-Expected: `41 passed` (35 to 40 s with 2 workers, the 4 `slow` tests included; alone under `run_watched` the `MID_NAPHTHALENE` counts took 2.5 and 2.9 s at 358 MB and the `H2_631G_TEST` T3 7.9 and 8.2 s at 256 MB, log `.scratch/plan-check/stages/3S/3s-mid-compiles.log`).
+Expected: `43 passed` (35 to 40 s with 2 workers, the 4 `slow` tests included; alone under `run_watched` the `MID_NAPHTHALENE` counts took 2.5 and 2.9 s at 358 MB and the `H2_631G_TEST` T3 7.9 and 8.2 s at 256 MB, log `.scratch/plan-check/stages/3S/3s-mid-compiles.log`).
 
 - [ ] **Step 5: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `928 passed` (891 + 37; see "Expected test counts").
+Expected: `930 passed` (891 + 39; see "Expected test counts").
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
