@@ -22,6 +22,8 @@ This file holds Tasks 4.1 and 4.2 of the master plan (`docs/superpowers/plans/20
 
 **Load.** At most 2 pytest workers ran at any time, one pytest session at a time (the mutation check, the stage replay and the release check ran alone, in the background while only files were edited, each pytest session behind `p4qtest.sh`'s lock), and nothing FeMoco-shaped was compiled: FeMoco-54 values are asserted on the closed forms. Every process that compiled, simulated or ran pytest ran under the watchdog with a cap (3,000 MB; 4,096 MB for Task 4.2's subprocess compiles, as Task 3.4's): the probes, the docstring and interface scripts, every pytest session. In revision 2 the largest pytest session, the per-commit tier, peaked at 1,871 MB; the largest single simulation at 368 MB (the release check, QPE of the walk at `H2_STO3G_TEST` with t = 2, 487 s), the largest compile at 379 MB. The full per-commit tier ran once per revision. Every new per-commit test, 55 tests, ran in one session with one worker under the watchdog with `--durations=0`: `55 passed, 15 deselected in 33.85s` at a session peak of 398 MB, which bounds every test's peak; the longest took 5.1 s (the toy QPE program's rule listing and device-level closure, two compiles), four more 3.4 to 3.8 s (the walk-power and round compiles), the lightning test 2.5 s, the other 49 at most 1.4 s (`4q-per-test-evidence.log`). The checks that would exceed the per-test gate of about 1 GB and a few seconds run nightly or in the release tier: `ControlledWalkPower`'s three control states on the tape path (20 s), the verbose listing of the H2 QPE program (16 s), QPE of the walk (12 to 144 s nightly, 487 s release). No load-limit event occurred.
 
+**Revision 3** (2026-11-14, by the orchestrator, after Task 3.4's reviews). Task 3.4 gained two per-commit tests in `tests/ops/test_walk.py` (the controlled walk's control width and a test of `captured_targets` itself) and docstring changes in `walk.py` (assembly plan revision 5; both files copied into `repo-phase4q`). Every per-commit count here is two higher: 1055 on `main` with Tasks 3.3 to 3.5, 1109 after Task 4.1, 1110 after Task 4.2. The measured dry runs quoted (`1108 passed`, the stage copy's collection counts) predate this; nothing in this plan's code or tests changes.
+
 ---
 
 ## Changes from the master plan, the spec and HANDOFF
@@ -589,12 +591,12 @@ GATE_SET = {
 
 **Shell conventions.** Run commands from the worktree root of your lane. `VENV="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.venv"` locates the shared environment, as in the earlier plans.
 
-**Expected test counts.** Each task states its targeted count exactly. The per-commit tier (`scripts/test.sh -m "not slow and not release" -q`) counts **1053 tests on `main` with Tasks 3.3 to 3.5 merged** (measured on the stage copy: `1053/1147 tests collected (94 deselected)`; the assembly plan's revision 4 gives the same), and the nightly tier (`-m "slow and not release"`) 61. The tasks run in order, so Task 4.2 starts from Task 4.1's count; the stage copy collects `1107/1209` per commit after Task 4.1, and `1108/1217` per commit and `75/1217` nightly after Task 4.2. The pass criterion is "no failures, no errors, no warnings summary"; the number is a cross-check, and the orchestrator shifts the base if other tasks merge first.
+**Expected test counts.** Each task states its targeted count exactly. The per-commit tier (`scripts/test.sh -m "not slow and not release" -q`) counts **1055 tests on `main` with Tasks 3.3 to 3.5 merged** (revision 3; 1053 before Task 3.4's review) (measured on the stage copy: `1053/1147 tests collected (94 deselected)`; the assembly plan's revision 4 gives the same), and the nightly tier (`-m "slow and not release"`) 61. The tasks run in order, so Task 4.2 starts from Task 4.1's count; the stage copy collects `1107/1209` per commit after Task 4.1, and `1108/1217` per commit and `75/1217` nightly after Task 4.2. The pass criterion is "no failures, no errors, no warnings summary"; the number is a cross-check, and the orchestrator shifts the base if other tasks merge first.
 
 | Task | Base | Own per-commit | Expected per-commit tier | Own nightly and release tests |
 | --- | ---: | ---: | ---: | --- |
-| 4.1 | 1053 | 54 (`test_qpe.py` 32 of 35, `test_qpe_toy.py` 21, `test_qpe_walk.py` 1 of 6) | 1107 = 1053 + 54 | 7 `slow` (`test_qpe.py` 3, `test_qpe_walk.py` 4), 1 `release` (`test_qpe_walk.py`) |
-| 4.2 | 1107 | 1 (`test_qpe_counts.py` 1 of 8) | 1108 = 1107 + 1 | 7 `slow` |
+| 4.1 | 1055 | 54 (`test_qpe.py` 32 of 35, `test_qpe_toy.py` 21, `test_qpe_walk.py` 1 of 6) | 1109 = 1055 + 54 | 7 `slow` (`test_qpe.py` 3, `test_qpe_walk.py` 4), 1 `release` (`test_qpe_walk.py`) |
+| 4.2 | 1109 | 1 (`test_qpe_counts.py` 1 of 8) | 1110 = 1109 + 1 | 7 `slow` |
 
 Dry run on the replica with both tasks: `1108 passed in 553.71s`, peak 1,871 MB (`stages/4Q/4q-per-commit-tier.log`; run with `TMPDIR` outside the workspace, so `tests/test_infrastructure.py` passes in the replica too; another lane ran its tests part of the time), within the tier's budget of 15 minutes and 4 GB for the two-worker process tree. The per-test gate of about 1 GB and a few seconds binds each test: see "Load".
 
@@ -2314,7 +2316,7 @@ Expected: `71 passed` (the tolerance guard covers `toy_walk.py`; the pins of the
 - [ ] **Step 9: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1107 passed` (1053 + 54; see "Expected test counts").
+Expected: `1109 passed` (1055 + 54; see "Expected test counts").
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -2571,7 +2573,7 @@ Copy the eight `QPE_COMPILE` lines into the report. Each holds the compile's `se
 - [ ] **Step 7: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1108 passed` (1107 + 1).
+Expected: `1110 passed` (1109 + 1).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`

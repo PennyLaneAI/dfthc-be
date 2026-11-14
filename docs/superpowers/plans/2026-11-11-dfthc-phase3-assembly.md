@@ -20,6 +20,8 @@ This file holds Tasks 3.3 to 3.5 of the master plan (`docs/superpowers/plans/202
 
 **Revision 4** (2026-11-14, after Task 3.3's Opus review `.superpowers/sdd/task-3.3-review-opus.md`, Approved, 0 Critical, 0 Important, 4 Minor). `tests/ops/test_block_encoding.py` gained six per-commit tests: an `outer-keep` and a `tail-angle` constructor case for each class (the only tables the outer prepares' and the selects' checks reject alone), a control-width test for the controlled class, and `test_harness_sees_phases_outcomes_and_ancillas`, a self-test of `walk_sim`'s schedules, state comparison, projection and register report (an all-zero schedule, a comparison by modulus or an empty register report each blinded the T3 without failing it). The T3's norm assertion is removed: the strict simulator renormalizes the kept branch at every measurement, so it could not fail. `walk.py`'s "Paper and dfthcbe" section (both Task 3.3's and Task 3.4's block) cites arXiv v1 Eq. (11), Fig. 1, App. B.1 Eq. (87), B.2 Eq. (88) and Table 3, gives dfthcbe's call-graph split and the full -202 breakdown. Every per-commit count from Task 3.3 on is six higher: 1025 after Task 3.3, 1053 after Tasks 3.4 and 3.5; Task 3.3's targeted run is `52 passed` (50 per commit), Task 3.4's four-file run `82 passed`. The measured dry runs quoted predate this.
 
+**Revision 5** (2026-11-14, after Task 3.4's reviews: GPT-5.6 `.superpowers/sdd/task-3.4-review-1.md`, Needs fixes, 0 Critical, 1 Important; Opus `.superpowers/sdd/task-3.4-review-opus.md`, Approved, 0 Critical, 0 Important, 3 Minor). `tests/ops/test_walk.py` gained two per-commit tests: `test_controlled_walk_checks_the_control_width` (both reviews: removing `ControlledDFTHCWalk`'s control-width check passed every test) and `test_captured_targets_records_one_compile_and_restores_the_hook` (a hook left patched, or a name list that accumulates or is served from an earlier call, passed every test or failed only by one worker's test order). `walk.py`'s walk docstrings cite arXiv v1 Eq. (10), App. A.1 and A.2 (Eqs. (76), (77)), B.7 (Eqs. (96), (128)) with the -204 and +152 splits, and the controlled walk's action covers the walk's own states, as QPE uses it. Every per-commit count from Task 3.4 on is two higher: 1055 after Tasks 3.4 and 3.5; Task 3.4's four-file run is `84 passed`. The measured dry runs quoted predate this.
+
 ---
 
 ## Changes from the master plan, the spec and HANDOFF
@@ -542,8 +544,8 @@ GATE_SET = {
 | Task | Base | Own per-commit | Expected per-commit tier | Own slow and release tests |
 | --- | ---: | ---: | ---: | --- |
 | 3.3 | 975 | 50 (`test_block_encoding.py` 41 of 43, `test_work_pool.py` 9) | 1025 = 975 + 50 | 2 `slow` (the `MID_NAPHTHALENE` counts) |
-| 3.4 | 1025 | 28 (`test_walk.py` 23, `test_walk_counts.py` 5 of 7; `test_work_pool.py` replaced, still 9) | 1053 = 1025 + 28 | 2 `slow` (the `MID_NAPHTHALENE` compiles) |
-| 3.5 | 1053 | 0 | 1053 | 10 `slow`, 32 `release` (`test_end_to_end.py`) |
+| 3.4 | 1025 | 30 (`test_walk.py` 25, `test_walk_counts.py` 5 of 7; `test_work_pool.py` replaced, still 9) | 1055 = 1025 + 30 | 2 `slow` (the `MID_NAPHTHALENE` compiles) |
+| 3.5 | 1055 | 0 | 1055 | 10 `slow`, 32 `release` (`test_end_to_end.py`) |
 
 Dry run on the replica with all three tasks: `1045 passed in 432.98s`, peak 1,949 MB (`stages/3A/3a-per-commit-tier.log`; run with `TMPDIR` outside the workspace, so `tests/test_infrastructure.py` passes in the replica too).
 
@@ -1910,16 +1912,16 @@ git commit -m "Add DFTHCBlockEncoding and ControlledDFTHCBlockEncoding with the 
   - `_walk_children(p, t, controlled)`. Neither class is ever adjointed or controlled.
 - Produces, in `dfthc.testing.resources`: `captured_targets(qfunc, num_wires) -> list[str]` (every converted rule target of one `compiled_resources` compile, in order, with its modifiers and without the attribute dump); `LEAF_ADJOINTS`, `TEMPLATE_ADJOINTS`; `modified_targets(names, bases) -> set[str]`; `inventory(names) -> set[str]` (the modified targets of dfthc operators and of the templates of `TEMPLATE_ADJOINTS`).
 
-**Acceptance tests** (30 new tests, 2 of them `slow`, and the replaced `test_work_pool.py`'s 9):
+**Acceptance tests** (32 new tests, 2 of them `slow`, and the replaced `test_work_pool.py`'s 9):
 - T3 on the tape path (4 tests): at `sto3g` and `fails-c3` the walk's whole output equals `DFTHCBlockEncoding`'s with `RefAB`'s exact action applied, and its block is H̃_SA/Λ̃ − I; `ControlledDFTHCWalk` at `sto3g` with the control in |0⟩, |1⟩ and |+⟩; after one uncontrolled walk step (the index registers no longer |0⟩), the control in |+⟩ gives (|0⟩W|ψ⟩ + |1⟩W²|ψ⟩)/√2.
 - The children (2 tests): the (controlled) block encoding on the whole groups, the control and the whole pool; the (controlled) `RefAB` on the six registers and the pool's prefix of n_w − 3 (n_w − 2).
 - T6, T5 and the inventory (6 tests): the listing pairs `DFTHCWalk`/`ControlledDFTHCWalk`, the block encodings, the reflections and the selects with their pinned rules, `Adjoint(MajoranaGate)` with a copy of `_majorana_gate`, and has no `C(ZeroReflection)`; nothing dfthc survives at `level="device"` in a program holding both walks; the inventory of each walk program holds its own top-level target once and every Phase 3 class of the program, and its modified dfthc and template targets are exactly `LEAF_ADJOINTS | TEMPLATE_ADJOINTS`; a program with `qp.adjoint(InnerSigns(...))` shows `Adjoint(InnerSigns)` (negative control).
 - The failing generic control (1 test): `qp.ctrl(DFTHCWalk(...))` fails with `CompileError` "Decomposition rule not found for operator 'C(DFTHCWalk)'" after the expected measuring-rule warnings only (the Task G0.1 probe).
-- T2 (3 tests), `required_wires` (1 test), constructor validation (6 tests).
+- T2 (3 tests), `required_wires` (1 test), constructor validation (6 tests and the controlled walk's two-wire `control`, 1 test); `captured_targets` itself (1 test): a repeated call gives the same list, another program its own, and the hook is restored after a compile and after a program that raises.
 - `tests/integration/test_walk_counts.py` (7 tests, 2 `slow`): the walk and controlled walk compiled each as one program on `null.qubit` at both test presets, T, M and A against `costs.walk` and `costs.measured_and_uncomputes`, the plain `Toffoli` count `toffoli_only`, non-symbolic and closed (4); at `MID_NAPHTHALENE` (`slow`, `subprocess`): each compile in a subprocess under `run_watched` with a 4 GB cap, the same equalities, the watched time and peak on a `MID_COMPILE` line (2); FeMoco-54 on the closed forms: 9,793 and 9,795, M = 2,524, T_Toffoli = 1,118, A = 8,675 and 8,677, M + A = 11,199 and 11,201 (1).
 - `tests/test_work_pool.py` (9 tests): as in Task 3.3, for all four rules; the pool is `ControlledRefAB`'s need, read from the controlled walk's rule, and `RefAB`'s is one less; the random-shape test also takes the walks' children from `_walk_children`.
 
-**Definition of done:** `82 passed` for the four files targeted (28 new per-commit tests); the slow `MID_NAPHTHALENE` cases pass and their `MID_COMPILE` numbers are in the report (each about 10 s and 0.6 GB; the orchestrator copies them into the ledger); the per-commit tier passes; `ruff check .` clean; the spec 9.0 docstring sections in order; one commit.
+**Definition of done:** `84 passed` for the four files targeted (30 new per-commit tests); the slow `MID_NAPHTHALENE` cases pass and their `MID_COMPILE` numbers are in the report (each about 10 s and 0.6 GB; the orchestrator copies them into the ledger); the per-commit tier passes; `ruff check .` clean; the spec 9.0 docstring sections in order; one commit.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1928,7 +1930,7 @@ Create `tests/ops/test_walk.py`:
 ```python
 """DFTHCWalk and ControlledDFTHCWalk (spec 9.22): the walk against the block encoding and the
 encoded model on the tape path, the three control states, the children, rule selection, the
-inventory of captured targets, the failing qp.ctrl(DFTHCWalk), validation."""
+inventory of captured targets and its instrument, the failing qp.ctrl(DFTHCWalk), validation."""
 
 import re
 import warnings
@@ -2148,6 +2150,31 @@ def test_inventory_flags_a_stray_modifier():
 
 
 @pytest.mark.compiled
+def test_captured_targets_records_one_compile_and_restores_the_hook():
+    """captured_targets wraps Catalyst's private hook for one compile only: a second call of the
+    same program gives the same list and another program of the same width its own (nothing
+    accumulates or is served from an earlier call), and afterwards, also after a program that
+    raises, the module holds the original function again."""
+    import catalyst.from_plxpr.qfunc_interpreter as qfunc_interpreter
+
+    original = qfunc_interpreter._convert_decomp_target_spec
+    registers = {"sgn": [0], "d_sgn": [1], "less_than_b": [2]}
+    adjointed = list(captured_targets(lambda: qp.adjoint(InnerSigns(**registers)), 3))
+    assert qfunc_interpreter._convert_decomp_target_spec is original
+    assert captured_targets(lambda: qp.adjoint(InnerSigns(**registers)), 3) == adjointed
+    plain = captured_targets(lambda: InnerSigns(**registers), 3)
+    assert "Adjoint(InnerSigns)" in adjointed and "InnerSigns" in plain
+    assert "Adjoint(InnerSigns)" not in plain
+
+    def failing():
+        raise RuntimeError("the program fails to trace")
+
+    with pytest.raises(RuntimeError, match="fails to trace"):
+        captured_targets(failing, 3)
+    assert qfunc_interpreter._convert_decomp_target_spec is original
+
+
+@pytest.mark.compiled
 def test_controlled_walk_has_no_generic_controlled_rule():
     """Spec 7.4 rule 6 and 9.22, the Task G0.1 probe: qp.ctrl(DFTHCWalk(...)) at H2_STO3G_TEST
     fails to compile with a CompileError naming C(DFTHCWalk), after Catalyst's expected
@@ -2203,6 +2230,15 @@ def test_constructor_validates(kind, change, match):
     arguments = {"params": params, "tables": tables} | c.groups(kind == "controlled") | change
     with pytest.raises(ValueError, match=match):
         cls(**arguments)
+
+
+def test_controlled_walk_checks_the_control_width():
+    """ControlledDFTHCWalk checks its one-wire control like the groups (spec 9.0; its _validate
+    call passes the class's own wire_argnames, so the block encoding's test does not cover it)."""
+    c = walk_sim.case("sto3g")
+    with pytest.raises(ValueError, match="'control' has 2 wires; expected 1"):
+        ControlledDFTHCWalk(*c.compilable,
+                            **c.groups(True) | {"control": [*c.control, c.num_wires]})
 ```
 
 Create `tests/integration/test_walk_counts.py` (a new directory, no `__init__.py`):
@@ -3004,9 +3040,19 @@ class DFTHCWalk(Operator2):
     ``M + A = 11199`` physical measurements (spec 9.24). ``CNOT`` and ``PauliX`` counts are
     upper bounds (spec 7.6).
 
-    **Paper and dfthcbe.** Steps 1 to 28 of spec 3.5, the walk of the paper's App. B and Table
-    III (9,997 Toffolis at FeMoco-54; ours is -204, spec 13.1). dfthcbe: ``DFTHCWalk``
-    (``dfthcbe/block_encoding.py``), 9,641; ours is +152 (spec 13.1).
+    **Paper and dfthcbe.** Steps 1 to 28 of spec 3.5: the walk
+    :math:`W = \mathrm{Ref}_{\mathrm{a}\mathcal{B}}\,U^\dagger\,\mathrm{Ref}_{\mathcal{B}}\,U`
+    with eigenphases :math:`\pm\arccos(E_k/\Lambda - 1)` (PRX 15, 041016; arXiv:2502.15882v1
+    Eq. (10), App. A.2 Eqs. (76) and (77), :math:`\mathrm{Ref} = 2|0\rangle\langle 0| - I` as in
+    App. A.1), whose reflection covers every ancilla of the linear combination and of the
+    qubitization signal (App. B); its Table 3 (PRX Table III) gives 9,997 Toffolis at FeMoco-54,
+    46 of them for :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}` with the phase-estimation
+    control (App. B.7, Eqs. (96) and (128)). Ours is -204: the block encoding's -202 and
+    ``RefAB``'s 44 against 46 (spec 13.1). dfthcbe: ``DFTHCWalk``
+    (``dfthcbe/block_encoding.py``), the same two children with the same sign (Qualtran's
+    ``reflection_around_zero`` with ``global_phase=-1``), :math:`9596 + 45 = 9641` by its call
+    graph; ours is +152: the block encoding's +153 and ``RefAB``'s 44 against 45 (dfthcbe's
+    uncontrolled reflection adds a phase target).
 
     **Example.**
 
@@ -3066,8 +3112,11 @@ class ControlledDFTHCWalk(Operator2):
     C(\mathrm{REF}_{T_2})\,U`.
 
     **Action.** :math:`|0\rangle\langle 0|_{control} \otimes I + |1\rangle\langle 1|_{control}
-    \otimes W` on inputs whose ancilla groups are in :math:`|0\rangle`, with :math:`W` the action
-    of :class:`DFTHCWalk` for the same arguments: control ``|0>`` returns the whole input,
+    \otimes W` on inputs whose ancilla groups are in :math:`|0\rangle` and on every state the walk
+    reaches from there, where only the six index registers of :math:`\mathcal{A}\cup\mathcal{B}`
+    are nonzero (as between QPE rounds; the prepares and unprepares run on both branches and
+    :math:`U^\dagger U = I` there too), with :math:`W` the action of :class:`DFTHCWalk` for the
+    same arguments: control ``|0>`` returns the whole input,
     control ``|1>`` gives :class:`DFTHCWalk`'s whole output, global sign included, and control
     ``|+>`` their superposition (spec 12.4, E-3). The output is the same for every outcome of the
     erase measurements.
@@ -3105,8 +3154,14 @@ class ControlledDFTHCWalk(Operator2):
     ``T = 9795``, ``M = 2524``, ``A = 8677``, ``M + A = 11201``.
 
     **Paper and dfthcbe.** The controlled walk of spec 3.3, the unit of the paper's phase
-    estimation. dfthcbe: ``DFTHCWalk(is_controlled=True)``, 9,642 Toffolis at FeMoco-54 (its
-    controlled ``ref_ab`` costs the same as the uncontrolled one); ours is +153.
+    estimation (arXiv:2502.15882v1 Sec. II, after Eq. (11)). The paper counts the phase-estimation
+    control on :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}` only (App. B.7.2, Eq. (128)),
+    which gives controlled even powers of :math:`W` because the block encoding is self-inverse;
+    this class also controls :math:`\mathrm{REF}_{T_2}` (+1), so every power works. dfthcbe:
+    ``DFTHCWalk(is_controlled=True)``, which also controls only the two reflections,
+    :math:`9597 + 45 = 9642` Toffolis at FeMoco-54 by its call graph (its controlled ``ref_ab``
+    uses the control as the phase target, so it costs the same as the uncontrolled one); ours is
+    +153.
 
     **Example.**
 
@@ -3369,7 +3424,7 @@ def assert_resources(
 - [ ] **Step 5: Run the tests**
 
 Run: `scripts/test.sh tests/ops/test_walk.py tests/integration/test_walk_counts.py tests/test_work_pool.py tests/ops/test_block_encoding.py -q`
-Expected: `82 passed` (about 110 s with 2 workers, the 4 `slow` compiles included).
+Expected: `84 passed` (about 110 s with 2 workers, the 4 `slow` compiles included).
 
 Run: `scripts/test.sh tests/test_tolerance_hygiene.py tests/test_compile.py tests/test_canary_helper.py -q`
 Expected: `71 passed`.
@@ -3382,7 +3437,7 @@ Expected: `2 passed, 5 deselected`, after two `MID_COMPILE {...}` lines (the sec
 - [ ] **Step 7: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1053 passed` (1025 + 28).
+Expected: `1055 passed` (1025 + 30).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -3690,7 +3745,7 @@ Expected: `1 passed` (about 40 s; one input of the 28 of the release tier's 6-31
 - [ ] **Step 8: Run the per-commit tier and the linter**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1053 passed` (unchanged: the checks are nightly or release).
+Expected: `1055 passed` (unchanged: the checks are nightly or release).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
