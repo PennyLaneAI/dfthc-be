@@ -51,7 +51,7 @@ class SpinMux(Operator2):
     **Cost.** :func:`dfthc.costs.spin_mux`: :math:`T = 1`, one plain ``Toffoli`` (``A = 0``);
     ``M = 0``. Two per ``InnerSelect``.
 
-    **Paper and dfthcbe.** Steps 12 and 17; the paper computes :math:`\sigma_{G_0}` in App. B 2
+    **Paper and dfthcbe.** Steps 12 and 17; the paper computes :math:`\sigma_{G_0}` in App. B.3
     but has no Table III row for it. dfthcbe: ``InnerSelect._build_sigma``, two
     ``MultiControlX`` gates (2 Toffolis per application).
 
