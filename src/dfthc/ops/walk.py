@@ -1,5 +1,5 @@
-r"""The block encoding of the sum-of-squares Hamiltonian and its controlled class (spec 9.21;
-steps 1 to 27).
+r"""The block encoding of the sum-of-squares Hamiltonian, the qubitized walk and their controlled
+classes (spec 9.21 and 9.22; steps 1 to 28).
 
 **The circuit** (spec 3.3 and 3.5). The block encoding is :math:`U^\dagger\,\mathrm{REF}_{T_2}\,U`
 with :math:`U` = ``OuterPrepare``, ``InnerPrepare``, ``InnerSigns``, ``InnerSelect``,
@@ -7,9 +7,11 @@ with :math:`U` = ``OuterPrepare``, ``InnerPrepare``, ``InnerSigns``, ``InnerSele
 ``InnerSigns``, ``InnerUnprepare``, ``OuterUnprepare``; its block on the ancillas in
 :math:`|0\rangle` is :math:`\tilde H_{SA}/\tilde\Lambda - I` (spec 8.5). Every adjoint in it is an
 explicit class (``InnerUnprepare``, ``InnerSelectDagger``, ``OuterUnprepare``; spec 7.4 rule 6).
-The controlled class controls only the reflection: on states whose ancillas start in
-:math:`|0\rangle`, :math:`U^\dagger U = I` (spec 3.3). There is no ``C(...)`` rule of either
-operator.
+The walk is :math:`W = \mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}\,\mathrm{BE}`: the block
+encoding, then ``RefAB``. The controlled classes control only the reflections: on states whose
+ancillas start in :math:`|0\rangle`, :math:`U^\dagger U = I`, so
+:math:`C(W) = C(\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}})\,U^\dagger\,C(\mathrm{REF}_{T_2})\,U`
+(spec 3.3). There is no ``C(...)`` rule of any of these operators.
 
 **Wires.** Each class takes the groups of :class:`~dfthc.registers.WalkLayout` (``outer``,
 ``inner``, ``select``, ``system``, ``phase_grad``, ``work``; a controlled class ``control``
@@ -22,7 +24,8 @@ the ``outer`` and ``inner`` groups, never to ``work`` (spec 10.2).
 **Arguments.** ``params`` is :meth:`WalkParams.as_compilable` and ``tables`` is
 :meth:`WalkTables.as_compilable`; the rules rebuild both with ``from_compilable``. One list,
 :func:`_children`, gives the rule its children in time order with their compilable arguments and
-work needs, and the resource function its declaration, so the two cannot disagree.
+work needs, and the resource function its declaration, so the two cannot disagree;
+:func:`_walk_children` does the same for the walks.
 """
 
 from __future__ import annotations
@@ -45,7 +48,7 @@ from dfthc.ops.prepare import (
     _check_inner,
     _check_outer,
 )
-from dfthc.ops.reflections import ControlledRefAB, ControlledRefT2, RefT2
+from dfthc.ops.reflections import ControlledRefAB, ControlledRefT2, RefAB, RefT2
 from dfthc.ops.select import InnerSelect, InnerSelectDagger
 from dfthc.ops.select import _check as _check_select
 from dfthc.params import WalkParams
@@ -400,3 +403,238 @@ def _controlled_block_encoding(params, tables, control, outer, inner, select, sy
 
 
 register_rule(ControlledDFTHCBlockEncoding, _controlled_block_encoding)
+
+
+def _walk_children(p: WalkParams, t: WalkTables, controlled: bool) -> list[tuple[type, tuple, int]]:
+    """The walk's children (spec 9.22), each ``(class, compilable arguments, work wires)``: the
+    block encoding on the whole groups and pool, then ``RefAB``; both controlled if
+    ``controlled``."""
+    block_encoding = ControlledDFTHCBlockEncoding if controlled else DFTHCBlockEncoding
+    reflection = ControlledRefAB if controlled else RefAB
+    return [(block_encoding, (p.as_compilable(), t.as_compilable()), WalkLayout.work_size(p)),
+            (reflection, (), reflection.required_wires(p.w_x, p.b_k1, p.w_b, p.b_k2)["work"])]
+
+
+class DFTHCWalk(Operator2):
+    r"""The qubitized walk :math:`W = \mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}\,\mathrm{BE}`
+    (steps 1 to 28) of the DFTHC block encoding.
+
+    **Action.** :class:`DFTHCBlockEncoding`, then
+    :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}} = 2|0\rangle\langle 0| - I` on
+    ``x_o``, ``m_x_o``, ``sigma_1``, ``b``, ``m_b`` and ``sigma_0`` (spec 3.3). With the ancilla
+    groups in :math:`|0\rangle`, :math:`\langle 0|W^k|0\rangle = T_k(\tilde H_{SA}/\tilde\Lambda
+    - I)` for the Chebyshev polynomials :math:`T_k` (spec 12.4, E-2), and :math:`W` has the
+    eigenphases :math:`\pm\arccos(E_j/\tilde\Lambda - 1)` for the eigenvalues :math:`E_j` of
+    :math:`\tilde H_{SA}` (spec 3.3, 8.5). The output is the same for every outcome of the erase
+    measurements.
+
+    **Registers.** Those of :class:`DFTHCBlockEncoding`, with the same input and output states.
+
+    ============== ============================== ===================== ======================
+    name           width (FeMoco-54)              input                 output
+    ============== ============================== ===================== ======================
+    ``outer``      the ``outer`` group (143)      ``|0>``               see the action
+    ``inner``      the ``inner`` group (455)      ``|0>``               see the action
+    ``select``     ``(N - 1) b_rot + 4`` (799)    ``|0>``               ``|0>``
+    ``system``     ``2N`` (108)                   any                   see the action
+    ``phase_grad`` ``b_rot`` (15)                 phase-gradient state  unchanged
+    ``work``       ``WalkLayout.work_size`` (44)  ``|0>``               ``|0>``
+    ============== ============================== ===================== ======================
+
+    **Compilable arguments.** Those of :class:`DFTHCBlockEncoding`, with the same checks.
+
+    **Pre- and postconditions.** Those of :class:`DFTHCBlockEncoding`. After every step only
+    the six index registers of :math:`\mathcal{A}\cup\mathcal{B}` may differ from ``|0>``;
+    they carry the walk's state to the next step.
+
+    **Decomposition** (spec 9.22). ``DFTHCBlockEncoding(params, tables, outer, inner, select,
+    system, phase_grad, work)`` on the whole groups, then ``RefAB(x_o, m_x_o, sigma_1, b, m_b,
+    sigma_0, work[:n_w - 3])`` on the registers ``WalkLayout.split_group`` names.
+
+    **Adjoint and control.** Never adjointed: its rule measures. Never controlled: the
+    controlled walk is the class :class:`ControlledDFTHCWalk`. There is no ``C(DFTHCWalk)``
+    rule, so ``qp.ctrl(DFTHCWalk(...))`` fails to compile with a ``CompileError`` (the erases
+    cannot be controlled); a delegating rule would compile but bring back the cascade of
+    distributed candidates (spec 7.4 rule 6, Task G0.1).
+
+    **Cost.** :func:`dfthc.costs.walk` (uncontrolled): :math:`T = T_{BE} + T_{RefAB}`,
+    :math:`M = M_{BE}`; ``A`` = :func:`dfthc.costs.measured_and_uncomputes` (uncontrolled),
+    ``T - T_Toffoli``. At FeMoco-54: :math:`9749 + 44 = 9793`, ``M = 2524``, ``A = 8675``, so
+    ``M + A = 11199`` physical measurements (spec 9.24). ``CNOT`` and ``PauliX`` counts are
+    upper bounds (spec 7.6).
+
+    **Paper and dfthcbe.** Steps 1 to 28 of spec 3.5: the walk
+    :math:`W = \mathrm{Ref}_{\mathrm{a}\mathcal{B}}\,U^\dagger\,\mathrm{Ref}_{\mathcal{B}}\,U`
+    with eigenphases :math:`\pm\arccos(E_k/\Lambda - 1)` (PRX 15, 041016; arXiv:2502.15882v1
+    Eq. (10), App. A.2 Eqs. (76) and (77), :math:`\mathrm{Ref} = 2|0\rangle\langle 0| - I` as in
+    App. A.1), whose reflection covers every ancilla of the linear combination and of the
+    qubitization signal (App. B); its Table 3 (PRX Table III) gives 9,997 Toffolis at FeMoco-54,
+    46 of them for :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}` with the phase-estimation
+    control (App. B.7, Eqs. (96) and (128)). Ours is -204: the block encoding's -202 and
+    ``RefAB``'s 44 against 46 (spec 13.1). dfthcbe: ``DFTHCWalk``
+    (``dfthcbe/block_encoding.py``), the same two children with the same sign (Qualtran's
+    ``reflection_around_zero`` with ``global_phase=-1``), :math:`9596 + 45 = 9641` by its call
+    graph; ours is +152: the block encoding's +153 and ``RefAB``'s 44 against 45 (dfthcbe's
+    uncontrolled reflection adds a phase target).
+
+    **Example.**
+
+    .. code-block:: python
+
+        import pennylane as qp
+        from dfthc.compile import compiled_resources
+        from dfthc.data.factors import load_factors
+        from dfthc.data.tables import WalkTables
+        from dfthc.ops.walk import DFTHCWalk
+        from dfthc.params import H2_STO3G_TEST as p
+        from dfthc.registers import WalkLayout
+
+        t = WalkTables.from_factors(load_factors("h2_sto3g_R2_B2_C1"), p)
+        layout = WalkLayout.from_params(p)
+        groups = {name: getattr(layout, name) for name in DFTHCWalk.wire_argnames}
+
+        def program():
+            qp.PhaseGradientStatePrep(layout.phase_grad)
+            DFTHCWalk(p.as_compilable(), t.as_compilable(), **groups)
+
+        compiled_resources(program, num_wires=layout.num_wires).toffoli  # 150 + 8 = 158
+    """
+
+    compilable_argnames = ("params", "tables")
+    wire_argnames = _GROUPS
+
+    def __init__(self, params, tables, outer, inner, select, system, phase_grad, work):
+        wires = (outer, inner, select, system, phase_grad, work)
+        compilable = _validate("DFTHCWalk", self.wire_argnames, params, tables, wires)
+        super().__init__(*compilable, *wires)
+
+    @staticmethod
+    def required_wires(params, tables) -> dict[str, int]:
+        """The layout's group sizes (spec 10.1); ``tables`` does not change them."""
+        return _group_sizes(WalkParams.from_compilable(params))
+
+
+def _walk_resources(params, tables, outer, inner, select, system, phase_grad, work):
+    p, t = _rebuild(params, tables)
+    return _resources(_walk_children(p, t, controlled=False), p)
+
+
+@qp.register_resources(_walk_resources)
+def _walk(params, tables, outer, inner, select, system, phase_grad, work):
+    p, t = _rebuild(params, tables)
+    _emit(_walk_children(p, t, controlled=False),
+          _registers(p, outer, inner, select, system, phase_grad), work)
+
+
+register_rule(DFTHCWalk, _walk)
+
+
+class ControlledDFTHCWalk(Operator2):
+    r"""The controlled walk: the explicit controlled class of :class:`DFTHCWalk` (spec 7.4 rule
+    6), :math:`C(W) = C(\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}})\,U^\dagger\,
+    C(\mathrm{REF}_{T_2})\,U`.
+
+    **Action.** :math:`|0\rangle\langle 0|_{control} \otimes I + |1\rangle\langle 1|_{control}
+    \otimes W` on inputs whose ancilla groups are in :math:`|0\rangle` and on every state the walk
+    reaches from there, where only the six index registers of :math:`\mathcal{A}\cup\mathcal{B}`
+    are nonzero (as between QPE rounds; the prepares and unprepares run on both branches and
+    :math:`U^\dagger U = I` there too), with :math:`W` the action of :class:`DFTHCWalk` for the
+    same arguments: control ``|0>`` returns the whole input,
+    control ``|1>`` gives :class:`DFTHCWalk`'s whole output, global sign included, and control
+    ``|+>`` their superposition (spec 12.4, E-3). The output is the same for every outcome of the
+    erase measurements.
+
+    **Registers.** Those of :class:`DFTHCWalk` after a one-wire ``control``, which stays a
+    control (only phases on it).
+
+    ============== ============================== ===================== ======================
+    name           width (FeMoco-54)              input                 output
+    ============== ============================== ===================== ======================
+    ``control``    1                              any                   a control
+    ``outer``      the ``outer`` group (143)      ``|0>``               see the action
+    ``inner``      the ``inner`` group (455)      ``|0>``               see the action
+    ``select``     ``(N - 1) b_rot + 4`` (799)    ``|0>``               ``|0>``
+    ``system``     ``2N`` (108)                   any                   see the action
+    ``phase_grad`` ``b_rot`` (15)                 phase-gradient state  unchanged
+    ``work``       ``WalkLayout.work_size`` (44)  ``|0>``               ``|0>``
+    ============== ============================== ===================== ======================
+
+    **Compilable arguments.** Those of :class:`DFTHCWalk`, with the same checks.
+
+    **Pre- and postconditions.** Those of :class:`DFTHCWalk`, on both control branches;
+    ``control`` is disjoint from the groups (unchecked).
+
+    **Decomposition** (spec 9.22). ``ControlledDFTHCBlockEncoding(params, tables, control, outer,
+    inner, select, system, phase_grad, work)``, then ``ControlledRefAB(control, x_o, m_x_o,
+    sigma_1, b, m_b, sigma_0, work[:n_w - 2])``: only the two reflections are controlled; the
+    prepares, selects and measured unprepares run uncontrolled (spec 7.4 rule 5).
+
+    **Adjoint and control.** Never adjointed or controlled itself (spec 9.0);
+    ``ControlledWalkPower`` (spec 9.23) repeats it.
+
+    **Cost.** :func:`dfthc.costs.walk` (controlled): :class:`DFTHCWalk`'s ``T + 2``, the same
+    ``M``; ``A`` = :func:`dfthc.costs.measured_and_uncomputes` (controlled). At FeMoco-54:
+    ``T = 9795``, ``M = 2524``, ``A = 8677``, ``M + A = 11201``.
+
+    **Paper and dfthcbe.** The controlled walk of spec 3.3, the unit of the paper's phase
+    estimation (arXiv:2502.15882v1 Sec. II, after Eq. (11)). The paper counts the phase-estimation
+    control on :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}` only (App. B.7.2, Eq. (128)),
+    which gives controlled even powers of :math:`W` because the block encoding is self-inverse;
+    this class also controls :math:`\mathrm{REF}_{T_2}` (+1), so every power works. dfthcbe:
+    ``DFTHCWalk(is_controlled=True)``, which also controls only the two reflections,
+    :math:`9597 + 45 = 9642` Toffolis at FeMoco-54 by its call graph (its controlled ``ref_ab``
+    uses the control as the phase target, so it costs the same as the uncontrolled one); ours is
+    +153.
+
+    **Example.**
+
+    .. code-block:: python
+
+        import pennylane as qp
+        from dfthc.compile import compiled_resources
+        from dfthc.data.factors import load_factors
+        from dfthc.data.tables import WalkTables
+        from dfthc.ops.walk import ControlledDFTHCWalk
+        from dfthc.params import H2_STO3G_TEST as p
+        from dfthc.registers import WalkLayout
+
+        t = WalkTables.from_factors(load_factors("h2_sto3g_R2_B2_C1"), p)
+        layout = WalkLayout.from_params(p, qpe_bits=1)
+        groups = {name: getattr(layout, name) for name in ControlledDFTHCWalk.wire_argnames[1:]}
+
+        def program():
+            qp.PhaseGradientStatePrep(layout.phase_grad)
+            ControlledDFTHCWalk(p.as_compilable(), t.as_compilable(), layout.qpe_control,
+                                **groups)
+
+        compiled_resources(program, num_wires=layout.num_wires).toffoli  # 158 + 2 = 160
+    """
+
+    compilable_argnames = ("params", "tables")
+    wire_argnames = ("control", *_GROUPS)
+
+    def __init__(self, params, tables, control, outer, inner, select, system, phase_grad, work):
+        wires = (control, outer, inner, select, system, phase_grad, work)
+        compilable = _validate("ControlledDFTHCWalk", self.wire_argnames, params, tables, wires)
+        super().__init__(*compilable, *wires)
+
+    @staticmethod
+    def required_wires(params, tables) -> dict[str, int]:
+        """``control`` (1 wire), then the layout's group sizes."""
+        return {"control": 1} | _group_sizes(WalkParams.from_compilable(params))
+
+
+def _controlled_walk_resources(params, tables, control, outer, inner, select, system, phase_grad,
+                               work):
+    p, t = _rebuild(params, tables)
+    return _resources(_walk_children(p, t, controlled=True), p)
+
+
+@qp.register_resources(_controlled_walk_resources)
+def _controlled_walk(params, tables, control, outer, inner, select, system, phase_grad, work):
+    p, t = _rebuild(params, tables)
+    _emit(_walk_children(p, t, controlled=True),
+          _registers(p, outer, inner, select, system, phase_grad, control), work)
+
+
+register_rule(ControlledDFTHCWalk, _controlled_walk)
