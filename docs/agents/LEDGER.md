@@ -79,8 +79,8 @@ marked `merged` is never re-dispatched after a loss of context.
 
 | Id | Title | Tier | Status | Branch | Merge commit | Test evidence | Reviews (GPT-5.6 / Opus) | Open issues |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 3.1 | `InnerSelect` and `InnerSelectDagger` | A | not started | `phase3/3.1` | | | / | plan `phase3-select`; + 37 (891 with 2E.3 -> 928); after G2 |
-| 3.2 | `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB` | B | not started | `phase3/3.2` | | | / n/a | plan `phase3-select`; + 45 (891 with 2E.3 -> 936); after G2; parallel to 3.1 |
+| 3.1 | `InnerSelect` and `InnerSelectDagger` | A | in progress | `phase3/3.1` | | lane-a from `898b754`, implementer db8564a1 (inherit) | / | plan `phase3-select`; + 37 (891 with 2E.3 -> 928); after G2 |
+| 3.2 | `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB` | B | in progress | `phase3/3.2` | | lane-b from `898b754`, implementer 6e6d2a37 (Sonnet) | / n/a | plan `phase3-select`; + 45 (891 with 2E.3 -> 936); after G2; parallel to 3.1 |
 | 3.3 | `DFTHCBlockEncoding` and `ControlledDFTHCBlockEncoding` | A | not started | `phase3/3.3` | | | / | plan `phase3-assembly`; + 44 (973 -> 1,017); after 3.1 and 3.2 |
 | 3.4 | `DFTHCWalk`, `ControlledDFTHCWalk`, whole-program counts at the test and mid presets, inventory test | A | not started | `phase3/3.4` | | | / | plan `phase3-assembly`; + 28 (1,017 -> 1,045); shared edit `dfthc.testing.resources` |
 | 3.5 | End-to-end checks E-1 to E-4 and tier budgets | A | not started | `phase3/3.5` | | | / | plan `phase3-assembly`; 0 per commit, 10 nightly, 32 release |
