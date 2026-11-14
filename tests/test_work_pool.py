@@ -1,0 +1,189 @@
+"""The walk's shared work pool (spec 10.1 and 10.2): every call of the block encoding's rules gets
+exactly its required_wires, its work is a prefix of the pool, and neither the pool nor the
+comparators' dirty work registers appear where they do not belong; WalkLayout.work_size covers
+every child of the walk."""
+
+import functools
+import inspect
+import random
+
+import pennylane as qp
+import pytest
+
+from dfthc.data.factors import load_factors, random_factors
+from dfthc.data.tables import WalkTables
+from dfthc.ops.reflections import ControlledRefAB, ControlledRefT2, RefAB, RefT2
+from dfthc.ops.walk import _block_encoding, _children, _controlled_block_encoding
+from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE, WalkParams, lg
+from dfthc.registers import WalkLayout
+
+PRESETS = {
+    "sto3g": lambda: (H2_STO3G_TEST, load_factors("h2_sto3g_R2_B2_C1")),
+    "631g": lambda: (H2_631G_TEST, load_factors("h2_631g_R2_B2_C2")),
+    "mid": lambda: (MID_NAPHTHALENE, load_factors("naphthalene")),
+    "femoco": lambda: (FEMOCO54, random_factors(54, 10, 27, 27, n_plus=27, seed=0)),
+}
+"""FeMoco-54 is classical here: the rules run in tape mode and construct their children (the
+constructors check every register); nothing is compiled."""
+
+DIRTY = {"succ_work_x_o": {"OuterPrepare", "OuterUnprepare"},
+         "cmp_work_x_o": {"OuterPrepare", "OuterUnprepare"},
+         "succ_work_b": {"InnerPrepare", "InnerUnprepare"},
+         "cmp_work_b": {"InnerPrepare", "InnerUnprepare"}}
+"""The comparators' work registers, dirty from a prepare to its unprepare (spec 10.2), and the
+only classes that may take them."""
+
+AT_LEAST = {"OuterPrepare", "OuterUnprepare", "InnerPrepare", "InnerUnprepare"}
+"""Their ``phase_grad`` is a minimum (``s_u``); the walk passes the whole register."""
+
+RULES = {"block encoding": (_block_encoding, False, 11),
+         "controlled block encoding": (_controlled_block_encoding, True, 11)}
+"""Each assembly rule, whether it is controlled, and its number of calls."""
+
+
+@functools.cache
+def preset(name):
+    p, factors = PRESETS[name]()
+    return p, WalkTables.from_factors(factors, p), WalkLayout.from_params(p, qpe_bits=1)
+
+
+def required(op) -> dict:
+    """``required_wires`` of the call: from its compilable arguments, or, for the reflections,
+    whose sizes follow from their wires, from the widths of its pattern registers."""
+    cls = type(op)
+    if cls in (RefT2, ControlledRefT2):
+        return cls.required_wires(len(op.b), len(op.m_b))
+    if cls in (RefAB, ControlledRefAB):
+        return cls.required_wires(len(op.x_o), len(op.m_x_o), len(op.b), len(op.m_b))
+    names = inspect.signature(cls.required_wires).parameters
+    return cls.required_wires(**{k: v for k, v in op.hyperparameters.items() if k in names})
+
+
+def calls(rule, p, t, layout, controlled):
+    """The rule's children in tape mode, on the layout's groups (``qpe_control`` as control)."""
+    groups = {name: getattr(layout, name)
+              for name in ("outer", "inner", "select", "system", "phase_grad", "work")}
+    if controlled:
+        groups = {"control": layout.qpe_control} | groups
+    with qp.capture.pause(), qp.queuing.AnnotatedQueue() as queue:
+        rule(p.as_compilable(), t.as_compilable(), **groups)
+    return list(queue.queue)
+
+
+def check_call(op, layout) -> int:
+    """Assert the pool discipline for one call and return its work need."""
+    sizes = required(op)
+    pool = set(layout.work)
+    registers = {name: list(getattr(op, name)) for name in op.wire_argnames}
+    assert set(registers) == set(sizes), op.name
+    for name, wires in registers.items():
+        if name == "phase_grad" and op.name in AT_LEAST:
+            assert wires == list(layout.phase_grad) and len(wires) >= sizes[name], op.name
+        else:
+            assert len(wires) == sizes[name], (op.name, name)
+        if name == "work":
+            assert wires == list(layout.work)[:len(wires)], op.name
+        else:
+            assert not pool & set(wires), (op.name, name)
+        if name in DIRTY:
+            assert op.name in DIRTY[name] and wires == list(getattr(layout, name))
+    work = set(registers.get("work", ()))
+    others = {wire for name, wires in registers.items() if name != "work" for wire in wires}
+    dirty = {wire for name in DIRTY for wire in getattr(layout, name)}
+    assert not work & others and not work & dirty, op.name
+    return sizes.get("work", 0)
+
+
+@pytest.mark.parametrize("name", PRESETS)
+def test_every_call_gets_exactly_its_required_wires(name):
+    """Spec 10.2 and master plan Task 3.3: in both block-encoding rules every child receives
+    exactly required_wires (phase_grad of the prepare classes is a minimum: they get the whole
+    register), its work is the pool's prefix of that size and disjoint from its other registers,
+    no other register holds a pool wire, the dirty comparator work registers go only to their
+    prepare and unprepare (never into a work prefix), and every need fits the pool."""
+    p, t, layout = preset(name)
+    for rule, controlled, count in RULES.values():
+        needs = [check_call(op, layout) for op in calls(rule, p, t, layout, controlled)]
+        assert len(needs) == count and max(needs) <= len(layout.work)
+
+
+@pytest.mark.parametrize("name", PRESETS)
+def test_the_pool_is_the_controlled_walks_largest_need(name):
+    """WalkLayout.work_size is the largest need of the walk's operators: the controlled RefAB's
+    w_x + b_k1 + w_b + b_k2 at every preset (44 at FeMoco-54, spec 10.3), which the walk (Task
+    3.4) will call; the uncontrolled RefAB needs one wire less, the block encodings' children at
+    most that."""
+    p, t, layout = preset(name)
+    needs = {}
+    for rule, controlled, _ in RULES.values():
+        for op in calls(rule, p, t, layout, controlled):
+            needs[op.name] = max(needs.get(op.name, 0), check_call(op, layout))
+    for cls in (RefAB, ControlledRefAB):
+        needs[cls.__name__] = cls.required_wires(p.w_x, p.b_k1, p.w_b, p.b_k2)["work"]
+    assert max(needs.values()) == needs["ControlledRefAB"] == len(layout.work)
+    assert needs["ControlledRefAB"] == WalkLayout.work_size(p) == p.w_x + p.b_k1 + p.w_b + p.b_k2
+    assert needs["RefAB"] == needs["ControlledRefAB"] - 1
+
+
+def own_work(cls, args, p) -> int:
+    """A child's own work need: its class's ``required_wires(...)["work"]`` from the compilable
+    arguments the rule gives it, or, for the reflections (sizes from their wires), from the
+    pattern widths; 0 without a work register."""
+    if cls in (RefT2, ControlledRefT2):
+        return cls.required_wires(p.w_b, p.b_k2)["work"]
+    if cls in (RefAB, ControlledRefAB):
+        return cls.required_wires(p.w_x, p.b_k1, p.w_b, p.b_k2)["work"]
+    arguments = dict(zip(cls.compilable_argnames, args, strict=True))
+    names = inspect.signature(cls.required_wires).parameters
+    return cls.required_wires(**{k: v for k, v in arguments.items() if k in names}).get("work", 0)
+
+
+def zero_tables(p) -> WalkTables:
+    """Tables of ``p``'s shapes with every entry 0: the work needs depend on the shapes only."""
+    def rows(n, m):
+        return tuple((0,) * m for _ in range(n))
+
+    inner = rows(p.RC, p.B + 1)
+    return WalkTables(outer_alt=(0,) * p.X_o, outer_keep=(0,) * p.X_o, inner_alt=inner,
+                      inner_keep=inner, inner_sgn=inner, inner_d_sgn=inner,
+                      tail_angles=rows(p.N, p.N - 1),
+                      sf_angles=tuple(rows(p.B, p.N - 1) for _ in range(p.R)))
+
+
+CHILDREN = {"OuterPrepare", "InnerPrepare", "InnerSigns", "InnerSelect", "InnerUnprepare",
+            "RefT2", "ControlledRefT2", "InnerSelectDagger", "OuterUnprepare", "RefAB",
+            "ControlledRefAB"}
+"""Every class the two block-encoding rules call, and the walk's reflections (Task 3.4)."""
+
+
+def test_work_size_covers_every_child_at_random_shapes():
+    """At 300 random valid shapes, every child of both block-encoding rules, taken from their own
+    child list (``_children``, plain and controlled), is given exactly its class's own
+    ``required_wires`` work, so no explicit inverse or controlled class (``OuterUnprepare``,
+    ``InnerUnprepare``, ``InnerSelectDagger``, ``ControlledRefT2``) can drift from its forward
+    form unnoticed; and ``WalkLayout.work_size`` (spec 10.1, provisional until this test) covers
+    every need, the walk's ``RefAB`` and ``ControlledRefAB`` (Task 3.4) included."""
+    rng = random.Random(0)
+    checked, seen = 0, set()
+    while checked < 300:
+        N, R, B, C = rng.randint(2, 12), rng.randint(1, 10), rng.randint(1, 30), rng.randint(1, 30)
+        b_rot = rng.randint(3, 16)
+        values = dict(N=N, R=R, B=B, C=C, n_plus=rng.randint(0, N), b_rot=b_rot,
+                      b_k1=rng.randint(1, 16), b_k2=rng.randint(1, 16), s_u=rng.randint(3, b_rot))
+        values |= dict(k1=rng.randint(0, lg(N + R * C)), k2=rng.randint(0, lg(B + 1)),
+                       ke1=rng.randint(0, lg(N + R * C)), ke2=rng.randint(0, lg(R * C)))
+        p = WalkParams(**values)
+        if (2**p.ke1 > p.K1 * p.d1 or 2**(p.ke2 + p.w_b) > p.K2 * p.d2
+                or 2**p.w_b > (p.N - 1) * p.b_rot + 1):
+            continue
+        t = zero_tables(p)
+        for controlled in (False, True):
+            for cls, args, need in _children(p, t, controlled):
+                assert own_work(cls, args, p) == need, (p, cls.__name__)
+                assert need <= WalkLayout.work_size(p), (p, cls.__name__, need)
+                seen.add(cls.__name__)
+        for cls in (RefAB, ControlledRefAB):
+            assert own_work(cls, (), p) <= WalkLayout.work_size(p), (p, cls.__name__)
+            seen.add(cls.__name__)
+        checked += 1
+    assert seen == CHILDREN
