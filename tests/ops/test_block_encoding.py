@@ -105,11 +105,13 @@ def test_prepare_then_unprepare_is_the_identity(name):
 
 
 def test_harness_sees_phases_outcomes_and_ancillas():
-    """The harness the semantic tests rely on (and Tasks 3.4 and 3.5): the alternating and seeded
-    schedules force both outcomes, assert_same_state compares complex amplitudes (a -1 on the
-    whole state or on one term fails it), project returns an input exactly and drops every term
-    with a nonzero ancilla, and nonzero_registers names that ancilla's register."""
+    """The harness the semantic tests rely on (and Tasks 3.4 and 3.5): S0 and S1 force every
+    outcome 0 and every outcome 1, the alternating and seeded schedules both outcomes,
+    assert_same_state compares complex amplitudes (a -1 on the whole state or on one term fails
+    it), project returns an input exactly and drops every term with a nonzero ancilla, and
+    nonzero_registers names that ancilla's register."""
     c = case("sto3g")
+    assert (walk_sim.schedule("S0", 8), walk_sim.schedule("S1", 8)) == ([0] * 8, [1] * 8)
     for kind in ("alternating", "seeded"):
         assert set(walk_sim.schedule(kind, 8)) == {0, 1}
     psi = walk_sim.superposition(c, SUPPORT["sto3g"], seed=1)

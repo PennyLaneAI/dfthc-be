@@ -26,18 +26,26 @@ FIXED_INPUTS = (0b0000, 0b1000, 0b1010, 0b1111)
 TWO_ELECTRON_631G = tuple(v for v in range(256) if bin(v).count("1") == 2)
 """The 28 two-electron basis states of H2_631G_TEST (N = 4, 8 spin orbitals)."""
 ATOL = 1e-10
-"""Spec 12.4: E-1 and E-2 to 1e-10."""
+"""Spec 12.4 and the Task 3.5 brief: every E-check comparison to 1e-10."""
 
 nightly, release = pytest.mark.slow, pytest.mark.release
 
 
-def columns(c, ops, inputs, kind, control=None, row=0, seed=0):
-    """The projected output (``row``: control value) of every basis input, as columns, each run
-    with the forced schedule ``kind`` of exactly the program's measurements."""
+def columns(c, ops, inputs, kind, seed=0):
+    """The projected output of every basis input, as columns, each run with the forced schedule
+    ``kind`` of exactly the program's measurements."""
     outcomes = walk_sim.schedule(kind, walk_sim.num_measurements(ops), seed=seed)
     return np.array([walk_sim.project(c, walk_sim.simulate(
-        c, ops, walk_sim.input_state(c, walk_sim.basis(c, v), control), outcomes))[row]
+        c, ops, walk_sim.input_state(c, walk_sim.basis(c, v)), outcomes))[0]
         for v in inputs]).T
+
+
+def assert_same(state, expected, where):
+    """``walk_sim.assert_same_state``, naming the input and control state of a failure."""
+    try:
+        walk_sim.assert_same_state(state, expected, atol=ATOL)
+    except AssertionError as error:
+        raise AssertionError(f"{where}: largest difference {error}") from None
 
 
 E1 = [pytest.param("sto3g", "S0", ALL_INPUTS, marks=nightly, id="sto3g-S0-all"),
@@ -58,7 +66,7 @@ def test_e1_block_encoding(name, kind, inputs):
     c = walk_sim.case(name)
     ops = walk_sim.program(c, DFTHCBlockEncoding)
     measured = columns(c, ops, inputs, kind, seed=12)
-    assert np.allclose(measured, c.block()[:, list(inputs)], rtol=0, atol=ATOL)
+    np.testing.assert_allclose(measured, c.block()[:, list(inputs)], rtol=0, atol=ATOL)
 
 
 @nightly
@@ -72,7 +80,7 @@ def test_e2_walk_powers(name, k):
     chebyshev = {1: x, 2: 2 * x @ x - np.eye(len(x))}[k]
     ops = walk_sim.program(c, DFTHCWalk, repeat=k)
     measured = columns(c, ops, FIXED_INPUTS, "S0")
-    assert np.allclose(measured, chebyshev[:, list(FIXED_INPUTS)], rtol=0, atol=ATOL)
+    np.testing.assert_allclose(measured, chebyshev[:, list(FIXED_INPUTS)], rtol=0, atol=ATOL)
 
 
 E3 = [pytest.param("S0", FIXED_INPUTS, marks=nightly, id="S0-fixed"),
@@ -109,12 +117,13 @@ def test_e3_controlled_walk(kind, inputs):
         for label, control in (("0", [1, 0]), ("1", [0, 1]), ("+", [plus, plus])):
             out = walk_sim.simulate(c, controlled, walk_sim.input_state(c, psi, control),
                                     outcomes[:m])
-            walk_sim.assert_same_state(out, expected[label])
+            assert_same(out, expected[label], f"input {v:04b}, control |{label}>")
         stepped_twice = walk_sim.simulate(c, twice, walk_sim.input_state(c, psi), outcomes)
         out = walk_sim.simulate(c, then_controlled, walk_sim.input_state(c, psi, [plus, plus]),
                                 outcomes)
-        walk_sim.assert_same_state(out, walk_sim.superpose(
-            (plus, stepped), (plus, walk_sim.set_control(c, stepped_twice))))
+        assert_same(out, walk_sim.superpose(
+            (plus, stepped), (plus, walk_sim.set_control(c, stepped_twice))),
+            f"input {v:04b}, control |+> after a walk step")
 
 
 @nightly
@@ -130,5 +139,5 @@ def test_e4_prepare_then_unprepare(kind):
     for v in ALL_INPUTS:
         psi = walk_sim.basis(c, v)
         identity = walk_sim.simulate(c, walk_sim.operations(c), walk_sim.input_state(c, psi), [])
-        walk_sim.assert_same_state(walk_sim.simulate(c, ops, walk_sim.input_state(c, psi),
-                                                     outcomes), identity)
+        assert_same(walk_sim.simulate(c, ops, walk_sim.input_state(c, psi), outcomes), identity,
+                    f"input {v:04b}")
