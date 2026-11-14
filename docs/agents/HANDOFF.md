@@ -105,6 +105,10 @@ Found while dry-running the Phase 0 plan (canaries L-24 and L-25 pin the first t
   `qp.adjoint(lambda: Op(...))()` also work.
 - **Inside a rule, wire registers are arrays.** Never test them for truth (`work[:n] or None`
   raises); compute lengths from compilable arguments and slice explicitly.
+- **The wires of one operator must be distinct qubits.** Registers that share a wire fail to
+  compile (`'qref.operator' op qubit operands must refer to distinct qubits`), even when the
+  shared wires are idle in the other register. To reuse a pool, bind it once and slice it
+  inside the rule: `QPERound`'s corrections take the walk's `work` pool from its `walk_wires`.
 - **Declared resources must match emitted operators exactly**, including compilable arguments and
   wire-register sizes. An emitted operator whose signature is not declared is left undecomposed,
   and `compiled_resources` then fails with "operations outside the gate set remain".
@@ -237,9 +241,10 @@ Spec 7.4. Each rule exists because of a confirmed limitation (section 7 below).
    Convert list-valued dynamic arguments to arrays in `__init__` (L-23).
 4. **Control flow.** Bodies of auto-adjointed operators contain no `qp.for_loop` or `qp.cond`;
    unroll loops in Python with static bounds. `qp.cond` on measurement outcomes appears only
-   inside erase operators and the QPE wrapper. `qp.for_loop` appears only in `QROAMRead` (one
-   loop per unary leaf, with `qp.cond` on table bits; spec 9.3) and `ControlledWalkPower`, both
-   never adjointed or controlled (rule 6).
+   inside erase operators and the QPE wrapper (`QPERound`'s corrections). `qp.for_loop`
+   appears only in `QROAMRead` (one loop per unary leaf, with `qp.cond` on table bits;
+   spec 9.3), `ControlledWalkPower` and its toy twin `ToyControlledWalkPower`, all never
+   adjointed or controlled (rule 6).
 5. **Measurement-based uncompute** lives only in `QROAMErase`, `AngleErase` and the base rules
    of `OuterUnprepare` and `InnerUnprepare`. Never place a measuring operator under `qp.ctrl`.
    Catalyst would silently control a unitary inverse instead (L-2).

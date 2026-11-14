@@ -289,7 +289,7 @@ Remedying Option 2 converges on Option 1. Option 3 re-implements primitives Penn
 2. **The erase phase fixup is our own construction** (`PhaseFixup` and its rule helper `emit_phase_fixup`, §9.4). It applies `CZ`/`Z` gates directly. It does not load parity bits through a `QROM` into a $\lvert -\rangle$ ancilla, because PennyLane's select-swap `QROM` adds complex phases unless its block size is 1 (§14, L-12). The fallback is plain unary iteration (§9.4).
 3. **Explicit controlled constructions are required, not only tidier** ([pennylane#10357](https://github.com/PennyLaneAI/pennylane/issues/10357)). Since G0 they are operator classes, not `C(...)` rules (item 13).
 4. **Structure-determining data are compilable arguments** ([catalyst#3172](https://github.com/PennyLaneAI/catalyst/issues/3172)). If compile time at FeMoco size is too high, the remedies of §16 K-1 keep the walk a single compiled program. Otherwise work stops and is escalated.
-5. **Bodies of operators that are auto-adjointed contain no `qp.for_loop`/`qp.cond`** ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)). Since G0 the two operators with loops, `QROAMRead` (item 12) and `ControlledWalkPower`, are never adjointed or controlled, by construction (item 13).
+5. **Bodies of operators that are auto-adjointed contain no `qp.for_loop`/`qp.cond`** ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)). Since G0 the operators with loops, `QROAMRead` (item 12), `ControlledWalkPower` and its toy twin `ToyControlledWalkPower` (§11.4), are never adjointed or controlled, by construction (item 13).
 6. **Rule selection is asserted.** Tests use measurement-count signatures and, where the output is capturable, the verbose rule listing of `catalyst.passes.graph_decomposition`. Conditionals carry `qp.hint` branch probabilities.
 7. **Junk persists from read to erase.** The qubit count therefore exceeds the paper's (§10.3). An alternative with no Toffoli penalty stays open (Q-1, §16). The user decided to settle it after the Phase 0 probe K-10 and the Phase 4 resource report, preferring the argument variant if it works.
 8. **Unary iteration is exact, not truncated** (decided by the user, §16 Q-4). Truncated iteration and aligned-block pruning are later optimizations.
@@ -360,7 +360,7 @@ dfthc-be/
       majorana.py             MajoranaGate
       select.py               InnerSelect, InnerSelectDagger
       walk.py                 DFTHCBlockEncoding, DFTHCWalk, ControlledDFTHCBlockEncoding, ControlledDFTHCWalk
-    qpe.py                    ControlledWalkPower, QPERound, iterative_phase_estimation(), energy_from_phase(), physical_energy()
+    qpe.py                    ControlledWalkPower, QPERound, WalkPowerSpec, spare_wires_needed(), iterative_phase_estimation(), qpe_program(), phase_from_bits(), energy_from_phase(), physical_energy()
     testing/
       sparse_sim.py           sparse-state simulator (§12.3)
       tape.py                 tape-path decomposition for simulation
@@ -587,7 +587,7 @@ Each rule exists because of a confirmed limitation (§14).
 4. **Control flow.**
    - Bodies of operators that are auto-adjointed contain no `qp.for_loop` or `qp.cond`, because adjoint lowering can crash on nested control flow ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)). Loops are unrolled in Python with static bounds, which also keeps `qp.analyze` counts concrete.
    - `qp.cond` on mid-circuit measurement outcomes appears only inside erase operators and the QPE wrapper.
-   - `qp.for_loop` appears in two operators, both never adjointed and never controlled: `QROAMRead`, whose per-leaf loads also carry `qp.cond` on table bits (§9.3, K-1 lever P), and `ControlledWalkPower`. The angle loads reach their loops through `QROAMRead`; the erases have none. Static bounds keep the counts concrete.
+   - `qp.for_loop` appears in three operators, all never adjointed and never controlled: `QROAMRead`, whose per-leaf loads also carry `qp.cond` on table bits (§9.3, K-1 lever P), `ControlledWalkPower` and its toy twin `ToyControlledWalkPower` (§11.4). The angle loads reach their loops through `QROAMRead`; the erases have none. Static bounds keep the counts concrete.
    - "Never adjointed or controlled" holds by construction since G0: no program wraps a dfthc composite in `qp.adjoint` or `qp.ctrl` (rule 6), so Catalyst synthesizes no distributed candidate of a composite, nor of a looped operator inside one. The inventory test (§12.1, T6) checks this per program.
    - PennyLane primitives that we use under an adjoint (`SemiAdder`, the comparators) are covered by Phase 0 capability tests (K-7).
 5. **Measurement-based uncompute.**
@@ -624,7 +624,7 @@ The adjoint and controlled classes (rule 6). Each base rule is the modified rule
 | `GivensLadderDagger` | the ladder's rungs in reverse time order ($k = 0, \dots, N-2$), each an auto-adjointed `GivensRotation` (§9.15) | the auto-derived `Adjoint(GivensLadder)` |
 | `ControlledRefT2`, `ControlledRefAB` | exact controlled reflections (§9.19, §9.20) | `C(RefT2)`, `C(RefAB)` |
 | `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk` | control only the reflections (§9.21, §9.22) | `C(DFTHCBlockEncoding)`, `C(DFTHCWalk)` |
-| `ControlledToyWalk` | control only the toy reflection (§11.4) | `C(ToyWalk)` |
+| `ControlledToyWalk` | control only the toy's two reflections, $\mathrm{REF}_{\mathrm{anc}}$ and SELECT (§11.4) | `C(ToyWalk)` |
 
 The symbolic keys that remain:
 
@@ -1206,11 +1206,11 @@ Rounds run for $j = t-1, \dots, 0$, with $t$ = `num_bits`. Round $j$ is one `Ope
 
 `earlier_bits` is a dynamic boolean array of shape $(t,)$, indexed by bit position. Entry $l$ holds $m_l$ for $l > j$ and `False` for $l \le j$. The rule reads only `earlier_bits[l]` for $l > j$. The driver starts from an all-`False` array and sets entry $j$ after measuring $m_j$. Every round therefore gets an array of the same shape, so all rounds share one argument signature, including round $j = t-1$, in which no entry is set yet.
 
-Whether such measurement-valued arrays work as dynamic arguments in both capture and tape mode is decided by the Phase 0 probe K-10. If they do not, steps 1–4 stay in the driver, with the same gates and counts; `ControlledWalkPower` remains the operator.
+K-10 passed (Task 0.8): such arrays work as dynamic arguments in both modes, so `QPERound` holds steps 1–4. Its final signature is `QPERound(j, num_bits, earlier_bits, walk_op, walk_compilable, walk_wire_sizes, control, qpe_grad, walk_wires)`. An `Operator2` takes no Python callable and cannot mix compilable with hybrid (nested) wire arguments, so the walk power is named: `walk_op` is a class name in the registry `dfthc.qpe.WALK_POWERS` (`ControlledWalkPower`, and the toy's `ToyControlledWalkPower`), `walk_compilable` its compilable arguments after `power`, and `walk_wires` its wire groups after `control`, concatenated in its `wire_argnames` order and split by `walk_wire_sizes` (its `required_wires` after `control`), then the spare wires of the correction register below; the driver takes them as a `WalkPowerSpec` from `walk_power_factory()`. Every round takes `qpe_grad` of $t$ wires. The corrections are not hinted, so `qp.analyze` counts each at its maximum branch (§11.3).
 
-**Correction register.** The largest correction width is $d = t$, at $j = 0$ and $l = t-1$. So the corrections use their own phase-gradient register `qpe_grad` of $t$ wires, prepared once with `PhaseGradientStatePrep` (§10.1). The wrapper raises `ValueError` if `num_bits > len(qpe_grad)`. The walk's `phase_grad` ($b_{\mathrm{grad}} = b_{\mathrm{rot}}$ wires) is not used for corrections, so QPE precision is not limited by $b_{\mathrm{rot}}$. The correction scratch and work wires (`correction_wires`, $2t - 1$ wires) may reuse the walk's `work` pool, because corrections never overlap a walk power.
+**Correction register.** The largest correction width is $d = t$, at $j = 0$ and $l = t-1$. So the corrections use their own phase-gradient register `qpe_grad` of $t$ wires, prepared once with `PhaseGradientStatePrep` (§10.1). The wrapper raises `ValueError` if `num_bits > len(qpe_grad)`. The walk's `phase_grad` ($b_{\mathrm{grad}} = b_{\mathrm{rot}}$ wires) is not used for corrections, so QPE precision is not limited by $b_{\mathrm{rot}}$. The correction scratch and work wires ($2t - 1$ wires) reuse the walk's `work` pool, because corrections never overlap a walk power and the controlled walk returns the pool to $\lvert 0\rangle$. They are no register of their own, because two wire registers of one operator that share a qubit do not compile (`'qref.operator' op qubit operands must refer to distinct qubits`): `QPERound` binds every wire once, and its rule slices the corrections' wires from `walk_wires`, from the first wire of the walk power's scratch group (its last group, named by the class attribute `scratch_argname`: `work` for `ControlledWalkPower`) on, into spare wires that `walk_wires` holds after the walk's groups where the pool has fewer than $2t - 1$ wires (`spare_wires_needed`: from $t = 5$ at `H2_STO3G_TEST`, whose pool has 8 wires, and from $t = 23$ at FeMoco-54, 44). The toy walk lends no scratch group, so its corrections take $2t - 1$ spare wires. The driver prepares `qpe_grad` and checks that no wire is bound twice; `dfthc.qpe.qpe_program` places the spare wires, if any, after `WalkLayout`'s wires.
 
-**Energies.** The estimated phase is $\varphi = \sum_j m_j 2^{-(j+1)}$, and $\theta = 2\pi\varphi$.
+**Energies.** The estimated phase is $\varphi = \sum_j m_j 2^{-(j+1)}$, and $\theta = 2\pi\varphi$ (`phase_from_bits`, with the bits in the driver's order $m_{t-1}, \dots, m_0$). The bits estimate the eigenvalue $e^{2\pi i\varphi}$ of $W$ itself; an exact $t$-bit phase is returned with certainty.
 - `energy_from_phase(phi, Lambda, shift=1.0)` returns the sum-of-squares eigenvalue $E_{\mathrm{SA}} = \tilde\Lambda(\mathrm{shift} + \cos 2\pi\varphi)$: shift 1 for the DFTHC walk, shift 0 for standard qubitization.
 - `physical_energy(E_SA, e_sos_phys, core_energy=0.0)` returns $E_{\mathrm{SA}} + E_{\mathrm{SoS}}^{\mathrm{phys}}$ (+ `core_energy`) for $\eta$-electron inputs (§3.4).
 
@@ -1223,7 +1223,7 @@ All gates are in the gate set:
 
 ### 11.3 Resources
 
-The QPE program compiles at the `H2_STO3G_TEST` and `H2_631G_TEST` presets for $t \in \{1, 2, 3\}$; it is not compiled at FeMoco-54 shape (§15). Its worst-case cost is $T = (2^t - 1)\,T_{C(W)} + (t^3 - t)/6$ and $M = (2^t - 1)\,M_W + t$ (§9.24), with every correction conditional counted at its maximum branch. The compiled counts at the test presets must equal this closed form exactly. At FeMoco-54 the report evaluates it with $T_{C(W)}$ and $M_W$ from the single compile of the walk and controlled walk (§13.3), for $t \le 3$ and for larger $t$.
+The QPE program compiles at the `H2_STO3G_TEST` and `H2_631G_TEST` presets for $t \in \{1, 2, 3\}$; it is not compiled at FeMoco-54 shape (§15). Its worst-case cost is $T = (2^t - 1)\,T_{C(W)} + (t^3 - t)/6$ and $M = (2^t - 1)\,M_W + t$ (§9.24), with every correction conditional counted at its maximum branch. The compiled counts at the test presets must equal this closed form exactly. At FeMoco-54 the report evaluates it with $T_{C(W)}$ and $M_W$ from the single compile of the walk and controlled walk (§13.3), for $t \le 3$ and for larger $t$. The program's wires are `WalkLayout`'s with `qpe_bits` $= t$, the corrections in the `work` pool (§11.1): $64 + t$ at `H2_STO3G_TEST` for $t \le 4$, $1{,}565 + t$ at FeMoco-54 for $t \le 22$; beyond, the $2t - 45$ spare wires of §11.1 follow at FeMoco-54.
 
 ### 11.4 Toy-size validation
 
@@ -1231,11 +1231,12 @@ The QPE program compiles at the `H2_STO3G_TEST` and `H2_631G_TEST` presets for $
 - PREP is a Hadamard.
 - SELECT is a zero-controlled `Z` plus a one-controlled `X`.
 - The walk is $W = \mathrm{REF}_{\mathrm{anc}}\,\mathrm{PREP}^\dagger\,\mathrm{SEL}\,\mathrm{PREP}$, with eigenphases $\pm\pi/4$ and $\pm 3\pi/4$.
-- Its controlled form is the class `ControlledToyWalk` (control only the toy reflection; §7.4 rule 6), which `ToyControlledWalkPower` loops over.
+- Its controlled form is the class `ControlledToyWalk` (§7.4 rule 6), which `ToyControlledWalkPower` loops over. It controls only the toy's two reflections, $\mathrm{REF}_{\mathrm{anc}}$ and SELECT (itself a reflection: a Hermitian unitary): $C(W) = C(\mathrm{REF}_{\mathrm{anc}})\,\mathrm{PREP}^\dagger\,C(\mathrm{SEL})\,\mathrm{PREP}$, as `ControlledDFTHCWalk` controls `RefAB` and `RefT2`. Controlling $\mathrm{REF}_{\mathrm{anc}}$ alone would leave $\mathrm{PREP}^\dagger\,\mathrm{SEL}\,\mathrm{PREP} \ne I$ on the control's $\lvert 0\rangle$: the toy walk has one reflection outside $U = \mathrm{PREP}$, the DFTHC walk two.
 
 With $t = 3$ and input $\lvert 0\rangle$, QPE returns $\varphi \in \{1/8, 7/8\}$ with total probability $\cos^2(\pi/8)$ and $\varphi \in \{3/8, 5/8\}$ with $\sin^2(\pi/8)$. Both tests below pass `earlier_bits` with shape $(t,)$ to every round, so they cover round $j = t-1$ with no bit set as well as rounds with set bits. Two tests check the distribution:
 - **Exact distribution:** the sparse simulator branches on the control measurements and forces erasure-type measurements (§12.3).
 - **Compiled smoke test:** `lightning.qubit` with 2,000 shots, comparing within five standard deviations. It uses no postselection and no measurement inside `qp.cond` (§14, L-15).
+- **The walk itself:** QPE of the DFTHC walk also runs on the sparse simulator, at the two smallest walk shapes, `H2_STO3G_TEST` ($t = 1$ nightly, $t = 2$ release) and `FAILS_C3` of §12.4 ($t = 1, 2$, nightly), with the erase measurements forced through the branch policy's `otherwise`. The control bits' distribution equals the exact distribution of the encoded block: each eigenvalue $a$ of $\tilde H_{\mathrm{SA}}/\tilde\Lambda - I$ splits its weight equally between the phases $\pm\arccos(a)/2\pi$. These are the toy sizes of R-8.
 
 ## 12. Verification and tests
 
