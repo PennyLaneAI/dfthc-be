@@ -13,7 +13,13 @@ import pennylane as qp
 from catalyst.decomposition.rule_lowering_warning import RuleLoweringWarning
 from catalyst.passes import graph_decomposition
 
-from dfthc.compile import FIXED_DECOMPS, GATE_SET, CompiledResources, dfthc_operator_names
+from dfthc.compile import (
+    FIXED_DECOMPS,
+    GATE_SET,
+    CompiledResources,
+    compiled_resources,
+    dfthc_operator_names,
+)
 
 _EXCLUDED_RULE = (
     r"(?:_(?:\w*_)?ppm|_toffoli_elbow|_cphase_to_single_phase|\w*_workers?\w*"
@@ -107,6 +113,66 @@ def chosen_rules(listing: str) -> list[str]:
     """Rule names from the lines ``Chosen Rule: __builtin_<rule>`` of a verbose listing."""
     prefix = "Chosen Rule: __builtin_"
     return [line.split(prefix, 1)[1].strip() for line in listing.splitlines() if prefix in line]
+
+
+def captured_targets(qfunc: Callable[[], None], num_wires: int) -> list[str]:
+    """The rule targets the Catalyst frontend converts while :func:`compiled_resources` compiles
+    ``qfunc`` once, one name per converted target, in order: the operator name with its modifiers
+    (``Adjoint(MajoranaGate)``, ``C(RefT2)``), without the attribute dump that starts at the first
+    ``{`` (spec 12.1, T6: the inventory test).
+
+    A port of Task 0.9d's capture instrument (``spikes/k1_whole_program.capture_instrument``): it
+    wraps Catalyst's private ``catalyst.from_plxpr.qfunc_interpreter._convert_decomp_target_spec``
+    for this one compile and restores it afterwards. The frontend converts every target it builds
+    rules for, chosen or not, so the list holds every distributed ``Adjoint``/``C`` candidate the
+    compile captured. The hook is private, which makes this a compatibility canary at every
+    nightly bump: a renamed hook raises ``AttributeError``, and callers assert that the program's
+    own top-level target is in the list, so a hook that no longer sees targets fails instead of
+    passing. The private module is imported here, so a renamed module fails only the callers.
+    """
+    import catalyst.from_plxpr.qfunc_interpreter as qfunc_interpreter
+
+    convert = qfunc_interpreter._convert_decomp_target_spec
+    names: list[str] = []
+
+    def recording(interpreter, target_spec):
+        names.append(str(target_spec.target_id).split("{", 1)[0])
+        return convert(interpreter, target_spec)
+
+    qfunc_interpreter._convert_decomp_target_spec = recording
+    try:
+        compiled_resources(qfunc, num_wires)
+    finally:
+        qfunc_interpreter._convert_decomp_target_spec = convert
+    return names
+
+
+LEAF_ADJOINTS = frozenset({"Adjoint(FlaggedUniformPrep)", "Adjoint(GivensRotation)",
+                           "Adjoint(MajoranaGate)", "Adjoint(PhaseGradientRotation)"})
+"""The only modified dfthc targets a walk program may capture: the auto-derived leaf adjoints of
+spec 7.4 rule 6 (the uniform preparation's and, inside it, its rotations'; the Givens rung's; the
+Majorana gate's)."""
+
+TEMPLATE_ADJOINTS = frozenset({"Adjoint(SemiAdder)", "Adjoint(LeftQuantumComparator)",
+                               "Adjoint(LeftClassicalComparator)"})
+"""The PennyLane templates those leaves and the unprepares adjoint: the rotations' and Givens
+rungs' adders and the comparators (spec 7.4 rule 4, K-7)."""
+
+
+def modified_targets(names: Iterable[str], bases: Iterable[str]) -> set[str]:
+    """The ``Adjoint(...)`` and ``C(...)`` targets of ``names`` (any nesting, ``2C(...)``
+    included) whose operator is one of ``bases``."""
+    bases = set(bases)
+    return {name for name in names if "(" in name and dfthc_operator_names([name]) & bases}
+
+
+def inventory(names: Iterable[str]) -> set[str]:
+    """Spec 12.1 T6: the modified targets of ``names`` (from :func:`captured_targets`) whose
+    operator is a dfthc operator (every name with a pinned rule: the composites, ``QROAMRead`` and
+    the leaves) or a template of :data:`TEMPLATE_ADJOINTS`. For a walk, controlled-walk or QPE
+    program it must equal ``LEAF_ADJOINTS | TEMPLATE_ADJOINTS``: no modified composite or read."""
+    templates = {name[len("Adjoint("):-1] for name in TEMPLATE_ADJOINTS}
+    return modified_targets(names, dfthc_operator_names() | templates)
 
 
 def assert_resources(
