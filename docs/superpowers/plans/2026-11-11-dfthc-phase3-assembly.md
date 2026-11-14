@@ -18,7 +18,7 @@ This file holds Tasks 3.3 to 3.5 of the master plan (`docs/superpowers/plans/202
 
 **Revision 3** (2026-11-14, after Task 3.1's reviews). Task 3.1 gained two per-commit tests (the adjoint and controlled compile test for `InnerSelectDagger`), so every per-commit count here is two higher: 975 on `main` with Tasks 3.1 and 3.2, 1019 after Task 3.3, 1047 after Tasks 3.4 and 3.5. The measured dry runs quoted (`1045 passed`) predate this.
 
-**Revision 4** (2026-11-14, after Task 3.3's Opus review `.superpowers/sdd/task-3.3-review-opus.md`, Approved, 0 Critical, 0 Important, 4 Minor). `tests/ops/test_block_encoding.py` gained six per-commit tests: an `outer-keep` and a `tail-angle` constructor case for each class (the only tables the outer prepares' and the selects' checks reject alone), a control-width test for the controlled class, and `test_harness_sees_phases_outcomes_and_ancillas`, a self-test of `walk_sim`'s schedules, state comparison, projection and register report (an all-zero schedule, a comparison by modulus or an empty register report each blinded the T3 without failing it). The T3's norm assertion is removed: the strict simulator renormalizes the kept branch at every measurement, so it could not fail. `walk.py`'s "Paper and dfthcbe" section (both Task 3.3's and Task 3.4's block) cites arXiv v1 Eq. (11), Fig. 1, App. B.1 Eq. (87), B.2 Eq. (88) and Table 3, gives dfthcbe's call-graph split and the full -202 breakdown. Every per-commit count from Task 3.3 on is six higher: 1025 after Task 3.3, 1053 after Tasks 3.4 and 3.5; Task 3.3's targeted run is `52 passed` (50 per commit). The measured dry runs quoted predate this.
+**Revision 4** (2026-11-14, after Task 3.3's Opus review `.superpowers/sdd/task-3.3-review-opus.md`, Approved, 0 Critical, 0 Important, 4 Minor). `tests/ops/test_block_encoding.py` gained six per-commit tests: an `outer-keep` and a `tail-angle` constructor case for each class (the only tables the outer prepares' and the selects' checks reject alone), a control-width test for the controlled class, and `test_harness_sees_phases_outcomes_and_ancillas`, a self-test of `walk_sim`'s schedules, state comparison, projection and register report (an all-zero schedule, a comparison by modulus or an empty register report each blinded the T3 without failing it). The T3's norm assertion is removed: the strict simulator renormalizes the kept branch at every measurement, so it could not fail. `walk.py`'s "Paper and dfthcbe" section (both Task 3.3's and Task 3.4's block) cites arXiv v1 Eq. (11), Fig. 1, App. B.1 Eq. (87), B.2 Eq. (88) and Table 3, gives dfthcbe's call-graph split and the full -202 breakdown. Every per-commit count from Task 3.3 on is six higher: 1025 after Task 3.3, 1053 after Tasks 3.4 and 3.5; Task 3.3's targeted run is `52 passed` (50 per commit), Task 3.4's four-file run `82 passed`. The measured dry runs quoted predate this.
 
 ---
 
@@ -1919,7 +1919,7 @@ git commit -m "Add DFTHCBlockEncoding and ControlledDFTHCBlockEncoding with the 
 - `tests/integration/test_walk_counts.py` (7 tests, 2 `slow`): the walk and controlled walk compiled each as one program on `null.qubit` at both test presets, T, M and A against `costs.walk` and `costs.measured_and_uncomputes`, the plain `Toffoli` count `toffoli_only`, non-symbolic and closed (4); at `MID_NAPHTHALENE` (`slow`, `subprocess`): each compile in a subprocess under `run_watched` with a 4 GB cap, the same equalities, the watched time and peak on a `MID_COMPILE` line (2); FeMoco-54 on the closed forms: 9,793 and 9,795, M = 2,524, T_Toffoli = 1,118, A = 8,675 and 8,677, M + A = 11,199 and 11,201 (1).
 - `tests/test_work_pool.py` (9 tests): as in Task 3.3, for all four rules; the pool is `ControlledRefAB`'s need, read from the controlled walk's rule, and `RefAB`'s is one less; the random-shape test also takes the walks' children from `_walk_children`.
 
-**Definition of done:** `76 passed` for the four files targeted (28 new per-commit tests); the slow `MID_NAPHTHALENE` cases pass and their `MID_COMPILE` numbers are in the report (each about 10 s and 0.6 GB; the orchestrator copies them into the ledger); the per-commit tier passes; `ruff check .` clean; the spec 9.0 docstring sections in order; one commit.
+**Definition of done:** `82 passed` for the four files targeted (28 new per-commit tests); the slow `MID_NAPHTHALENE` cases pass and their `MID_COMPILE` numbers are in the report (each about 10 s and 0.6 GB; the orchestrator copies them into the ledger); the per-commit tier passes; `ruff check .` clean; the spec 9.0 docstring sections in order; one commit.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3369,7 +3369,7 @@ def assert_resources(
 - [ ] **Step 5: Run the tests**
 
 Run: `scripts/test.sh tests/ops/test_walk.py tests/integration/test_walk_counts.py tests/test_work_pool.py tests/ops/test_block_encoding.py -q`
-Expected: `76 passed` (about 110 s with 2 workers, the 4 `slow` compiles included).
+Expected: `82 passed` (about 110 s with 2 workers, the 4 `slow` compiles included).
 
 Run: `scripts/test.sh tests/test_tolerance_hygiene.py tests/test_compile.py tests/test_canary_helper.py -q`
 Expected: `71 passed`.
