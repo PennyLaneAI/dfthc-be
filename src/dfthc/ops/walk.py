@@ -232,12 +232,18 @@ class DFTHCBlockEncoding(Operator2):
     ``CNOT`` and ``PauliX`` counts are upper bounds (spec 7.6).
 
     **Paper and dfthcbe.** Steps 1 to 27 of spec 3.5: the sum-of-squares block encoding
-    :math:`U^\dagger\,\mathrm{REF}_{T_2}\,U` of the paper's App. B (PRX 15, 041016;
-    arXiv:2502.15882v1). dfthcbe: ``DFTHCBlockEncoding`` (``dfthcbe/block_encoding.py``), 9,596
-    Toffolis at FeMoco-54; ours is +153 (the inner prepare +58 and select +35 per round, the
-    inner unprepare -3 per round, the outer prepare -2 and unprepare -25; spec 13.1). The paper's
-    Table III gives 9,997 per walk, 46 of them for :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}`
-    (spec 13.1); without it ours is -202, mostly the Givens ladders' ``rz-addsub``.
+    :math:`U^\dagger\,\mathrm{REF}_{T_2}\,U` (PRX 15, 041016; arXiv:2502.15882v1 Eq. (11) and
+    Fig. 1), built in App. B: the prepare over :math:`x_o` (B.1, Eq. (87)) and the step of
+    oblivious amplitude amplification, whose reflection is controlled on the success of
+    :math:`x_o` (B.2, Eq. (88)); the costs are its Table 3 (PRX Table III). dfthcbe:
+    ``DFTHCBlockEncoding`` (``dfthcbe/block_encoding.py``), 9,596 Toffolis at FeMoco-54 by its
+    call graph, :math:`212 + 2 (913 + 220) + 2 \cdot 3502 + 20 + 94`; ours is +153 (the inner
+    prepare +58 and select +35 per round, the inner unprepare -3 per round, the outer prepare -2
+    and unprepare -25; spec 13.1). The paper gives 9,997 per walk, 46 of them for
+    :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}`; against the other 9,951 ours is -202: the
+    Givens ladders -424 (``rz-addsub``), the 26-bit inner entries against its 20-bit ones +186,
+    exact boundaries and one-hot padding +80 (``exact-iter``, ``no-prune``, ``onehot-pad``), the
+    free comparator adjoints -46 (``cmp-free``) and the rest +2 (spec 13.1).
 
     **Example.**
 

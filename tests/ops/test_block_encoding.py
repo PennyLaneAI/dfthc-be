@@ -1,7 +1,8 @@
 """DFTHCBlockEncoding and ControlledDFTHCBlockEncoding (spec 9.21): the block against the encoded
-model on the tape path, the three control states, U then U-dagger, the children's order and
-registers, counts, rule selection, validation."""
+model on the tape path, the three control states, U then U-dagger, the harness, the children's
+order and registers, counts, rule selection, validation."""
 
+import dataclasses
 import re
 import warnings
 
@@ -51,7 +52,8 @@ def test_block_against_the_encoded_model(name):
     and a seeded schedule of the erases. fails-c3 has the failed uniform preparation of x_o (so
     Lambda~ != Lambda) and the dfthcbe failure-sign difference; sto3g is the H2 test preset.
     Outside the block, only the six index registers of A u B are nonzero (the postcondition that
-    makes RefAB the walk's reflection), and the output has norm 1."""
+    makes RefAB the walk's reflection). The output's norm is not asserted: the simulator
+    renormalizes the kept branch of every measurement to norm 1."""
     c = case(name)
     ops = walk_sim.program(c, DFTHCBlockEncoding)
     psi = walk_sim.superposition(c, SUPPORT[name], seed=3)
@@ -62,7 +64,6 @@ def test_block_against_the_encoded_model(name):
         assert np.allclose(block[0], c.block() @ psi, rtol=0, atol=1e-12)
         assert np.allclose(block[1], 0, rtol=0, atol=1e-12)
         assert walk_sim.nonzero_registers(c, out) <= set(walk_sim.AB_REGISTERS)
-        assert np.isclose(np.linalg.norm(out.amps), 1, rtol=0, atol=1e-12)
 
 
 def test_controlled_block_encoding_in_three_control_states():
@@ -101,6 +102,29 @@ def test_prepare_then_unprepare_is_the_identity(name):
         out = walk_sim.simulate(c, ops, walk_sim.input_state(c, psi),
                                 walk_sim.schedule(kind, walk_sim.num_measurements(ops), seed=6))
         walk_sim.assert_same_state(out, identity)
+
+
+def test_harness_sees_phases_outcomes_and_ancillas():
+    """The harness the semantic tests rely on (and Tasks 3.4 and 3.5): the alternating and seeded
+    schedules force both outcomes, assert_same_state compares complex amplitudes (a -1 on the
+    whole state or on one term fails it), project returns an input exactly and drops every term
+    with a nonzero ancilla, and nonzero_registers names that ancilla's register."""
+    c = case("sto3g")
+    for kind in ("alternating", "seeded"):
+        assert set(walk_sim.schedule(kind, 8)) == {0, 1}
+    psi = walk_sim.superposition(c, SUPPORT["sto3g"], seed=1)
+    state = walk_sim.simulate(c, walk_sim.operations(c), walk_sim.input_state(c, psi), [])
+    assert np.allclose(walk_sim.project(c, state)[0], psi, rtol=0, atol=1e-12)
+    relative = state.copy()
+    relative.amps = np.where(relative.bits(c.system[0]), -1, 1) * relative.amps
+    for wrong in (walk_sim.superpose((-1, state)), relative):
+        with pytest.raises(AssertionError):
+            walk_sim.assert_same_state(wrong, state)
+    assert walk_sim.nonzero_registers(c, state) == set()
+    dirty = state.copy()
+    dirty.flip(c.layout.x_o[0])
+    assert np.allclose(walk_sim.project(c, dirty), 0, rtol=0, atol=1e-12)
+    assert walk_sim.nonzero_registers(c, dirty) == {"x_o"}
 
 
 def children(rule, c, controlled):
@@ -295,26 +319,53 @@ def test_required_wires():
         "control": 1} | sizes
 
 
+def bad_outer_keep(c):
+    """The case's tables with the first outer keep value 2**b_k1, outside the outer prepares'
+    range; every other table stays valid."""
+    keep = (2**c.params.b_k1, *c.tables.outer_keep[1:])
+    return dataclasses.replace(c.tables, outer_keep=keep).as_compilable()
+
+
+def bad_tail_angle(c):
+    """The case's tables with the first tail angle 2**(b_rot - 1), outside the selects' range."""
+    rows = c.tables.tail_angles
+    rows = ((2 ** (c.params.b_rot - 1), *rows[0][1:]), *rows[1:])
+    return dataclasses.replace(c.tables, tail_angles=rows).as_compilable()
+
+
 @pytest.mark.parametrize(("name", "change", "match"), [
     ("sto3g", {"params": 7}, "params and tables must be"),
     ("sto3g", {"params": H2_631G_TEST.as_compilable()}, r"alt must be a table of ints of shape"),
     ("fails-c3", {"params": walk_sim.FAILS_C3.as_compilable()[:-1] + (3,)},
      r"the erase's one-hot over ke2 \+ lg\(B \+ 1\) = 5 bits needs 32 wires"),
     ("sto3g", {"tables": ()}, "WalkTables needs 8 fields; got 0"),
+    ("sto3g", {"tables": bad_outer_keep}, r"keep entries must lie in \[0, 4\), got 4"),
+    ("sto3g", {"tables": bad_tail_angle}, r"tail_angles angles must lie in \[0, 2\*\*\(b_rot"),
     ("sto3g", {"work": list(range(7))}, "'work' has 7 wires; expected 8"),
     ("sto3g", {"system": [0]}, "'system' has 1 wires; expected 4"),
-], ids=["params-type", "params-shape", "onehot", "tables", "work", "system"])
+], ids=["params-type", "params-shape", "onehot", "tables", "outer-keep", "tail-angle", "work",
+        "system"])
 @pytest.mark.parametrize("kind", CLASSES)
 def test_constructor_validates(kind, name, change, match):
     """Spec 9.0: a wrong argument type, tables of another shape, a one-hot register that does
-    not fit (ke2 = 3 needs 2**(3 + w_b) = 32 wires of the inner erase's 8), missing tables and
+    not fit (ke2 = 3 needs 2**(3 + w_b) = 32 wires of the inner erase's 8), missing tables, an
+    outer keep value only the outer prepares check, a tail angle only the selects check, and
     wrong group widths each raise ValueError."""
     c = case(name)
     cls, _ = CLASSES[kind]
     params, tables = c.compilable
+    change = {key: value(c) if callable(value) else value for key, value in change.items()}
     arguments = {"params": params, "tables": tables} | c.groups(kind == "controlled") | change
     with pytest.raises(ValueError, match=match):
         cls(**arguments)
+
+
+def test_controlled_constructor_checks_the_control_width():
+    """The controlled class checks its one-wire control like the groups (spec 9.0)."""
+    c = case("sto3g")
+    with pytest.raises(ValueError, match="'control' has 2 wires; expected 1"):
+        ControlledDFTHCBlockEncoding(*c.compilable,
+                                     **c.groups(True) | {"control": [*c.control, c.num_wires]})
 
 
 def test_constructor_checks_the_work_pool(monkeypatch):
