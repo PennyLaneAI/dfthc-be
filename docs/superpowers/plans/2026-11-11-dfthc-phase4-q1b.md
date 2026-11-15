@@ -24,6 +24,8 @@ This file holds the conditional Task Q1b of the master plan (`docs/superpowers/p
 - **I-1, the spec and the read's docstring still misstated the walk's erase path and measurement point: fixed.** New edit B-S39: spec 9.3's adjoint-and-control row no longer ends "The walk erases with `QROAMErase`." but names the three erase paths (`QROAMErase` for a read whose junk is kept, the unprepares from outcomes through `emit_erase_from_outcomes` for the walk's alias reads, `AngleErase` for the angle reads). The generic path (a caller may X-measure the junk right after the read) is now kept apart from this walk's, which X-measures it right after the enclosing prepare (steps 4 and 8), before any angle load; the comparator and the swaps in between do not touch the junk, so the two placements are equivalent. Changed: B-S34 (4.3), B-S35 (9.3's introduction), B-S38 (9.5's precondition row) and B-S33 (4.2; the paper measures "early, in the prepare", not claimed to be right after the read). New edit B-S40: spec 16's Q-1 "What it is" said "right after its swap network". In the code (Q1b.1's snapshot): `QROAMRead`'s summary, path (b) of its pre- and postconditions (after the read and before anything else acts on the junk) and its paper paragraph; `QROAMErase`'s path (b) pointer; the paper sections of `OuterUnprepareFromOutcomes` and `InnerUnprepareFromOutcomes`, which said the junk is "measured at step 2" (and step 6). A new search of `src/dfthc/`, the documents this plan touches and the edited spec, master plan and HANDOFF for where or when the walk measures or erases the junk found every other statement already saying "right after its prepare". The plan now has 63 edits (40 to the spec). Docstrings only: the code hash stays `5e3eed1e7a95...`. Replayed again (`run_rev2_q1b.sh`, `q1b-rev3.log`), with the same counts as revision 2.
 - **M-1, the Revision 2 note overcounted the plans equal to `main`: fixed** in its last bullet.
 
+**Revision 4** (2026-11-15, by the orchestrator, after Task Q1b.1's reviews: GPT-5.6 `.superpowers/sdd/task-Q1b.1-review-1.md`, Approved, 0 Critical, 0 Important, 0 Minor, 10 of 10 mutants killed; Opus `.superpowers/sdd/task-Q1b.1-review-opus.md`, Approved, 0 Critical, 0 Important, 2 Minor, 29 of 29 mutants killed per commit). m-1: the compiled path of the junk outcomes (the capture branch of `_junk_outcomes`) had only sampled checks, so a reversed or stale outcome array died only in the two seeded lightning tests (missed with probability about 1/64 and 1/4096). The test file now has `test_lightning_round_trip_with_postselected_junk[outer-sto3g, inner-small]`, which postselects the junk on 1, 0, ..., 0 and kills both for every seed; `measure_x` and `round_trip` take an optional `postselect`, and the replica `stages/Q1B/q1b1` holds the reviewed file. m-2: the acceptance list named the no-adjoint test's cases `[outer, inner]`; they are `[adjoint, control]` on the inner class (the outer class fails the same way, by the review's probe). No hashed file changed. Q1b.1 has 44 per-commit tests, so every expected per-commit count from Q1b.1 on rises by 2: 1265 after Q1b.1, 1270 after Q1b.2, 1271 for Task 4.5 (report plan revision 8 at Q1b's merge); the nightly (86) and release (34) counts are unchanged. Measured on the rebased Q1b.1 branch with the fix: Step 7's targeted run `199 passed in 50.28s`, the per-commit tier `1265 passed in 432.42s (435 s, 2,038 MB)`, no warnings summary. The master plan's two Q1b count sentences change accordingly.
+
 **Code provenance.** Every code block below was executed on 2026-11-15 in a scratch replica of the repository (`.scratch/plan-check/repo-phase4b`, not committed): `git archive` of local `main` at `9f4c7eb` (Task 4.4 merged at `ce5cc0b` with its review fixes, report file revision 7; since `1a3e062` only the ledger changed), plus this plan's files. The dry run began on `main` at `c157211` with Task 4.4's six files from the report file's revision 6 (`stages/Q1B/overlay_task44.py`); when Task 4.4 merged with the review's changes to `tests/test_docstrings.py` and four documents (nothing hashed, nothing under `src/`), this plan's edits of `tests/test_docstrings.py`, `docs/architecture.md`, `docs/conventions.md` and `docs/verification.md` were ported onto the merged files by exact replacements (`stages/Q1B/port_task44_files.py`, each old text once), and the replica was rebuilt on `1a3e062`; every other file is unchanged by the rebase. The replica is not a git repository, so the dry run ran pytest the way `scripts/test.sh` does (the same environment, 2 workers, `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0`, lowered priority) through `.scratch/plan-check/p4btest.sh`, which runs every session under the watchdog with a 3,000 MB cap and a session lock; every script ran through `p4brun.sh` (same cap, same lock). Both sub-tasks were replayed in order, RED then GREEN, in a fresh copy of the base: from `c157211` with the per-commit tier after each sub-task (`stages/Q1B/run_stages_q1b.sh`, log `q1b-stages.log`), and again from `1a3e062` with every step that runs `tests/test_docstrings.py`, that test on the Q1b.2 tree, ruff and each tier's collection count (`run_rebase_q1b.sh`, log `q1b-rebase.log`); the report plan's revision 7 rule (a tree that differs from a tested one only in `docs/` carries the tier result after `tests/test_docstrings.py` passes on it) covers the rest, since the two trees differ only in `docs/` and that test. Revision 2's docstring changes were replayed from `9f4c7eb` (`run_rev2_q1b.sh`, log `q1b-rev2.log`): Q1b.1's RED and GREEN steps, `tests/test_docstrings.py` and the tests of the modules that cover `dfthc.ops.qroam` and `dfthc.ops.prepare` on both trees, the code hash, ruff and each tier's collection count; revision 3's by the same script (log `q1b-rev3.log`). All four replays end byte-identical to the replica of their time, the last to the final one. Every "Expected" line below is a replay's output; the step says which. Further evidence under `stages/Q1B/`: the layout sizes at every preset and system (`probe_layout_sizes.py`, `probe-layout-sizes.log`), the operators' first compiles and T2 checks, among them a caller inside another rule (`probe_from_outcomes.py`, `probe-from-outcomes.log`), the report's rows at every system (`probe_report_rows.py`, `probe-report-rows.log`), the regenerated report of the H2 systems and `naphthalene` (`report-small-systems.log`, summarized by `report_summary_q1b.py` in `report-summary.md`), back-to-back compiles against the baseline code (`compare_compiles.py`, `compare-compiles.raw`), the projections (`project_large_q1b.py`, four `projections-*.log`), seven mutants (`mutate_q1b.py`, `q1b-mutants.log`), the nightly tier (`q1b-nightly-tier.raw`), three release-tier inputs (`release-sample.log`), Q1b.2's RED failures by name (`q1b2-red-detail.log`), Task 4.5's per-commit test on the Q1b tree (`task45-test-on-q1b.log`) and the document edits (`make_doc_edits_q1b.py`, `doc-edits.md`).
 
 **Load.** At most 2 pytest workers ran at any time and one process that compiled or ran pytest at a time (the shared lock), each under the watchdog with a 3,000 MB cap. The per-commit tier ran twice (once per sub-task, in the first replay) and the report regeneration once, never beside a pytest session; the largest process tree was the Q1b.2 per-commit tier, 1,975 MB, and the largest single compile the `MID_NAPHTHALENE` walk in the compile comparison, 630.9 MB. Nothing above `naphthalene` was compiled: `fe2s2`, `fe4s4` and FeMoco-54 were built in tape mode only (their rows and gates). Revisions 2 and 3 ran targeted sessions only (the longest 50 s, at most 1,827 MB), no per-commit tier and no report. No load-limit event occurred.
@@ -1087,7 +1089,7 @@ Q1b.1 changes one existing test file's literals and adds tests:
 
 - `tests/test_docstrings.py`: the audited count 32 → 34 and both class names (the new classes); the `SECTIONS` docstring names the classes that title section 3 "Arguments".
 - `tests/ops/test_certificates_prepare.py`: a `from_outcomes` helper and two parametrized certificate tests (8 nightly); the existing certificates are unchanged.
-- `tests/ops/test_unprepare_from_outcomes.py` (new): 40 per commit, 2 nightly.
+- `tests/ops/test_unprepare_from_outcomes.py` (new): 42 per commit, 2 nightly.
 
 Q1b.2 changes literals where the layout, the rule or the report changed:
 
@@ -1104,13 +1106,13 @@ The per-commit tier (`scripts/test.sh -m "not slow and not release" -q`) counts 
 
 | Task | Base | Own per-commit | Expected per-commit tier | Own nightly and release tests |
 | --- | ---: | ---: | ---: | --- |
-| Q1b.1 | 1221 | 42 (`test_unprepare_from_outcomes.py` 40, `test_docstrings.py` + 2) | 1263 = 1221 + 42 | 10 nightly (`test_certificates_prepare.py` + 8, `test_unprepare_from_outcomes.py` 2): 86 = 76 + 10 |
-| Q1b.2 | 1263 | 5 (`test_registers.py` + 4, `test_block_encoding.py` + 2, `test_report.py` − 1: `test_report_h2` 48 → 46 and `test_qubit_summary_at_femoco` + 1) | 1268 = 1263 + 5 | none: nightly 86, release 34 |
-| 4.5 (report file) | 1268 | 1 | 1269 = 1268 + 1 (was 1222) | 1 release |
+| Q1b.1 | 1221 | 44 (`test_unprepare_from_outcomes.py` 42, `test_docstrings.py` + 2) | 1265 = 1221 + 44 | 10 nightly (`test_certificates_prepare.py` + 8, `test_unprepare_from_outcomes.py` 2): 86 = 76 + 10 |
+| Q1b.2 | 1265 | 5 (`test_registers.py` + 4, `test_block_encoding.py` + 2, `test_report.py` − 1: `test_report_h2` 48 → 46 and `test_qubit_summary_at_femoco` + 1) | 1270 = 1265 + 5 | none: nightly 86, release 34 |
+| 4.5 (report file) | 1270 | 1 | 1271 = 1270 + 1 (was 1222) | 1 release |
 
-**Task 4.5's counts after Q1b (the orchestrator).** The report plan (revision 7) states Task 4.5's per-commit base as 1221 (its "Expected test counts" table) and its expectation as `1222 passed` (the table, and Task 4.5's Step 3, "Run the per-commit tier and the linter, commit, and stop": "Expected: `1222 passed` (1221 + 1)"). At Q1b's merge the orchestrator revises the report plan as its revision 8, changing only those numbers: base 1221 → 1268 and expected per-commit tier 1222 → 1269, in the table and in Step 3 ("Expected: `1269 passed` (1268 + 1)"), with the nightly and release counts unchanged (nightly 86 after Q1b; release 34 + 1, `test_femoco_cache`). Task 4.5's dispatch states the Q1b counts (base 1268, expected `1269 passed`) whatever the report plan's revision at that time.
+**Task 4.5's counts after Q1b (the orchestrator).** The report plan (revision 7) states Task 4.5's per-commit base as 1221 (its "Expected test counts" table) and its expectation as `1222 passed` (the table, and Task 4.5's Step 3, "Run the per-commit tier and the linter, commit, and stop": "Expected: `1222 passed` (1221 + 1)"). At Q1b's merge the orchestrator revises the report plan as its revision 8, changing only those numbers: base 1221 → 1270 and expected per-commit tier 1222 → 1271, in the table and in Step 3 ("Expected: `1271 passed` (1270 + 1)"), with the nightly and release counts unchanged (nightly 86 after Q1b; release 34 + 1, `test_femoco_cache`). Task 4.5's dispatch states the Q1b counts (base 1270, expected `1271 passed`) whatever the report plan's revision at that time.
 
-Measured in the replays: collection `1263/1383 tests collected (120 deselected)` after Q1b.1 and `1268/1388 tests collected (120 deselected)` after Q1b.2 (nightly 86, release 34; `q1b-rebase.log`, and again on `9f4c7eb` in `q1b-rev2.log` and `q1b-rev3.log`). Revision 3's replay on `9f4c7eb` (the final files; revision 2's gave the same counts): Q1b.1's RED `1 error` and `1 failed, 45 passed`, GREEN `197 passed` (36 s, 1,622 MB) and nightly `25 passed`; the tests of the modules that cover `dfthc.ops.qroam` and `dfthc.ops.prepare` (`test_docstrings.py`, `test_unprepare_from_outcomes.py`, `test_outer_prepare.py`, `test_inner_prepare.py`, `test_qroam_read.py`, `test_qroam_erase.py`, `test_phase_fixup.py`, per commit) `266 passed` on the Q1b.1 tree (49 s, 1,816 MB) and on the Q1b.2 tree (50 s, 1,827 MB); ruff clean on both; the Q1b.2 tree's code hash `5e3eed1e7a95...`, the regenerated report's. The per-commit tiers ran in the first replay, on `c157211` with revision 6's `tests/test_docstrings.py` (4 tests fewer, the review's link tests): `1259 passed in 371.25s` (373 s, 1,859 MB) after Q1b.1 and `1264 passed in 482.98s` (486 s, 1,975 MB) after Q1b.2, both without a warnings summary, inside the 15-minute budget; `tests/test_docstrings.py` then passed on both rebased trees (`48 passed`). Task 4.5's per-commit test passes on the Q1b tree (`task45-test-on-q1b.log`). The nightly tier, run once on the Q1b.2 replica: `86 passed in 442.72s` (1,872 MB), against its 4-hour budget.
+Measured in the replays (before revision 4's two tests): collection `1263/1383 tests collected (120 deselected)` after Q1b.1 and `1268/1388 tests collected (120 deselected)` after Q1b.2 (nightly 86, release 34; `q1b-rebase.log`, and again on `9f4c7eb` in `q1b-rev2.log` and `q1b-rev3.log`). Revision 3's replay on `9f4c7eb` (the final files; revision 2's gave the same counts): Q1b.1's RED `1 error` and `1 failed, 45 passed`, GREEN `197 passed` (36 s, 1,622 MB) and nightly `25 passed`; the tests of the modules that cover `dfthc.ops.qroam` and `dfthc.ops.prepare` (`test_docstrings.py`, `test_unprepare_from_outcomes.py`, `test_outer_prepare.py`, `test_inner_prepare.py`, `test_qroam_read.py`, `test_qroam_erase.py`, `test_phase_fixup.py`, per commit) `266 passed` on the Q1b.1 tree (49 s, 1,816 MB) and on the Q1b.2 tree (50 s, 1,827 MB); ruff clean on both; the Q1b.2 tree's code hash `5e3eed1e7a95...`, the regenerated report's. The per-commit tiers ran in the first replay, on `c157211` with revision 6's `tests/test_docstrings.py` (4 tests fewer, the review's link tests): `1259 passed in 371.25s` (373 s, 1,859 MB) after Q1b.1 and `1264 passed in 482.98s` (486 s, 1,975 MB) after Q1b.2, both without a warnings summary, inside the 15-minute budget; `tests/test_docstrings.py` then passed on both rebased trees (`48 passed`). Task 4.5's per-commit test passes on the Q1b tree (`task45-test-on-q1b.log`). The nightly tier, run once on the Q1b.2 replica: `86 passed in 442.72s` (1,872 MB), against its 4-hour budget.
 
 ## Risks and open questions
 
@@ -1206,7 +1208,7 @@ GATE_SET = {
 | `src/dfthc/ops/qroam.py` | Q1b.1 | `emit_erase_from_outcomes`, `_fixup_from_outcomes` (shared with `QROAMErase`'s body) |
 | `src/dfthc/ops/prepare.py` | Q1b.1 | `OuterUnprepareFromOutcomes`, `InnerUnprepareFromOutcomes`, their rules, `abstract_junk_outcomes`, `_junk_outcomes` |
 | `src/dfthc/costs.py` | Q1b.1, Q1b.2 | `outer_unprepare_from_outcomes`, `inner_unprepare_from_outcomes`; `junk_measurements` |
-| `tests/ops/test_unprepare_from_outcomes.py` | Q1b.1 | the operators' tests (40 per commit, 2 nightly) |
+| `tests/ops/test_unprepare_from_outcomes.py` | Q1b.1 | the operators' tests (42 per commit, 2 nightly) |
 | `tests/ops/test_certificates_prepare.py` | Q1b.1 | the two certificates (8 nightly) |
 | `tests/test_docstrings.py` | Q1b.1 | the audit at 34 classes |
 | `src/dfthc/registers.py` | Q1b.2 | `GROUPS` without junk, `junk_overflow`, `JUNK`, `junk_sizes`, `split_junk` |
@@ -1235,11 +1237,12 @@ GATE_SET = {
 - Consumes: `OuterPrepare`, `InnerPrepare` (`required_wires`, `read_shape`, `read_table`), `QROAMRead.junk_layout` and `loaded_bits`, `QROAMEmitter`, `dfthc.compile.mcm_parities` and `emit_phase_fixup` (through `qroam`), `dfthc.costs.outer_unprepare` and `inner_unprepare`.
 - Produces: `OuterUnprepareFromOutcomes(junk_outcomes, X_o, alt, keep, b_k1, k1, ke1, s_u, x_o, succ_x_o, succ_work_x_o, sigma_1, m_x_o, less_than_x_o, cmp_work_x_o, alt_x_o, keep_x_o, phase_grad, work, extra_onehot)` and `InnerUnprepareFromOutcomes(junk_outcomes, N, R, B, C, alt, keep, sgn_table, d_sgn_table, b_k2, k2, ke2, s_u, x_o, b, succ_b, succ_work_b, sigma_0, m_b, less_than_b, cmp_work_b, alt_b, keep_b, sgn, d_sgn, r, phase_grad, work, extra_onehot)`, each with static `required_wires(...)` and `junk_size(...)`; `prepare.abstract_junk_outcomes(size) -> AbstractArray`; `qroam.emit_erase_from_outcomes(junk_outcomes, *, table, address_widths, live_ranges, width, block_bits, onehot_bits, address, target, work, extra_onehot, emit=None)`; `costs.outer_unprepare_from_outcomes(p)`, `costs.inner_unprepare_from_outcomes(p)`. Q1b.2 calls them from the block encodings.
 
-**Acceptance tests** (42 per commit, 10 nightly):
+**Acceptance tests** (44 per commit, 10 nightly):
 - `test_round_trip_after_the_junk_measurement[...]` (9): prepare, H and measure on the junk, unprepare from outcomes, on the sparse simulator in strict mode at four outer and five inner shapes (among them `inner-small`: N = 2, R = 1, B = 1, C = 1) under the alternating and a seeded schedule: the inputs' random state comes back, every other register is |0⟩ and the phase gradient unchanged; where the junk has more than one qubit, the outcomes passed in reversed order fail under the zero or some unit schedule (`basis_schedules`), so their order is tested.
 - `test_lightning_round_trip_with_two_seeds`: the same on `lightning.qubit` with two seeds.
+- `test_lightning_round_trip_with_postselected_junk[outer-sto3g, inner-small]`: the compiled round trip with the junk measurements postselected on 1, 0, ..., 0, so the capture path of the junk outcomes is checked for every seed (revision 4).
 - `test_caller_inside_another_rule_is_valid_and_counted[inner-sto3g, inner-small]`, `test_caller_inside_another_rule_restores_every_outcome` (zero and unit schedules at `small`), `test_caller_inside_another_rule_on_lightning`: `InnerRoundTripProbe`, a test operator whose pinned rule holds the inner prepare, the junk measurement and the unprepare from outcomes (decision "K-10 consequences" (3)).
-- `test_rules_are_valid[...]` (6, T2 in tape mode with `MeasurementValue` outcomes), `test_counts_match_the_closed_forms[...]` (6, T4), `test_pinned_rules_are_chosen_and_nothing_survives_at_device_level` (T5, T6), `test_no_adjoint_or_controlled_path[outer, inner]` (`CompileError`), `test_required_wires_and_junk_sizes_by_hand`, `test_constructors_validate[...]` (9: too few outcomes, booleans in tape mode, an abstract array of the wrong shape, a wrong `extra_onehot` or `r` width, a one-hot too large for its reset wires, an out-of-domain `ke2`), `test_femoco_counts_on_the_closed_forms` (69 / 24 and 217 / 26, `extra_onehot` 0 and 102, junk 72 and 390).
+- `test_rules_are_valid[...]` (6, T2 in tape mode with `MeasurementValue` outcomes), `test_counts_match_the_closed_forms[...]` (6, T4), `test_pinned_rules_are_chosen_and_nothing_survives_at_device_level` (T5, T6), `test_no_adjoint_or_controlled_path[adjoint, control]` (`CompileError`, on the inner class), `test_required_wires_and_junk_sizes_by_hand`, `test_constructors_validate[...]` (9: too few outcomes, booleans in tape mode, an abstract array of the wrong shape, a wrong `extra_onehot` or `r` width, a one-hot too large for its reset wires, an out-of-domain `ke2`), `test_femoco_counts_on_the_closed_forms` (69 / 24 and 217 / 26, `extra_onehot` 0 and 102, junk 72 and 390).
 - Nightly: `test_counts_at_mid_naphthalene[outer, inner]`; `test_outer_unprepare_from_outcomes_certificate[...]`, `test_inner_unprepare_from_outcomes_certificate[...]` (4 each).
 - `tests/test_docstrings.py`: 48 tests (34 classes).
 
@@ -1401,21 +1404,24 @@ def pair(key, seed=5):
     return build(p, seed)
 
 
-def measure_x(wires):
+def measure_x(wires, postselect=None):
+    """``H`` and ``qp.measure(q, reset=True)`` on every wire, postselected on the bits of
+    ``postselect`` if it is given."""
     outcomes = []
-    for wire in wires:
+    for i, wire in enumerate(wires):
         qp.H(wire)
-        outcomes.append(qp.measure(wire, reset=True))
+        outcomes.append(qp.measure(wire, reset=True,
+                                   postselect=None if postselect is None else postselect[i]))
     return outcomes
 
 
-def round_trip(pr, order=lambda outcomes: outcomes):
-    """The phase gradient, the prepare, the junk measurement and the unprepare from the
-    outcomes, passed in the order ``order`` gives."""
+def round_trip(pr, order=lambda outcomes: outcomes, postselect=None):
+    """The phase gradient, the prepare, the junk measurement (postselected on ``postselect`` if
+    it is given) and the unprepare from the outcomes, passed in the order ``order`` gives."""
     def qfunc():
         qp.PhaseGradientStatePrep(pr.prepare_wires["phase_grad"])
         pr.prepare(*pr.args, **pr.prepare_wires)
-        outcomes = measure_x(pr.prepare_wires[pr.junk])
+        outcomes = measure_x(pr.prepare_wires[pr.junk], postselect)
         pr.unprepare(order(outcomes), *pr.args, **pr.unprepare_wires)
 
     return qfunc
@@ -1514,13 +1520,36 @@ def expected_state(num_wires, gradient_wires, inputs=()):
 @pytest.mark.compiled
 def test_lightning_round_trip_with_two_seeds():
     """The compiled round trip at H2_STO3G_TEST's outer shape (19 wires): every register returns
-    to |0> and the phase gradient is unchanged, for two measurement seeds (smoke runs; the
-    certificates prove every outcome)."""
+    to |0> and the phase gradient is unchanged, for two measurement seeds (smoke runs: the
+    certificates prove every outcome on the tape path, and the postselected test below fixes the
+    junk outcomes of the compiled path)."""
     pr = pair("outer-sto3g")
     expected = expected_state(pr.num_wires, pr.prepare_wires["phase_grad"])
     for seed in range(2):
         state = lightning(pr.num_wires, round_trip(pr), seed)
         assert np.allclose(state, expected, rtol=0, atol=1e-10), seed
+
+
+@pytest.mark.compiled
+@pytest.mark.parametrize("key", ["outer-sto3g", "inner-small"])
+def test_lightning_round_trip_with_postselected_junk(key):
+    """The compiled path of the junk outcomes, deterministically: the junk measurements are
+    postselected on the unit pattern 1, 0, ..., 0 (analytic lightning.qubit honours postselection
+    under capture and renormalizes), so the unprepare receives a traced bool array of known
+    content. The inputs (x_o of the inner pair in |+>) come back, every other register |0> and the
+    phase gradient unchanged. The pattern is neither zero nor a palindrome, so junk outcomes that
+    the capture branch of the canonicalization reverses or drops leave a phase, which the sampled
+    lightning tests see only for some seeds."""
+    pr = pair(key)
+    pattern = [1] + [0] * (len(pr.prepare_wires[pr.junk]) - 1)
+
+    def body():
+        for wire in pr.inputs:
+            qp.H(wire)
+        round_trip(pr, postselect=pattern)()
+
+    expected = expected_state(pr.num_wires, pr.prepare_wires["phase_grad"], pr.inputs)
+    assert np.allclose(lightning(pr.num_wires, body, 0), expected, rtol=0, atol=1e-10)
 
 
 # ------------------------------------------------- a caller inside another operator's rule
@@ -5156,7 +5185,7 @@ simulator comparisons unless a test names another), or an explicit relative boun
 - [ ] **Step 7: Run the targeted tests**
 
 Run: `scripts/test.sh tests/ops/test_unprepare_from_outcomes.py tests/test_docstrings.py tests/ops/test_outer_prepare.py tests/ops/test_inner_prepare.py tests/ops/test_qroam_erase.py -m "not slow and not release" -q`
-Expected: `197 passed` (dry run 33 s, 1,686 MB).
+Expected: `199 passed` (dry run 33 s, 1,686 MB, before revision 4's two tests).
 
 Run: `scripts/test.sh tests/ops/test_unprepare_from_outcomes.py tests/ops/test_certificates_prepare.py tests/ops/test_certificates_qroam.py -m "slow and not release" -q`
 Expected: `25 passed` (dry run 6 s; the first replay).
@@ -5164,7 +5193,7 @@ Expected: `25 passed` (dry run 6 s; the first replay).
 - [ ] **Step 8: Run the per-commit tier and the linter, and commit**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1263 passed` (1221 + 42), no warnings summary.
+Expected: `1265 passed` (1221 + 44), no warnings summary.
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -11233,7 +11262,7 @@ Expected: `48 passed`.
 - [ ] **Step 13: Run the per-commit tier and the linter, and commit**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1268 passed` (1263 + 5), no warnings summary.
+Expected: `1270 passed` (1265 + 5), no warnings summary.
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
