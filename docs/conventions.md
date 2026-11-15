@@ -61,12 +61,16 @@ Reflections are exact, global sign included: `2|0><0| - I` is a multi-controlled
   `alt_x_o`, `keep_x_o`, `junk_x_o`, `b`, `succ_b`, `sigma_0`, `m_b`, `less_than_b`, `alt_b`,
   `keep_b`, `sgn`, `d_sgn`, `r`, `junk_b`, `angles`, `G0`, `G1`, `b_neq_B`, `sg`, `psi_up`,
   `psi_dn`, `phase_grad`, `work`. `WalkLayout` also names the persistent comparator registers
-  `succ_work_x_o`, `cmp_work_x_o`, `succ_work_b`, `cmp_work_b`; QPE adds `qpe_control` and
-  `qpe_grad`.
+  `succ_work_x_o`, `cmp_work_x_o`, `succ_work_b`, `cmp_work_b`, and `junk_overflow`, the junk wires
+  beyond the angles; QPE adds `qpe_control` and `qpe_grad`.
 - The L3 assembly operators and `ControlledWalkPower` take `WalkLayout`'s groups. `QPERound`
   takes `control`, `qpe_grad` and the walk groups once as flat `walk_wires`; L1 and L2 operators
   take their spec 9 registers by name. A composite passes each child only the registers it needs.
 - One operator's registers are distinct qubits: two registers that share a wire do not compile.
+- The reads' junk registers `junk_x_o` and `junk_b` share the first wires of `angles` (and of
+  `junk_overflow`) in `WalkLayout`: the block encoding measures each junk register right after
+  its prepare, so no operator holds a junk register and the angles at once (spec 10.2; spec 16,
+  Q-1 variant (b)).
 
 ## Arguments and tables
 

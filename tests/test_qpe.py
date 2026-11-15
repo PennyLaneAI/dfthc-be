@@ -120,10 +120,10 @@ def test_controlled_walk_power_validates():
     c = walk_sim.case("sto3g")
     with pytest.raises(ValueError, match=r"power must lie in \[1, None\], got 0"):
         ControlledWalkPower(0, *c.compilable, **c.groups(controlled=True))
-    with pytest.raises(ValueError, match="'outer' has 1 wires; expected 16"):
+    with pytest.raises(ValueError, match="'outer' has 1 wires; expected 12"):
         ControlledWalkPower(1, *c.compilable, **(c.groups(controlled=True) | {"outer": [0]}))
     assert ControlledWalkPower.required_wires(5, *c.compilable) == {
-        "control": 1, "outer": 16, "inner": 23, "select": 8, "system": 4, "phase_grad": 4,
+        "control": 1, "outer": 12, "inner": 16, "select": 11, "system": 4, "phase_grad": 4,
         "work": 8}
 
 
@@ -267,10 +267,10 @@ def test_spare_wires_needed():
     assert [spare_wires_needed(sto3g.op_name, sto3g.wire_sizes, t) for t in range(1, 7)] == [
         0, 0, 0, 0, 1, 3]
     assert [QPERound.required_wires(0, t, sto3g.op_name, sto3g.compilable, sto3g.wire_sizes)[
-        "walk_wires"] for t in (4, 5)] == [63, 64]
+        "walk_wires"] for t in (4, 5)] == [55, 56]
     femoco = WalkLayout.from_params(FEMOCO54)
     sizes = tuple(len(getattr(femoco, name)) for name in ControlledWalkPower.wire_argnames[1:])
-    assert sizes[-1] == WalkLayout.work_size(FEMOCO54) == 44 and sum(sizes) == 1564
+    assert sizes[-1] == WalkLayout.work_size(FEMOCO54) == 44 and sum(sizes) == 1102
     assert [spare_wires_needed("ControlledWalkPower", sizes, t) for t in (3, 20, 22, 23, 25)] == [
         0, 0, 0, 1, 5]
 
@@ -305,27 +305,27 @@ def test_walk_power_spec_flattens_the_groups_in_wire_argnames_order():
     spec = walk_power_spec(c.params, c.tables, layout)
     assert isinstance(spec, WalkPowerSpec) and WALK_POWERS[spec.op_name] is ControlledWalkPower
     assert spec.compilable == c.compilable
-    assert spec.wire_sizes == (16, 23, 8, 4, 4, 8)
+    assert spec.wire_sizes == (12, 16, 11, 4, 4, 8)
     wires, start = list(spec.wires), 0
     for name, size in zip(ControlledWalkPower.wire_argnames[1:], spec.wire_sizes, strict=True):
         assert wires[start:start + size] == list(getattr(layout, name)), name
         start += size
-    assert wires[:4] != list(layout.system) and start == len(wires) == 63
+    assert wires[:4] != list(layout.system) and start == len(wires) == 55
 
 
-@pytest.mark.parametrize(("t", "spare"), [(3, []), (5, [69])])
+@pytest.mark.parametrize(("t", "spare"), [(3, []), (5, [61])])
 def test_qpe_program_wires(t, spare):
-    """qpe_program at H2_STO3G_TEST: the layout with qpe_bits = t (control 63, qpe_grad from
-    64), then the spare wires: none at t = 3, whose 5 correction wires fit the 8-wire work pool
-    (55 to 62), one (69) at t = 5, whose 9 do not. Every round binds each wire once, the same
-    registers in every round: control, qpe_grad and walk_wires (the walk's 63 wires, then the
+    """qpe_program at H2_STO3G_TEST: the layout with qpe_bits = t (control 55, qpe_grad from
+    56), then the spare wires: none at t = 3, whose 5 correction wires fit the 8-wire work pool
+    (47 to 54), one (61) at t = 5, whose 9 do not. Every round binds each wire once, the same
+    registers in every round: control, qpe_grad and walk_wires (the walk's 55 wires, then the
     spare ones). Round 0's corrections borrow the pool from its first wire on, into the spare
     wire: for d = l + 1, the scratch wires corrections[:d] and the work wires
     corrections[d:2d - 1]."""
     c = walk_sim.case("sto3g")
     program, num_wires = qpe_program(c.params, c.tables, t)
     layout = WalkLayout.from_params(c.params, qpe_bits=t)
-    assert num_wires == layout.num_wires + len(spare) == 63 + 1 + t + len(spare)
+    assert num_wires == layout.num_wires + len(spare) == 55 + 1 + t + len(spare)
     spec = walk_power_spec(c.params, c.tables, layout)
     walk_wires = [*spec.wires, *spare]
     with qp.capture.pause(), qp.queuing.AnnotatedQueue() as queue:
@@ -333,17 +333,17 @@ def test_qpe_program_wires(t, spare):
     rounds = [op for op in queue.queue if isinstance(op, QPERound)]
     assert [op.hyperparameters["j"] for op in rounds] == list(reversed(range(t)))
     for op in rounds:
-        assert list(op.control) == [63] and list(op.qpe_grad) == list(range(64, 64 + t))
-        assert list(op.walk_wires) == walk_wires and sorted(walk_wires[:63]) == list(range(63))
+        assert list(op.control) == [55] and list(op.qpe_grad) == list(range(56, 56 + t))
+        assert list(op.walk_wires) == walk_wires and sorted(walk_wires[:55]) == list(range(55))
     corrections = [*layout.work, *spare][:2 * t - 1]
     with qp.capture.pause(), qp.queuing.AnnotatedQueue() as inner:
         _qpe_round(0, t, [False, *measured(t - 1)], spec.op_name, spec.compilable,
-                   spec.wire_sizes, [63], list(range(64, 64 + t)), walk_wires)
+                   spec.wire_sizes, [55], list(range(56, 56 + t)), walk_wires)
     rotations = [op.base for op in inner.queue if isinstance(op, qp.ops.Conditional)]
     assert len(rotations) == t - 1
     for d, rotation in enumerate(rotations, start=2):
-        assert list(rotation.target) == [63] and list(rotation.phase_grad) == list(
-            range(64, 64 + d))
+        assert list(rotation.target) == [55] and list(rotation.phase_grad) == list(
+            range(56, 56 + d))
         assert list(rotation.scratch) == corrections[:d]
         assert list(rotation.work) == corrections[d:2 * d - 1]
 

@@ -280,7 +280,7 @@ def test_required_wires():
     for plain, controlled in ((DFTHCWalk, ControlledDFTHCWalk),
                               (DFTHCBlockEncoding, ControlledDFTHCBlockEncoding)):
         sizes = plain.required_wires(p.as_compilable(), ())
-        assert sizes == {"outer": 16, "inner": 23, "select": 8, "system": 4, "phase_grad": 4,
+        assert sizes == {"outer": 12, "inner": 16, "select": 11, "system": 4, "phase_grad": 4,
                          "work": 8}
         assert controlled.required_wires(p.as_compilable(), ()) == {"control": 1} | sizes
 
@@ -288,7 +288,7 @@ def test_required_wires():
 @pytest.mark.parametrize(("change", "match"), [
     ({"params": 7}, "params and tables must be"),
     ({"tables": ()}, "WalkTables needs 8 fields; got 0"),
-    ({"outer": [0]}, "'outer' has 1 wires; expected 16"),
+    ({"outer": [0]}, "'outer' has 1 wires; expected 12"),
 ], ids=["params-type", "tables", "outer"])
 @pytest.mark.parametrize("kind", CLASSES)
 def test_constructor_validates(kind, change, match):

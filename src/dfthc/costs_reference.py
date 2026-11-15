@@ -34,6 +34,14 @@ DEFAULT_PRECISIONS = {"b_rot": 15, "b_k1": 15, "b_k2": 15, "s_u": 7}
 PAPER_QUBITS_FEMOCO = 1131
 """The paper's logical qubits at FeMoco-54 (spec 10.3, 13.2)."""
 
+PAPER_QUBIT_GROUPS_FEMOCO = {"system": 108, "outer": 50, "inner": 53, "select": 795,
+                             "phase_grad": 15, "work": 110}
+"""The paper's FeMoco-54 qubits (arXiv:2502.15882v1 Table 3) under the names of our groups: the
+system, the persistent ancillas of the outer prepare, the inner prepare, RPREP (the angles) and
+SEL (the rotations' b_rot), and its largest temporary ancilla count, the outer prepare's, which
+it adds; the inner prepare's 313 temporaries share RPREP's 795 qubits. They sum to
+:data:`PAPER_QUBITS_FEMOCO`."""
+
 
 def default_params(N: int, R: int, B: int, C: int, n_plus: int) -> WalkParams:
     """A system's report parameters: :data:`DEFAULT_PRECISIONS` and the block bits that minimize

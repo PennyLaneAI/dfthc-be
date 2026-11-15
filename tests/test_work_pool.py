@@ -1,7 +1,8 @@
 """The walk's shared work pool (spec 10.1 and 10.2): every call of the four assembly rules (the
 walks' and the block encodings') gets exactly its required_wires, its work is a prefix of the
 pool, and neither the pool nor the comparators' dirty work registers appear where they do not
-belong; WalkLayout.work_size is the largest need, the controlled RefAB's."""
+belong; the junk registers and the unprepares' extra_onehot wires are the start of the angle
+wires; WalkLayout.work_size is the largest need, the controlled RefAB's."""
 
 import functools
 import inspect
@@ -10,10 +11,13 @@ import random
 import pennylane as qp
 import pytest
 
+from dfthc.compile import dfthc_operator_names
 from dfthc.data.factors import load_factors, random_factors
 from dfthc.data.tables import WalkTables
 from dfthc.ops.reflections import ControlledRefAB, ControlledRefT2, RefAB, RefT2
 from dfthc.ops.walk import (
+    FROM_OUTCOMES,
+    JUNK_MEASUREMENT,
     _block_encoding,
     _children,
     _controlled_block_encoding,
@@ -22,7 +26,7 @@ from dfthc.ops.walk import (
     _walk_children,
 )
 from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE, WalkParams, lg
-from dfthc.registers import WalkLayout
+from dfthc.registers import JUNK, WalkLayout
 
 PRESETS = {
     "sto3g": lambda: (H2_STO3G_TEST, load_factors("h2_sto3g_R2_B2_C1")),
@@ -33,20 +37,24 @@ PRESETS = {
 """FeMoco-54 is classical here: the rules run in tape mode and construct their children (the
 constructors check every register); nothing is compiled."""
 
-DIRTY = {"succ_work_x_o": {"OuterPrepare", "OuterUnprepare"},
-         "cmp_work_x_o": {"OuterPrepare", "OuterUnprepare"},
-         "succ_work_b": {"InnerPrepare", "InnerUnprepare"},
-         "cmp_work_b": {"InnerPrepare", "InnerUnprepare"}}
+DIRTY = {"succ_work_x_o": {"OuterPrepare", "OuterUnprepareFromOutcomes"},
+         "cmp_work_x_o": {"OuterPrepare", "OuterUnprepareFromOutcomes"},
+         "succ_work_b": {"InnerPrepare", "InnerUnprepareFromOutcomes"},
+         "cmp_work_b": {"InnerPrepare", "InnerUnprepareFromOutcomes"}}
 """The comparators' work registers, dirty from a prepare to its unprepare (spec 10.2), and the
 only classes that may take them."""
 
-AT_LEAST = {"OuterPrepare", "OuterUnprepare", "InnerPrepare", "InnerUnprepare"}
+AT_LEAST = {"OuterPrepare", "OuterUnprepareFromOutcomes", "InnerPrepare",
+            "InnerUnprepareFromOutcomes"}
 """Their ``phase_grad`` is a minimum (``s_u``); the walk passes the whole register."""
+
+LENDS = {cls.__name__: junk for cls, junk in FROM_OUTCOMES.items()}
+"""The unprepares from outcomes and the junk register whose start is their ``extra_onehot``."""
 
 RULES = {"block encoding": (_block_encoding, False, 11),
          "controlled block encoding": (_controlled_block_encoding, True, 11),
          "walk": (_walk, False, 2), "controlled walk": (_controlled_walk, True, 2)}
-"""Each assembly rule, whether it is controlled, and its number of calls."""
+"""Each assembly rule, whether it is controlled, and its number of operator calls."""
 
 
 @functools.cache
@@ -68,14 +76,15 @@ def required(op) -> dict:
 
 
 def calls(rule, p, t, layout, controlled):
-    """The rule's children in tape mode, on the layout's groups (``qpe_control`` as control)."""
+    """The rule's operator calls in tape mode, on the layout's groups (``qpe_control`` as
+    control); the junk measurements' gates are left out."""
     groups = {name: getattr(layout, name)
               for name in ("outer", "inner", "select", "system", "phase_grad", "work")}
     if controlled:
         groups = {"control": layout.qpe_control} | groups
     with qp.capture.pause(), qp.queuing.AnnotatedQueue() as queue:
         rule(p.as_compilable(), t.as_compilable(), **groups)
-    return list(queue.queue)
+    return [op for op in queue.queue if op.name in dfthc_operator_names()]
 
 
 def check_call(op, layout) -> int:
@@ -95,6 +104,10 @@ def check_call(op, layout) -> int:
             assert not pool & set(wires), (op.name, name)
         if name in DIRTY:
             assert op.name in DIRTY[name] and wires == list(getattr(layout, name))
+        if name in JUNK:
+            assert wires == list(getattr(layout, name)), (op.name, name)
+        if name == "extra_onehot":
+            assert wires == list(getattr(layout, LENDS[op.name]))[:len(wires)], op.name
     work = set(registers.get("work", ()))
     others = {wire for name, wires in registers.items() if name != "work" for wire in wires}
     dirty = {wire for name in DIRTY for wire in getattr(layout, name)}
@@ -109,7 +122,8 @@ def test_every_call_gets_exactly_its_required_wires(name):
     whole register; the walks' block encoding gets the whole groups and pool), its work is the
     pool's prefix of that size and disjoint from its other registers, no other register holds a
     pool wire, the dirty comparator work registers go only to their prepare and unprepare (never
-    into a work prefix), and every need fits the pool."""
+    into a work prefix), the junk registers and the unprepares' extra_onehot are the start of
+    the angle wires, and every need fits the pool."""
     p, t, layout = preset(name)
     for rule, controlled, count in RULES.values():
         needs = [check_call(op, layout) for op in calls(rule, p, t, layout, controlled)]
@@ -132,17 +146,16 @@ def test_the_pool_is_the_controlled_walks_largest_need(name):
     assert needs["RefAB"] == needs["ControlledRefAB"] - 1
 
 
-def own_work(cls, args, p) -> int:
-    """A child's own work need: its class's ``required_wires(...)["work"]`` from the compilable
-    arguments the rule gives it, or, for the reflections (sizes from their wires), from the
-    pattern widths; 0 without a work register."""
+def own_sizes(cls, args, p) -> dict:
+    """A child's own ``required_wires`` from the compilable arguments the rule gives it, or, for
+    the reflections (sizes from their wires), from the pattern widths."""
     if cls in (RefT2, ControlledRefT2):
-        return cls.required_wires(p.w_b, p.b_k2)["work"]
+        return cls.required_wires(p.w_b, p.b_k2)
     if cls in (RefAB, ControlledRefAB):
-        return cls.required_wires(p.w_x, p.b_k1, p.w_b, p.b_k2)["work"]
+        return cls.required_wires(p.w_x, p.b_k1, p.w_b, p.b_k2)
     arguments = dict(zip(cls.compilable_argnames, args, strict=True))
     names = inspect.signature(cls.required_wires).parameters
-    return cls.required_wires(**{k: v for k, v in arguments.items() if k in names}).get("work", 0)
+    return cls.required_wires(**{k: v for k, v in arguments.items() if k in names})
 
 
 def zero_tables(p) -> WalkTables:
@@ -157,19 +170,22 @@ def zero_tables(p) -> WalkTables:
                       sf_angles=tuple(rows(p.B, p.N - 1) for _ in range(p.R)))
 
 
-CHILDREN = {"OuterPrepare", "InnerPrepare", "InnerSigns", "InnerSelect", "InnerUnprepare",
-            "RefT2", "ControlledRefT2", "InnerSelectDagger", "OuterUnprepare",
-            "DFTHCBlockEncoding", "ControlledDFTHCBlockEncoding", "RefAB", "ControlledRefAB"}
+CHILDREN = {"OuterPrepare", "InnerPrepare", "InnerSigns", "InnerSelect",
+            "InnerUnprepareFromOutcomes", "RefT2", "ControlledRefT2", "InnerSelectDagger",
+            "OuterUnprepareFromOutcomes", "DFTHCBlockEncoding", "ControlledDFTHCBlockEncoding",
+            "RefAB", "ControlledRefAB"}
 """Every class the four assembly rules call."""
 
 
 def test_work_size_covers_every_child_at_random_shapes():
     """At 300 random valid shapes, every child of the four assembly rules, taken from the rules'
-    own child lists (``_children`` and ``_walk_children``, plain and controlled), is given exactly
-    its class's own ``required_wires`` work, so no explicit inverse or controlled class
-    (``OuterUnprepare``, ``InnerUnprepare``, ``InnerSelectDagger``, ``ControlledRefT2``,
-    ``ControlledRefAB``) can drift from its forward form unnoticed; and ``WalkLayout.work_size``
-    (spec 10.1, provisional until this test) covers every need."""
+    own step lists (``_children`` and ``_walk_children``, plain and controlled), is given exactly
+    its class's own ``required_wires`` work (and an unprepare from outcomes its own
+    ``extra_onehot``, no more than its junk register holds), so no explicit inverse or controlled
+    class (``OuterUnprepareFromOutcomes``, ``InnerUnprepareFromOutcomes``, ``InnerSelectDagger``,
+    ``ControlledRefT2``, ``ControlledRefAB``) can drift from its forward form unnoticed;
+    ``WalkLayout.work_size`` (spec 10.1, provisional until this test) covers every need; and each
+    junk register fits in the angle wires and the overflow wires."""
     rng = random.Random(0)
     checked, seen = 0, set()
     while checked < 300:
@@ -184,10 +200,20 @@ def test_work_size_covers_every_child_at_random_shapes():
                 or 2**p.w_b > (p.N - 1) * p.b_rot + 1):
             continue
         t = zero_tables(p)
+        sizes = WalkLayout.register_sizes(p)
+        junk = WalkLayout.junk_sizes(p)
+        assert max(junk.values()) <= sizes["angles"] + sizes["junk_overflow"], p
         for controlled in (False, True):
-            for cls, args, need in _children(p, t, controlled) + _walk_children(p, t, controlled):
-                assert own_work(cls, args, p) == need, (p, cls.__name__)
-                assert need <= WalkLayout.work_size(p), (p, cls.__name__, need)
-                seen.add(cls.__name__)
+            for step in _children(p, t, controlled) + _walk_children(p, t, controlled):
+                if step.op == JUNK_MEASUREMENT:
+                    assert step.args in JUNK
+                    continue
+                own = own_sizes(step.op, step.args, p)
+                assert own.get("work", 0) == step.work, (p, step.op.__name__)
+                assert own.get("extra_onehot", 0) == step.extra_onehot, (p, step.op.__name__)
+                if step.op in FROM_OUTCOMES:
+                    assert step.extra_onehot <= junk[FROM_OUTCOMES[step.op]], p
+                assert step.work <= WalkLayout.work_size(p), (p, step.op.__name__, step.work)
+                seen.add(step.op.__name__)
         checked += 1
     assert seen == CHILDREN

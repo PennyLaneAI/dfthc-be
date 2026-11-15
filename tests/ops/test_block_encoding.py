@@ -129,11 +129,16 @@ def test_harness_sees_phases_outcomes_and_ancillas():
     assert walk_sim.nonzero_registers(c, dirty) == {"x_o"}
 
 
-def children(rule, c, controlled):
-    """The rule's operators in tape mode."""
+def queued(rule, c, controlled):
+    """Everything the rule queues in tape mode: the children and the junk measurements."""
     with qp.capture.pause(), qp.queuing.AnnotatedQueue() as queue:
         rule(*c.compilable, **c.groups(controlled))
     return list(queue.queue)
+
+
+def children(rule, c, controlled):
+    """The rule's operators in tape mode."""
+    return [op for op in queued(rule, c, controlled) if op.name not in ("Hadamard", "MidMeasure")]
 
 
 def registers(op):
@@ -141,29 +146,38 @@ def registers(op):
     return {name: list(getattr(op, name)) for name in op.wire_argnames}
 
 
+NAMES = ["OuterPrepare", "InnerPrepare", "InnerSigns", "InnerSelect", "InnerUnprepareFromOutcomes",
+         "RefT2", "InnerPrepare", "InnerSelectDagger", "InnerSigns", "InnerUnprepareFromOutcomes",
+         "OuterUnprepareFromOutcomes"]
+"""The block encoding's children in time order (spec 9.21; spec 16, Q-1 variant (b))."""
+JUNK_OF = {"OuterPrepare": "junk_x_o", "InnerPrepare": "junk_b",
+           "OuterUnprepareFromOutcomes": "junk_x_o", "InnerUnprepareFromOutcomes": "junk_b"}
+
+
 @pytest.mark.parametrize("name", ["sto3g", "fails-c3"])
 def test_children_order_and_registers(name):
     """Spec 9.21's order, every child on the layout's registers of its own names (spec 9.0):
-    the work pool's prefix, the whole phase_grad; InnerSigns after InnerPrepare in the first
-    round and after InnerSelectDagger in the second; the two rules differ only in the reflection,
-    ControlledRefT2 on the control; the two InnerPrepare and InnerUnprepare calls are equal, and
-    the selects have equal arguments with fixup_bits = w_b, so each shares one target."""
+    the work pool's prefix, the whole phase_grad, the junk registers on the start of the angle
+    wires, an unprepare's extra_onehot on the start of its junk register; InnerSigns after
+    InnerPrepare in the first round and after InnerSelectDagger in the second; the two rules
+    differ only in the reflection, ControlledRefT2 on the control; the two InnerPrepare and
+    InnerUnprepareFromOutcomes calls are equal, and the selects have equal arguments with
+    fixup_bits = w_b, so each shares one target."""
     c = case(name)
     p, layout = c.params, c.layout
-    names = ["OuterPrepare", "InnerPrepare", "InnerSigns", "InnerSelect", "InnerUnprepare",
-             "RefT2", "InnerPrepare", "InnerSelectDagger", "InnerSigns", "InnerUnprepare",
-             "OuterUnprepare"]
     plain, controlled = children(_block_encoding, c, False), children(
         _controlled_block_encoding, c, True)
-    assert [op.name for op in plain] == names
+    assert [op.name for op in plain] == NAMES
     assert [op.name for op in controlled] == [
-        "ControlledRefT2" if n == "RefT2" else n for n in names]
+        "ControlledRefT2" if n == "RefT2" else n for n in NAMES]
     for op in plain + controlled:
         for register, wires in registers(op).items():
             if register == "work":
                 assert wires == list(layout.work)[:len(wires)]
             elif register == "control":
                 assert wires == c.control
+            elif register == "extra_onehot":
+                assert wires == list(getattr(layout, JUNK_OF[op.name]))[:len(wires)]
             else:
                 assert wires == list(getattr(layout, register)), (op.name, register)
     for a, b in zip(plain, controlled, strict=True):
@@ -180,6 +194,41 @@ def test_children_order_and_registers(name):
     assert plain[0].hyperparameters == plain[10].hyperparameters == {
         "X_o": p.X_o, "alt": c.tables.outer_alt, "keep": c.tables.outer_keep, "b_k1": p.b_k1,
         "k1": p.k1, "ke1": p.ke1, "s_u": p.s_u}
+
+
+@pytest.mark.parametrize("name", ["sto3g", "631g"])
+def test_junk_is_measured_right_after_each_prepare(name):
+    """Spec 16, Q-1 variant (b): right after each prepare the rule applies H and a reset
+    measurement to every wire of its junk register, in wire order, and nothing else; each
+    unprepare from outcomes receives exactly the outcomes of the latest measurement of its junk
+    register, in that order (the two inner rounds measure separately)."""
+    c = case(name)
+    ops = queued(_block_encoding, c, False)
+    measured, latest, seen = {}, {}, []
+    i = 0
+    while i < len(ops):
+        op = ops[i]
+        if op.name in ("OuterPrepare", "InnerPrepare"):
+            junk = list(getattr(c.layout, JUNK_OF[op.name]))
+            pairs = ops[i + 1:i + 1 + 2 * len(junk)]
+            assert [g.name for g in pairs] == ["Hadamard", "MidMeasure"] * len(junk)
+            assert [list(g.wires) for g in pairs] == [[w] for w in junk for _ in range(2)]
+            assert all(g.reset for g in pairs[1::2])
+            latest[JUNK_OF[op.name]] = pairs[1::2]
+            i += 1 + 2 * len(junk)
+            seen.append(op.name)
+            continue
+        if op.name in ("OuterUnprepareFromOutcomes", "InnerUnprepareFromOutcomes"):
+            outcomes = [mv.measurements[0] for mv in op.junk_outcomes]
+            assert outcomes == latest[JUNK_OF[op.name]], op.name
+            measured[op.name] = measured.get(op.name, 0) + 1
+        assert op.name not in ("Hadamard", "MidMeasure"), i
+        i += 1
+    assert seen == ["OuterPrepare", "InnerPrepare", "InnerPrepare"]
+    assert measured == {"InnerUnprepareFromOutcomes": 2, "OuterUnprepareFromOutcomes": 1}
+    junk = costs.junk_measurements(c.params).measurements
+    assert sum(op.name == "MidMeasure" for op in ops) == junk == (
+        len(c.layout.junk_x_o) + 2 * len(c.layout.junk_b))
 
 
 # --------------------------------------------------------------------------- resources
@@ -227,22 +276,28 @@ def test_counts_at_mid_naphthalene(kind):
 
 def test_femoco_counts_on_the_closed_forms():
     """FeMoco-54 (spec 9.24), without compiling: T = 279 + 2 * 4,725 + 20 = 9,749 (controlled
-    9,750), M = 96 + 2 * (416 + 798) = 2,524, A = T - (1,118 - 1) = 8,632 (8,633); the groups are
-    143, 455, 799, 108, 15 and 44 wires, 1,564 in all."""
+    9,750), M = 24 + 2 * (26 + 798) + 852 = 2,524, the 852 junk measurements (72 + 2 * 390) in the
+    rule itself (spec 16, Q-1 variant (b)), as spec 9.24's 96 + 2 * (416 + 798); A = T - (1,118 -
+    1) = 8,632 (8,633); the groups are 71, 65, 799, 108, 15 and 44 wires, 1,102 in all."""
     p = FEMOCO54
-    outer = costs.outer_prepare(p) + costs.outer_unprepare(p)
-    inner = costs.inner_prepare(p) + costs.inner_select(p) + costs.inner_unprepare(p)
-    assert (outer, inner, costs.ref_t2(p, False)) == (costs.Cost(279, 96), costs.Cost(4725, 1214),
-                                                      costs.Cost(20))
+    outer = costs.outer_prepare(p) + costs.outer_unprepare_from_outcomes(p)
+    inner = (costs.inner_prepare(p) + costs.inner_select(p)
+             + costs.inner_unprepare_from_outcomes(p))
+    junk = costs.junk_measurements(p)
+    assert (outer, inner, junk, costs.ref_t2(p, False)) == (
+        costs.Cost(279, 24), costs.Cost(4725, 824), costs.Cost(0, 852), costs.Cost(20))
+    for controlled in (False, True):
+        assert costs.block_encoding(p, controlled) == (
+            outer + 2 * inner + junk + costs.ref_t2(p, controlled))
     assert costs.block_encoding(p, False) == costs.Cost(9749, 2524)
     assert costs.block_encoding(p, True) == costs.Cost(9750, 2524)
     assert costs.toffoli_only(p) == 1118
     assert [costs.block_encoding(p, c).toffoli - (costs.toffoli_only(p) - 1)
             for c in (False, True)] == [8632, 8633]
     sizes = DFTHCBlockEncoding.required_wires(p.as_compilable(), ())
-    assert sizes == {"outer": 143, "inner": 455, "select": 799, "system": 108, "phase_grad": 15,
+    assert sizes == {"outer": 71, "inner": 65, "select": 799, "system": 108, "phase_grad": 15,
                      "work": 44}
-    assert sum(sizes.values()) == WalkLayout.from_params(p).num_wires == 1564
+    assert sum(sizes.values()) == WalkLayout.from_params(p).num_wires == 1102
 
 
 def both_classes():
@@ -313,9 +368,10 @@ def test_rules_are_valid(name):
 
 
 def test_required_wires():
-    """By hand at H2_STO3G_TEST: the layout's groups (work: RefAB's controlled need, 8)."""
+    """By hand at H2_STO3G_TEST: the layout's groups (select: 4 angle wires and 3 overflow wires
+    for the 7 inner junk wires, and 4 flags; work: RefAB's controlled need, 8)."""
     p = H2_STO3G_TEST
-    sizes = {"outer": 16, "inner": 23, "select": 8, "system": 4, "phase_grad": 4, "work": 8}
+    sizes = {"outer": 12, "inner": 16, "select": 11, "system": 4, "phase_grad": 4, "work": 8}
     assert DFTHCBlockEncoding.required_wires(p.as_compilable(), ()) == sizes
     assert ControlledDFTHCBlockEncoding.required_wires(p.as_compilable(), ()) == {
         "control": 1} | sizes
