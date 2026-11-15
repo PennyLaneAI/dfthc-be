@@ -13,9 +13,11 @@ integer is :meth:`QROAMRead.loaded_bits`. The read's dynamic ``leaf_words`` hold
 wire order instead: bit ``s`` of word ``w`` of block position ``p`` is the bit for wire
 ``32 w + s`` of that position's register, which is entry bit ``width - 1 - (32 w + s)``
 (:meth:`QROAMRead.leaf_words_from_table` converts a table).
-With ``M = 2**block_bits * width``, the qubits of ``target ‖ junk`` that the erase measures, bit
-``i`` of ``loaded_bits`` is the wire ``M - 1 - i`` of ``target ‖ junk``, so the erase passes its
-outcomes to :func:`dfthc.compile.mcm_parities` in reverse wire order.
+With ``M = 2**block_bits * width``, the qubits of ``target ‖ junk`` whose outcomes the erase
+uses, bit ``i`` of ``loaded_bits`` is the wire ``M - 1 - i`` of ``target ‖ junk``, so the erase
+passes its outcomes to :func:`dfthc.compile.mcm_parities` in reverse wire order.
+:class:`QROAMErase` measures all of them; :func:`emit_erase_from_outcomes` measures the target and
+takes the junk's outcomes, in wire order, from a caller that X-measured the junk after the read.
 """
 
 from __future__ import annotations
@@ -297,7 +299,8 @@ def _loaded_contents(entries, widths, live_ranges, width, block_bits, addresses)
 
 class QROAMRead(Operator2):
     r"""The paper's QROAM read: the requested entry into ``target``, the rest of its block into
-    ``junk``, which stays until the measured erase (:class:`QROAMErase`).
+    ``junk``, for a measured erase: the junk stays until :class:`QROAMErase`, or the caller
+    X-measures it early and erases with :func:`emit_erase_from_outcomes`.
 
     **Action** on every computational address ``a`` (spec 9.3), with :math:`K = 2^k` and
     ``k = block_bits``; a *block* is the set of ``K`` addresses that differ only in the low ``k``
@@ -341,7 +344,16 @@ class QROAMRead(Operator2):
     the enabling value 0 or 1).
 
     **Pre- and postconditions.** ``target``, ``junk`` and ``work`` start in ``|0>``; ``work``
-    ends in ``|0>``.
+    ends in ``|0>``. The loaded data is erased by measurement on one of two paths: (a) nothing
+    writes ``target ‖ junk`` until :class:`QROAMErase` measures both; or (b) the caller applies
+    ``H`` and ``qp.measure(q, reset=True)`` to every ``junk`` qubit after the read and before
+    anything else acts on the junk (right after the read, or later: the walk measures right
+    after each enclosing prepare, whose comparator and swaps do not touch the junk), keeps the
+    outcomes in wire order (slot ``r`` of :meth:`junk_layout` is outcomes ``r width`` to
+    ``(r + 1) width - 1``), may then use the junk wires for other registers, and later erases
+    the unchanged ``target`` with :func:`emit_erase_from_outcomes` (spec 16, Q-1 variant (b)).
+    On both paths, operations in between may act on the address only in ways that keep what the
+    read loaded for the current address.
 
     **Decomposition.** (1) Nested exact unary iteration (:mod:`dfthc.ops.unary`) over the visited
     blocks: the first register over its live range, then the top ``w_p - k`` bits of the last
@@ -357,8 +369,10 @@ class QROAMRead(Operator2):
 
     **Adjoint and control.** Never adjointed or controlled: its body has loops and data
     conditionals (spec 7.4 rule 4; L-6), and no program wraps a composite that contains it in an
-    adjoint or a control (spec 7.4 rule 6). The walk erases with :class:`QROAMErase`; use the
-    enable instead of a control.
+    adjoint or a control (spec 7.4 rule 6). Its data is erased by :class:`QROAMErase` (the
+    baseline unprepares), by :func:`emit_erase_from_outcomes` (the unprepares from outcomes,
+    which the walk calls) or by :class:`~dfthc.ops.angle_data.AngleErase` (the angle loads); use
+    the enable instead of a control.
 
     **Cost.** :func:`dfthc.costs.qroam_read` with ``ranges = visited_ranges(...)``:
     :math:`T = U` (or :math:`U_2`) over the visited block ranges, controlled if there is an
@@ -370,9 +384,12 @@ class QROAMRead(Operator2):
     on the data and are exact.
 
     **Paper and dfthcbe.** Steps 2 and 6 (and the engine of 10 and 11); the QROAM of Berry et al.
-    (Quantum 3, 208) with the junk kept until a measured erase. dfthcbe: the reads in
-    ``OuterPrepare``/``InnerPrepare``; its truncated iteration and flat ``r`` target are
-    deferred refinements (spec 9.3, "Known deltas").
+    (Quantum 3, 208) with a measured erase. The paper X-measures its prepares' junk early, in
+    the prepare (arXiv:2502.15882v1 App. B.7.2, steps 2 and 4); the walk measures it right after
+    each enclosing prepare, before any angle load, which equals measuring right after the read
+    because the comparator and the swaps in between do not touch the junk; dfthcbe keeps it
+    until the erase. dfthcbe: the reads in ``OuterPrepare``/``InnerPrepare``; its truncated
+    iteration and flat ``r`` target are deferred refinements (spec 9.3, "Known deltas").
 
     **Example.**
 
@@ -791,7 +808,9 @@ class QROAMErase(Operator2):
     **Pre- and postconditions.** ``target ‖ junk`` hold exactly what the matching read produced
     for the current address (operations in between may act on the address only in ways that
     preserve this). Afterwards ``target``, ``junk``, ``work`` and ``extra_onehot`` are
-    :math:`|0\rangle`, and the address state equals its pre-read state exactly.
+    :math:`|0\rangle`, and the address state equals its pre-read state exactly. A caller that
+    X-measured the junk after the read, before anything else acted on it, erases the target
+    with :func:`emit_erase_from_outcomes` instead (spec 16, Q-1 variant (b)).
 
     **Decomposition** (spec 9.5). (1) ``H`` and ``qp.measure(q, reset=True)`` on every qubit of
     ``target ‖ junk``, giving the outcomes :math:`\xi`. (2) The parities
@@ -867,19 +886,53 @@ class QROAMErase(Operator2):
         return PhaseFixup.high_ranges(address_widths, covered, onehot_bits)
 
 
-def _erase_body(emit, table, address_widths, live_ranges, width, block_bits, control_value,
-                onehot_bits, address, target, junk, work, control, extra_onehot):
-    qubits = list(target) + list(junk)
-    outcomes = [emit.measure_x(qubit) for qubit in qubits]
+def _fixup_from_outcomes(emit, outcomes, onehot_wires, table, address_widths, live_ranges, width,
+                         block_bits, control_value, onehot_bits, address, work, control):
+    """Steps 2 and 3 of the erase (spec 9.5): the parities of ``outcomes``, one per qubit of
+    ``target ‖ junk`` in wire order, against the loaded bits of every address of the read's loaded
+    set (masks built here from the compilable table), then the fixup over that set with the first
+    ``2**onehot_bits`` wires of ``onehot_wires``, reset wires, as its one-hot register."""
     covered = QROAMRead.loaded_ranges(address_widths, live_ranges, block_bits)
     order = PhaseFixup.address_order(address_widths, covered)
     masks = _loaded_contents(_entries(table), address_widths, live_ranges, width, block_bits,
                              order)
     parities = emit.parities(outcomes[::-1], masks)
-    onehot = (qubits + list(extra_onehot))[:2**onehot_bits] if onehot_bits else []
+    onehot = list(onehot_wires)[:2**onehot_bits] if onehot_bits else []
     emit_phase_fixup(parities, address=address, address_widths=address_widths, covered=covered,
                      onehot=onehot, onehot_bits=onehot_bits, work=work, emit=emit,
                      **_control(control, control_value))
+
+
+def _erase_body(emit, table, address_widths, live_ranges, width, block_bits, control_value,
+                onehot_bits, address, target, junk, work, control, extra_onehot):
+    qubits = list(target) + list(junk)
+    outcomes = [emit.measure_x(qubit) for qubit in qubits]
+    _fixup_from_outcomes(emit, outcomes, qubits + list(extra_onehot), table, address_widths,
+                         live_ranges, width, block_bits, control_value, onehot_bits, address,
+                         work, control)
+
+
+def emit_erase_from_outcomes(junk_outcomes, *, table, address_widths, live_ranges, width,
+                             block_bits, onehot_bits, address, target, work, extra_onehot,
+                             emit=None) -> None:
+    r"""Emit the erase of a :class:`QROAMRead` without an enable whose junk was X-measured
+    earlier (spec 16, Q-1 variant (b)), inside a rule.
+
+    ``H`` and ``qp.measure(q, reset=True)`` on every ``target`` qubit, then the parities of the
+    concatenated outcomes ``target ‖ junk_outcomes`` and the fixup over the read's loaded set,
+    exactly as :class:`QROAMErase` does once it has measured ``target ‖ junk``; the one-hot
+    register is the reset ``target ‖ extra_onehot``. ``junk_outcomes`` holds one outcome per junk
+    qubit, ``(2**block_bits - 1) width`` of them, in the junk register's wire order: slot ``r`` of
+    :meth:`QROAMRead.junk_layout` holds outcomes ``r width`` to ``(r + 1) width - 1``.
+    ``extra_onehot`` has ``max(2**onehot_bits - width, 0)`` wires in ``|0>``; ``work`` the fixup's
+    ``PhaseFixup.required_wires(...)["work"]``. ``emit`` is a :class:`QROAMEmitter` (default:
+    emitting); counting, the outcomes are not read.
+    """
+    emit = QROAMEmitter() if emit is None else emit
+    outcomes = [emit.measure_x(qubit) for qubit in target] + list(junk_outcomes)
+    _fixup_from_outcomes(emit, outcomes, list(target) + list(extra_onehot), table,
+                         address_widths, live_ranges, width, block_bits, None, onehot_bits,
+                         address, work, [])
 
 
 def _qroam_erase_resources(table, address_widths, live_ranges, width, block_bits, control_value,

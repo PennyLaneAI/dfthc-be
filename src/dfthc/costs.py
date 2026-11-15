@@ -188,6 +188,20 @@ def inner_unprepare(p: WalkParams) -> Cost:
     return Cost(p.w_b) + erase + flagged_uniform_unprep(p.B + 1, p.s_u)
 
 
+def outer_unprepare_from_outcomes(p: WalkParams) -> Cost:
+    """``OuterUnprepareFromOutcomes`` (spec 9.24 row; spec 16, Q-1 variant (b)): the ``T`` of
+    :func:`outer_unprepare`, ``M = d1`` (the target; the caller measures the ``(K1 - 1) d1``
+    junk qubits)."""
+    return Cost(outer_unprepare(p).toffoli, p.d1)
+
+
+def inner_unprepare_from_outcomes(p: WalkParams) -> Cost:
+    """``InnerUnprepareFromOutcomes`` (spec 9.24 row; spec 16, Q-1 variant (b)): the ``T`` of
+    :func:`inner_unprepare`, ``M = d2`` (the target; the caller measures the ``(K2 - 1) d2``
+    junk qubits)."""
+    return Cost(inner_unprepare(p).toffoli, p.d2)
+
+
 def inner_signs() -> Cost:
     """``InnerSigns`` (spec 9.24 row): ``T = 0``, ``M = 0``."""
     return Cost(0)

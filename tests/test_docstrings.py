@@ -34,8 +34,9 @@ SECTIONS = (
     ("paper equations and the dfthcbe bloq", r"\*\*Paper and dfthcbe\.\*\*"),
     ("a minimal compiled example", r"\*\*Example\.\*\*"),
 )
-"""Spec 9.0's sections in order, each a bold heading at the start of a docstring line. QROAMRead
-and PhaseFixup, which also take dynamic arguments, title section 3 "Arguments"."""
+"""Spec 9.0's sections in order, each a bold heading at the start of a docstring line. QROAMRead,
+PhaseFixup and the two unprepares from outcomes, which also take dynamic arguments, title
+section 3 "Arguments"."""
 DOCUMENTS = ("architecture.md", "conventions.md", "environment.md", "limitations.md",
              "verification.md", "resources.md", "resources.json", "agents/HANDOFF.md",
              "agents/LEDGER.md")
@@ -58,11 +59,13 @@ CLASSES = operator_classes()
 
 
 def test_every_operator_is_audited():
-    """The 30 operators of dfthc.ops (spec 9.1 to 9.22) and the two of dfthc.qpe (9.23, 11.1)."""
-    assert len(CLASSES) == 32
+    """The 32 operators of dfthc.ops (spec 9.1 to 9.22, the two unprepares from outcomes of
+    spec 16, Q-1 variant (b), included) and the two of dfthc.qpe (9.23, 11.1)."""
+    assert len(CLASSES) == 34
     names = {cls.__name__ for cls in CLASSES.values()}
     assert {"PhaseGradientRotation", "QROAMRead", "DFTHCWalk", "ControlledDFTHCWalk",
-            "ControlledWalkPower", "QPERound"} <= names
+            "OuterUnprepareFromOutcomes", "InnerUnprepareFromOutcomes", "ControlledWalkPower",
+            "QPERound"} <= names
 
 
 @pytest.mark.parametrize("qualified_name", sorted(CLASSES))

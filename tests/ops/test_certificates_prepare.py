@@ -28,6 +28,12 @@ random complex amplitude on every value of ``x_o``, SF rows, one-body rows and f
 alike; any permutation or relative phase of the rows is caught. The tables are random, with a
 zero row (so zero erase masks) where the rank column is zero too; the shapes include dead
 positions, failed ``b`` and partly covered fix-up leaves.
+
+Prepare -> junk measurement -> unprepare from outcomes (spec 16, Q-1 variant (b)): the same
+shapes, with ``H`` and ``qp.measure(q, reset=True)`` on every junk qubit right after the prepare
+and the unprepare from those outcomes, its ``extra_onehot`` lent from the start of the measured
+junk register. The outcome vector ``xi`` ranges over the junk outcomes, measured first, and the
+target outcomes together: M = K d forced outcomes per run, M + 1 runs.
 """
 
 import numpy as np
@@ -35,7 +41,14 @@ import pennylane as qp
 import pytest
 from pennylane.ops import Conditional
 
-from dfthc.ops.prepare import InnerPrepare, InnerUnprepare, OuterPrepare, OuterUnprepare
+from dfthc.ops.prepare import (
+    InnerPrepare,
+    InnerUnprepare,
+    InnerUnprepareFromOutcomes,
+    OuterPrepare,
+    OuterUnprepare,
+    OuterUnprepareFromOutcomes,
+)
 from dfthc.params import H2_631G_TEST, H2_STO3G_TEST, lg
 from dfthc.testing.sparse_sim import (
     ForcedPolicy,
@@ -170,4 +183,47 @@ def test_inner_prepare_unprepare_certificate(name):
     wires, num_wires = layout(InnerPrepare.required_wires(N, R, B, C, b_k2, k2, ke2, s_u))
     certify(lambda: InnerPrepare(*args, **wires), lambda: InnerUnprepare(*args, **wires), wires,
             num_wires, inputs=wires["x_o"],
+            num_measured=2**k2 * (lg(B + 1) + b_k2 + 2 + lg(R)))
+
+
+def from_outcomes(prepare, unprepare, args, wires, junk, structure):
+    """``(prepare and junk measurement, unprepare from those outcomes)`` as two callables of one
+    round trip; the unprepare's ``extra_onehot`` is the start of the measured junk register."""
+    sizes = unprepare.required_wires(*structure)
+    registers = {name: wires[name] for name in sizes if name != "extra_onehot"}
+    registers["extra_onehot"] = wires[junk][:sizes["extra_onehot"]]
+    outcomes = []
+
+    def measure():
+        prepare(*args, **wires)
+        for wire in wires[junk]:
+            qp.H(wire)
+            outcomes.append(qp.measure(wire, reset=True))
+
+    return measure, lambda: unprepare(outcomes, *args, **registers)
+
+
+@pytest.mark.parametrize("name", list(OUTER))
+def test_outer_unprepare_from_outcomes_certificate(name):
+    X_o, b_k1, k1, ke1, s_u = OUTER[name]
+    args = (X_o, *random_outer_tables(X_o, b_k1), b_k1, k1, ke1, s_u)
+    sizes = OuterPrepare.required_wires(X_o, b_k1, k1, ke1, s_u)
+    sizes["phase_grad"] += 2 if name == "x-o-5-ke2" else 0
+    wires, num_wires = layout(sizes)
+    certify(*from_outcomes(OuterPrepare, OuterUnprepareFromOutcomes, args, wires, "junk_x_o",
+                           (X_o, b_k1, k1, ke1, s_u)),
+            wires, num_wires, inputs=[], num_measured=2**k1 * (lg(X_o) + b_k1))
+
+
+@pytest.mark.parametrize("name", list(INNER))
+def test_inner_unprepare_from_outcomes_certificate(name):
+    N, R, B, C, b_k2, k2, ke2, s_u = INNER[name]
+    zero_rows = (0,) if name.endswith("zero-row") else ()
+    args = (N, R, B, C, *random_inner_tables(R, B, C, b_k2, zero_rows=zero_rows), b_k2, k2, ke2,
+            s_u)
+    structure = (N, R, B, C, b_k2, k2, ke2, s_u)
+    wires, num_wires = layout(InnerPrepare.required_wires(*structure))
+    certify(*from_outcomes(InnerPrepare, InnerUnprepareFromOutcomes, args, wires, "junk_b",
+                           structure),
+            wires, num_wires, inputs=wires["x_o"],
             num_measured=2**k2 * (lg(B + 1) + b_k2 + 2 + lg(R)))
