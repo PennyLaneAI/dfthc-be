@@ -36,6 +36,7 @@ from dfthc.params import (
     lg,
     odd_part,
 )
+from dfthc.registers import WalkLayout
 from dfthc.testing.resources import chosen_rules, verbose_program
 from dfthc.testing.sparse_sim import ForcedPolicy, SparseSimulator
 from dfthc.testing.tape import decompose_for_simulation
@@ -280,8 +281,9 @@ def test_femoco_counts_on_the_closed_forms():
     the pair's A is its T less its Toffoli-only part 2 w_b + (K2 - 1) d2, as
     dfthc.costs.measured_and_uncomputes counts it. InnerSigns costs 0 (its A = 0 is the compiled
     count of test_inner_signs_counts_rules_and_device_level: it has three wires at every size).
-    The operator's own read and erase shapes give the same pieces, and its registers make spec
-    10.3's 455-wire inner group."""
+    The operator's own read and erase shapes give the same pieces, and its registers but x_o are
+    spec 10.3's 65-wire inner group and the 390 junk wires, which the walk's layout puts on the
+    angle wires (spec 10.2)."""
     p = FEMOCO54
     assert costs.inner_prepare(p) == costs.Cost(971)
     assert costs.inner_unprepare(p) == costs.Cost(217, 416)
@@ -304,7 +306,10 @@ def test_femoco_counts_on_the_closed_forms():
     assert sizes == {"x_o": 9, "b": 5, "succ_b": 1, "succ_work_b": 2, "sigma_0": 1, "m_b": 15,
                      "less_than_b": 1, "cmp_work_b": 14, "alt_b": 5, "keep_b": 15, "sgn": 1,
                      "d_sgn": 1, "r": 4, "junk_b": 390, "phase_grad": 7, "work": 16}
-    assert sum(sizes.values()) - sizes["x_o"] - sizes["phase_grad"] - sizes["work"] == 455
+    layout = WalkLayout.from_params(p)
+    assert sizes["junk_b"] == len(layout.junk_b) == 390
+    assert (sum(sizes.values()) - sizes["x_o"] - sizes["junk_b"] - sizes["phase_grad"]
+            - sizes["work"] == len(layout.inner) == 65)
 
 
 @pytest.mark.compiled
