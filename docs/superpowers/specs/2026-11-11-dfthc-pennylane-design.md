@@ -46,7 +46,7 @@ Correctness is established in three ways:
 At FeMoco-54, the exact cost formulas (§9.24, built on probed PennyLane primitive costs) give, per walk:
 - 9,793 Toffolis (9,795 for the controlled walk), against the paper's 9,997 and dfthcbe's 9,641;
 - 2,524 explicit erase measurements, and 11,199 physical measurements in total once the 8,675 measured AND uncomputes are included;
-- about 1,570 qubits, against the paper's 1,131.
+- 1,102 qubits, with each read's junk measured right after its prepare (Q-1 variant (b), §16; 1,564 if the junk is kept to the erase), against the paper's 1,131.
 
 Differences are explained in a generated report, not tuned away.
 
@@ -85,7 +85,7 @@ Not in scope for this phase:
 - computing DFTHC factorizations or the sum-of-squares shift from molecular integrals;
 - Clifford+T synthesis and T counts;
 - Qualtran-specific refinements: aligned-block pruning of unary iteration, heterogeneous target layouts;
-- deferred cost and qubit optimizations: early junk measurement (Q-1, open) and truncated unary iteration (Q-4, decided as a later optimization);
+- deferred cost optimizations: truncated unary iteration (Q-4, decided as a later optimization); the early junk measurement of Q-1 is in scope as variant (b) (§16);
 - spacetime or surface-code costing;
 - hardware execution;
 - simulating QPE on DFTHC instances.
@@ -226,14 +226,16 @@ The numbering follows dfthcbe's README.
 | 16 | Inverse Givens ladder | `GivensLadderDagger` |
 | 17 | Undo the swap, unbuild $\sigma$ | `SpinSwap`, `SpinMux` |
 | 18 | Erase angles, $[b \ne B]$, $G_0$, $G_1$ by measurement | `AngleErase` |
-| 19–22 | Undo 5–8; erase inner data by measurement | `InnerUnprepare` |
+| 19–22 | Undo 5–8; erase inner data by measurement (the junk was X-measured right after step 8) | `InnerUnprepareFromOutcomes`; `InnerUnprepare` measures the junk here instead (§16, Q-1 variant (b)) |
 | 23 | $\mathrm{REF}_{T_2}$ | `RefT2` |
-| 24–27 | Undo 1–4; erase outer data by measurement | `OuterUnprepare` |
+| 24–27 | Undo 1–4; erase outer data by measurement (the junk was X-measured right after step 4) | `OuterUnprepareFromOutcomes`; `OuterUnprepare` measures the junk here instead (§16, Q-1 variant (b)) |
 | 28 | $\mathrm{REF}_{\mathcal A \cup \mathcal B}$ | `RefAB` |
 
 Steps 10–18 form `InnerSelect`. Steps 5–22 run twice per block encoding:
-1. Before $\mathrm{REF}_{T_2}$: `InnerPrepare`, `InnerSigns`, `InnerSelect`, `InnerUnprepare`.
-2. After it: `InnerPrepare`, `InnerSelectDagger`, `InnerSigns`, `InnerUnprepare`.
+1. Before $\mathrm{REF}_{T_2}$: `InnerPrepare`, the X measurement of `junk_b`, `InnerSigns`, `InnerSelect`, `InnerUnprepareFromOutcomes`.
+2. After it: `InnerPrepare`, the X measurement of `junk_b`, `InnerSelectDagger`, `InnerSigns`, `InnerUnprepareFromOutcomes`.
+
+The block encoding X-measures `junk_x_o` right after step 4 and `junk_b` right after each step 8, as the paper does (App. B.7.2, steps 2 and 4), and passes each round's outcomes to its unprepare from outcomes (§16, Q-1 variant (b)). The baseline `OuterUnprepare` and `InnerUnprepare` keep the junk to their erase; the walk does not call them.
 
 The adjoint of `InnerSelect`, the operator `InnerSelectDagger`, is the same circuit with the adjoint Majorana gate, because the Majorana gate is not Hermitian. Every adjoint and controlled form of a composite is an operator class of its own (§4.4 item 13, §7.4 rule 6).
 
@@ -266,7 +268,7 @@ Two effects drive the gaps:
 - **Table-read construction, about +5,500.** PennyLane's `QROM` returns its work wires clean, so its select-swap variant runs two selects and four swap networks.
   - At 324 × 24 bits the solver therefore picks plain unary iteration: 326 Toffolis, against the paper's 177 for read, test and swap together.
   - The combined-address inner read costs about 2,860 against the paper's 860.
-  - The paper instead keeps the swap junk until a measured erase.
+  - The paper instead erases the swap junk by measurement (X measurements, which its prepares take early, in the prepare, and a phase fix-up later), so it never undoes the swap network.
 
 Option 2 is also not viable for other reasons:
 - `UniformPrep` and `AliasSampling` need arbitrary-angle rotations, so they do not compile to the gate set.
@@ -279,7 +281,7 @@ Remedying Option 2 converges on Option 1. Option 3 re-implements primitives Penn
 ### 4.3 Decision
 
 **Option 1, with a paper-faithful `QROAMRead`** (user decision, 2026-11-11):
-- The read keeps its swap junk on caller-provided wires until the measured erase.
+- The read leaves its swap junk on caller-provided wires for a measured erase and never undoes the swap network: the caller keeps the junk until `QROAMErase`, or X-measures it with reset after the read, before anything else acts on the junk wires, and passes the outcomes, in wire order, to the erase of the target (Q-1 variant (b), §16). The walk measures each alias read's junk right after the enclosing prepare (steps 4 and 8), before any angle load; the comparator and the swaps between the read and that point do not touch the junk, so this equals measuring right after the read.
 - It iterates only over rows that hold data: unary iteration over $x_o$, the swap network over $b$.
 - Qualtran-specific refinements (aligned-block pruning, heterogeneous target layouts) stay deferred.
 
@@ -291,7 +293,7 @@ Remedying Option 2 converges on Option 1. Option 3 re-implements primitives Penn
 4. **Structure-determining data are compilable arguments** ([catalyst#3172](https://github.com/PennyLaneAI/catalyst/issues/3172)). If compile time at FeMoco size is too high, the remedies of §16 K-1 keep the walk a single compiled program. Otherwise work stops and is escalated.
 5. **Bodies of operators that are auto-adjointed contain no `qp.for_loop`/`qp.cond`** ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)). Since G0 the operators with loops, `QROAMRead` (item 12), `ControlledWalkPower` and its toy twin `ToyControlledWalkPower` (§11.4), are never adjointed or controlled, by construction (item 13).
 6. **Rule selection is asserted.** Tests use measurement-count signatures and, where the output is capturable, the verbose rule listing of `catalyst.passes.graph_decomposition`. Conditionals carry `qp.hint` branch probabilities.
-7. **Junk persists from read to erase.** The qubit count therefore exceeds the paper's (§10.3). An alternative with no Toffoli penalty stays open (Q-1, §16). The user decided to settle it after the Phase 0 probe K-10 and the Phase 4 resource report, preferring the argument variant if it works.
+7. **Junk persists from read to erase in the baseline; Q-1 variant (b) measures it early.** With the junk kept, the qubit count exceeds the paper's (§10.3). Q-1 variant (b) (§16; the working choice of 2026-11-15, after K-10 passed, as the user preferred) X-measures each read's junk right after its prepare and passes the outcomes to the unprepares from outcomes, with no Toffoli penalty; the junk then shares the angle wires: 1,102 qubits at FeMoco-54, against the paper's 1,131 (§10.3).
 8. **Unary iteration is exact, not truncated** (decided by the user, §16 Q-4). Truncated iteration and aligned-block pruning are later optimizations.
    - *Choice.* A leaf flag fires only for in-range addresses, so out-of-range addresses (failed uniform preparations, one-body rows in the inner read) load nothing. The behaviour on every computational address is specified (§9.3), and failed $b$ branches act as $+I$ (§8.5).
    - *Alternative.* Truncated iteration, as in the Babbush et al. walk, Qualtran and dfthcbe. It routes some out-of-range addresses onto live leaves.
@@ -584,15 +586,15 @@ Each rule exists because of a confirmed limitation (§14).
 3. **Arguments.**
    - Every argument that determines circuit structure is in `compilable_argnames`: sizes, live ranges, block bits, tables. Rules are compiled once against abstract inputs, and only compilable values are concrete inside them ([catalyst#3172](https://github.com/PennyLaneAI/catalyst/issues/3172)).
    - `static_argnames` are not used, because an operator cannot mix static and compilable arguments.
-   - `dynamic_argnames` are used only for runtime data: the parity bits of `PhaseFixup`, the earlier measured bits of `QPERound`, and the per-leaf table words of `QROAMRead` (§9.3), which its callers build from their compilable tables.
+   - `dynamic_argnames` are used only for runtime data: the parity bits of `PhaseFixup`, the earlier measured bits of `QPERound`, the per-leaf table words of `QROAMRead` (§9.3), which its callers build from their compilable tables, and the junk outcomes of `OuterUnprepareFromOutcomes` and `InnerUnprepareFromOutcomes` (§9.7, §9.8; §16, Q-1 variant (b)). Measurement outcomes are a bool array under capture and an object array of `MeasurementValue`s in tape mode, so a resource key that declares them takes its dtype from the mode, computed before `resource_key` pauses capture (`dfthc.ops.prepare.abstract_junk_outcomes`).
 4. **Control flow.**
    - Bodies of operators that are auto-adjointed contain no `qp.for_loop` or `qp.cond`, because adjoint lowering can crash on nested control flow ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)). Loops are unrolled in Python with static bounds, which also keeps `qp.analyze` counts concrete.
-   - `qp.cond` on mid-circuit measurement outcomes appears only inside erase operators and the QPE wrapper.
+   - `qp.cond` on mid-circuit measurement outcomes appears only inside erase operators, the unprepares from outcomes (§9.7, §9.8) and the QPE wrapper.
    - `qp.for_loop` appears in three operators, all never adjointed and never controlled: `QROAMRead`, whose per-leaf loads also carry `qp.cond` on table bits (§9.3, K-1 lever P), `ControlledWalkPower` and its toy twin `ToyControlledWalkPower` (§11.4). The angle loads reach their loops through `QROAMRead`; the erases have none. Static bounds keep the counts concrete.
    - "Never adjointed or controlled" holds by construction since G0: no program wraps a dfthc composite in `qp.adjoint` or `qp.ctrl` (rule 6), so Catalyst synthesizes no distributed candidate of a composite, nor of a looped operator inside one. The inventory test (§12.1, T6) checks this per program.
    - PennyLane primitives that we use under an adjoint (`SemiAdder`, the comparators) are covered by Phase 0 capability tests (K-7).
 5. **Measurement-based uncompute.**
-   - It lives only in dedicated erase operators (`QROAMErase`, `AngleErase`) and in the base rules of the unprepare classes `OuterUnprepare` and `InnerUnprepare` (§9.7, §9.8), which call `QROAMErase`. Their resource functions declare the measurements.
+   - It lives only in dedicated erase operators (`QROAMErase`, `AngleErase`), in the base rules of the unprepare classes `OuterUnprepare` and `InnerUnprepare` (§9.7, §9.8), which call `QROAMErase`, in the base rules of their siblings `OuterUnprepareFromOutcomes` and `InnerUnprepareFromOutcomes`, which measure the read's target and apply the fix-up themselves, and in the block encodings' rules, which X-measure each read's junk right after its prepare (§9.21; §16, Q-1 variant (b)). Their resource functions declare the measurements.
    - An operator that contains a measurement is never placed under `qp.ctrl`, because Catalyst rejects measurements in control regions.
 6. **Adjoint and controlled forms of composites are operator classes (G0, K-1 lever X).**
    - Every adjoint or controlled form of a dfthc composite that a program uses is an `Operator2` of its own whose base rule is the construction: `OuterUnprepare`, `InnerUnprepare`, `InnerSelectDagger`, `GivensLadderDagger`, `ControlledRefT2`, `ControlledRefAB`, `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk` and `ControlledToyWalk` (§7.5). No rule and no program calls `qp.adjoint` or `qp.ctrl` on a dfthc composite.
@@ -775,7 +777,7 @@ Only the walk-frame offset is involved; the physical-frame offset never enters $
 
 ### 9.0 Common conventions for every operator
 
-- **Class.** A subclass of `pennylane.core.Operator2` with `wire_argnames`, `compilable_argnames` and, only for `PhaseFixup`, `QPERound` and `QROAMRead`, `dynamic_argnames`.
+- **Class.** A subclass of `pennylane.core.Operator2` with `wire_argnames`, `compilable_argnames` and, only for `PhaseFixup`, `QPERound`, `QROAMRead`, `OuterUnprepareFromOutcomes` and `InnerUnprepareFromOutcomes`, `dynamic_argnames`.
 - **Constructor.** It validates every wire-register length against `required_wires(...)` and every compilable argument against its documented domain, raising `ValueError` with the expected value otherwise.
 - **Docstring template.** Sections in this order:
   1. purpose and mathematical action;
@@ -828,7 +830,7 @@ The paper's QROAM read for steps 2 and 6. It is also the engine of steps 10 and 
 **Background.**
 - *Unary iteration* (Babbush et al. 2018) steps through address values with a ladder of AND gates, so that a flag qubit is 1 exactly when the address register holds the current value. It costs about one Toffoli per visited value.
 - A *QROAM read* (Berry et al. 2019) loads a whole block of $K$ table entries at each visited value, then moves the requested entry into the output with a *swap network* (a "select-swap" lookup). This trades extra qubits for fewer Toffolis.
-- In the paper's variant, the $K - 1$ entries that were not requested stay on extra qubits as *junk*. A later measurement-based erase clears them, so the swap network never has to be undone.
+- In the paper's variant, the $K - 1$ entries that were not requested stay on extra qubits as *junk*. A measurement-based erase clears them, so the swap network never has to be undone: X measurements, either at the erase or early, then a phase fix-up at the erase. A caller may measure the junk right after the read; the paper's prepares measure it early, in the prepare, and the walk, under Q-1 variant (b) (§16), right after each enclosing prepare (steps 4 and 8), before any angle load.
 - The unary-iteration helper `dfthc.ops.unary` is a Python function that emits operators inside rules. It is an implementation technique rather than a building block, so it is not an `Operator2`. It is tested through `QROAMRead` with $k = 0$ and through `PhaseFixup`. We do not use PennyLane's `Select` (§14, L-13).
 
 **Address model.**
@@ -857,7 +859,7 @@ The *loaded set* is the set of addresses in visited blocks (the first two rows).
 | Post | As in Action. `work` is $\lvert 0\rangle$, the address is unchanged. |
 | Rule | 1. Nested unary iteration over live blocks: the `dfthc.ops.unary` helper builds a `TemporaryAND` ladder whose uncompute is measured (`Adjoint(TemporaryAND)`). 2. At each block leaf, one `qp.for_loop` over its $K\cdot$`width` bits loads all $K$ entries into `target ‖ junk`: iteration $t$ takes position $p = \lfloor t/\text{width}\rfloor$ and bit $i = t \bmod \text{width}$ and applies a CNOT from the leaf flag onto `(target ‖ junk)`$[p\cdot\text{width} + i]$, conditioned on that bit of `leaf_words` (an `X` when the whole address is low and there is no enable, so no flag exists). No conditional surrounds the loop. 3. A swap-with-zero network on the low $k$ address bits moves the selected entry into `target`, using $(K-1)\cdot$`width` exact `CSWAP`s. |
 | Classical helpers | `QROAMRead.loaded_bits(table, address)` (defined above), checked against simulation for every computational address of small instances; `leaf_words_from_table`, `leaf_blocks` and `leaf_words_shape` build and describe the dynamic array. |
-| Adjoint and control | Never: the body has loops and data conditionals (§7.4 rule 4), and no adjoint or controlled form of a composite that contains the read is ever requested (§7.4 rule 6). The walk erases with `QROAMErase`. |
+| Adjoint and control | Never: the body has loops and data conditionals (§7.4 rule 4), and no adjoint or controlled form of a composite that contains the read is ever requested (§7.4 rule 6). Its data is erased by `QROAMErase` for a read whose junk is kept (the baseline unprepares, §9.7 and §9.8), by the unprepares from outcomes through `emit_erase_from_outcomes` for the walk's alias reads (§16, Q-1 variant (b)), and by `AngleErase` for the angle reads (§9.17). |
 | Cost | $T = U$(visited block ranges, $c$) $+ (2^k - 1)\cdot$`width`, with $U$ the exact unary-iteration count of §9.24 and $c = 1$ iff there is an enable control. $M = 0$. At FeMoco-54: outer $84 + 72 = 156$; inner $543 + 390 = 933$. The rule declares $K\cdot$`width` load CNOTs per leaf, or X gates for the flagless leaf (the whole address low and no enable), every position and bit with padding included, and is registered with `exact=False`: the CNOT count (the X count for the flagless leaf) is an upper bound, and `qp.analyze` reports the same bound, because it counts every unhinted load conditional. T, M and A do not depend on the data: T4 asserts them exactly and asserts the analyzed CNOT count, or X count for the flagless leaf, equal to the declared one. At FeMoco-54 the four reads of a walk have $81 + 540 + 54 + 270 = 945$ leaves. |
 
 **Known deltas against dfthcbe (deferred refinements).**
@@ -869,7 +871,7 @@ The *loaded set* is the set of addresses in visited blocks (the first two rows).
 
 `PhaseFixup` is the standalone operator for the erase phase fixup. It is validated in isolation and used by callers whose parities are an array.
 
-Its rule body is the helper `dfthc.ops.qroam.emit_phase_fixup`. `QROAMErase` and `AngleErase` call that helper directly with their measurement-derived parities. They do so on architectural grounds: the parities never leave the rule that measured them, so no operator boundary carries measurement data, and the erase is a single node in the graph and in the resource report.
+Its rule body is the helper `dfthc.ops.qroam.emit_phase_fixup`. `QROAMErase`, `AngleErase` and the unprepares from outcomes (through `emit_erase_from_outcomes`, §16) call that helper directly with their measurement-derived parities. They do so on architectural grounds: the parities never leave the rule that computes them, and the erase is a single node in the graph and in the resource report. The one operator boundary that carries measurement data is the junk outcomes' dynamic array, from the block encoding's rule into an unprepare from outcomes (K-10 part 2; §16, Q-1 variant (b)); the parities are still computed in the rule that applies the fix-up.
 
 Passing measurement values as dynamic `Operator2` arguments is itself possible. On 2026-11-11 a single `MeasurementValue`, and a list containing one, worked as dynamic arguments in tape mode, and a single measured value compiled under capture. Whether the packed parity arrays used here work in both modes, with exact `qp.analyze` counts, is decided by the Phase 0 probe K-10. That probe also decides Q-1's variant and `QPERound` (§11.1).
 
@@ -893,9 +895,9 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 
 | | |
 | --- | --- |
-| Wires | Those of the matching read (`address`, `target`, `junk`, `control`), plus `work`, plus `extra_onehot` ($\max(2^{\mathrm{ob}} - K\cdot$`width`$, 0)$ wires; 0 in every walk instance) |
+| Wires | Those of the matching read (`address`, `target`, `junk`, `control`), plus `work`, plus `extra_onehot` ($\max(2^{\mathrm{ob}} - K\cdot$`width`$, 0)$ wires; 0 wherever the baseline unprepares call it, whose constructors check that the one-hot fits; the walk calls no `QROAMErase` under Q-1 variant (b), §16) |
 | Compilable | The read's arguments, plus the fixup's `onehot_bits` |
-| Pre | `target ‖ junk` hold exactly what the matching read produced for the current address. Operations between read and erase may act on the address and other registers, provided they preserve this. In the walk, they act on the address only as controls or as permutations that are undone before the erase. |
+| Pre | `target ‖ junk` hold exactly what the matching read produced for the current address. Operations between read and erase may act on the address and other registers, provided they preserve this. In the baseline unprepares (§9.7, §9.8), they act on the address only as controls or as permutations that are undone before the erase. A caller that X-measured the junk with reset after the read, before anything else acted on it, erases the target with `emit_erase_from_outcomes` and the junk's outcomes in wire order instead (§16, Q-1 variant (b)). The walk does so for its alias reads, measuring right after each enclosing prepare (steps 4 and 8); the comparator and the swaps in between do not touch the junk. |
 | Post | `target`, `junk` and `work` are $\lvert 0\rangle$. The address state equals its pre-read state exactly, for every measurement outcome. |
 | Rule | 1. Apply `H`, then `qp.measure(q, reset=True)`, to every qubit of `target ‖ junk`, giving outcomes $\xi$. 2. Compute the parities $f(a) = \xi\cdot g(a) \bmod 2$, with $g(a) =$ `QROAMRead.loaded_bits(table, a)`, via `dfthc.compile.mcm_parities`, for every address of the read's loaded set. That includes dead positions of visited blocks, whose junk is not zero. Outside the loaded set $g(a) = 0$, so no fixup is needed there. 3. Apply the fixup with `emit_phase_fixup(f, ...)` (§9.4) over the loaded set, using the freshly reset `target ‖ junk` wires as its one-hot register. |
 | Adjoint and control | Never: its rule contains measurements, which Catalyst excludes from auto-derived adjoints and controls anyway |
@@ -921,7 +923,8 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Base rule | 1. `FlaggedUniformPrep(L=X_o)` on (`x_o`, `succ_x_o`). 2. `H` on `m_x_o` and `sigma_1`. 3. `QROAMRead` of (alt ‖ keep) over $x_o \in [0, X_o)$ with $k_1$ block bits; its `leaf_words` are built in the rule from the compilable `alt` and `keep`. 4. `LeftQuantumComparator(keep_x_o, m_x_o, less_than_x_o, cmp_work_x_o, "<=")` writes $[\mathrm{keep} \le m]$. 5. $w_x$ `CSWAP`s swap `alt_x_o` and `x_o`, controlled by `less_than_x_o`. |
 | Post | On $\mathrm{succ}_{x_o} = 1$: $e^{i\varphi}\sqrt{1 - P_{\mathrm{fail}}(X_o, s_u)}\,\sum_x \sqrt{\tilde p(x)}\lvert x\rangle\lvert\mathrm{garb}(x)\rangle \otimes \lvert +\rangle_{\sigma_1}$, with $\tilde p$ the $b_{k1}$-bit alias distribution, $P_{\mathrm{fail}}(X_o, s_u)$ = `uniform_failure_probability(X_o, s_u)` and $e^{i\varphi}$ the one phase of `FlaggedUniformPrep`'s $\mathrm{succ} = 1$ amplitudes ($\varphi = 0$ when $X_o$ is a power of two; $\varphi = 2.207$ at FeMoco-54). The read, the comparator and the swaps permute basis states, so every basis term has the amplitude $e^{i\varphi}\sqrt{(1 - P_{\mathrm{fail}}(X_o, s_u))/X_o}\,/\sqrt{2^{b_{k1}+1}}$. The failure part, of weight $P_{\mathrm{fail}}(X_o, s_u)$ and with $\mathrm{succ}_{x_o} = 0$, comes from drawn values $x_0 \ge X_o$: there the selected target entry `alt_x_o ‖ keep_x_o` is zero (the junk may hold other entries of a visited block), so $\mathrm{less\_than}_{x_o} = 1$ and the swap leaves $x_o = 0$ and $x_0$ in `alt_x_o`. The walk does not see the phase (the unprepare is the exact inverse); the factor enters only through $\tilde\Lambda$ (§8.5). |
 | `OuterUnprepare` (own class, pinned base rule; same wires and compilable arguments as `OuterPrepare`) | `CSWAP`s (self-inverse), adjoint comparator (measured uncompute; also cleans `cmp_work_x_o`), `QROAMErase`, `H` on `m_x_o` and `sigma_1`, adjoint `FlaggedUniformPrep` |
-| Cost | Prepare $T = F(X_o) + T_{\mathrm{read,out}} + b_{k1} + w_x$; unprepare $T = w_x + T_{\mathrm{erase,out}} + F^\dagger(X_o)$, $M = K_1 d_1$ (§9.24). At FeMoco-54: prepare $30 + 156 + 15 + 9 = 210$; unprepare $9 + 36 + 24 = 69$, $M = 96$. |
+| `OuterUnprepareFromOutcomes` (own class, pinned base rule; §16, Q-1 variant (b); the walk's outer unprepare) | Wires: `OuterPrepare`'s except `junk_x_o`, then `extra_onehot` ($\max(2^{k_{e1}} - d_1, 0)$ wires in $\lvert 0\rangle$, which the block encoding lends from the start of the measured junk wires; 0 at FeMoco-54). Compilable: `OuterPrepare`'s. Dynamic: `junk_outcomes`, the $(K_1 - 1) d_1$ outcomes of the junk measurement right after the prepare, in the junk register's wire order (the slots of `QROAMRead.junk_layout`). Base rule: the `CSWAP`s, the adjoint comparator, `H` and `qp.measure(q, reset=True)` on `alt_x_o ‖ keep_x_o`, the parities of the target and junk outcomes against the loaded bits (masks built in the rule from the compilable tables) and `emit_phase_fixup` over the loaded set with the reset target ‖ `extra_onehot` as its one-hot register (`dfthc.ops.qroam.emit_erase_from_outcomes`), `H` on `m_x_o` and `sigma_1`, the adjoint `FlaggedUniformPrep`. Never adjointed or controlled |
+| Cost | Prepare $T = F(X_o) + T_{\mathrm{read,out}} + b_{k1} + w_x$; unprepare $T = w_x + T_{\mathrm{erase,out}} + F^\dagger(X_o)$, $M = K_1 d_1$ (§9.24). At FeMoco-54: prepare $30 + 156 + 15 + 9 = 210$; unprepare $9 + 36 + 24 = 69$, $M = 96$; `OuterUnprepareFromOutcomes` the same $T$, $M = d_1 = 24$ (the block encoding measures the other $(K_1 - 1) d_1 = 72$). |
 
 ### 9.8 `InnerPrepare` (steps 5–8) and `InnerUnprepare` (steps 19–22)
 
@@ -932,7 +935,8 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Base rule | 1. `FlaggedUniformPrep(L=B+1)` on (`b`, `succ_b`). 2. `H` on `sigma_0` and `m_b`. 3. `QROAMRead` with rows $x_o \in [0, RC)$, block axis $b \in [0, B+1)$ with $k_2$ block bits, and entries (alt, keep, sgn, d_sgn, $\lfloor x_o/C\rfloor$); its `leaf_words` are built in the rule from the compilable inner tables. 4. `LeftQuantumComparator(keep_b, m_b, less_than_b, cmp_work_b, "<=")`. 5. $w_b$ `CSWAP`s for alt and `b`. One-body rows load nothing, and the uniform preparation of $b$ runs unconditionally (as in dfthcbe). |
 | Post | `x_o` is unchanged. On an SF row $x_o = x < RC$ the $\mathrm{succ}_b = 1$ part is $e^{i\varphi_b}\sqrt{1 - P_{\mathrm{fail}}(B + 1, s_u)}\,\sum_b \sqrt{\tilde q_x(b)}\lvert b\rangle\lvert\mathrm{garb}_{x,b}\rangle \otimes \lvert +\rangle_{\sigma_0}$, with $\tilde q_x$ the $b_{k2}$-bit alias distribution of row $x$, $P_{\mathrm{fail}}(B + 1, s_u)$ = `uniform_failure_probability(B + 1, s_u)` and $e^{i\varphi_b}$ the success phase of `FlaggedUniformPrep` ($\varphi_b = 2.051$ at FeMoco-54); `sgn`, `d_sgn` and $r = \lfloor x/C\rfloor$ hold the drawn entry's columns, and every basis term has the uniform preparation's amplitude for the drawn $b_0$ over $\sqrt{2^{b_{k2}+1}}$. Where the selected target entry is zero (one-body rows, failed $x_o$, and failed $b_0 > B$, which have $\mathrm{succ}_b = 0$; the junk may hold other entries of a visited block): $\mathrm{less\_than}_b = 1$, the swap leaves $b = 0$ and $b_0$ in `alt_b`, and `sgn` $=$ `d_sgn` $= r = 0$ (§8.5). |
 | `InnerUnprepare` (own class, pinned base rule; same wires and compilable arguments as `InnerPrepare`) | `CSWAP`s, adjoint comparator (measured uncompute), `QROAMErase` (one-hot over the low $k_{e2}$ bits of $x_o$ and all bits of $b$), `H`s, adjoint `FlaggedUniformPrep` |
-| Cost | Prepare $T = F(B+1) + T_{\mathrm{read,in}} + b_{k2} + w_b$; unprepare $T = w_b + T_{\mathrm{erase,in}} + F^\dagger(B+1)$, $M = K_2 d_2$ (§9.24). At FeMoco-54: prepare $18 + 933 + 15 + 5 = 971$; unprepare $5 + 196 + 16 = 217$, $M = 416$. |
+| `InnerUnprepareFromOutcomes` (own class, pinned base rule; §16, Q-1 variant (b); the walk's inner unprepare) | Wires: `InnerPrepare`'s except `junk_b`, then `extra_onehot` ($\max(2^{k_{e2} + w_b} - d_2, 0)$ wires in $\lvert 0\rangle$, which the block encoding lends from the start of the measured junk wires; 102 at FeMoco-54, whose one-hot needs 128 wires and whose target has 26). Compilable: `InnerPrepare`'s. Dynamic: `junk_outcomes`, the $(K_2 - 1) d_2$ outcomes of the junk measurement right after the prepare, in the junk register's wire order. Base rule: as `OuterUnprepareFromOutcomes`'s on the inner registers (`H` and `qp.measure(q, reset=True)` on `alt_b ‖ keep_b ‖ sgn ‖ d_sgn ‖ r`; one-hot over the low $k_{e2}$ bits of $x_o$ and all bits of $b$). Never adjointed or controlled |
+| Cost | Prepare $T = F(B+1) + T_{\mathrm{read,in}} + b_{k2} + w_b$; unprepare $T = w_b + T_{\mathrm{erase,in}} + F^\dagger(B+1)$, $M = K_2 d_2$ (§9.24). At FeMoco-54: prepare $18 + 933 + 15 + 5 = 971$; unprepare $5 + 196 + 16 = 217$, $M = 416$; `InnerUnprepareFromOutcomes` the same $T$, $M = d_2 = 26$ (the block encoding measures the other $(K_2 - 1) d_2 = 390$). |
 
 ### 9.9 `InnerSigns` (step 9)
 
@@ -1039,13 +1043,13 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 
 | | |
 | --- | --- |
-| Wires | Grouped: `outer`, `inner`, `select`, `system`, `phase_grad`, `work`, exactly `WalkLayout`'s groups (§10; `required_wires(params, tables)` gives their sizes). The rule splits them once with `WalkLayout.split_group` and gives each child the registers its §9 table names and the prefix of `work` of its need; the prepares take the whole `phase_grad` |
+| Wires | Grouped: `outer`, `inner`, `select`, `system`, `phase_grad`, `work`, exactly `WalkLayout`'s groups (§10; `required_wires(params, tables)` gives their sizes); the junk registers are the start of `select` (§10.2). The rule splits them once with `WalkLayout.split_group` and `WalkLayout.split_junk` and gives each child the registers its §9 table names and the prefix of `work` of its need; the prepares take the whole `phase_grad`; each unprepare from outcomes gets the first `extra_onehot` wires of its junk register |
 | Compilable | `params` = `WalkParams.as_compilable()` and `tables` = `WalkTables.as_compilable()`, rebuilt in the rules with `from_compilable`; the constructor checks them against the children's domains and that `WalkLayout.work_size` covers every child of the walk |
-| Base rule | `OuterPrepare`; [`InnerPrepare`, `InnerSigns`, `InnerSelect`, `InnerUnprepare`]; `RefT2`; [`InnerPrepare`, `InnerSelectDagger`, `InnerSigns`, `InnerUnprepare`]; `OuterUnprepare` |
+| Base rule | `OuterPrepare`, X measurement of `junk_x_o`; [`InnerPrepare`, X measurement of `junk_b`, `InnerSigns`, `InnerSelect`, `InnerUnprepareFromOutcomes`]; `RefT2`; [`InnerPrepare`, X measurement of `junk_b`, `InnerSelectDagger`, `InnerSigns`, `InnerUnprepareFromOutcomes`]; `OuterUnprepareFromOutcomes` (Q-1 variant (b), §16: an X measurement is `H` and `qp.measure(q, reset=True)` on every junk wire; each unprepare from outcomes takes the outcomes of the latest measurement of its junk register) |
 | Action | $\langle 0_{\mathrm{anc}}\vert\mathrm{BE}\vert 0_{\mathrm{anc}}\rangle = \tilde H_{\mathrm{SA}}/\tilde\Lambda - I$ |
 | Adjoint | Not provided; not used |
 | Control | The class `ControlledDFTHCBlockEncoding(params, tables, control, outer, inner, select, system, phase_grad, work)`: the same sequence with `ControlledRefT2` in place of `RefT2`. There is no `C(DFTHCBlockEncoding)` rule (§7.4 rule 6) |
-| Cost | $T = T_{\mathrm{out}} + T_{\mathrm{out}}^\dagger + 2\,(T_{\mathrm{in}} + T_{\mathrm{sel}} + T_{\mathrm{in}}^\dagger) + T_{\mathrm{RefT2}}$ (`InnerSigns` costs 0), $M = K_1 d_1 + 2\,(K_2 d_2 + (N-1)b_{\mathrm{rot}} + 3)$; controlled $T + 1$. At FeMoco-54: $T = 279 + 2\cdot 4725 + 20 = 9{,}749$, $M = 2524$ explicit erase measurements. |
+| Cost | $T = T_{\mathrm{out}} + T_{\mathrm{out}}^\dagger + 2\,(T_{\mathrm{in}} + T_{\mathrm{sel}} + T_{\mathrm{in}}^\dagger) + T_{\mathrm{RefT2}}$ (`InnerSigns` costs 0), $M = K_1 d_1 + 2\,(K_2 d_2 + (N-1)b_{\mathrm{rot}} + 3)$; controlled $T + 1$. At FeMoco-54: $T = 279 + 2\cdot 4725 + 20 = 9{,}749$, $M = 2524$ explicit erase measurements, $852 = 72 + 2 \cdot 390$ of them the rule's own junk measurements (`dfthc.costs.junk_measurements`). |
 
 ### 9.22 `DFTHCWalk` (steps 1–28)
 
@@ -1103,6 +1107,8 @@ $$U(lo, hi, n, c) = \sum_{m=1}^{n}\Big(\big\lfloor (hi - 1)/2^m \big\rfloor - \b
 | `ZeroReflection` ($n_w$ wires) / controlled | $\max(n_w - 2, 0)$ / $n_w - 1$ | 0 |
 | `OuterPrepare` / `OuterUnprepare` | $F(X_o) + T_{\mathrm{read,out}} + b_{k1} + w_x$ / $w_x + T_{\mathrm{erase,out}} + F^\dagger(X_o)$ | 0 / $K_1 d_1$ |
 | `InnerPrepare` / `InnerUnprepare` | $F(B+1) + T_{\mathrm{read,in}} + b_{k2} + w_b$ / $w_b + T_{\mathrm{erase,in}} + F^\dagger(B+1)$ | 0 / $K_2 d_2$ |
+| `OuterUnprepareFromOutcomes` / `InnerUnprepareFromOutcomes` | those of `OuterUnprepare` / `InnerUnprepare` | $d_1$ / $d_2$ |
+| junk measurements in `DFTHCBlockEncoding`'s rule (Q-1 variant (b)) | 0 | $(K_1 - 1)d_1 + 2(K_2 - 1)d_2$ |
 | `InnerSigns` | 0 | 0 |
 | `TailAngleLoad` | $U(RC, X_o, w_x, 0)$ | 0 |
 | `SFAngleLoad` | $U(0, R, w_r, 1) + R\, U(0, B, w_b, 1)$ | 0 |
@@ -1143,6 +1149,7 @@ The controlled walk has the same $T_{\mathrm{Toffoli}}$, because each of its two
 | $T_{\mathrm{read,out}}$; $T_{\mathrm{read,in}}$ | 156; 933 |
 | $T_{\mathrm{erase,out}}$; $T_{\mathrm{erase,in}}$ | 36; 196 |
 | `OuterPrepare` / `OuterUnprepare`; `InnerPrepare` / `InnerUnprepare` | 210 / 69; 971 / 217 |
+| `OuterUnprepareFromOutcomes` / `InnerUnprepareFromOutcomes` ($M$); junk measurements per walk | 69 / 217 ($M = 24$ / 26); 852 ($72 + 2 \cdot 390$) |
 | `GivensLadder` and `GivensLadderDagger`; `AngleErase`; `InnerSelect` and `InnerSelectDagger` | 1,484; 102; 3,537 |
 | `RefT2`; `RefAB` | 20; 44 |
 | Block encoding; walk; controlled walk | 9,749; 9,793; 9,795 |
@@ -1160,9 +1167,9 @@ The controlled walk has the same $T_{\mathrm{Toffoli}}$, because each of its two
 | Group | Registers, in order |
 | --- | --- |
 | `system` | `psi_up` ($N$), `psi_dn` ($N$) |
-| `outer` | `x_o`, `succ_x_o`, `succ_work_x_o`, `sigma_1`, `m_x_o`, `less_than_x_o`, `cmp_work_x_o`, `alt_x_o`, `keep_x_o`, `junk_x_o` |
-| `inner` | `b`, `succ_b`, `succ_work_b`, `sigma_0`, `m_b`, `less_than_b`, `cmp_work_b`, `alt_b`, `keep_b`, `sgn`, `d_sgn`, `r`, `junk_b` |
-| `select` | `angles`, `G0`, `G1`, `b_neq_B`, `sg` |
+| `outer` | `x_o`, `succ_x_o`, `succ_work_x_o`, `sigma_1`, `m_x_o`, `less_than_x_o`, `cmp_work_x_o`, `alt_x_o`, `keep_x_o` |
+| `inner` | `b`, `succ_b`, `succ_work_b`, `sigma_0`, `m_b`, `less_than_b`, `cmp_work_b`, `alt_b`, `keep_b`, `sgn`, `d_sgn`, `r` |
+| `select` | `angles`, `junk_overflow`, `G0`, `G1`, `b_neq_B`, `sg`; the junk registers `junk_x_o` and `junk_b` are the first wires of `angles ‖ junk_overflow` (§10.2) |
 | `phase_grad` | $b_{\mathrm{grad}}$ wires |
 | `work` | Shared pool, sized as the maximum, over all steps, of the work that the active operator requires |
 | `qpe_control`, `qpe_grad` | 1 wire and `qpe_bits` wires, only if `qpe_bits > 0` (§11.1) |
@@ -1171,26 +1178,27 @@ The controlled walk has the same $T_{\mathrm{Toffoli}}$, because each of its two
 
 - Sequential operators share `work`. Each one returns it in $\lvert 0\rangle$.
 - The comparator work registers (`succ_work_*`, `cmp_work_*`) are dirty from prepare to unprepare. They belong to their group, never to `work`.
-- `QROAMErase` and `AngleErase` reuse their own freshly reset target, junk and angle wires as the one-hot register.
-- No other aliasing exists. Tests check that groups do not overlap and that every operator call receives exactly `required_wires(...)`.
+- `QROAMErase` and `AngleErase` reuse their own freshly reset target, junk and angle wires as the one-hot register; the unprepares from outcomes their reset target and `extra_onehot`, which the block encoding lends from the start of the measured junk wires.
+- The reads' junk registers `junk_x_o` and `junk_b` have no wires of their own (Q-1 variant (b), §16): each is the first wires of `angles ‖ junk_overflow`, the start of the `select` group, with `junk_overflow` = $\max((K_1 - 1)d_1, (K_2 - 1)d_2, (N - 1)b_{\mathrm{rot}}) - (N - 1)b_{\mathrm{rot}}$ wires (0 at FeMoco-54, 3 at `H2_STO3G_TEST`). The block encoding X-measures each junk register right after its prepare, before any angle is loaded, so the junk and the angles never hold data at the same time, and no operator takes both.
+- No other aliasing exists. Tests check that the groups do not overlap, that the junk registers are the start of the angle wires, and that every operator call receives exactly `required_wires(...)`.
 
 ### 10.3 Qubit budget
 
-At FeMoco-54 (estimate; `WalkLayout` computes the exact number and the report prints it):
+At FeMoco-54 `WalkLayout` gives these wires (the report prints the same comparison):
 
-| Group | Wires |
-| --- | --- |
-| `system` | 108 |
-| `phase_grad` | 15 |
-| `outer` (51 index and data + 72 junk + 14 `cmp_work` + 6 `succ_work`) | 143 |
-| `inner` (49 index and data + 390 junk + 14 `cmp_work` + 2 `succ_work`) | 455 |
-| `select` (795 angles + 4 flags) | 799 |
-| `work` (the largest need is `RefAB`'s 43 zeroed `MultiControlledX` work wires, 44 when controlled; the Givens adders need 14) | ≈ 50 |
-| **Total** | **≈ 1,570** |
+| Group | Wires | The paper (its Table 3) |
+| --- | --- | --- |
+| `system` | 108 | 108 |
+| `phase_grad` | 15 | 15 (SEL's $b_{\mathrm{rot}}$) |
+| `outer` (51 index and data + 14 `cmp_work` + 6 `succ_work`) | 71 | 50 |
+| `inner` (49 index and data + 14 `cmp_work` + 2 `succ_work`) | 65 | 53 |
+| `select` (795 angles, which the 72 outer and 390 inner junk wires share, + 4 flags; `junk_overflow` 0) | 799 | 795 (RPREP) |
+| `work` (the largest need is the controlled `RefAB`'s 44 zeroed `MultiControlledX` work wires; the Givens adders need 14) | 44 | 110 (the outer prepare's temporaries) |
+| **Total** | **1,102** | **1,131** |
 
-The paper reports 1,131. Its inner-read temporaries (313 qubits) share the 795 angle qubits, which requires measuring the inner junk before the angle load. In our design the junk persists from read to erase (§4.3), and the angle registers are live in between, so the two cannot share. Early junk measurement would recover about 460 qubits with no Toffoli penalty, in one of two variants (§16, Q-1).
+The junk registers have no wires of their own (§10.2; Q-1 variant (b), §16): with them the walk would need 1,564. The paper shares its inner-read temporaries (313 qubits) with its 795 angle qubits, which requires measuring the inner junk before the angle load, and adds the outer prepare's 110 temporaries to its 1,021 persistent qubits; ours shares both junk registers with the angles, and the work pool takes the place of the temporaries. The rest of the difference, −29 in all, is our dirty comparator and uniform-preparation work registers (20 outer, 16 inner; they buy the free comparator adjoints, §4.4 item 10), the keep test's `less_than_x_o`, the inner entry registers (`less_than_b`, `sgn`, `d_sgn`, `r`: 7 wires against the paper's 11 for G, r and c) and the four select flags.
 
-The `H2_STO3G_TEST` configuration needs about 60 wires, exactly as computed by `WalkLayout`.
+The `H2_STO3G_TEST` configuration needs 55 wires (its 7 inner junk wires exceed its 4 angle wires, so `junk_overflow` has 3), exactly as computed by `WalkLayout`.
 
 ## 11. Iterative phase estimation
 
@@ -1332,7 +1340,7 @@ Correctness for every outcome of an erase block is proved with GF(2) linearity, 
   - standalone `QROAMRead` → `QROAMErase` round trips in the outer and inner shapes of both test presets;
   - `TailAngleLoad` and `SFAngleLoad` followed by `AngleErase`;
   - the composite unprepares, each preceded by its prepare: `OuterPrepare` → `OuterUnprepare` and `InnerPrepare` → `InnerUnprepare`, including the comparators and swaps in between;
-  - if Q-1 variant (b) is adopted, `OuterPrepare` → junk measurement → `OuterUnprepareFromOutcomes`, and likewise for the inner pair, with $\xi$ ranging over the concatenated target and junk outcomes.
+  - Q-1 variant (b) (the working choice, Task Q1b): `OuterPrepare` → junk measurement → `OuterUnprepareFromOutcomes`, and likewise for the inner pair, with $\xi$ ranging over the junk outcomes and the target outcomes together, at the shapes of the two certificates above; and `InnerPrepare` → junk measurement → `InnerUnprepareFromOutcomes` inside another operator's rule, as the block encoding calls them.
 - **The $p = 1/2$ check** of strict mode stays as a precondition check only.
 - **Premise check.** The conclusion also requires every conditional of the certified block, that is every fix-up, to be diagonal (`PauliZ` or `CZ`) with a predicate that is GF(2)-linear in the outcomes. The certificates assert this on the decomposed tape they certify (`dfthc.testing.sparse_sim.nonlinear_conditionals`).
 - **End-to-end schedules are smoke tests:** S0 (every outcome 0), S1 (every outcome 1) and seeded random schedules, used per tier as in §12.6.
@@ -1399,7 +1407,7 @@ Ours minus dfthcbe is +152: the same inner-read, boundary and padding causes, pa
 
 ### 13.2 Qubits
 
-See §10.3: about 1,570 against the paper's 1,131.
+See §10.3: 1,102 with Q-1 variant (b) (1,564 with the junk kept to the erase) against the paper's 1,131, compared by group.
 
 ### 13.3 Report design
 
@@ -1411,10 +1419,10 @@ See §10.3: about 1,570 against the paper's 1,131.
    - at `fe2s2` and `fe4s4`: the same programs as heavy runs, started by the orchestrator under the watchdog. Each program is first projected from the smaller compiles and compiled on the development laptop only if the projection stays within 7.5 GB (the watchdog's effective limit) and 60 minutes; the others follow the G0 decision of §16, K-1, or keep their closed form, marked refused. A program's size is its gates from its operator's resource functions; a program no larger than some measured one of its kind takes the largest time and peak over all measurements of its kind, and a larger one is extrapolated (K-1's method). The first killed or failed compile stops the system's run: the remaining programs are recorded as skipped, never as measurements, and the orchestrator escalates;
    - at FeMoco-54: only the walk and the controlled walk, once each, as the last step of Phase 4. Every per-operator FeMoco-54 row is the closed form, validated exactly by the compiles above. If the walk is refused, killed or fails, the run stops before the controlled walk, which is recorded as skipped, and the orchestrator escalates to the user (§16, "Where compiles above the cap run").
 3. Evaluates `dfthc.costs` (ours), the paper's Table III formulas and dfthcbe's formulas from `dfthc.costs_reference`, at the same parameters.
-4. Checks exactly, and exits non-zero on any difference: every compiled count equals its closed form, and at FeMoco-54 the sum over the blocks of calls per walk times the closed form equals the compiled walk and controlled-walk totals of $T$, $M$ and $A$.
+4. Checks exactly, and exits non-zero on any difference: every compiled count equals its closed form, and at FeMoco-54 the sum over the blocks of calls per walk times the closed form, plus in $M$ the block encoding's own junk measurements (Q-1 variant (b)), equals the compiled walk and controlled-walk totals of $T$, $M$ and $A$.
 5. Writes `docs/resources.md` and `docs/resources.json`. The json caches every heavy compile with its counts, a hash of the code (the package outside `dfthc.testing`, `scripts/resource_report.py`, which builds the programs and selects the cache's entries, and the lock file) that ignores docstrings and comments, the environment, the wall time and the peak memory. Later runs reuse an entry while its hash matches, so a FeMoco-54 recompile happens only after a code change. An entry of another hash stays in the json as history; its row shows the closed form, marked pending, and never as a current measurement.
 
-Each row is one program: an operator exactly as the walk or the controlled walk calls it (one row per distinct call, so `QROAMRead` has four), `PhaseFixup` and `C(ZeroReflection)` with their callers' arguments, `ControlledWalkPower` ($p = 1, 2$) and the QPE program. The partition rows, the children of the walks, block encodings and selects, times their calls per walk give the walk exactly. Each report row contains:
+Each row is one program: an operator exactly as the walk or the controlled walk calls it (one row per distinct call, so `QROAMRead` has four), `PhaseFixup` and `C(ZeroReflection)` with their callers' arguments, `ControlledWalkPower` ($p = 1, 2$) and the QPE program. The partition rows, the children of the walks, block encodings and selects, times their calls per walk give the walk exactly, with the block encoding's own junk measurements in $M$; the walk's unprepares from outcomes erase without `QROAMErase`, so the `PhaseFixup` rows take their erase arguments and `QROAMErase` has no row. Each report row contains:
 - block and paper steps;
 - calls per walk;
 - measured $T$ where the block was compiled at that size, otherwise a mark that the value is the closed form;
@@ -1436,7 +1444,6 @@ Reason codes:
 | `adder-const` | `SemiAdder` constants differ from Qualtran's |
 | `mux` | Spin-multiplexer construction |
 | `attrib` | The paper attributes the cost to a different step |
-| `junk-qubits` | Junk persists until the erase |
 | `rz-addsub` | Each Givens $R_z$ is Qualtran's `ControlledAddOrSubtract`, with $b_{\mathrm{rot}} - 1$ Toffolis, as in dfthcbe. The paper counts $b_{\mathrm{rot}}$ (§4.4 item 9). |
 | `cmp-free` | PennyLane's comparators uncompute by measurement, so their adjoints cost no Toffoli |
 | `maj-and` | The Majorana gate folds the success flags into two ANDs with $G_0$ ($2 + 2 + 1$ Toffolis); the paper's Fig. 4 controls its four gates on one AND of both flags ($1 + 2 + 4$) (§9.16) |
@@ -1637,27 +1644,27 @@ The implementation plan specifies tasks, prompts and acceptance checks. This sec
     - *The outcome decides* Q-1's variant (b) and the `QPERound` form (§11.1).
     - *Fallback:* corrections stay in the QPE driver, and Q-1 keeps only variant (a).
 
-**Questions for the user.** The user decided Q-2 to Q-5 on 2026-11-11; the decisions are recorded below and in the baseline. Q-1 stays open and does not block Phase 0.
+**Questions for the user.** The user decided Q-2 to Q-5 on 2026-11-11; the decisions are recorded below and in the baseline. Q-1 has a working choice, variant (b), which the user may override.
 
-- **Q-1: Early junk measurement. Open; decided after K-10 and the Phase 4 report.**
-  - *What it is.* Each read's junk is X-measured right after its swap network. That frees about 460 qubits at FeMoco-54 (72 outer and 390 inner junk wires), which can then hold the angle registers as in the paper's 1,131-qubit count.
+- **Q-1: Early junk measurement. Working choice: variant (b) (2026-11-15).**
+  - *What it is.* Each alias read's junk is X-measured early instead of at its erase: a caller may measure it right after the read's swap network, and the walk measures it right after the enclosing prepare (steps 4 and 8), before any angle load (the comparator and the swaps in between do not touch the junk). That frees about 460 qubits at FeMoco-54 (72 outer and 390 inner junk wires), which can then hold the angle registers as in the paper's 1,131-qubit count.
   - *No Toffoli penalty.* The outcomes are XORed into the parities of the later erase, so no extra fixup is needed. That outcomes survive nested `Operator2` calls inside one rule was verified on 2026-11-11, on the compiled path and the tape path.
   - *Variant (a): a composite owns the measurements.* The measurement and its fixup sit in one rule. For each inner round, `InnerPrepare` and its adjoint (steps 5–8 and 19–22) merge into one composite with `InnerSigns` and `InnerSelect`, and `DFTHCBlockEncoding` owns the outer junk. The separately pinned prepare and unprepare operators disappear.
   - *Variant (b): outcomes passed to dedicated unprepare operators.* The baseline unprepares `OuterUnprepare` and `InnerUnprepare` (§7.4 rule 6) take no outcomes, and an `Operator2` has one signature, so variant (b) adds two sibling classes, `OuterUnprepareFromOutcomes` and `InnerUnprepareFromOutcomes`. They follow the same pattern as the baseline unprepares (base classes with one pinned rule, never adjointed or controlled), so their docstrings, T2–T6 tests and certificates reuse the baseline's scaffolding; this does not decide Q-1:
-    - *Signature.* Wires: the matching prepare's wires except its junk register. Compilable: the prepare's compilable arguments. Dynamic: `junk_outcomes`, a boolean array with one entry per junk qubit ($(K_1 - 1)d_1$ outer, $(K_2 - 1)d_2$ inner), in the order of `QROAMRead.junk_layout`.
+    - *Signature.* Wires: the matching prepare's wires except its junk register, then `extra_onehot`, $\max(2^{\mathrm{ob}} - d, 0)$ wires in $\lvert 0\rangle$ for the fix-up's one-hot register beyond the reset target ($d$ the read's entry width; 0 outer and 102 inner at FeMoco-54, whose inner one-hot needs 128 wires and whose inner target has 26: without the junk the reset target alone cannot hold it, and the block encoding lends these wires from the start of the measured junk wires). Compilable: the prepare's compilable arguments. Dynamic: `junk_outcomes`, a boolean array with one entry per junk qubit ($(K_1 - 1)d_1$ outer, $(K_2 - 1)d_2$ inner), in the order of `QROAMRead.junk_layout` (the junk register's wire order); in tape mode an object array of `MeasurementValue`s.
     - *Rule.* As the base rule of `OuterUnprepare` or `InnerUnprepare` (§9.7, §9.8), with the erase split:
       1. the alias `CSWAP`s;
       2. the adjoint comparator;
       3. X-measure the target qubits only;
-      4. compute the parities with `mcm_parities` from the concatenated (target ‖ `junk_outcomes`) outcomes, and apply `emit_phase_fixup` over the read's loaded set;
+      4. compute the parities with `mcm_parities` from the concatenated (target ‖ `junk_outcomes`) outcomes, and apply `emit_phase_fixup` over the read's loaded set with the reset target ‖ `extra_onehot` as its one-hot register;
       5. the `H`s;
       6. the adjoint `FlaggedUniformPrep`.
 
       $T$ and the total $M$ are unchanged. The junk's share of $M$ moves into the block-encoding rule.
-    - *Pins and use.* Both rules are pinned in `FIXED_DECOMPS`. The operators are never adjointed or controlled. `DFTHCBlockEncoding`'s rule X-measures each prepare's junk right after the prepare and passes the outcomes to the matching unprepare operator. `WalkLayout` then lets the angle registers reuse the freed junk wires.
-    - *Catalog and tests.* If adopted, both operators get §9 entries, T2–T6 tests and §12.5 certificates (outcome vectors over target and junk). `OuterUnprepare` and `InnerUnprepare` remain for the baseline. Block boundaries stay as they are. Feasibility is decided by K-10.
+    - *Pins and use.* Both rules are pinned in `FIXED_DECOMPS`. The operators are never adjointed or controlled. `DFTHCBlockEncoding`'s rule X-measures each prepare's junk right after the prepare and passes the outcomes to the matching unprepare operator. `WalkLayout` then lets the angle registers reuse the freed junk wires: each junk register is the first wires of `angles ‖ junk_overflow` (§10.2).
+    - *Catalog and tests.* Both operators have §9 entries (§9.7, §9.8), T2–T6 tests and §12.5 certificates (outcome vectors over target and junk), and an `InnerUnprepareFromOutcomes` test calls it from inside another operator's rule. `OuterUnprepare` and `InnerUnprepare` remain for the baseline. Block boundaries stay as they are. K-10 passed.
   - *Trade-off.* Implementation complexity, and for (a) changed block boundaries, against about 460 qubits.
-  - *Status.* Open. The user decides after K-10 (Phase 0) and the Phase 4 resource report, preferring variant (b) if K-10 passes. The baseline keeps the junk until the erase.
+  - *Status.* Variant (b) is the working choice (2026-11-15): K-10 passed and the user prefers variant (b) if it does, so the orchestrator adopted it under the user's standing directive; the user may override before Task Q1b runs. The FeMoco-54 walk needs 1,102 qubits with it (1,564 with the junk kept to the erase); T, A and the total M are unchanged (§9.24, §10.3).
 - **Q-2: Generating dfthcbe reference fixtures. Decided: yes.** Agents may install Qualtran and dfthcbe into the separate `.venv-ref` to generate the reference fixtures (§8.6). The skip path of §8.6 remains for machines where `.venv-ref` cannot be created.
 - **Q-3: The QPE driver is a plain quantum function. Decided: yes** (R-4 exemption, §2.1, §11.1). It returns measured bits, which an `Operator2` cannot. `QPERound` and `ControlledWalkPower` stay `Operator2`. If K-10 fails, the per-round quantum content is `ControlledWalkPower` alone (§11.1).
 - **Q-4: Exact versus truncated unary iteration. Decided: exact now** (§4.4 item 8). Exact iteration costs 26 more Toffolis per walk than truncated iteration in the alias reads and erases, and 74 more than dfthcbe's pruned angle loads and fixups. In return it gives simple semantics on every address and trivial failure signs. Truncated iteration and pruning are later optimizations, worth up to 100 Toffolis per walk at FeMoco-54.

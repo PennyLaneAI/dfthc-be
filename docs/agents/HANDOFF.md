@@ -110,6 +110,12 @@ Found while dry-running the Phase 0 plan (canaries L-24 and L-25 pin the first t
   compile (`'qref.operator' op qubit operands must refer to distinct qubits`), even when the
   shared wires are idle in the other register. To reuse a pool, bind it once and slice it
   inside the rule: `QPERound`'s corrections take the walk's `work` pool from its `walk_wires`.
+- **Measurement outcomes passed as a dynamic argument have a mode-specific type.** Under
+  capture they are a bool array, in tape mode an object array of `MeasurementValue`s, so a rule
+  that declares such an operator builds the key's abstract array with the mode's dtype
+  (`dfthc.ops.prepare.abstract_junk_outcomes`) before calling `resource_key`, which pauses
+  capture. With the wrong dtype Catalyst drops the declaring rule ("Decomposition rule not
+  found") or tape-mode T2 reports a resource mismatch (Q1b plan dry run).
 - **Declared resources must match emitted operators exactly**, including compilable arguments and
   wire-register sizes. An emitted operator whose signature is not declared is left undecomposed,
   and `compiled_resources` then fails with "operations outside the gate set remain".
@@ -239,17 +245,21 @@ Spec 7.4. Each rule exists because of a confirmed limitation (section 7 below).
    Counts are Python ints; resource functions never raise.
 3. **Arguments.** Everything structural is in `compilable_argnames` (sizes, ranges, block bits,
    tables). Never use `static_argnames`, and never mix compilable and hybrid arguments.
-   `dynamic_argnames` only for runtime data: `PhaseFixup` parities, `QPERound` earlier bits, and
-   `QROAMRead`'s per-leaf table words (`int64`, built by the caller from its compilable table).
+   `dynamic_argnames` only for runtime data: `PhaseFixup` parities, `QPERound` earlier bits,
+   `QROAMRead`'s per-leaf table words (`int64`, built by the caller from its compilable table)
+   and the junk outcomes of `OuterUnprepareFromOutcomes` and `InnerUnprepareFromOutcomes`.
    Convert list-valued dynamic arguments to arrays in `__init__` (L-23).
 4. **Control flow.** Bodies of auto-adjointed operators contain no `qp.for_loop` or `qp.cond`;
    unroll loops in Python with static bounds. `qp.cond` on measurement outcomes appears only
-   inside erase operators and the QPE wrapper (`QPERound`'s corrections). `qp.for_loop`
+   inside erase operators, the unprepares from outcomes and the QPE wrapper (`QPERound`'s
+   corrections). `qp.for_loop`
    appears only in `QROAMRead` (one loop per unary leaf, with `qp.cond` on table bits;
    spec 9.3), `ControlledWalkPower` and its toy twin `ToyControlledWalkPower`, all never
    adjointed or controlled (rule 6).
-5. **Measurement-based uncompute** lives only in `QROAMErase`, `AngleErase` and the base rules
-   of `OuterUnprepare` and `InnerUnprepare`. Never place a measuring operator under `qp.ctrl`.
+5. **Measurement-based uncompute** lives only in `QROAMErase`, `AngleErase`, the base rules
+   of `OuterUnprepare`, `InnerUnprepare`, `OuterUnprepareFromOutcomes` and
+   `InnerUnprepareFromOutcomes`, and the block encodings' junk measurements (spec 16, Q-1
+   variant (b)). Never place a measuring operator under `qp.ctrl`.
    Catalyst would silently control a unitary inverse instead (L-2).
 6. **Adjoint and controlled forms of composites are explicit classes** (spec 7.4 rule 6, G0):
    `OuterUnprepare`, `InnerUnprepare`, `InnerSelectDagger`, `GivensLadderDagger`,
@@ -318,9 +328,10 @@ The canonical minimal example of an operator with a pinned measured adjoint rule
 - **Wires.** Big-endian integers (the first wire is the most significant). Register names follow
   dfthcbe (Global Constraints). The assembly operators (spec 9.21 to 9.23) take grouped wires
   (`outer`, `inner`, `select`, `system`, `phase_grad`, `work`) and split them only through
-  `WalkLayout.split_group`; the blocks they call, `InnerSelect`, `InnerSelectDagger` and the
-  reflections included, take the registers their spec 9 tables list by name (spec 9.0, wire
-  passing).
+  `WalkLayout.split_group`, and the junk registers, the start of `select`, through
+  `WalkLayout.split_junk` (spec 10.2); the blocks they call, `InnerSelect`,
+  `InnerSelectDagger` and the reflections included, take the registers their spec 9 tables
+  list by name (spec 9.0, wire passing).
 - **Test tolerances.** Every `np.allclose`, `np.isclose`, `np.testing.assert_allclose` and
   `pytest.approx` states both tolerances: `rtol=0` (`rel=0`) with the contract's absolute `atol`
   (`abs`; 1e-12 for dense and simulator comparisons unless the brief names another), or an
