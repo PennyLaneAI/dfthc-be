@@ -81,10 +81,11 @@ H2 sizes and `ControlledWalkPower` at `MID_NAPHTHALENE`. The FeMoco-54 values (w
 Toffolis, controlled walk 9,795, M = 2,524, A = 8,675 and 8,677) are asserted on the closed forms
 per commit. The resource report compiles every program of the walk at the H2 systems and
 `naphthalene` (and `fe2s2`, `fe4s4` as heavy runs), checks each against its closed form, and
-checks that the partition rows times their calls give the compiled walk. Task 4.5 will compile
-the FeMoco-54 walk and controlled walk once and cache them in [`resources.json`](resources.json);
-`tests/report/test_femoco_cache.py` (release tier) will assert the cached counts while the code
-hash matches.
+checks that the partition rows times their calls give the compiled walk. Task 4.5 compiled the
+FeMoco-54 walk and controlled walk once each and cached them in [`resources.json`](resources.json);
+`tests/report/test_femoco_cache.py` (release tier) asserts, without compiling, the cached counts,
+their gate dictionaries and wires, the partition sum (plus the block encodings' junk
+measurements in M) and the QPE summary, while the code hash matches.
 
 ## Tiers (spec 12.6)
 
