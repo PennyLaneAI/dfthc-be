@@ -29,6 +29,7 @@ per walk, 9,795 per controlled walk.
 | Tests | `tests/` (`data`, `ops`, `integration`, `sim`, `canary`, `report`) |
 | Spikes | `spikes/` (not collected by pytest), results in `spikes/results/` |
 | Vendored data | `data/dfthc/` (Apache-2.0, unmodified) |
+| Resource report | `scripts/resource_report.py` writes `docs/resources.md` and `docs/resources.json` (spec 13.3) |
 | Scratch (never committed) | `.scratch/` |
 
 ## 3. Environment
@@ -148,7 +149,7 @@ is not the requested one, or the priority is not lowered, so never run plain `py
 
 ### 3.4 `.venv-ref` for dfthcbe reference fixtures (Q-2: approved)
 
-Only Task 1A.6 (and later refreshes) uses it, to run `scripts/make_dfthcbe_fixtures.py`. The
+Only Tasks 1A.6 and 4.3 (and later refreshes) use it, to run `scripts/make_dfthcbe_fixtures.py` and `scripts/make_report_fixture.py`. The
 orchestrator builds it; nothing is cloned and no step needs elevated permission. dfthcbe comes
 from the tarball of commit `930255020cec30172e0a7d17c0071d9476a687d1`, extracted into
 `.scratch/dfthcbe-ref` (git-ignored) and checked by a SHA-256 digest of its sources:
@@ -214,6 +215,8 @@ not run heavy processes throughout." The full policy is master plan section 12.9
 | Canaries only | `scripts/test.sh tests/canary -q` |
 | Refresh the compile baseline (nightly bump only) | `DFTHC_UPDATE_COMPILE_BASELINE=1 DFTHC_TEST_WORKERS=0 scripts/test.sh tests/canary/test_l21_compile_time.py` |
 | Spike | `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python" spikes/<script>.py` |
+| Resource report (H2 systems and `naphthalene`; reuses current compiles) | `PYTHONPATH=src "$VENV/bin/python" scripts/resource_report.py` |
+| Large compiles of the report (orchestrator only, alone) | `PYTHONPATH=src "$VENV/bin/python" -m dfthc.testing.watchdog --timeout-min 120 -- "$VENV/bin/python" scripts/resource_report.py --large fe2s2` (then `fe4s4`; `femoco54` in Task 4.5) |
 
 Markers: `compiled`, `slow`, `release` (implies `slow`), `canary`, `femoco`, `subprocess`. Mark
 every compile test `compiled`, tests that spawn Python processes `subprocess`, and tests too slow

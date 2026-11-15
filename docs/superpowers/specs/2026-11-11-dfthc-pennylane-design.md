@@ -331,6 +331,7 @@ dfthc-be/
     setup_env.sh              the environment recipe of §7.1
     test.sh                   exports CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0, then runs pytest (§7.1, §12.6)
     make_dfthcbe_fixtures.py  generates reference fixtures from dfthcbe in a separate environment (§8.6)
+    make_report_fixture.py    dfthcbe's per-block Toffolis at the report's parameter sets, from its call graph (§13.3)
     resource_report.py        writes docs/resources.md and docs/resources.json (§13.3)
   data/dfthc/                 vendored dfthcbe data, LICENSE (Apache-2.0) and NOTICE (§8.1)
   src/dfthc/
@@ -698,7 +699,7 @@ Validation covers four things:
   - $b_{\mathrm{rot}} \ge 3$, $b_{k1}, b_{k2} \ge 1$, and $3 \le s_u \le b_{\mathrm{grad}}$;
   - $0 \le k_1 \le w_x$ and $0 \le k_2 \le w_b$;
   - $0 \le k_{e1} \le w_x$ and $0 \le k_{e2} \le \lg(RC)$.
-- **Block-bit defaults** come from `dfthc.costs.cheapest_block_bits`, which minimizes our closed-form Toffoli count, as dfthcbe does.
+- **Block-bit defaults** come from `dfthc.costs.cheapest_block_bits`, which minimizes our closed-form Toffoli count, as dfthcbe does. The resource report gives every vendored system Table III's precisions ($b_{\mathrm{rot}} = b_{k1} = b_{k2} = 15$, $s_u = 7$) with these block bits (`dfthc.costs_reference.default_params`), its "default precisions" (§13.3).
 
 Presets:
 
@@ -1369,14 +1370,14 @@ Toffolis per walk at FeMoco-54.
 
 | Block (calls per walk) | Paper (Table III) | dfthcbe | Ours (§9.24) | Main reason for Ours − dfthcbe |
 | --- | ---: | ---: | ---: | --- |
-| Uniform preparation of $x_o$, prepare and unprepare | 72 | 74 | 54 | measured comparator uncomputes and PennyLane's $(n-1)$-Toffoli classical comparator, less one Toffoli per rotation ($s - 1$ against Qualtran's $s - 2$) (`cmp-free`) |
+| Uniform preparation of $x_o$, prepare and unprepare | 72 | 74 | 54 | measured comparator uncomputes and PennyLane's $(n-1)$-Toffoli classical comparator (`cmp-free`), offset by one Toffoli more per rotation ($s - 1$ against Qualtran's $s - 2$, `rot-add`) |
 | Outer read, keep test and swap | 177 | 175 | 180 | exact range boundaries (+5, `exact-iter`) |
-| Outer unprepare and erase | 61 | 57 | 45 | free comparator adjoint (`cmp-free`); exact boundaries (+3) |
+| Outer unprepare and erase | 61 | 57 | 45 | free comparator adjoint (`cmp-free`; the saving the paper notes after its Eq. (127)); exact boundaries (+3) |
 | Uniform preparation of $b$, two prepare/unprepare pairs | 80 | 84 | 68 | `cmp-free` |
-| Inner read, keep test and swap (×2) | 1,720 | 1,784 | 1,906 | $r$ carried through the swap (+60 per read, `flat-r`); exact boundaries +5 per read, less dfthcbe's 4 stops on the zero D1/Q1 rows, which ours does not visit (net +1 per read) |
-| Inner unprepare and erase (×2) | 508 ¹ | 398 | 402 | one-hot over 128 positions instead of 112 (`onehot-pad`; the failed $b$ in $[28, 32)$, loaded by the read's last block, is covered); exact iteration in the fix-up (+1 per erase, `exact-iter`); free comparator adjoint |
-| Angle loads (×2) | 648 | 654 | 704 | exact boundaries instead of aligned-block pruning (`exact-iter`, `no-prune`) |
-| Angle erase (×2) | 74 ¹ | 180 | 204 | same, for the fixups |
+| Inner read, keep test and swap (×2) | 1,720 | 1,784 | 1,906 | $r$ carried through the swap (+60 per read, `flat-r`); exact boundaries +5 per read (`exact-iter`), less dfthcbe's 4 stops on the zero D1/Q1 rows, which ours does not visit (`no-prune`; net +1 per read) |
+| Inner unprepare and erase (×2) | 508 ¹ | 398 | 402 | one-hot over 128 positions instead of 112 (`onehot-pad`; the failed $b$ in $[28, 32)$, loaded by the read's last block, is covered); exact boundaries in the fix-up (+4 per erase, `exact-iter`), less dfthcbe's 3 stops on the dead tail rows, which ours does not visit (−3 per erase, `no-prune`); free comparator adjoint |
+| Angle loads (×2) | 648 | 654 | 704 | exact boundaries in the SF loads (+44, `exact-iter`); the tail loads without aligned-block pruning (+10, `no-prune`), less dfthcbe's $s(R) = 2$ stops per SF load for the identity row $b = B$ (−4, `no-prune`) |
+| Angle erase (×2) | 74 ¹ | 180 | 204 | exact boundaries in the fix-up walks (+14: `exact-iter` +4 over $r$, `no-prune` +10 over the tail rows), one-hot over 32 positions instead of 28 (+8, `onehot-pad`), the SF fix-up enabled on $G_0$ (+2, `sf-enable`) |
 | Spin multiplexer (×2) | 0 | 8 | 4 | one Toffoli to build, one to unbuild (`mux`) |
 | Spin swaps (×4) | 216 | 216 | 216 | none |
 | Givens ladders (×4) | 6,360 | 5,936 | 5,936 | dfthcbe's exact construction, $b_{\mathrm{rot}} - 1$ per $R_z$; the paper counts $b_{\mathrm{rot}}$ (`rz-addsub`) |
@@ -1392,9 +1393,9 @@ Ours minus the paper is −204, by cause:
 - **Inner reads: +186.** Our swapped inner entry has $d_2 = 26$ bits (alt, keep, sgn, d_sgn and $r$), against the 20-bit entries of the paper's Table III.
 - **Angle loads and erases, and the inner erase: +80**, after moving the paper's tail fixup to step 18. These come from exact boundaries in place of pruned iteration, and from one-hot padding.
 - **Uniform preparations and the outer erase: −46.** Measured comparator uncomputes (free comparator adjoints) and PennyLane's $(n-1)$-Toffoli classical comparator, partly offset by the rotations' $s - 1$ Toffolis each (Qualtran's cost $s - 2$). dfthcbe's AND-ladder uncompute is measured too, so it is not a source of the difference.
-- **Remaining terms: net 0.** Outer read +3, spin multiplexer +4, Majorana gate −4, reflections −3.
+- **Remaining terms: net 0.** Outer read +3 (`exact-iter` +5, `iter-const` −2), spin multiplexer +4 (`mux`; Table III has no row, while App. B.3 and B.7.1 count 2 per select), Majorana gate −4 (`maj-and`), reflections −3 (`ref-unif` −1 on $\mathrm{REF}_{T_2}$; `ref-target` −1 and `qpe-ctrl` −1 on $\mathrm{REF}_{\mathcal A\cup\mathcal B}$).
 
-Ours minus dfthcbe is +152: the same inner-read, boundary and padding causes, partly offset by the free comparator adjoints. The Givens ladders equal dfthcbe's (5,936). The controlled walk costs two more Toffolis than the walk. The deferred refinements (§4.4 item 8; §9.3) would save up to 100 Toffolis, from truncated or pruned iteration.
+Ours minus dfthcbe is +152: the same inner-read, boundary and padding causes, partly offset by the free comparator adjoints. The Givens ladders equal dfthcbe's (5,936). The controlled walk costs two more Toffolis than the walk. The paper's 9,997 is its QPE step, with the control on $\mathrm{REF}_{\mathcal A\cup\mathcal B}$ only (App. B.7.2, Eq. (128)): against our controlled walk, 9,795, the difference is −202, the block encoding's −202 with +1 for controlling $\mathrm{REF}_{T_2}$ too (`ctrl-ref-t2`, §9.23) and −1 for the controlled $\mathrm{REF}_{\mathcal A\cup\mathcal B}$ against B55 (`ref-target`); both carry the QPE control, so `qpe-ctrl` does not apply. The deferred refinements (§4.4 item 8; §9.3) would save up to 100 Toffolis, from truncated or pruned iteration.
 
 ### 13.2 Qubits
 
@@ -1407,13 +1408,13 @@ See §10.3: about 1,570 against the paper's 1,131.
 1. Builds the walk at FeMoco-54 shape (`random_factors`, fixed seed) and at every vendored system with default precisions.
 2. Compiles with `compiled_resources` on `null.qubit`, within the load policy of §15:
    - at the H2 systems and `naphthalene`: every operator of §9 separately, plus the walk and the controlled walk, and the QPE program ($t \le 3$) at the H2 systems;
-   - at `fe2s2` and `fe4s4`: the same programs as heavy runs, started by the orchestrator under the watchdog. Each program is first projected from the smaller compiles and compiled on the development laptop only if the projection stays within 7.5 GB (the watchdog's effective limit) and 60 minutes; the others follow the G0 decision of §16, K-1, or keep their closed form, marked pending;
-   - at FeMoco-54: only the walk and the controlled walk, once each, as the last step of Phase 4. Every per-operator FeMoco-54 row is the closed form, validated exactly by the compiles above.
+   - at `fe2s2` and `fe4s4`: the same programs as heavy runs, started by the orchestrator under the watchdog. Each program is first projected from the smaller compiles and compiled on the development laptop only if the projection stays within 7.5 GB (the watchdog's effective limit) and 60 minutes; the others follow the G0 decision of §16, K-1, or keep their closed form, marked refused. A program's size is its gates from its operator's resource functions; a program no larger than some measured one of its kind takes the largest time and peak over all measurements of its kind, and a larger one is extrapolated (K-1's method). The first killed or failed compile stops the system's run: the remaining programs are recorded as skipped, never as measurements, and the orchestrator escalates;
+   - at FeMoco-54: only the walk and the controlled walk, once each, as the last step of Phase 4. Every per-operator FeMoco-54 row is the closed form, validated exactly by the compiles above. If the walk is refused, killed or fails, the run stops before the controlled walk, which is recorded as skipped, and the orchestrator escalates to the user (§16, "Where compiles above the cap run").
 3. Evaluates `dfthc.costs` (ours), the paper's Table III formulas and dfthcbe's formulas from `dfthc.costs_reference`, at the same parameters.
 4. Checks exactly, and exits non-zero on any difference: every compiled count equals its closed form, and at FeMoco-54 the sum over the blocks of calls per walk times the closed form equals the compiled walk and controlled-walk totals of $T$, $M$ and $A$.
-5. Writes `docs/resources.md` and `docs/resources.json`. The json caches every heavy compile with its counts, a hash of the code that ignores docstrings and comments, the environment, the wall time and the peak memory. Later runs reuse an entry while its hash matches, so a FeMoco-54 recompile happens only after a code change. An entry of another hash stays in the json as history; its row shows the closed form, marked pending, and never as a current measurement.
+5. Writes `docs/resources.md` and `docs/resources.json`. The json caches every heavy compile with its counts, a hash of the code (the package outside `dfthc.testing`, `scripts/resource_report.py`, which builds the programs and selects the cache's entries, and the lock file) that ignores docstrings and comments, the environment, the wall time and the peak memory. Later runs reuse an entry while its hash matches, so a FeMoco-54 recompile happens only after a code change. An entry of another hash stays in the json as history; its row shows the closed form, marked pending, and never as a current measurement.
 
-Each report row contains:
+Each row is one program: an operator exactly as the walk or the controlled walk calls it (one row per distinct call, so `QROAMRead` has four), `PhaseFixup` and `C(ZeroReflection)` with their callers' arguments, `ControlledWalkPower` ($p = 1, 2$) and the QPE program. The partition rows, the children of the walks, block encodings and selects, times their calls per walk give the walk exactly. Each report row contains:
 - block and paper steps;
 - calls per walk;
 - measured $T$ where the block was compiled at that size, otherwise a mark that the value is the closed form;
@@ -1438,8 +1439,20 @@ Reason codes:
 | `junk-qubits` | Junk persists until the erase |
 | `rz-addsub` | Each Givens $R_z$ is Qualtran's `ControlledAddOrSubtract`, with $b_{\mathrm{rot}} - 1$ Toffolis, as in dfthcbe. The paper counts $b_{\mathrm{rot}}$ (§4.4 item 9). |
 | `cmp-free` | PennyLane's comparators uncompute by measurement, so their adjoints cost no Toffoli |
+| `maj-and` | The Majorana gate folds the success flags into two ANDs with $G_0$ ($2 + 2 + 1$ Toffolis); the paper's Fig. 4 controls its four gates on one AND of both flags ($1 + 2 + 4$) (§9.16) |
+| `sf-enable` | The SF fix-up of `AngleErase` is enabled on $G_0$, one Toffoli more than dfthcbe's (§9.17) |
+| `rot-add` | `PhaseGradientRotation` adds with one $m$-bit `SemiAdder`, $m - 1$ Toffolis; Qualtran's `ZPowConstViaPhaseGradient`, dfthcbe's rotation, costs $m - 2$ (§9.1) |
+| `unif-odd` | dfthcbe's uniform preparation, $4n + 2s_u - 5$ on the $n = \lg l$ qubits of the odd part $l$ of $L$ (as ours), against the paper's $4\lg L$ (B24, B32, B52, B54) over all $\lg L$ qubits (§9.2) |
+| `sign-bits` | The inner entry carries both sign bits, `sgn` and `d_sgn`; Table III evaluates its inner swaps with $b_2 = w_b + b_{k2}$ bits |
+| `onehot-const` | A one-hot over $K$ values costs $K - 2$ Toffolis (§9.24); the paper's B50 and B53 count $K$, and its B47 counts $B$ for the $B + 1$ values of $b$ |
+| `iter-const` | Truncated unary iteration over $L$ leaves with $c$ controls costs $L + c - 2$ Toffolis; the paper counts $L$, one per leaf (dfthcbe's README, "Constants") |
+| `prefix-stops` | dfthcbe's walks over the tail rows $[RC, X_o)$ (the tail angle load and the angle erase's tail fix-up) stop once on each aligned block of the dead SF prefix $[0, RC)$, $s(RC)$ stops, $s$ counting the ones in binary (its README, "Zero rows"); the paper's (B41, and the fix-up $N$ of B50) count their $N$ leaves alone |
+| `ref-target` | The reflection's multi-controlled $Z$ targets one of its $n_w$ pattern qubits ($n_w - 2$ Toffolis, §9.6); dfthcbe's uncontrolled $\mathrm{REF}_{\mathcal A\cup\mathcal B}$ and the paper's B55 add a phase target ($n_w - 1$) |
+| `ref-unif` | The paper's $\mathrm{REF}_{T_2}$ (B11) also reflects the rotated qubit of its $\mathrm{Unif}(b)$, which the flagged uniform preparation does not have |
+| `qpe-ctrl` | The paper's B55 books one Toffoli for the unary iteration on the QPE control in the walk (App. B.7.2, Eq. (128)); our walk has no QPE control (our controlled walk has it, so the controlled rows do not carry this code) |
+| `ctrl-ref-t2` | The controlled walk also controls $\mathrm{REF}_{T_2}$ (+1 per step), so $C(W)^p$ is exact for every $p$; the paper's QPE step controls only $\mathrm{REF}_{\mathcal A\cup\mathcal B}$, which gives controlled even powers because $\mathrm{BE}^2 = I$ (App. B.7.2, Eq. (128); §9.23) |
 
-The report never adjusts measured numbers.
+A row's reason codes are the causes with a nonzero contribution to its delta, each with its contribution (`dfthc.costs_reference.delta_causes`): every block is split into parts that ours, dfthcbe's and the paper's constructions share, each part's difference goes to the code that names its mechanism, and a composite's contributions are its children's times their calls. A code whose contributions cancel within a row is not listed (the paper's tail fix-up, `attrib`, moves between two rows of the block encoding and nets to zero there); two different codes that cancel within a row are both listed (`ref-unif` $-1$ and `ctrl-ref-t2` $+1$ in the controlled $\mathrm{REF}_{T_2}$ against the paper). Each unary-iteration difference is split by mechanism (`dfthc.costs_reference.iteration_causes`) at an intermediate count (`iteration_counts`), an accounting convention and not a circuit: on the walks from address 0, Qualtran's truncated iteration ($L + c - 2$) over the live leaves alone, without stops on dead addresses; on the tail rows $[RC, X_o)$, our exact count. It is a valid circuit only where dfthcbe's walk has no stops (the outer read, the outer erase's fix-up and the SF fix-up), where it is that walk. Elsewhere dead addresses carry amplitude, which truncated iteration would route onto live leaves, and on the tail rows no truncated walk without stops on the dead SF prefix is valid. `exact-iter` is ours minus the intermediate, `no-prune` the intermediate minus dfthcbe's walk, which stops once on each aligned block of a dead interval (signed: negative where those stops cost more than the intermediate). Against the paper's one Toffoli per leaf, the intermediate minus the paper is `iter-const`, except on the tail walks, which reach the paper through dfthcbe's walk: ours minus dfthcbe as above, then dfthcbe's $s(RC)$ stops on the dead SF prefix (`prefix-stops`) and its truncated iteration's constant (`iter-const`). The report checks at every system that each row's contributions sum to its deltas exactly and fails otherwise. The report never adjusts measured numbers.
 
 ## 14. Known limitations and mitigations
 
