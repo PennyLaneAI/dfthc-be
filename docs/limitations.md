@@ -2,9 +2,11 @@
 
 One entry per limitation of spec section 14, with the behaviour the canary in `tests/canary/`
 pins today. A flipped canary is a signal to revisit the mitigation, not a failure to hide. All
-observations are from 2026-11-11 (PennyLane 0.46.0.dev151, Catalyst 0.16.0.dev140). Entries marked
-**changed** differ from the spec's original wording; as of Task 0.4, spec section 14 matches this
-file.
+observations are from 2026-11-11 (PennyLane 0.46.0.dev151, Catalyst 0.16.0.dev140) unless an entry
+gives its own date. Entries marked **changed** differ from the spec's original wording. As of Task
+4.4 (2026-11-14) spec section 14 matches this file entry for entry, L-1 to L-27, with L-26 (Task
+0.4b) and L-27 (Task 0.2c); `tests/test_docstrings.py` checks that every limitation has an entry
+and that every canary named here exists.
 
 ## Decomposition rules, pins, control and templates
 
@@ -33,8 +35,9 @@ file.
   `for_loop`, `cond` and a nested operator) compiles to `{"PauliX": "4"}`; the IRMapping crash was
   not reproduced. The canary fails if the crash returns; it cannot detect a fix. Canary:
   `test_auto_adjoint_with_nested_control_flow`. Mitigation kept: no control flow in auto-adjointed
-  bodies (spec 7.4 rule 4). Since G0 the looped `QROAMRead` and `ControlledWalkPower` are never
-  adjointed or controlled by construction (spec 7.4 rule 6), which the inventory test checks.
+  bodies (spec 7.4 rule 4). Since G0 the looped `QROAMRead`, `ControlledWalkPower` and
+  `ToyControlledWalkPower` are never adjointed or controlled by construction (spec 7.4 rule 6),
+  which the inventory test checks.
 - **L-7, `C(ChangeOpBasis)` loses its saving under capture** (pennylane#10357). Controlling
   `change_op_basis(CNOT, Z, CNOT)` gives two Toffolis instead of zero. Canary:
   `test_controlled_change_op_basis_controls_everything`. Mitigation: the explicit controlled
