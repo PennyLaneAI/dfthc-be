@@ -196,6 +196,7 @@ def test_large_compile_is_watched(tmp_path, monkeypatch):
     entry = record["compiled"]["H2_STO3G_TEST/SpinSwap"][-1]
     assert (entry["status"], entry["reason"]) == ("killed", "memory")
     assert entry["watchdog"]["cap_mb"] == 200 and entry["watchdog"]["survivors"] == []
+    assert entry["watchdog"]["timeout_s"] == report.LARGE_TIMEOUT_S
     row = next(r for r in record["systems"]["H2_STO3G_TEST"]["rows"] if r["id"] == "SpinSwap")
     assert (row["status"], row["measured"]) == ("killed", None)
 
@@ -238,28 +239,30 @@ def test_large_stops_after_a_refusal_at_femoco(monkeypatch):
     assert any("stopped; escalate to the user" in line for line in log)
 
 
-def test_large_stops_after_a_kill(monkeypatch):
-    """Under --large, the first killed compile stops the system's run: the next program is never
-    measured and is recorded as skipped, and the log names the escalation."""
+@pytest.mark.parametrize("status", ["killed", "failed"])
+def test_large_stops_after_a_failed_or_killed_compile(monkeypatch, status):
+    """Under --large, the first killed or failed compile stops the system's run: the next
+    program is never measured and is recorded as skipped, and the log names the escalation."""
     s, rows = _standin("fe2s2")
     monkeypatch.setattr(report, "projection", lambda *args: {"allowed": True,
                                                               "reason": "within the limits"})
     measured = []
 
-    def killed_once(system, row, *args):
-        assert not measured, "the run continued after a kill"
+    def stops_once(system, row, *args):
+        assert not measured, f"the run continued after a {status} compile"
         measured.append(row.id)
-        return {"code_hash": "1" * 64, "environment": {}, "status": "killed", "reason": "memory",
+        return {"code_hash": "1" * 64, "environment": {}, "status": status,
+                "reason": "memory" if status == "killed" else "compile",
                 "watchdog": {"seconds": 1.0, "peak_mb": 7700.0}}
 
-    monkeypatch.setattr(report, "measure", killed_once)
+    monkeypatch.setattr(report, "measure", stops_once)
     cache = {}
     log = report.run_system(s, rows, cache, "1" * 64, projected=True,
                             only={"SpinMux", "SpinSwap"})
     assert measured == ["SpinMux"]
     assert [cache[f"fe2s2/{r}"][-1]["status"] for r in ("SpinMux", "SpinSwap")] == [
-        "killed", "skipped"]
-    assert any("stopped; the orchestrator reports the killed compile" in line for line in log)
+        status, "skipped"]
+    assert any(f"stopped; the orchestrator reports the {status} compile" in line for line in log)
 
 
 @functools.cache
