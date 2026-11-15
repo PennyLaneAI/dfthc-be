@@ -14501,8 +14501,12 @@
      "calls": 1,
      "controlled_calls": 0,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 9793,
+      "measurements": 2524,
+      "measured_and_uncomputes": 8675
+     },
      "closed": {
       "toffoli": 9793,
       "measurements": 2524,
@@ -14544,13 +14548,59 @@
       "ref-target": -1,
       "qpe-ctrl": -1
      },
-     "cliffords": null,
+     "cliffords": 1045520,
      "clifford_kind": "upper bound (CNOT, PauliX); expected, hinted (CZ, PauliZ)",
      "wires": 1102,
-     "seconds": null,
-     "peak_mb": null,
-     "gates": null,
-     "projection": null
+     "seconds": 34.62,
+     "peak_mb": 1692.1,
+     "gates": 1073044,
+     "projection": {
+      "allowed": true,
+      "reason": "within the limits",
+      "method": "k1",
+      "gates": 1073044,
+      "seconds": 35.4,
+      "time_exponent": 1.0,
+      "peak_mb": 1747.2,
+      "mb_per_1000_gates": 1.153,
+      "limits": {
+       "seconds": 3600.0,
+       "mb": 7680.0,
+       "cap_mb": 8192
+      },
+      "points": [
+       [
+        3565,
+        6.0,
+        466.4
+       ],
+       [
+        7104,
+        6.1,
+        488.2
+       ],
+       [
+        7766,
+        6.1,
+        478.9
+       ],
+       [
+        48186,
+        8.5,
+        614.6
+       ],
+       [
+        296917,
+        19.3,
+        1002.3
+       ],
+       [
+        566743,
+        18.7,
+        1081.9
+       ]
+      ]
+     }
     },
     {
      "id": "DFTHCBlockEncoding",
@@ -15734,8 +15784,12 @@
      "calls": 0,
      "controlled_calls": 1,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 9795,
+      "measurements": 2524,
+      "measured_and_uncomputes": 8677
+     },
      "closed": {
       "toffoli": 9795,
       "measurements": 2524,
@@ -15776,13 +15830,59 @@
       "ctrl-ref-t2": 1,
       "ref-target": -1
      },
-     "cliffords": null,
+     "cliffords": 1045524,
      "clifford_kind": "upper bound (CNOT, PauliX); expected, hinted (CZ, PauliZ)",
      "wires": 1103,
-     "seconds": null,
-     "peak_mb": null,
-     "gates": null,
-     "projection": null
+     "seconds": 35.99,
+     "peak_mb": 1675.1,
+     "gates": 1073050,
+     "projection": {
+      "allowed": true,
+      "reason": "within the limits",
+      "method": "k1",
+      "gates": 1073050,
+      "seconds": 35.0,
+      "time_exponent": 1.0,
+      "peak_mb": 1647.0,
+      "mb_per_1000_gates": 1.078,
+      "limits": {
+       "seconds": 3600.0,
+       "mb": 7680.0,
+       "cap_mb": 8192
+      },
+      "points": [
+       [
+        3571,
+        5.6,
+        438.5
+       ],
+       [
+        7110,
+        5.6,
+        461.0
+       ],
+       [
+        7772,
+        5.8,
+        455.4
+       ],
+       [
+        48192,
+        8.2,
+        584.6
+       ],
+       [
+        296923,
+        18.0,
+        1012.9
+       ],
+       [
+        566749,
+        18.5,
+        993.1
+       ]
+      ]
+     }
     },
     {
      "id": "ControlledDFTHCBlockEncoding",
@@ -16223,7 +16323,7 @@
      "projection": null
     }
    ],
-   "qpe_basis": "T, M and A from the closed form of the controlled walk: T = (2^t - 1) T_C(W) + (t^3 - t)/6, M = (2^t - 1) M_W + t and A = (2^t - 1) A_C(W) + (t^3 - t)/6, every correction at its maximum branch; Task 4.5 replaces them by the compiled T_C(W), M_W and A_C(W).",
+   "qpe_basis": "T, M and A from the compiled controlled walk (Task 4.5): T = (2^t - 1) T_C(W) + (t^3 - t)/6, M = (2^t - 1) M_W + t and A = (2^t - 1) A_C(W) + (t^3 - t)/6, every correction at its maximum branch.",
    "qpe": {
     "1": {
      "toffoli": 9795,
@@ -16265,50 +16365,8 @@
   }
  },
  "log": [
-  "fe4s4/DFTHCWalk: compiled (18.7 s, 1081.9 MB)",
-  "fe4s4/DFTHCBlockEncoding: compiled (19.4 s, 937.2 MB)",
-  "fe4s4/OuterPrepare: compiled (5.0 s, 289.3 MB)",
-  "fe4s4/FlaggedUniformPrep@OuterPrepare: compiled (3.9 s, 255.9 MB)",
-  "fe4s4/PhaseGradientRotation@FlaggedUniformPrep@OuterPrepare: compiled (3.8 s, 240.4 MB)",
-  "fe4s4/QROAMRead@OuterPrepare: compiled (4.3 s, 275.9 MB)",
-  "fe4s4/InnerPrepare: compiled (5.8 s, 364.4 MB)",
-  "fe4s4/FlaggedUniformPrep@InnerPrepare: compiled (3.9 s, 246.9 MB)",
-  "fe4s4/PhaseGradientRotation@FlaggedUniformPrep@InnerPrepare: compiled (3.7 s, 237.3 MB)",
-  "fe4s4/QROAMRead@InnerPrepare: compiled (5.4 s, 317.9 MB)",
-  "fe4s4/InnerSigns: compiled (3.3 s, 202.1 MB)",
-  "fe4s4/InnerSelect: compiled (9.9 s, 569.9 MB)",
-  "fe4s4/TailAngleLoad: compiled (4.2 s, 267.5 MB)",
-  "fe4s4/QROAMRead@TailAngleLoad: compiled (4.0 s, 262.3 MB)",
-  "fe4s4/SFAngleLoad: compiled (6.8 s, 401.1 MB)",
-  "fe4s4/QROAMRead@SFAngleLoad: compiled (6.5 s, 368.6 MB)",
-  "fe4s4/SpinMux: compiled (3.4 s, 203.5 MB)",
-  "fe4s4/SpinSwap: compiled (3.5 s, 207.1 MB)",
-  "fe4s4/GivensLadder: compiled (4.1 s, 268.1 MB)",
-  "fe4s4/GivensRotation: compiled (3.8 s, 243.4 MB)",
-  "fe4s4/MajoranaGate: compiled (3.7 s, 239.6 MB)",
-  "fe4s4/GivensLadderDagger: compiled (4.1 s, 267.2 MB)",
-  "fe4s4/Adjoint(GivensRotation): compiled (4.0 s, 253.3 MB)",
-  "fe4s4/AngleErase: compiled (5.2 s, 323.9 MB)",
-  "fe4s4/InnerUnprepareFromOutcomes: compiled (6.6 s, 367.7 MB)",
-  "fe4s4/Adjoint(FlaggedUniformPrep)@InnerUnprepareFromOutcomes: compiled (3.8 s, 248.8 MB)",
-  "fe4s4/RefT2: compiled (3.9 s, 264.5 MB)",
-  "fe4s4/ZeroReflection@RefT2: compiled (3.9 s, 262.2 MB)",
-  "fe4s4/InnerSelectDagger: compiled (10.1 s, 572.2 MB)",
-  "fe4s4/Adjoint(MajoranaGate): compiled (3.9 s, 234.2 MB)",
-  "fe4s4/OuterUnprepareFromOutcomes: compiled (4.4 s, 278.7 MB)",
-  "fe4s4/Adjoint(FlaggedUniformPrep)@OuterUnprepareFromOutcomes: compiled (3.9 s, 251.8 MB)",
-  "fe4s4/RefAB: compiled (4.1 s, 274.4 MB)",
-  "fe4s4/ZeroReflection@RefAB: compiled (4.0 s, 265.5 MB)",
-  "fe4s4/ControlledDFTHCWalk: compiled (18.5 s, 993.1 MB)",
-  "fe4s4/ControlledDFTHCBlockEncoding: compiled (18.6 s, 970.9 MB)",
-  "fe4s4/ControlledRefT2: compiled (4.2 s, 248.5 MB)",
-  "fe4s4/ControlledRefAB: compiled (4.0 s, 263.0 MB)",
-  "fe4s4/PhaseFixup@InnerUnprepareFromOutcomes: compiled (5.9 s, 336.0 MB)",
-  "fe4s4/C(ZeroReflection)@RefT2: compiled (5.9 s, 358.1 MB)",
-  "fe4s4/PhaseFixup@OuterUnprepareFromOutcomes: compiled (4.0 s, 247.2 MB)",
-  "fe4s4/C(ZeroReflection)@RefAB: compiled (6.3 s, 396.1 MB)",
-  "fe4s4/ControlledWalkPower(p=1): compiled (20.2 s, 1010.4 MB)",
-  "fe4s4/ControlledWalkPower(p=2): compiled (21.1 s, 1066.8 MB)"
+  "femoco54/DFTHCWalk: compiled (36.5 s, 1692.1 MB)",
+  "femoco54/ControlledDFTHCWalk: compiled (38.0 s, 1675.1 MB)"
  ],
  "compiled": {
   "h2_sto3g_R2_B2_C1/DFTHCWalk": [
@@ -50287,6 +50345,211 @@
     },
     "gates": 227,
     "family": "PhaseFixup:outer_erase"
+   }
+  ],
+  "femoco54/DFTHCWalk": [
+   {
+    "code_hash": "5e3eed1e7a9535765299d6c90afe643f96a5155e7eb43d43e039864133fbba8e",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "watchdog": {
+     "command": [
+      "femoco54",
+      "DFTHCWalk"
+     ],
+     "pid": 10487,
+     "returncode": 0,
+     "seconds": 36.5,
+     "peak_mb": 1692.1,
+     "samples": 705,
+     "killed": null,
+     "survivors": [],
+     "cap_mb": 8192,
+     "timeout_s": 3600,
+     "priority": "taskpolicy -c utility",
+     "heavy": false
+    },
+    "status": "compiled",
+    "toffoli": 9793,
+    "measurements": 2524,
+    "measured_and_uncomputes": 8675,
+    "counts": {
+     "Adjoint(S)": 636,
+     "Adjoint(TemporaryAND)": 8675,
+     "CNOT": 1026422,
+     "CZ": 9074,
+     "GlobalPhase": 2,
+     "Hadamard": 4846,
+     "MidCircuitMeasure": 2524,
+     "PauliX": 3848,
+     "PauliZ": 56,
+     "PhaseGradientStatePrep": 1,
+     "S": 636,
+     "TemporaryAND": 8675,
+     "Toffoli": 1118
+    },
+    "num_wires": 1102,
+    "seconds": 34.62,
+    "projection": {
+     "allowed": true,
+     "reason": "within the limits",
+     "method": "k1",
+     "gates": 1073044,
+     "seconds": 35.4,
+     "time_exponent": 1.0,
+     "peak_mb": 1747.2,
+     "mb_per_1000_gates": 1.153,
+     "limits": {
+      "seconds": 3600.0,
+      "mb": 7680.0,
+      "cap_mb": 8192
+     },
+     "points": [
+      [
+       3565,
+       6.0,
+       466.4
+      ],
+      [
+       7104,
+       6.1,
+       488.2
+      ],
+      [
+       7766,
+       6.1,
+       478.9
+      ],
+      [
+       48186,
+       8.5,
+       614.6
+      ],
+      [
+       296917,
+       19.3,
+       1002.3
+      ],
+      [
+       566743,
+       18.7,
+       1081.9
+      ]
+     ]
+    },
+    "gates": 1073044,
+    "family": "DFTHCWalk:walk"
+   }
+  ],
+  "femoco54/ControlledDFTHCWalk": [
+   {
+    "code_hash": "5e3eed1e7a9535765299d6c90afe643f96a5155e7eb43d43e039864133fbba8e",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "watchdog": {
+     "command": [
+      "femoco54",
+      "ControlledDFTHCWalk"
+     ],
+     "pid": 10546,
+     "returncode": 0,
+     "seconds": 38.0,
+     "peak_mb": 1675.1,
+     "samples": 732,
+     "killed": null,
+     "survivors": [],
+     "cap_mb": 8192,
+     "timeout_s": 3600,
+     "priority": "taskpolicy -c utility",
+     "heavy": false
+    },
+    "status": "compiled",
+    "toffoli": 9795,
+    "measurements": 2524,
+    "measured_and_uncomputes": 8677,
+    "counts": {
+     "Adjoint(S)": 636,
+     "Adjoint(TemporaryAND)": 8677,
+     "CNOT": 1026422,
+     "CZ": 9074,
+     "Hadamard": 4846,
+     "MidCircuitMeasure": 2524,
+     "PauliX": 3852,
+     "PauliZ": 58,
+     "PhaseGradientStatePrep": 1,
+     "S": 636,
+     "TemporaryAND": 8677,
+     "Toffoli": 1118
+    },
+    "num_wires": 1103,
+    "seconds": 35.99,
+    "projection": {
+     "allowed": true,
+     "reason": "within the limits",
+     "method": "k1",
+     "gates": 1073050,
+     "seconds": 35.0,
+     "time_exponent": 1.0,
+     "peak_mb": 1647.0,
+     "mb_per_1000_gates": 1.078,
+     "limits": {
+      "seconds": 3600.0,
+      "mb": 7680.0,
+      "cap_mb": 8192
+     },
+     "points": [
+      [
+       3571,
+       5.6,
+       438.5
+      ],
+      [
+       7110,
+       5.6,
+       461.0
+      ],
+      [
+       7772,
+       5.8,
+       455.4
+      ],
+      [
+       48192,
+       8.2,
+       584.6
+      ],
+      [
+       296923,
+       18.0,
+       1012.9
+      ],
+      [
+       566749,
+       18.5,
+       993.1
+      ]
+     ]
+    },
+    "gates": 1073050,
+    "family": "ControlledDFTHCWalk:controlled_walk"
    }
   ]
  }
