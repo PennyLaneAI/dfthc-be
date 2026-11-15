@@ -33,7 +33,10 @@ validated by the compiles at the other systems and by the cross-check.
 The script exits with status 1 after writing both files if a check fails: a measured T, M or A
 that differs from its closed form, a nonzero delta against dfthcbe or the paper without a reason
 code, or, wherever the walks are measured, a cross-check (the sum over the partition rows of calls
-per walk times the closed form against the measured walk and controlled walk).
+per walk times the closed form, plus in M the block encoding's own junk measurements, against the
+measured walk and controlled walk). The walk's unprepares take the junk outcomes the block
+encoding measured (spec 16, Q-1 variant (b)): their programs pass constant outcomes, and the
+``PhaseFixup`` rows take their erase arguments; the walk calls no ``QROAMErase``.
 """
 
 from __future__ import annotations
@@ -64,6 +67,7 @@ from dfthc.compile import (  # noqa: E402
 )
 from dfthc.data.factors import load_factors, random_factors  # noqa: E402
 from dfthc.data.tables import WalkTables  # noqa: E402
+from dfthc.ops.prepare import InnerPrepare, OuterPrepare  # noqa: E402
 from dfthc.ops.qroam import PhaseFixup, QROAMErase, QROAMRead  # noqa: E402
 from dfthc.ops.reflections import ZeroReflection  # noqa: E402
 from dfthc.ops.walk import ControlledDFTHCWalk, DFTHCWalk  # noqa: E402
@@ -112,7 +116,6 @@ REASON_CODES = {
     "adder-const": "SemiAdder constants differ from Qualtran's",
     "mux": "spin-multiplexer construction",
     "attrib": "the paper attributes the cost to a different step",
-    "junk-qubits": "junk persists until the erase",
     "rz-addsub": "each Givens R_z is Qualtran's ControlledAddOrSubtract, b_rot - 1 Toffolis, as in "
                  "dfthcbe; the paper counts b_rot",
     "cmp-free": "PennyLane's comparators uncompute by measurement, so their adjoints cost no "
@@ -156,9 +159,13 @@ LEVELS = {"L1": {"PhaseGradientRotation", "FlaggedUniformPrep", "Adjoint(Flagged
           "L3": {"RefT2", "RefAB", "ControlledRefT2", "ControlledRefAB", "DFTHCBlockEncoding",
                  "ControlledDFTHCBlockEncoding", "DFTHCWalk", "ControlledDFTHCWalk"},
           "L4": {"ControlledWalkPower", "QPE"}}
+FROM_OUTCOMES = frozenset({"OuterUnprepareFromOutcomes", "InnerUnprepareFromOutcomes"})
+"""The unprepares the walk calls (spec 16, Q-1 variant (b)): they take the junk outcomes the
+block encoding measured, so their programs pass constant outcomes, and they emit the erase's
+fix-up themselves, so the ``PhaseFixup`` rows take their erase arguments."""
 NAME_KEYS = {
-    "OuterPrepare": "outer_prepare", "OuterUnprepare": "outer_unprepare",
-    "InnerPrepare": "inner_prepare", "InnerUnprepare": "inner_unprepare",
+    "OuterPrepare": "outer_prepare", "OuterUnprepareFromOutcomes": "outer_unprepare",
+    "InnerPrepare": "inner_prepare", "InnerUnprepareFromOutcomes": "inner_unprepare",
     "InnerSigns": "inner_signs", "TailAngleLoad": "tail_angle_load",
     "SFAngleLoad": "sf_angle_load", "SpinMux": "spin_mux", "SpinSwap": "spin_swap",
     "GivensRotation": "givens_rotation", "Adjoint(GivensRotation)": "givens_rotation_adjoint",
@@ -176,16 +183,14 @@ NAME_KEYS = {
 PARENT_KEYS = {
     ("FlaggedUniformPrep", "OuterPrepare"): "uniform_x_o",
     ("FlaggedUniformPrep", "InnerPrepare"): "uniform_b",
-    ("Adjoint(FlaggedUniformPrep)", "OuterUnprepare"): "uniform_x_o_adjoint",
-    ("Adjoint(FlaggedUniformPrep)", "InnerUnprepare"): "uniform_b_adjoint",
+    ("Adjoint(FlaggedUniformPrep)", "OuterUnprepareFromOutcomes"): "uniform_x_o_adjoint",
+    ("Adjoint(FlaggedUniformPrep)", "InnerUnprepareFromOutcomes"): "uniform_b_adjoint",
     ("PhaseGradientRotation", "FlaggedUniformPrep"): "rotation",
     ("QROAMRead", "OuterPrepare"): "outer_read", ("QROAMRead", "InnerPrepare"): "inner_read",
     ("QROAMRead", "TailAngleLoad"): "tail_angle_load",
     ("QROAMRead", "SFAngleLoad"): "sf_angle_load",
-    ("QROAMErase", "OuterUnprepare"): "outer_erase",
-    ("QROAMErase", "InnerUnprepare"): "inner_erase",
-    ("PhaseFixup", "OuterUnprepare"): "outer_erase",
-    ("PhaseFixup", "InnerUnprepare"): "inner_erase",
+    ("PhaseFixup", "OuterUnprepareFromOutcomes"): "outer_erase",
+    ("PhaseFixup", "InnerUnprepareFromOutcomes"): "inner_erase",
     ("ZeroReflection", "RefT2"): "ref_t2", ("ZeroReflection", "RefAB"): "ref_ab",
     ("C(ZeroReflection)", "RefT2"): "controlled_ref_t2",
     ("C(ZeroReflection)", "RefAB"): "controlled_ref_ab",
@@ -196,20 +201,20 @@ STEPS = {"OuterPrepare": "1-4", "InnerPrepare": "5-8", "InnerSigns": "9", "Inner
          "GivensLadder": "14", "GivensRotation": "14", "MajoranaGate": "15",
          "Adjoint(MajoranaGate)": "15", "GivensLadderDagger": "16",
          "Adjoint(GivensRotation)": "16", "AngleErase": "18", "InnerSelectDagger": "10-18",
-         "InnerUnprepare": "19-22", "RefT2": "23", "ControlledRefT2": "23",
-         "OuterUnprepare": "24-27", "RefAB": "28", "ControlledRefAB": "28",
+         "InnerUnprepareFromOutcomes": "19-22", "RefT2": "23", "ControlledRefT2": "23",
+         "OuterUnprepareFromOutcomes": "24-27", "RefAB": "28", "ControlledRefAB": "28",
          "DFTHCBlockEncoding": "1-27", "ControlledDFTHCBlockEncoding": "1-27",
          "DFTHCWalk": "1-28", "ControlledDFTHCWalk": "1-28", "ControlledWalkPower": "QPE",
          "QPE": "QPE"}
 PARENT_STEPS = {("FlaggedUniformPrep", "OuterPrepare"): "1",
                 ("FlaggedUniformPrep", "InnerPrepare"): "5",
-                ("Adjoint(FlaggedUniformPrep)", "OuterUnprepare"): "27",
-                ("Adjoint(FlaggedUniformPrep)", "InnerUnprepare"): "22",
+                ("Adjoint(FlaggedUniformPrep)", "OuterUnprepareFromOutcomes"): "27",
+                ("Adjoint(FlaggedUniformPrep)", "InnerUnprepareFromOutcomes"): "22",
                 ("PhaseGradientRotation", "FlaggedUniformPrep"): "1, 5",
                 ("QROAMRead", "OuterPrepare"): "2", ("QROAMRead", "InnerPrepare"): "6",
                 ("QROAMRead", "TailAngleLoad"): "10", ("QROAMRead", "SFAngleLoad"): "11",
-                ("QROAMErase", "OuterUnprepare"): "26", ("QROAMErase", "InnerUnprepare"): "21",
-                ("PhaseFixup", "OuterUnprepare"): "26", ("PhaseFixup", "InnerUnprepare"): "21",
+                ("PhaseFixup", "OuterUnprepareFromOutcomes"): "26",
+                ("PhaseFixup", "InnerUnprepareFromOutcomes"): "21",
                 ("ZeroReflection", "RefT2"): "23", ("ZeroReflection", "RefAB"): "28",
                 ("C(ZeroReflection)", "RefT2"): "23", ("C(ZeroReflection)", "RefAB"): "28"}
 
@@ -325,12 +330,15 @@ def _signature(op) -> tuple:
 
 def _rebuilt(op, index: dict):
     """``op`` constructed again on the wires ``index`` maps its wires to (under capture this
-    queues it)."""
+    queues it); an unprepare from outcomes gets constant junk outcomes, a bool array, since its
+    program has no junk measurement (its counts do not depend on the outcomes)."""
     if op.name.startswith("Adjoint("):
         return qp.adjoint(_rebuilt(op.base, index))
     arguments = dict(op.arguments)
     for name in op.wire_argnames:
         arguments[name] = [index[wire] for wire in getattr(op, name)]
+    if op.name in FROM_OUTCOMES:
+        arguments["junk_outcomes"] = np.zeros(len(arguments["junk_outcomes"]), dtype=bool)
     return type(op)(**arguments)
 
 
@@ -342,12 +350,24 @@ def _call_program(op):
     return program
 
 
-def _fixup_program(erase):
-    """``PhaseFixup`` with the erase's fix-up arguments: its covered set, one-hot bits, enable
-    and work, on a one-hot of ``2**onehot_bits`` wires; the program's parities are all ``False``,
-    and the size operator (tape mode) takes an abstract parity array. Returns ``(program,
-    size_op, wires)``."""
-    a = erase.arguments
+def _erase_arguments(op) -> dict:
+    """The erase an unprepare from outcomes performs: its read's ``address_widths``,
+    ``live_ranges``, ``width`` and ``block_bits`` (no enable) and the fix-up's ``onehot_bits``
+    (spec 9.7, 9.8)."""
+    a = op.arguments
+    if op.name == "OuterUnprepareFromOutcomes":
+        shape, onehot_bits = OuterPrepare.read_shape(a["X_o"], a["b_k1"], a["k1"]), a["ke1"]
+    else:
+        shape = InnerPrepare.read_shape(a["N"], a["R"], a["B"], a["C"], a["b_k2"], a["k2"])
+        onehot_bits = a["ke2"] + lg(a["B"] + 1)
+    return shape | {"control_value": None, "onehot_bits": onehot_bits}
+
+
+def _fixup_program(a: dict):
+    """``PhaseFixup`` with an erase's fix-up arguments ``a`` (:func:`_erase_arguments`): its
+    covered set, one-hot bits, enable and work, on a one-hot of ``2**onehot_bits`` wires; the
+    program's parities are all ``False``, and the size operator (tape mode) takes an abstract
+    parity array. Returns ``(program, size_op, wires)``."""
     covered = QROAMRead.loaded_ranges(a["address_widths"], a["live_ranges"], a["block_bits"])
     sizes = PhaseFixup.required_wires(a["address_widths"], covered, a["onehot_bits"],
                                       a["control_value"])
@@ -390,12 +410,13 @@ def _dirty(L: int) -> int:
 
 
 def closed_form(name: str, op, p: WalkParams) -> tuple[costs.Cost, int]:
-    """The closed form (``dfthc.costs``) of one call: ``(Cost(T, M), A)``. A counts the measured
-    AND uncomputes inside the call: a prepare leaves its comparators' ANDs (``b_k`` and the
-    uniform preparation's :func:`_dirty`) for its unprepare to measure (spec 9.24, 10.2), so per
-    call A is not ``T`` minus the plain ``Toffoli`` gates; over the walk it is
+    """The closed form (``dfthc.costs``) of one call: ``(Cost(T, M), A)``; for ``PhaseFixup``,
+    ``op`` is the erase's arguments (:func:`_erase_arguments`). A counts the measured AND
+    uncomputes inside the call: a prepare leaves its comparators' ANDs (``b_k`` and the uniform
+    preparation's :func:`_dirty`) for its unprepare to measure (spec 9.24, 10.2), so per call A
+    is not ``T`` minus the plain ``Toffoli`` gates; over the walk it is
     (``measured_and_uncomputes``)."""
-    a = _target(op).arguments if op is not None else {}
+    a = op if isinstance(op, dict) else _target(op).arguments if op is not None else {}
     if name == "PhaseGradientRotation":
         cost = costs.phase_gradient_rotation(a["k"], a["m"])
         return cost, cost.toffoli
@@ -410,12 +431,10 @@ def closed_form(name: str, op, p: WalkParams) -> tuple[costs.Cost, int]:
         cost = costs.qroam_read(ranges, a["block_bits"], a["width"],
                                 a["control_value"] is not None)
         return cost, cost.toffoli - (2**a["block_bits"] - 1) * a["width"]
-    if name in ("QROAMErase", "PhaseFixup"):
+    if name == "PhaseFixup":
         ranges = QROAMErase.fixup_high_ranges(a["address_widths"], a["live_ranges"],
                                               a["block_bits"], a["onehot_bits"])
-        cost = costs.qroam_erase(ranges, a["block_bits"], a["width"], a["onehot_bits"],
-                                 a["control_value"] is not None)
-        cost = cost if name == "QROAMErase" else costs.Cost(cost.toffoli)
+        cost = costs.phase_fixup(ranges, a["onehot_bits"], a["control_value"] is not None)
         return cost, cost.toffoli
     if name in ("ZeroReflection", "C(ZeroReflection)"):
         n_w = len(op.zero_wires) + len(op.one_wires)
@@ -426,10 +445,12 @@ def closed_form(name: str, op, p: WalkParams) -> tuple[costs.Cost, int]:
     table = {
         "OuterPrepare": (costs.outer_prepare(p),
                          -_dirty(p.X_o) - (p.K1 - 1) * p.d1 - p.b_k1 - p.w_x),
-        "OuterUnprepare": (costs.outer_unprepare(p), -p.w_x + p.b_k1 + _dirty(p.X_o)),
+        "OuterUnprepareFromOutcomes": (costs.outer_unprepare_from_outcomes(p),
+                                       -p.w_x + p.b_k1 + _dirty(p.X_o)),
         "InnerPrepare": (costs.inner_prepare(p),
                          -_dirty(p.B + 1) - (p.K2 - 1) * p.d2 - p.b_k2 - p.w_b),
-        "InnerUnprepare": (costs.inner_unprepare(p), -p.w_b + p.b_k2 + _dirty(p.B + 1)),
+        "InnerUnprepareFromOutcomes": (costs.inner_unprepare_from_outcomes(p),
+                                       -p.w_b + p.b_k2 + _dirty(p.B + 1)),
         "InnerSigns": (costs.inner_signs(), 0),
         "TailAngleLoad": (costs.tail_angle_load(p), 0),
         "SFAngleLoad": (costs.sf_angle_load(p), 0),
@@ -515,14 +536,15 @@ def _walk_rows_program(s: System, name: str):
 def _extra_rows(s: System, rows: list[Row]) -> list[Row]:
     p, extra = s.params, []
     for row in rows:
-        if row.name == "QROAMErase":
-            program, size_op, wires = _fixup_program(row.op)
-            closed, uncomputes = closed_form("PhaseFixup", row.op, p)
+        if row.name in FROM_OUTCOMES:
+            erase = _erase_arguments(row.op)
+            program, size_op, wires = _fixup_program(erase)
+            closed, uncomputes = closed_form("PhaseFixup", erase, p)
             extra.append(dataclasses.replace(
-                row, id=f"PhaseFixup@{row.parent}", name="PhaseFixup", level="L1",
-                steps=PARENT_STEPS[("PhaseFixup", row.parent)], calls=0, controlled_calls=0,
+                row, id=f"PhaseFixup@{row.id}", name="PhaseFixup", parent=row.name, level="L1",
+                steps=PARENT_STEPS[("PhaseFixup", row.name)], calls=0, controlled_calls=0,
                 partition=False, closed=closed, uncomputes=uncomputes, wires=wires, program=program,
-                key=PARENT_KEYS[("PhaseFixup", row.parent)], descendants=frozenset({
+                key=PARENT_KEYS[("PhaseFixup", row.name)], descendants=frozenset({
                     "PhaseFixup"}), size_op=size_op))
         if row.name == "ZeroReflection":
             program, size_op, wires = _controlled_reflection_program(row.op)
@@ -571,8 +593,8 @@ def clifford_kind(row: Row) -> str:
     conditionals, counted at their maximum branch; erase fix-ups are hinted, counted at their
     expectation."""
     names = row.descendants
-    unhinted = names & {"QROAMRead", "QROAMErase", "AngleErase", "QPERound"}
-    hinted = names & {"QROAMErase", "AngleErase", "PhaseFixup"}
+    unhinted = names & ({"QROAMRead", "QROAMErase", "AngleErase", "QPERound"} | FROM_OUTCOMES)
+    hinted = names & ({"QROAMErase", "AngleErase", "PhaseFixup"} | FROM_OUTCOMES)
     parts = (["upper bound (CNOT, PauliX)"] if unhinted else []) + (
         ["expected, hinted (CZ, PauliZ)"] if hinted else [])
     return "; ".join(parts) or "exact"
@@ -791,7 +813,8 @@ def report_system(s: System, rows: list[Row], cache: dict, hash_: str) -> tuple[
     record = {"params": dataclasses.asdict(p), "wires": s.layout.num_wires,
               "qubit_groups": {g: len(getattr(s.layout, g)) for g in
                                ("system", "outer", "inner", "select", "phase_grad", "work")},
-              "junk_wires": len(s.layout.junk_x_o) + len(s.layout.junk_b), "rows": records}
+              "junk_wires": len(s.layout.junk_x_o) + len(s.layout.junk_b),
+              "junk_measurements": costs.junk_measurements(p).measurements, "rows": records}
     if s.name == "femoco54":
         cwalk = next(r for r in records if r["id"] == "ControlledDFTHCWalk")
         basis = cwalk["measured"] or cwalk["closed"]
@@ -812,14 +835,17 @@ def report_system(s: System, rows: list[Row], cache: dict, hash_: str) -> tuple[
 
 
 def cross_check(s: System, records: list[dict]) -> list[str]:
-    """Spec 13.3 step 4: the partition rows times their calls give the walk and the controlled
-    walk, in closed form always and against the measured walks where they are measured; and the
-    partition sums of dfthcbe's and the paper's values give their walks."""
+    """Spec 13.3 step 4: the partition rows times their calls, plus in M the block encoding's own
+    junk measurements (:func:`dfthc.costs.junk_measurements`; spec 16, Q-1 variant (b)), give the
+    walk and the controlled walk, in closed form always and against the measured walks where they
+    are measured; and the partition sums of dfthcbe's and the paper's values give their walks."""
     errors, by_id = [], {r["id"]: r for r in records}
+    junk = costs.junk_measurements(s.params).measurements
     for walk, calls in (("DFTHCWalk", "calls"), ("ControlledDFTHCWalk", "controlled_calls")):
         parts = [r for r in records if r["partition"] and r[calls]]
         total = {name: sum(r[calls] * r["closed"][name] for r in parts)
                  for name in ("toffoli", "measurements", "measured_and_uncomputes")}
+        total["measurements"] += junk
         if total != by_id[walk]["closed"]:
             errors.append(f"{s.name}: partition {total} != closed {walk} {by_id[walk]['closed']}")
         if by_id[walk]["measured"] is not None and total != by_id[walk]["measured"]:
@@ -913,7 +939,10 @@ def femoco_summary(system: dict) -> list[str]:
                  f"**{walk['paper']:,}** |")
     m, a = walk["closed"]["measurements"], walk["closed"]["measured_and_uncomputes"]
     ca = cwalk["closed"]["measured_and_uncomputes"]
-    junk = system["junk_wires"]
+    junk, junk_m = system["junk_wires"], system["junk_measurements"]
+    ours, paper = system["qubit_groups"], costs_reference.PAPER_QUBIT_GROUPS_FEMOCO
+    qubit_rows = [f"| `{group}` | {ours[group]:,} | {paper[group]:,} | "
+                  f"{ours[group] - paper[group]:+,} |" for group in ours]
     lines += ["", f"- Ours minus dfthcbe: walk {walk['delta_dfthcbe']:+,}, controlled walk "
               f"{cwalk['delta_dfthcbe']:+,}. Ours minus the paper: walk {walk['delta_paper']:+,}. "
               f"The paper's {walk['paper']:,} is its QPE step, with the control on "
@@ -923,19 +952,33 @@ def femoco_summary(system: dict) -> list[str]:
               "REF_T2) and `ref-target` -1 (the controlled REF_{A u B} against B55), and no "
               "`qpe-ctrl`, since both carry the QPE control.",
               f"- Measurements per walk: M = {m:,}, A = {a:,} (controlled {ca:,}), so "
-              f"M + A = {m + a:,} (controlled {m + ca:,}) physical measurements.",
+              f"M + A = {m + a:,} (controlled {m + ca:,}) physical measurements. {junk_m:,} of "
+              "the M are the block encoding's own junk measurements, right after each prepare "
+              "(spec 16, Q-1 variant (b)); the partition rows hold the rest.",
               "- The paper's Table III charges the tail-angle fix-up (N) to the inner erase; "
               "the rows show its value and, in parentheses, the value with the fix-up at step 18, "
               "where dfthcbe and we apply it. The spin multiplexer is 0 in Table III and 1 per "
               "application in App. B.3 and B.7.1 (4(N + 1) for the four swaps).",
               "", "### Qubits (spec 10.3, 13.2)", "",
-              f"Ours: {system['wires']:,} wires from `WalkLayout` ("
-              + ", ".join(f"{g} {n}" for g, n in system["qubit_groups"].items())
-              + f"); the paper: {costs_reference.PAPER_QUBITS_FEMOCO:,}. The junk registers hold "
-              f"{junk:,} wires (`junk-qubits`): the paper measures the junk right after each "
-              "read; early junk measurement (Q-1, open) would let the angle registers reuse them. "
-              "The dirty comparator work registers (`cmp-free`) and r in the inner junk "
-              "(`flat-r`) account for the rest of the outer and inner groups' excess.", "",
+              f"Ours: {system['wires']:,} wires from `WalkLayout`; the paper: "
+              f"{costs_reference.PAPER_QUBITS_FEMOCO:,} (its Table 3, under the names of our "
+              f"groups: the persistent ancillas of each subroutine and, as `work`, its largest "
+              f"temporary count, the outer prepare's). The junk registers' {junk:,} wires are "
+              "X-measured right after each prepare and share the angle register's wires (spec 16, "
+              "Q-1 variant (b)); the paper shares only its inner junk (313 temporaries) with its "
+              "angles and adds the outer prepare's 110 temporaries.", "",
+              "| Group | Ours | Paper | Ours - paper |", "| --- | ---: | ---: | ---: |",
+              *qubit_rows,
+              f"| **total** | **{system['wires']:,}** | **{sum(paper.values()):,}** | "
+              f"**{system['wires'] - sum(paper.values()):+,}** |", "",
+              "By group: `outer` holds the dirty comparator and uniform-preparation work "
+              "registers (20 wires, which make the comparator adjoint free, `cmp-free`) and the "
+              "keep test's `less_than_x_o`; `inner` holds the dirty work registers (16 wires), "
+              "and its `less_than_b`, `sgn`, `d_sgn` and `r` take 7 wires against the paper's "
+              "11 for G, r and c; `select` adds the flags `G0`, `G1`, `b_neq_B` and `sg` to the "
+              "angles; the shared `work` pool (the controlled `RefAB`'s 44 wires, the largest "
+              "need) takes the place of the paper's 110 outer temporaries, because our outer "
+              "junk shares the angle register like the inner junk.", "",
               "### QPE at FeMoco-54 (spec 11.3)", "",
               "| t | T | M | A | Qubits |", "| ---: | ---: | ---: | ---: | ---: |"]
     for bits in (1, 2, 3, 10, 20, 23):
@@ -950,9 +993,7 @@ def femoco_summary(system: dict) -> list[str]:
               "walk for 14 more dirty qubits (ledger rows 2D.1 and 2D.2).",
               "- An SF fix-up one-hot of ob = w_b - 1 = 4 bits in `AngleErase`: 35 instead of 41 "
               "Toffolis per erase, 12 less per walk and per controlled walk, no extra qubits "
-              "(ledger row 2E.2).",
-              "- Early junk measurement (Q-1): about 460 qubits (the junk wires above), no Toffoli "
-              "penalty.", ""]
+              "(ledger row 2E.2).", ""]
     return lines
 
 

@@ -1,36 +1,43 @@
-"""WalkLayout: named wires, groups, the work pool and the split helper (spec section 10)."""
+"""WalkLayout: named wires, groups, the junk aliases, the work pool and the split helpers (spec
+section 10)."""
 
 import jax.numpy as jnp
 import pytest
 from pennylane.wires import Wires
 
 from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE
-from dfthc.registers import GROUPS, WalkLayout
+from dfthc.registers import GROUPS, JUNK, WalkLayout
 
 PRESETS = [FEMOCO54, H2_STO3G_TEST, H2_631G_TEST, MID_NAPHTHALENE]
 
 
 def test_femoco_group_sizes():
+    """Spec 10.3 with the junk registers on the angle wires (spec 16, Q-1 variant (b)): 1,102
+    wires, 462 fewer than the 1,564 of separate junk registers (72 outer, 390 inner)."""
     layout = WalkLayout.from_params(FEMOCO54)
     sizes = {name: len(getattr(layout, name)) for name in
              ("system", "phase_grad", "outer", "inner", "select", "work")}
-    assert sizes == {"system": 108, "phase_grad": 15, "outer": 143, "inner": 455,
+    assert sizes == {"system": 108, "phase_grad": 15, "outer": 71, "inner": 65,
                      "select": 799, "work": 44}
-    assert layout.num_wires == 1564
+    assert layout.num_wires == 1102 == 1564 - 72 - 390
 
 
 def test_femoco_register_sizes_follow_spec_9_7_and_9_8():
     sizes = WalkLayout.register_sizes(FEMOCO54)
-    assert (sizes["succ_work_x_o"], sizes["cmp_work_x_o"], sizes["junk_x_o"]) == (6, 14, 72)
-    assert (sizes["succ_work_b"], sizes["cmp_work_b"], sizes["junk_b"]) == (2, 14, 390)
+    assert (sizes["succ_work_x_o"], sizes["cmp_work_x_o"]) == (6, 14)
+    assert (sizes["succ_work_b"], sizes["cmp_work_b"]) == (2, 14)
     assert (sizes["x_o"], sizes["b"], sizes["r"], sizes["angles"]) == (9, 5, 4, 795)
+    assert WalkLayout.junk_sizes(FEMOCO54) == {"junk_x_o": 72, "junk_b": 390}
+    assert sizes["junk_overflow"] == 0 and not set(JUNK) & set(sizes)
 
 
 def test_h2_sto3g_layout():
+    """55 wires: the 4 and 7 junk wires share the 4 angle wires and 3 overflow wires."""
     layout = WalkLayout.from_params(H2_STO3G_TEST)
-    assert layout.num_wires == 63
+    assert layout.num_wires == 55
     assert len(layout.work) == 8 == WalkLayout.work_size(H2_STO3G_TEST)
     assert len(layout.succ_work_x_o) == 0  # X_o = 4 has odd part 1: a zero-width register
+    assert (len(layout.angles), len(layout.junk_overflow)) == (4, 3)
 
 
 def test_work_size_formula():
@@ -55,6 +62,24 @@ def test_groups_never_overlap_and_cover_every_wire(params):
 
 
 @pytest.mark.parametrize("params", PRESETS)
+def test_junk_registers_alias_the_start_of_the_angle_wires(params):
+    """Spec 10.2: each junk register is the first wires of angles ‖ junk_overflow, the start of
+    the select group, and junk_overflow holds exactly the junk wires beyond the angles (none at
+    FeMoco-54, H2_631G_TEST and MID_NAPHTHALENE; 3 at H2_STO3G_TEST); no group register holds a
+    junk wire elsewhere."""
+    layout = WalkLayout.from_params(params)
+    shared = list(layout.angles) + list(layout.junk_overflow)
+    junk = WalkLayout.junk_sizes(params)
+    assert len(layout.junk_overflow) == max(*junk.values(), len(layout.angles)) - len(
+        layout.angles)
+    for name, size in junk.items():
+        assert list(getattr(layout, name)) == shared[:size] == list(layout.select)[:size]
+    others = {wire for group in GROUPS.values() for name in group
+              if name not in ("angles", "junk_overflow") for wire in getattr(layout, name)}
+    assert not others & set(shared)
+
+
+@pytest.mark.parametrize("params", PRESETS)
 def test_split_group_inverts_the_layout(params):
     layout = WalkLayout.from_params(params)
     for group, names in GROUPS.items():
@@ -62,21 +87,28 @@ def test_split_group_inverts_the_layout(params):
         parts = WalkLayout.split_group(params, group, wires)
         assert list(parts) == list(names)
         assert all(parts[name] == getattr(layout, name) for name in names)
+    assert WalkLayout.split_junk(params, layout.select) == {
+        name: getattr(layout, name) for name in JUNK}
 
 
-def test_split_group_slices_arrays_as_rules_see_them():
+def test_split_helpers_slice_arrays_as_rules_see_them():
     layout = WalkLayout.from_params(H2_STO3G_TEST)
     parts = WalkLayout.split_group(H2_STO3G_TEST, "inner", jnp.asarray(layout.inner.tolist()))
     assert [p.tolist() for p in parts.values()] == [w.tolist() for w in
                                                    (getattr(layout, n) for n in GROUPS["inner"])]
+    junk = WalkLayout.split_junk(H2_STO3G_TEST, jnp.asarray(layout.select.tolist()))
+    assert [j.tolist() for j in junk.values()] == [layout.junk_x_o.tolist(),
+                                                   layout.junk_b.tolist()]
 
 
-def test_split_group_rejects_a_wrong_length():
+def test_split_helpers_reject_a_wrong_length():
     layout = WalkLayout.from_params(H2_STO3G_TEST)
-    with pytest.raises(ValueError, match="outer needs 16 wires; got 15"):
+    with pytest.raises(ValueError, match="outer needs 12 wires; got 11"):
         WalkLayout.split_group(H2_STO3G_TEST, "outer", layout.outer[:-1])
     with pytest.raises(ValueError, match="unknown group"):
         WalkLayout.split_group(H2_STO3G_TEST, "angles", layout.angles)
+    with pytest.raises(ValueError, match="select needs 11 wires; got 10"):
+        WalkLayout.split_junk(H2_STO3G_TEST, layout.select[:-1])
 
 
 def test_angle_register_is_a_slice_of_angles():
@@ -89,8 +121,8 @@ def test_angle_register_is_a_slice_of_angles():
 
 def test_qpe_registers_only_when_requested():
     layout = WalkLayout.from_params(H2_STO3G_TEST, qpe_bits=3)
-    assert layout.num_wires == 63 + 1 + 3
-    assert layout.qpe_control == Wires([63]) and layout.qpe_grad == Wires([64, 65, 66])
+    assert layout.num_wires == 55 + 1 + 3
+    assert layout.qpe_control == Wires([55]) and layout.qpe_grad == Wires([56, 57, 58])
     with pytest.raises(AttributeError):
         _ = WalkLayout.from_params(H2_STO3G_TEST).qpe_control
     with pytest.raises(ValueError, match="qpe_bits"):

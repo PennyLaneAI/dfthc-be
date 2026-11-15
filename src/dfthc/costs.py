@@ -267,6 +267,14 @@ def ref_ab(p: WalkParams, controlled: bool) -> Cost:
     return zero_reflection(p.w_x + p.b_k1 + p.w_b + p.b_k2 + 2, controlled)
 
 
+def junk_measurements(p: WalkParams) -> Cost:
+    """The block encoding's own X measurements of the reads' junk (spec 9.24 row; spec 16, Q-1
+    variant (b)): ``(K1 - 1) d1`` after ``OuterPrepare`` and ``(K2 - 1) d2`` after each
+    ``InnerPrepare``, ``T = 0``. With the unprepares from outcomes they make up
+    :func:`block_encoding`'s ``M``."""
+    return Cost(0, (p.K1 - 1) * p.d1 + 2 * (p.K2 - 1) * p.d2)
+
+
 def block_encoding(p: WalkParams, controlled: bool) -> Cost:
     """``DFTHCBlockEncoding`` (spec 9.24 row): ``T_out + T_out^dag + 2 (T_in + T_sel + T_in^dag)
     + T_RefT2`` (``InnerSigns`` costs 0), ``M = K1 d1 + 2 (K2 d2 + (N - 1) b_rot + 3)``; the

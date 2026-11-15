@@ -22,6 +22,7 @@ from dfthc.params import (
     lg,
     odd_part,
 )
+from dfthc.registers import WalkLayout
 from dfthc.testing.resources import chosen_rules, verbose_program
 from dfthc.testing.sparse_sim import ForcedPolicy, SparseSimulator
 from dfthc.testing.tape import decompose_for_simulation
@@ -284,7 +285,8 @@ def test_femoco_counts_on_the_closed_forms():
     A = 24 + 84 = 108, unprepare 9 + 36 + 24 = 69 with M = 96 and A = 15 + 36 + 30 = 81; the pair
     uncomputes all it computes, so its A is its T less its Toffoli-only part 2 w_x + (K1 - 1) d1,
     as dfthc.costs.measured_and_uncomputes counts it. The operator's own read and erase shapes
-    give the same pieces, and its registers make spec 10.3's 143-wire outer group."""
+    give the same pieces, and its registers are spec 10.3's 71-wire outer group and the 72 junk
+    wires, which the walk's layout puts on the angle wires (spec 10.2)."""
     p = FEMOCO54
     assert costs.outer_prepare(p) == costs.Cost(210)
     assert costs.outer_unprepare(p) == costs.Cost(69, 96)
@@ -304,7 +306,10 @@ def test_femoco_counts_on_the_closed_forms():
     assert sizes == {"x_o": 9, "succ_x_o": 1, "succ_work_x_o": 6, "sigma_1": 1, "m_x_o": 15,
                      "less_than_x_o": 1, "cmp_work_x_o": 14, "alt_x_o": 9, "keep_x_o": 15,
                      "junk_x_o": 72, "phase_grad": 7, "work": 20}
-    assert sum(sizes.values()) - sizes["phase_grad"] - sizes["work"] == 143
+    layout = WalkLayout.from_params(p)
+    assert sizes["junk_x_o"] == len(layout.junk_x_o) == 72
+    assert sum(sizes.values()) - sizes["junk_x_o"] - sizes["phase_grad"] - sizes["work"] == len(
+        layout.outer) == 71
 
 
 @pytest.mark.compiled

@@ -39,9 +39,22 @@ An erase X-measures M qubits; its fix-up must cancel the phase `(-1)^{xi . g(a)}
 outcome vector `xi`. The residual is GF(2)-linear in `xi`, so the zero vector and the M unit
 vectors prove it for all `2^M` outcomes: each block runs M + 1 forced schedules on the simulator,
 after checking that every conditional is diagonal with a linear predicate. Certified blocks:
-`QROAMRead` with `QROAMErase`, the angle loads with `AngleErase`, and each prepare with its
-unprepare (`tests/ops/test_certificates_qroam.py`, `test_certificates_angles.py`,
-`test_certificates_prepare.py`).
+`QROAMRead` with `QROAMErase`, the angle loads with `AngleErase`, each prepare with its
+unprepare, and each prepare with the X measurement of its junk and its unprepare from outcomes,
+where `xi` ranges over the junk outcomes and the target outcomes together (spec 16, Q-1 variant
+(b); `tests/ops/test_certificates_qroam.py`, `test_certificates_angles.py`,
+`test_certificates_prepare.py`). A test operator whose rule holds the inner prepare, the junk
+measurement and the unprepare from outcomes certifies the junk outcomes crossing an operator
+boundary inside another rule, as in the block encoding
+(`tests/ops/test_unprepare_from_outcomes.py`).
+
+The walk measures each read's junk right after its prepare, in the block encoding's rule, and the
+target in the unprepare. Nothing in the simulator changes for that: a forced schedule assigns
+outcomes in program order, so the junk outcomes come first; a fix-up's predicate is a parity of
+`MeasurementValue`s of both measurements, evaluated on the recorded outcomes when the
+conditional runs; strict mode asserts probability 1/2 for each of them. The end-to-end schedules
+(all zeros, all ones, alternating, seeded) keep their meaning, and the total number of
+measurements is unchanged.
 
 ## End-to-end checks (spec 12.4)
 

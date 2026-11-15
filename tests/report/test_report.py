@@ -45,21 +45,24 @@ H2_ROWS = [
     "PhaseGradientRotation", "QROAMRead@InnerPrepare", "InnerSigns", "InnerSelect",
     "TailAngleLoad", "QROAMRead@TailAngleLoad", "SFAngleLoad", "QROAMRead@SFAngleLoad", "SpinMux",
     "SpinSwap", "GivensLadder", "GivensRotation", "MajoranaGate", "GivensLadderDagger",
-    "Adjoint(GivensRotation)", "AngleErase", "InnerUnprepare", "QROAMErase@InnerUnprepare",
-    "Adjoint(FlaggedUniformPrep)@InnerUnprepare", "RefT2", "ZeroReflection@RefT2",
-    "InnerSelectDagger", "Adjoint(MajoranaGate)", "OuterUnprepare", "QROAMErase@OuterUnprepare",
-    "Adjoint(FlaggedUniformPrep)@OuterUnprepare", "RefAB", "ZeroReflection@RefAB",
+    "Adjoint(GivensRotation)", "AngleErase", "InnerUnprepareFromOutcomes",
+    "Adjoint(FlaggedUniformPrep)@InnerUnprepareFromOutcomes", "RefT2", "ZeroReflection@RefT2",
+    "InnerSelectDagger", "Adjoint(MajoranaGate)", "OuterUnprepareFromOutcomes",
+    "Adjoint(FlaggedUniformPrep)@OuterUnprepareFromOutcomes", "RefAB", "ZeroReflection@RefAB",
     "ControlledDFTHCWalk", "ControlledDFTHCBlockEncoding", "ControlledRefT2", "ControlledRefAB",
-    "PhaseFixup@InnerUnprepare", "C(ZeroReflection)@RefT2", "PhaseFixup@OuterUnprepare",
-    "C(ZeroReflection)@RefAB", "ControlledWalkPower(p=1)", "ControlledWalkPower(p=2)", "QPE(t=1)",
-    "QPE(t=2)", "QPE(t=3)",
+    "PhaseFixup@InnerUnprepareFromOutcomes", "C(ZeroReflection)@RefT2",
+    "PhaseFixup@OuterUnprepareFromOutcomes", "C(ZeroReflection)@RefAB",
+    "ControlledWalkPower(p=1)", "ControlledWalkPower(p=2)", "QPE(t=1)", "QPE(t=2)", "QPE(t=3)",
 ]
-"""Every program of the report at H2_STO3G_TEST, in report order."""
+"""Every program of the report at H2_STO3G_TEST, in report order: the walk calls no QROAMErase
+(the unprepares from outcomes erase themselves, spec 16, Q-1 variant (b)), so the fix-up rows
+take their arguments."""
 PARTITION = {"OuterPrepare": (1, 1), "InnerPrepare": (2, 2), "InnerSigns": (2, 2),
              "TailAngleLoad": (2, 2), "SFAngleLoad": (2, 2), "SpinMux": (4, 4),
              "SpinSwap": (4, 4), "GivensLadder": (2, 2), "MajoranaGate": (1, 1),
-             "GivensLadderDagger": (2, 2), "AngleErase": (2, 2), "InnerUnprepare": (2, 2),
-             "RefT2": (1, 0), "Adjoint(MajoranaGate)": (1, 1), "OuterUnprepare": (1, 1),
+             "GivensLadderDagger": (2, 2), "AngleErase": (2, 2),
+             "InnerUnprepareFromOutcomes": (2, 2), "RefT2": (1, 0),
+             "Adjoint(MajoranaGate)": (1, 1), "OuterUnprepareFromOutcomes": (1, 1),
              "RefAB": (1, 0), "ControlledRefT2": (0, 1), "ControlledRefAB": (0, 1)}
 """The partition rows and their calls per walk and per controlled walk (spec 3.5)."""
 
@@ -87,14 +90,15 @@ def test_report_h2_rows_and_columns(tmp_path):
     walk, cwalk = rows["DFTHCWalk"], rows["ControlledDFTHCWalk"]
     assert (walk.closed, walk.uncomputes) == (costs.walk(H2_STO3G_TEST, False), 108)
     assert (cwalk.closed, cwalk.uncomputes) == (costs.walk(H2_STO3G_TEST, True), 110)
-    assert (walk.wires, cwalk.wires, rows["QPE(t=3)"].wires) == (63, 64, 67)
+    assert (walk.wires, cwalk.wires, rows["QPE(t=3)"].wires) == (55, 56, 59)
     assert rows["QROAMRead@InnerPrepare"].level == "L1" and rows["SpinSwap"].level == "L2"
     assert rows["RefAB"].level == "L3" and rows["QPE(t=1)"].level == "L4"
-    assert rows["AngleErase"].steps == "18" and rows["QROAMErase@InnerUnprepare"].steps == "21"
+    assert rows["AngleErase"].steps == "18" and rows["InnerUnprepareFromOutcomes"].steps == "19-22"
+    assert rows["PhaseFixup@InnerUnprepareFromOutcomes"].steps == "21"
     assert report.clifford_kind(rows["SpinSwap"]) == "exact"
-    assert report.clifford_kind(rows["QROAMErase@InnerUnprepare"]) == (
+    assert report.clifford_kind(rows["InnerUnprepareFromOutcomes"]) == (
         "upper bound (CNOT, PauliX); expected, hinted (CZ, PauliZ)")
-    assert report.clifford_kind(rows["PhaseFixup@OuterUnprepare"]) == (
+    assert report.clifford_kind(rows["PhaseFixup@OuterUnprepareFromOutcomes"]) == (
         "expected, hinted (CZ, PauliZ)")
 
     assert report.main(["--systems", "H2_STO3G_TEST", "--rows", "--out", str(tmp_path)]) == 0
@@ -299,7 +303,7 @@ def test_every_large_row_projects():
     methods = set()
     for name in ("fe2s2", "fe4s4"):
         rows, sizes = _compiled_rows(name)
-        assert len(rows) == len(sizes) == 46, name
+        assert len(rows) == len(sizes) == 44, name
         for row in rows:
             estimate = report.projection(cache, row, hash_, sizes[row.id])
             assert estimate["allowed"], (name, row.id, estimate["reason"])
@@ -479,7 +483,7 @@ def test_qpe_summary_and_wire_boundaries(femoco_report):
     """The FeMoco-54 QPE summary gives T, M and A from the controlled walk, A = (2^t - 1) A_C(W)
     + (t^3 - t)/6 (the phase4-qpe plan's interface), in its record, its basis sentence and its
     table; and the QPE wires step by two where the phase register grows a spare wire:
-    `H2_STO3G_TEST` 67, 68, 70 at t = 3, 4, 5 and FeMoco-54 1,586, 1,587, 1,589 at t = 21, 22,
+    `H2_STO3G_TEST` 59, 60, 62 at t = 3, 4, 5 and FeMoco-54 1,124, 1,125, 1,127 at t = 21, 22,
     23 (nothing is compiled)."""
     record, markdown = femoco_report
     cwalk = next(r for r in record["rows"] if r["id"] == "ControlledDFTHCWalk")["closed"]
@@ -492,12 +496,32 @@ def test_qpe_summary_and_wire_boundaries(femoco_report):
             (2**bits - 1) * cwalk["measured_and_uncomputes"] + (bits**3 - bits) // 6)
     assert [record["qpe"][str(bits)]["measured_and_uncomputes"] for bits in (1, 2, 3)] == [
         8677, 26032, 60743]
-    assert [record["qpe"][str(bits)]["wires"] for bits in (20, 23)] == [1585, 1589]
+    assert [record["qpe"][str(bits)]["wires"] for bits in (20, 23)] == [1123, 1127]
     assert "A = (2^t - 1) A_C(W) + (t^3 - t)/6" in record["qpe_basis"]
     assert "| t | T | M | A | Qubits |" in markdown
     h2, femoco = report.build_system("H2_STO3G_TEST"), report.build_system("femoco54")
-    assert [report.qpe_wires(h2, bits) for bits in (3, 4, 5)] == [67, 68, 70]
-    assert [report.qpe_wires(femoco, bits) for bits in (21, 22, 23)] == [1586, 1587, 1589]
+    assert [report.qpe_wires(h2, bits) for bits in (3, 4, 5)] == [59, 60, 62]
+    assert [report.qpe_wires(femoco, bits) for bits in (21, 22, 23)] == [1124, 1125, 1127]
+
+
+def test_qubit_summary_at_femoco(femoco_report):
+    """The FeMoco-54 qubit section (spec 10.3, 13.2) after Q-1 variant (b): WalkLayout's 1,102
+    wires by group against the paper's Table 3 groups, 1,131 in all (-29: outer +21, inner +12,
+    select +4, work -66); the junk registers' 462 wires share the angle wires and their 852
+    measurements per walk are the block encoding's own; the early junk measurement is no longer
+    an open question or a deferred refinement (nothing is compiled)."""
+    record, markdown = femoco_report
+    assert record["wires"] == 1102 and record["qubit_groups"] == {
+        "system": 108, "outer": 71, "inner": 65, "select": 799, "phase_grad": 15, "work": 44}
+    assert (record["junk_wires"], record["junk_measurements"]) == (462, 852)
+    paper = costs_reference.PAPER_QUBIT_GROUPS_FEMOCO
+    assert sum(paper.values()) == costs_reference.PAPER_QUBITS_FEMOCO == 1131
+    assert {g: record["qubit_groups"][g] - paper[g] for g in paper} == {
+        "system": 0, "outer": 21, "inner": 12, "select": 4, "phase_grad": 0, "work": -66}
+    assert "| **total** | **1,102** | **1,131** | **-29** |" in markdown
+    assert "852 of the M are the block encoding's own junk measurements" in markdown
+    assert "Q-1, open" not in markdown and "Early junk measurement" not in markdown
+    assert "`junk-qubits`" not in markdown
 
 
 def test_dfthcbe_blocks_equal_the_call_graph():

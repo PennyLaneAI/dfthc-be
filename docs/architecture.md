@@ -31,7 +31,9 @@ explicit auxiliary and L4 program rows ([`resources.md`](resources.md)).
 DFTHCWalk                                steps 1-28
   DFTHCBlockEncoding                     1-27: U^dag REF_T2 U
     OuterPrepare                         1-4: FlaggedUniformPrep, QROAMRead, keep test, CSWAPs
+    (X measurement of junk_x_o)          the outer junk, right after the prepare
     InnerPrepare (round 1)               5-8: FlaggedUniformPrep (two PhaseGradientRotations), QROAMRead
+    (X measurement of junk_b)            the inner junk, right after the prepare
     InnerSigns                           9
     InnerSelect                          10-18
       TailAngleLoad, SFAngleLoad         10, 11 (each a QROAMRead)
@@ -41,12 +43,18 @@ DFTHCWalk                                steps 1-28
       GivensLadderDagger                 16 (adjoint GivensRotation per rung)
       SpinSwap, SpinMux                  17
       AngleErase                         18
-    InnerUnprepare                       19-22: CSWAPs, comparator adjoint, QROAMErase, adjoint FlaggedUniformPrep
+    InnerUnprepareFromOutcomes           19-22: CSWAPs, comparator adjoint, target measurement and fix-up, adjoint FlaggedUniformPrep
     RefT2                                23 (ZeroReflection)
-    InnerPrepare (round 2), InnerSelectDagger (adjoint MajoranaGate), InnerSigns, InnerUnprepare
-    OuterUnprepare                       24-27: CSWAPs, comparator adjoint, QROAMErase, adjoint FlaggedUniformPrep
+    InnerPrepare (round 2), X measurement of junk_b, InnerSelectDagger (adjoint MajoranaGate), InnerSigns, InnerUnprepareFromOutcomes
+    OuterUnprepareFromOutcomes           24-27: CSWAPs, comparator adjoint, target measurement and fix-up, adjoint FlaggedUniformPrep
   RefAB                                  28 (ZeroReflection)
 ```
+
+The block encoding's rule X-measures each read's junk right after its prepare and gives the
+outcomes to the matching unprepare from outcomes, which measures only the read's target and
+fixes the phases from both outcome vectors (spec 16, Q-1 variant (b)); the baseline
+`OuterUnprepare` and `InnerUnprepare`, which measure target and junk together through
+`QROAMErase`, stay in the package with their tests but are not called by the walk.
 
 The controlled walk `ControlledDFTHCWalk` is `ControlledDFTHCBlockEncoding`, which controls only
 the T2 reflection (`ControlledRefT2`), followed by `ControlledRefAB`: on ancillas in `|0>` the
@@ -62,19 +70,28 @@ walk does not call it as an operator. The toy walk of spec 11.4 (`ToyWalk`, `Con
 ## Registers
 
 `dfthc.registers.WalkLayout.from_params(params, qpe_bits=0)` gives every register named wires in
-the groups `system`, `outer`, `inner`, `select`, `phase_grad` and `work` (spec 10.1). The assembly
-operators take the groups and split them once with `WalkLayout.split_group`; every block they call
-takes only the registers its spec 9 table names (spec 9.0, wire passing).
+the groups `system`, `outer`, `inner`, `select`, `phase_grad` and `work` (spec 10.1). The reads'
+junk registers `junk_x_o` and `junk_b` have no wires of their own: each is the first wires of
+`angles` (and of `junk_overflow` where a junk register is longer than the angles), because the
+block encoding measures the junk right after each prepare, before any angle is loaded
+(`dfthc.registers.JUNK`, spec 10.2). The assembly operators take the groups and split them once
+with `WalkLayout.split_group` and `WalkLayout.split_junk`; every block they call takes only the
+registers its spec 9 table names (spec 9.0, wire passing).
 
 | Group | `H2_STO3G_TEST` | FeMoco-54 |
 | --- | ---: | ---: |
 | `system` (`psi_up`, `psi_dn`) | 4 | 108 |
-| `outer` | 16 | 143 |
-| `inner` | 23 | 455 |
-| `select` (`angles`, `G0`, `G1`, `b_neq_B`, `sg`) | 8 | 799 |
+| `outer` | 12 | 71 |
+| `inner` | 16 | 65 |
+| `select` (`angles`, `junk_overflow`, `G0`, `G1`, `b_neq_B`, `sg`) | 11 | 799 |
 | `phase_grad` | 4 | 15 |
 | `work` (the shared pool) | 8 | 44 |
-| **walk** | **63** | **1,564** |
+| **walk** | **55** | **1,102** |
+
+The junk shares 72 + 390 wires with the 795 angle wires at FeMoco-54, so the walk needs 462 wires
+fewer than with junk registers of its own; at `H2_STO3G_TEST` the 7 inner junk wires exceed the 4
+angle wires, so `junk_overflow` has 3. The paper's FeMoco-54 count is 1,131 (its Table 3): the
+resource report compares the two by group ([`resources.md`](resources.md)).
 
 The controlled walk adds one control wire; the QPE adds `qpe_control` and `qpe_grad` (t wires),
 its corrections borrow the work pool, and spare wires follow only where 2t - 1 exceeds the pool
@@ -96,9 +113,11 @@ are symbolic or an operation outside the gate set remains. Four rules carry the 
   `required_wires(**compilable_args)`;
 - the adjoint and controlled forms of the composites are explicit classes (`OuterUnprepare`,
   `InnerUnprepare`, `InnerSelectDagger`, `GivensLadderDagger`, `ControlledRefT2`,
-  `ControlledRefAB`, `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk`); no program calls
-  `qp.adjoint` or `qp.ctrl` on a composite, because Catalyst would capture the generic candidate
-  of its whole subtree (the K-1 memory finding), and an inventory test checks it;
+  `ControlledRefAB`, `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk`, and the walk's
+  unprepares `OuterUnprepareFromOutcomes` and `InnerUnprepareFromOutcomes`, which take the junk
+  outcomes as a dynamic array); no program calls `qp.adjoint` or `qp.ctrl` on a composite,
+  because Catalyst would capture the generic candidate of its whole subtree (the K-1 memory
+  finding), and an inventory test checks it;
 - `QROAMRead` loads each unary leaf with one `qp.for_loop` over a dynamic `int64` table array
   (spec 9.3), so the FeMoco-54 walk compiles in a few GB.
 

@@ -19,7 +19,7 @@ erase measurement must have probability 1/2, and every AND precondition is asser
 
 :data:`CASES` names the shapes of the Phase 3 tests: the two test presets and
 :data:`FAILS_C3`. At most 64 wires make a key one 64-bit word; wider programs (``H2_631G_TEST``:
-80 wires) are correct but about 25 times slower per input (``np.unique`` over two-word keys).
+68 wires) are correct but about 25 times slower per input (``np.unique`` over two-word keys).
 """
 
 from __future__ import annotations
@@ -107,8 +107,8 @@ CASES = {
     "631g": lambda: (H2_631G_TEST, load_factors("h2_631g_R2_B2_C2")),
     "fails-c3": lambda: (FAILS_C3, random_factors(2, 3, 2, 3, n_plus=1, seed=5)),
 }
-"""The Phase 3 test shapes: ``H2_STO3G_TEST`` (64 wires with the control), ``H2_631G_TEST``
-(80) and :data:`FAILS_C3` (59), each with its factors."""
+"""The Phase 3 test shapes: ``H2_STO3G_TEST`` (56 wires with the control), ``H2_631G_TEST``
+(68) and :data:`FAILS_C3` (59), each with its factors."""
 
 
 @functools.cache

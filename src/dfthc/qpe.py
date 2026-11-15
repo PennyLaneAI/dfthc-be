@@ -123,9 +123,10 @@ class ControlledWalkPower(Operator2):
     name           width (FeMoco-54)              input                 output
     ============== ============================== ===================== ======================
     ``control``    1                              any                   a control
-    ``outer``      the ``outer`` group (143)      walk state            walk state
-    ``inner``      the ``inner`` group (455)      walk state            walk state
-    ``select``     ``(N - 1) b_rot + 4`` (799)    ``|0>``               ``|0>``
+    ``outer``      the ``outer`` group (71)       walk state            walk state
+    ``inner``      the ``inner`` group (65)       walk state            walk state
+    ``select``     ``(N - 1) b_rot`` +            ``|0>``               ``|0>``
+                   ``junk_overflow`` + 4 (799)
     ``system``     ``2N`` (108)                   any                   see the action
     ``phase_grad`` ``b_rot`` (15)                 phase-gradient state  unchanged
     ``work``       ``WalkLayout.work_size`` (44)  ``|0>``               ``|0>``
