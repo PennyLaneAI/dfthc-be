@@ -41,6 +41,8 @@ This file holds Tasks 4.3, 4.4 and 4.5 of the master plan (`docs/superpowers/pla
 
 **Revision 8** (2026-11-15, by the orchestrator, at Task Q1b's merge). Q-1 variant (b) is the working choice (ledger decision 2026-11-15) and Q1b is merged: the walk Task 4.5 compiles is Q1b's (1,102 wires at FeMoco-54, 1,103 with the controlled walk's control; T, M and A unchanged), and the committed report is Q1b's (the small systems by Task Q1b.2, `fe2s2` and `fe4s4` rerun by the orchestrator). As the Q1b plan prescribes (section "Expected test counts" and "Interfaces for Task 4.5"), Task 4.5's per-commit counts change: base 1221 -> 1270 and expected 1222 -> 1271 (Q1b.1 + 44 with its review test, Q1b.2 + 5), in the table and in Step 3. `tests/report/test_femoco_cache.py`'s `EXPECTED` needs no change (its QPE wires come from `report.qpe_wires`), but its release test's partition sum does: under Q1b the partition rows' M at FeMoco-54 is 1,672 and the block encodings' own junk measurements (`costs.junk_measurements`, 852) make the walks' 2,524, exactly as `resource_report.cross_check` adds them (Task Q1b.2's GPT-5.6 review, `.superpowers/sdd/task-Q1b.2-review-1.md`, Focus 7; checked on the regenerated `docs/resources.json`: partition 9,793 / 1,672 / 8,675 and 9,795 / 1,672 / 8,677, + 852 in M). The replica's test adds them; the nightly tier is 86 after Q1b, the release tier 34 + 1.
 
+**Revision 9** (2026-11-15, by the orchestrator, at Task 4.5's merge). Task 4.5's GPT-5.6 review (`.superpowers/sdd/task-4.5-review-1.md`, Needs fixes, 0 Critical, 1 Important, 2 Minor; 10 mutants, 2 survived) found that `test_femoco_cache` accepted a cached gate dictionary that contradicts the cached T (a `TemporaryAND` count off by one) and a walk recorded on the wrong number of wires (I-1), and that its QPE M read the controlled walk where spec 11.3 names M_W (M-1; both 2,524 here). `tests/report/test_femoco_cache.py` is now the merged file with the reviewer's verified test-only fix: `femoco_cache_problems` derives T, M and A from `counts` as `dfthc.compile` defines them and pins 1,102 and 1,103 wires (`EXPECTED_WIRES`), and the QPE check takes M from the cached walk. No test is added (per commit 1271, release + 1 as before), and the file is not hashed, so the FeMoco-54 cache stands. The review's M-2 (a stale "until then" sentence in the generated FeMoco-54 summary) changes the hashed `scripts/resource_report.py` and goes to Task 5.1 with Q1b.2's m-2.
+
 **Code provenance.** Every code block below was executed on 2026-11-14 in a scratch replica of the repository (`.scratch/plan-check/repo-phase4r`, not committed): `git archive` of local `main` at `5fe4d65` (Task 3.5 merged at `329ede8`, the assembly plan at revision 6; the later commits up to `5fe4d65` touch only the ledger), plus the six files of Tasks 4.1 and 4.2 (QPE plan, revision 3), each written from the last code block that plan on `main` gives (`stages/4R/check_overlay_blocks.py`, `overlay-blocks.log`: `repo-phase4q` equals those blocks, `tests/test_qpe.py` up to one trailing blank line that the plan assembly strips; the eight files of Tasks 3.3 to 3.5 on `main` equal the assembly plan's blocks). The replica is not a git repository, so the dry run ran pytest the way `scripts/test.sh` does (the same environment, 2 workers, `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0`, lowered priority) through `.scratch/plan-check/p4rtest.sh`, which runs every session under the watchdog with a 3,000 MB cap and a session lock; every script ran through `p4rrun.sh` (same cap, same lock), and the `.venv-ref` scripts through `ref_run.sh` (same cap, same lock). The three tasks were replayed in order, RED then GREEN, in a fresh copy of `main` at `5fe4d65` with the same overlay (`stages/4R/run_stages_4r.sh`, log `4r-stages.log`); every "Expected" line below is that replay's output, and its files are byte-identical to the replica's. Further evidence under `stages/4R/`: the per-commit tier with all three tasks (`4r-per-commit-tier.log`), every per-commit test of the three tasks in one one-worker session (`4r-per-test-evidence.log`), the nightly report test (`4r-report-mid.log`), the dry-run report of the H2 systems and `naphthalene` (`report-small-systems.log`, summarized in `report-summary.md`), the `--large` path on a stand-in (`probes/p4r/standin_large.sh`, `large-standin.log`), the projections of every `fe2s2`, `fe4s4` and FeMoco-54 program (`probes/p4r/project_large.py`, `projections-large.log`), the size measures of the extra rows (`probes/p4r/probe_size_ops.py`), the QPE wire counts and the 4 GB cap's effective limit (`probes/p4r/probe_qpe_wires.py`), the FeMoco-54 decomposition and iteration counts (`decomposition_4r.py`, `decomposition.md`, `iteration-counts.md`), the gate counts (`probe-gates.log`), the first walk compiles at the default precisions (`probe-walk-compiles.log`), dfthcbe's rotation cost in `.venv-ref` (`probe-zpow-ref.log`), the docstring audit and its mutants (`docstring-audit.log`, `mutate_docstrings_4r.py`, `docstring-mutants.log`) and the document edits (`make_doc_edits_4r.py`, `doc-edits.md`). Revision 2's runs waited 12 minutes for the orchestrator's hold on the lock (`lock-waits.log`); revisions 3 and 4 did not wait.
 
 **Load.** At most 2 pytest workers ran at any time and one process that compiled or ran pytest at a time (the shared lock), each under the watchdog with a 3,000 MB cap; the largest process tree was the per-commit tier, 2,232 MB, and the largest single compile was the `naphthalene` walk, 634 MB. Nothing above `naphthalene` was compiled: `fe2s2`, `fe4s4` and FeMoco-54 were built in tape mode only (their rows, 46 and 49, and their gates from the resource functions, at most 177 MB). The full per-commit tier ran once in each revision. No load-limit event occurred.
@@ -4514,7 +4516,7 @@ Report the RED output of Step 2 and the counts of Steps 8 and 9. The orchestrato
 
 **Acceptance tests** (2 tests: 1 per commit, 1 `release` and `femoco`):
 - `test_stale_femoco_entry_names_the_recompile` (per commit): an entry of another code hash is no measurement; the check names `scripts/resource_report.py --large femoco54`.
-- `test_femoco_cache` (`release`, `femoco`): the current entries of `femoco54/DFTHCWalk` and `femoco54/ControlledDFTHCWalk` hold T = 9,793, M = 2,524, A = 8,675 and T = 9,795, M = 2,524, A = 8,677, gates within the gate set, the environment, the compile time and the peak memory; the partition rows times their calls per walk, plus in M the block encodings' own junk measurements (`costs.junk_measurements`, 852 at FeMoco-54; revision 8), equal those totals exactly; the report's FeMoco-54 QPE summary gives T, M, A and wires from the cached controlled walk for t = 1, 2, 3, 10, 20, 23 (A = (2^t − 1) A_C(W) + (t^3 − t)/6), and `costs.iterative_qpe` agrees for t = 1, 2, 3. Nothing is compiled.
+- `test_femoco_cache` (`release`, `femoco`): the current entries of `femoco54/DFTHCWalk` and `femoco54/ControlledDFTHCWalk` hold T = 9,793, M = 2,524, A = 8,675 and T = 9,795, M = 2,524, A = 8,677, gates within the gate set whose dictionary gives those T, M and A, 1,102 and 1,103 wires (revision 9), the environment, the compile time and the peak memory; the partition rows times their calls per walk, plus in M the block encodings' own junk measurements (`costs.junk_measurements`, 852 at FeMoco-54; revision 8), equal those totals exactly; the report's FeMoco-54 QPE summary gives T, A and wires from the cached controlled walk and M from the cached walk (M = (2^t - 1) M_W + t; revision 9) for t = 1, 2, 3, 10, 20, 23 (A = (2^t − 1) A_C(W) + (t^3 − t)/6), and `costs.iterative_qpe` agrees for t = 1, 2, 3. Nothing is compiled.
 
 **Definition of done:** the RED run of Step 2; the orchestrator's compile (Step 4) with two ledger rows; `test_femoco_cache` passes (Step 5); the regenerated report committed. D-3 met; then G4 can complete.
 
@@ -4549,6 +4551,7 @@ from dfthc.testing.provenance import code_hash
 
 REPO = Path(__file__).resolve().parents[2]
 EXPECTED = {"DFTHCWalk": (9793, 2524, 8675), "ControlledDFTHCWalk": (9795, 2524, 8677)}
+EXPECTED_WIRES = {"DFTHCWalk": 1102, "ControlledDFTHCWalk": 1103}
 RECOMPILE = ("scripts/resource_report.py --large femoco54 (the orchestrator, alone, under the "
              "watchdog; master plan 12.9 and Task 4.5)")
 
@@ -4581,8 +4584,18 @@ def femoco_cache_problems(record: dict, hash_: str) -> list[str]:
         counts = (entry["toffoli"], entry["measurements"], entry["measured_and_uncomputes"])
         if counts != expected:
             problems.append(f"{key}: cached T, M, A {counts} != {expected}")
-        if not set(entry["counts"]) <= ANALYZE_NAMES:
-            problems.append(f"{key}: gates outside the gate set {set(entry['counts'])}")
+        gates = entry["counts"]
+        outside = set(gates) - ANALYZE_NAMES
+        if outside:
+            problems.append(f"{key}: gates outside the gate set {outside}")
+        analyzed = (gates.get("Toffoli", 0) + gates.get("TemporaryAND", 0),
+                    gates.get("MidCircuitMeasure", 0),
+                    gates.get("Adjoint(TemporaryAND)", 0))
+        if analyzed != counts:
+            problems.append(f"{key}: gate dictionary gives T, M, A {analyzed} != {counts}")
+        if entry.get("num_wires") != EXPECTED_WIRES[program]:
+            problems.append(f"{key}: cached wires {entry.get('num_wires')} != "
+                            f"{EXPECTED_WIRES[program]}")
         for field in ("environment", "seconds"):
             if not entry.get(field):
                 problems.append(f"{key}: no {field}")
@@ -4629,12 +4642,13 @@ def test_femoco_cache(monkeypatch):
                  sum(getattr(r, calls) * r.uncomputes for r in parts))
         assert total == (entry["toffoli"], entry["measurements"],
                          entry["measured_and_uncomputes"]) == EXPECTED[program]
+    walk = report.current(cache, "femoco54/DFTHCWalk", hash_)
     cwalk = report.current(cache, "femoco54/ControlledDFTHCWalk", hash_)
     summary = record["systems"]["femoco54"]
     assert summary["qpe_basis"].startswith("T, M and A from the compiled controlled walk")
     for bits in (1, 2, 3, 10, 20, 23):
         expected = {"toffoli": (2**bits - 1) * cwalk["toffoli"] + (bits**3 - bits) // 6,
-                    "measurements": (2**bits - 1) * cwalk["measurements"] + bits,
+                    "measurements": (2**bits - 1) * walk["measurements"] + bits,
                     "measured_and_uncomputes": (2**bits - 1) * cwalk["measured_and_uncomputes"]
                     + (bits**3 - bits) // 6, "wires": report.qpe_wires(s, bits)}
         assert summary["qpe"][str(bits)] == expected, bits
