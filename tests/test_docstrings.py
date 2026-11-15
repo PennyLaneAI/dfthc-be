@@ -11,7 +11,9 @@ import importlib
 import inspect
 import pkgutil
 import re
+from collections import Counter
 from pathlib import Path
+from urllib.parse import unquote
 
 import pytest
 from pennylane.core import Operator2
@@ -42,13 +44,14 @@ LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 
 
 def operator_classes() -> dict[str, type]:
-    """Every Operator2 subclass defined in a module of dfthc.ops or in dfthc.qpe."""
-    modules = [importlib.import_module(f"dfthc.ops.{info.name}")
-               for info in pkgutil.iter_modules(dfthc.ops.__path__)]
+    """Every Operator2 subclass reachable from dfthc.ops (recursively) or dfthc.qpe."""
+    modules = [dfthc.ops]
+    modules.extend(importlib.import_module(info.name)
+                   for info in pkgutil.walk_packages(dfthc.ops.__path__, prefix="dfthc.ops."))
     modules.append(importlib.import_module("dfthc.qpe"))
-    return {cls.__name__: cls for module in modules
-            for _, cls in inspect.getmembers(module, inspect.isclass)
-            if issubclass(cls, Operator2) and cls.__module__ == module.__name__}
+    classes = {cls for module in modules for _, cls in inspect.getmembers(module, inspect.isclass)
+               if cls is not Operator2 and issubclass(cls, Operator2)}
+    return {f"{cls.__module__}.{cls.__qualname__}": cls for cls in classes}
 
 
 CLASSES = operator_classes()
@@ -57,16 +60,19 @@ CLASSES = operator_classes()
 def test_every_operator_is_audited():
     """The 30 operators of dfthc.ops (spec 9.1 to 9.22) and the two of dfthc.qpe (9.23, 11.1)."""
     assert len(CLASSES) == 32
+    names = {cls.__name__ for cls in CLASSES.values()}
     assert {"PhaseGradientRotation", "QROAMRead", "DFTHCWalk", "ControlledDFTHCWalk",
-            "ControlledWalkPower", "QPERound"} <= set(CLASSES)
+            "ControlledWalkPower", "QPERound"} <= names
 
 
-@pytest.mark.parametrize("name", sorted(CLASSES))
-def test_docstring_has_the_nine_sections_in_order(name):
+@pytest.mark.parametrize("qualified_name", sorted(CLASSES))
+def test_docstring_has_the_nine_sections_in_order(qualified_name):
     """Spec 9.0: a summary line, then the nine sections in order, each once; the cost section
     names at least one dfthc.costs function and only existing ones; the example calls
     compiled_resources."""
-    doc = inspect.getdoc(CLASSES[name]) or ""
+    cls = CLASSES[qualified_name]
+    name = cls.__name__
+    doc = inspect.getdoc(cls) or ""
     lines = doc.splitlines()
     assert lines and lines[0].strip(), f"{name} has no summary line"
     starts = []
@@ -75,6 +81,7 @@ def test_docstring_has_the_nine_sections_in_order(name):
         assert len(found) == 1, f"{name}: section '{title}' found {len(found)} times"
         starts.append(found[0])
     assert starts == sorted(starts), f"{name}: sections out of order"
+    assert starts[0] > 0, f"{name}: the summary must precede the Action section"
     cost = "\n".join(lines[starts[6]:starts[7]])
     named = re.findall(r"dfthc\.costs\.(\w+)", cost)
     assert named, f"{name}: the cost section names no dfthc.costs function"
@@ -89,16 +96,43 @@ def test_the_documentation_set_exists():
     assert not missing
 
 
-@pytest.mark.parametrize("document", sorted(p.name for p in DOCS.glob("*.md")))
+def markdown_anchors(text: str) -> set[str]:
+    """GitHub-style anchors for the Markdown headings used by this repository."""
+    anchors, counts = set(), Counter()
+    for heading in re.findall(r"^#{1,6}\s+(.+?)\s*#*\s*$", text, re.M):
+        heading = re.sub(r"`([^`]*)`", r"\1", heading)
+        heading = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", heading)
+        slug = re.sub(r"[^\w\s-]", "", heading.lower())
+        slug = re.sub(r"\s+", "-", slug.strip())
+        suffix = counts[slug]
+        counts[slug] += 1
+        anchors.add(f"{slug}-{suffix}" if suffix else slug)
+    return anchors
+
+
+DOCUMENT_PATHS = tuple(sorted(path.relative_to(DOCS) for path in DOCS.rglob("*.md")
+                              if "superpowers" not in path.relative_to(DOCS).parts))
+
+
+@pytest.mark.parametrize("document", DOCUMENT_PATHS, ids=lambda path: path.as_posix())
 def test_documentation_links_resolve(document):
-    """Every relative link of a top-level document points to an existing file (anchors are
-    stripped; web links are not followed)."""
+    """Every relative link in every Markdown document resolves, including its anchor."""
     path = DOCS / document
     broken = []
     for target in LINK.findall(path.read_text()):
-        if target.startswith(("http://", "https://", "mailto:", "#")):
+        if target.startswith(("http://", "https://", "mailto:")):
             continue
-        if not (path.parent / target.split("#", 1)[0]).exists():
+        relative, _, anchor = target.partition("#")
+        target_path = path if not relative else path.parent / unquote(relative)
+        try:
+            target_path.resolve().relative_to(DOCS.resolve())
+        except ValueError:
+            broken.append(target)
+            continue
+        if not target_path.is_file():
+            broken.append(target)
+            continue
+        if anchor and unquote(anchor) not in markdown_anchors(target_path.read_text()):
             broken.append(target)
     assert not broken, f"{document}: {broken}"
 
@@ -107,7 +141,8 @@ def test_limitations_match_the_canaries_and_spec_14():
     """docs/limitations.md has an entry for every limitation L-1 to L-27 of spec 14, and every
     canary it names is a test function in tests/canary."""
     text = (DOCS / "limitations.md").read_text()
-    assert sorted({int(n) for n in re.findall(r"\*\*L-(\d+)\b", text)}) == list(range(1, 28))
+    numbers = [int(n) for n in re.findall(r"\*\*L-(\d+)\b", text)]
+    assert Counter(numbers) == Counter(range(1, 28))
     canaries = set()
     for path in (REPO / "tests" / "canary").glob("test_*.py"):
         canaries |= set(re.findall(r"^def (test_\w+)", path.read_text(), re.M))
@@ -118,7 +153,7 @@ def test_limitations_match_the_canaries_and_spec_14():
 def test_architecture_names_every_operator():
     """docs/architecture.md names every audited operator class and every dfthc module."""
     text = (DOCS / "architecture.md").read_text()
-    assert [name for name in CLASSES if f"`{name}`" not in text] == []
+    assert [cls.__name__ for cls in CLASSES.values() if f"`{cls.__name__}`" not in text] == []
     modules = [path.relative_to(REPO / "src").with_suffix("").as_posix().replace("/", ".")
                for path in (REPO / "src" / "dfthc").rglob("*.py") if path.name != "__init__.py"]
     assert [module for module in modules if f"`{module}`" not in text] == []

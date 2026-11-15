@@ -4,9 +4,9 @@ One entry per limitation of spec section 14, with the behaviour the canary in `t
 pins today. A flipped canary is a signal to revisit the mitigation, not a failure to hide. All
 observations are from 2026-11-11 (PennyLane 0.46.0.dev151, Catalyst 0.16.0.dev140) unless an entry
 gives its own date. Entries marked **changed** differ from the spec's original wording. As of Task
-4.4 (2026-11-14) spec section 14 matches this file entry for entry, L-1 to L-27, with L-26 (Task
-0.4b) and L-27 (Task 0.2c); `tests/test_docstrings.py` checks that every limitation has an entry
-and that every canary named here exists.
+4.4 (2026-11-15), this file consolidates L-1 to L-27, including L-26 (Task 0.4b), L-27 (Task
+0.2c) and the ledger's later canary-state updates; `tests/test_docstrings.py` checks that every
+limitation has an entry and that every canary named here exists.
 
 ## Decomposition rules, pins, control and templates
 
@@ -152,7 +152,7 @@ and that every canary named here exists.
   The benchmark programs disable the decoration-time compile (L-27). On the development laptop
   (2026-11-12, after Task 0.2c) the ratio was 55, and one 8,640-entry table took 25 s wall, 25 s
   CPU and 973 MB (Task 0.4, with the decoration-time compile and under memory pressure: ratio 84,
-  37 s wall, 36 s CPU, 1.5 GB). Mitigation: few distinct table operators
+  37 s wall, 36 s CPU and 1.5 GB). Mitigation: few distinct table operators
   per walk; the K-1 budget.
 - **L-22, unresolved loops give symbolic counts.** Shared with L-12 and L-17
   (`test_select_swap_qrom_counts_are_symbolic`, `test_dynamic_loop_counts_are_symbolic`).

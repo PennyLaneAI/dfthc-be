@@ -24,8 +24,8 @@ Each layer depends only on the layers below it (spec 5.1).
 ## The walk, call by call
 
 The walk `W = REF_{A u B} BE` is one program. The tree below is the pinned rules' call structure
-(spec 3.5 gives the steps); the resource report has one row per distinct call
-([`resources.md`](resources.md)).
+(spec 3.5 gives the steps); the resource report has one row per distinct operator call, plus
+explicit auxiliary and L4 program rows ([`resources.md`](resources.md)).
 
 ```text
 DFTHCWalk                                steps 1-28
@@ -110,9 +110,10 @@ dfthcbe's per-block formulas, checked against dfthcbe's own call graph.
 [`resources.json`](resources.json): one row per program, measured where compiled, with the
 closed form, dfthcbe's and the paper's values, the deltas and the reason codes that explain them,
 each with its contribution (`dfthc.costs_reference.delta_causes`; spec 13.3). Its compiles are
-cached with `dfthc.testing.provenance.code_hash()`, which covers the package and the report script
-and ignores docstrings and comments, so the single FeMoco-54 compile of the walk and the
-controlled walk (Task 4.5) stays valid until the code changes.
+cached with `dfthc.testing.provenance.code_hash()`, which covers `src/dfthc` outside
+`dfthc.testing`, the report script and `requirements-nightly.lock`, while ignoring Python
+docstrings and comments. After Task 4.5, the FeMoco-54 walk and controlled-walk compiles can be
+reused while that hash matches.
 
 ## Further reading
 
@@ -121,3 +122,4 @@ controlled walk (Task 4.5) stays valid until the code changes.
 - [`limitations.md`](limitations.md): the PennyLane and Catalyst limitations and their canaries.
 - [`environment.md`](environment.md): the environment, the load limits and the commands.
 - [`agents/HANDOFF.md`](agents/HANDOFF.md): the shared context of the development agents.
+- [`agents/LEDGER.md`](agents/LEDGER.md): task status, decisions and heavy-run evidence.

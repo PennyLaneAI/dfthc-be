@@ -10,11 +10,11 @@ measured erase. Resources are asserted exactly against closed forms.
 | Code | What it establishes | Where |
 | --- | --- | --- |
 | T1 | classical data: tables, normalizations, both offset frames, the encoded model, agreement with dfthcbe's fixtures | `tests/data/` |
-| T2 | rule validity: declared resources equal emitted operators (`qp.testing.assert_valid_decomp_rule`) | each operator's module in `tests/ops/` |
-| T3 | semantics against NumPy references, compiled on `lightning.qubit` or on the sparse simulator | `tests/ops/` |
-| T4 | exact T, M and A against `dfthc.costs` at `H2_STO3G_TEST`, `H2_631G_TEST` (per commit) and `MID_NAPHTHALENE` (nightly); FeMoco-54 on the closed forms | `tests/ops/`, `tests/integration/test_walk_counts.py`, `tests/integration/test_qpe_counts.py`, `tests/test_costs.py` |
-| T5 | gate-set closure at `level="user"` and no dfthc operator left at `level="device"` | `tests/ops/` |
-| T6 | the pinned rules are chosen (count signatures, verbose rule listings) and the inventory test: no modified dfthc composite is captured | `tests/ops/`, `tests/ops/test_walk.py` |
+| T2 | rule validity: declared resources equal emitted operators (`qp.testing.assert_valid_decomp_rule`) | `tests/ops/`, `tests/test_qpe.py` |
+| T3 | semantics against NumPy references, compiled on `lightning.qubit` or on the sparse simulator | `tests/ops/`, `tests/integration/` |
+| T4 | exact T, M and A against `dfthc.costs`: table-bearing blocks at the two H2 presets (per commit) and `MID_NAPHTHALENE` (nightly), table-free blocks over representative widths, the QPE round and program at H2 sizes, and FeMoco-54 on closed forms | `tests/ops/`, `tests/test_qpe.py`, `tests/integration/test_walk_counts.py`, `tests/integration/test_qpe_counts.py`, `tests/test_costs.py` |
+| T5 | gate-set closure at `level="user"` and no dfthc operator left at `level="device"` | `tests/ops/`, `tests/test_qpe.py` |
+| T6 | the pinned rules are chosen (count signatures, verbose rule listings) and the inventory test: no modified dfthc composite is captured | `tests/ops/`, `tests/test_qpe.py`, `tests/ops/test_walk.py` |
 | T7 | canaries: one test per claim of every known limitation | `tests/canary/` |
 | T8 | end-to-end checks E-1 to E-4 | `tests/integration/test_end_to_end.py` |
 
@@ -61,14 +61,17 @@ simulator against the encoded block's exact phase distribution
 
 ## Resources
 
-Every operator's compiled T, M and A equal `dfthc.costs` at three sizes; the FeMoco-54 values
-(walk 9,793 Toffolis, controlled walk 9,795, M = 2,524, A = 8,675 and 8,677) are asserted on the
-closed forms per commit. The resource report compiles every program of the walk at the H2 systems
-and `naphthalene` (and `fe2s2`, `fe4s4` as heavy runs), checks each against its closed form, and
-checks that the partition rows times their calls give the compiled walk. The FeMoco-54 walk and
-controlled walk are compiled once (Task 4.5) and cached in [`resources.json`](resources.json);
-`tests/report/test_femoco_cache.py` (release tier) asserts the cached counts while the code hash
-matches.
+Every compiled T, M and A count equals `dfthc.costs`. Table-bearing blocks use the two H2 presets
+per commit and `MID_NAPHTHALENE` nightly; table-free blocks use representative register widths,
+including FeMoco-54 widths where inexpensive. The QPE tests compile the round and full program at
+H2 sizes and `ControlledWalkPower` at `MID_NAPHTHALENE`. The FeMoco-54 values (walk 9,793
+Toffolis, controlled walk 9,795, M = 2,524, A = 8,675 and 8,677) are asserted on the closed forms
+per commit. The resource report compiles every program of the walk at the H2 systems and
+`naphthalene` (and `fe2s2`, `fe4s4` as heavy runs), checks each against its closed form, and
+checks that the partition rows times their calls give the compiled walk. Task 4.5 will compile
+the FeMoco-54 walk and controlled walk once and cache them in [`resources.json`](resources.json);
+`tests/report/test_femoco_cache.py` (release tier) will assert the cached counts while the code
+hash matches.
 
 ## Tiers (spec 12.6)
 
