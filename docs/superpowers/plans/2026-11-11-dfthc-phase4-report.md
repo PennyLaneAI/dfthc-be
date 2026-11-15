@@ -39,6 +39,8 @@ This file holds Tasks 4.3, 4.4 and 4.5 of the master plan (`docs/superpowers/pla
 
 **Revision 7** (2026-11-15, by the orchestrator, after Task 4.4's review `.superpowers/sdd/task-4.4-review-1.md`: GPT-5.6, Needs fixes, 0 Critical, 2 Important, 4 Minor; 3 of 13 targeted mutants survived the audit). The replica holds the reviewed `tests/test_docstrings.py` and four reviewed documents (`environment.md` unchanged). The audit now finds `Operator2` subclasses recursively in `dfthc.ops` (re-exports included) and in `dfthc.qpe`, keyed by qualified name, and requires the summary line before the Action section (I-1); the link test covers every Markdown document under `docs/` outside `superpowers/` (10) and checks anchors, and an L-number may appear only once (I-2). The documents' factual fixes: the verification guide's test locations and resource coverage, and Task 4.5 in the future tense (M-1); the architecture's report rows, the exact code-hash inputs and a direct ledger link (M-2); the conventions' comparator and QPE registers and `QPERound`'s flat `walk_wires` (M-3); the limitations' date and provenance sentence (M-4). No hashed file changed, so the committed report stays current. Task 4.4 has 46 tests (RED `2 failed, 41 passed`, measured on `main` with only the test file), so every expected per-commit count from Task 4.4 on rises by 4: 1221 for Task 4.4 and 1222 for Task 4.5. Since this revision, per-commit tests read `docs/` (including `agents/LEDGER.md`): a tree that differs from a tested one only in `docs/` needs `tests/test_docstrings.py` rerun before its tier result carries.
 
+**Revision 8** (2026-11-15, by the orchestrator, at Task Q1b's merge). Q-1 variant (b) is the working choice (ledger decision 2026-11-15) and Q1b is merged: the walk Task 4.5 compiles is Q1b's (1,102 wires at FeMoco-54, 1,103 with the controlled walk's control; T, M and A unchanged), and the committed report is Q1b's (the small systems by Task Q1b.2, `fe2s2` and `fe4s4` rerun by the orchestrator). As the Q1b plan prescribes (section "Expected test counts" and "Interfaces for Task 4.5"), Task 4.5's per-commit counts change: base 1221 -> 1270 and expected 1222 -> 1271 (Q1b.1 + 44 with its review test, Q1b.2 + 5), in the table and in Step 3. `tests/report/test_femoco_cache.py`'s `EXPECTED` needs no change (its QPE wires come from `report.qpe_wires`), but its release test's partition sum does: under Q1b the partition rows' M at FeMoco-54 is 1,672 and the block encodings' own junk measurements (`costs.junk_measurements`, 852) make the walks' 2,524, exactly as `resource_report.cross_check` adds them (Task Q1b.2's GPT-5.6 review, `.superpowers/sdd/task-Q1b.2-review-1.md`, Focus 7; checked on the regenerated `docs/resources.json`: partition 9,793 / 1,672 / 8,675 and 9,795 / 1,672 / 8,677, + 852 in M). The replica's test adds them; the nightly tier is 86 after Q1b, the release tier 34 + 1.
+
 **Code provenance.** Every code block below was executed on 2026-11-14 in a scratch replica of the repository (`.scratch/plan-check/repo-phase4r`, not committed): `git archive` of local `main` at `5fe4d65` (Task 3.5 merged at `329ede8`, the assembly plan at revision 6; the later commits up to `5fe4d65` touch only the ledger), plus the six files of Tasks 4.1 and 4.2 (QPE plan, revision 3), each written from the last code block that plan on `main` gives (`stages/4R/check_overlay_blocks.py`, `overlay-blocks.log`: `repo-phase4q` equals those blocks, `tests/test_qpe.py` up to one trailing blank line that the plan assembly strips; the eight files of Tasks 3.3 to 3.5 on `main` equal the assembly plan's blocks). The replica is not a git repository, so the dry run ran pytest the way `scripts/test.sh` does (the same environment, 2 workers, `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0`, lowered priority) through `.scratch/plan-check/p4rtest.sh`, which runs every session under the watchdog with a 3,000 MB cap and a session lock; every script ran through `p4rrun.sh` (same cap, same lock), and the `.venv-ref` scripts through `ref_run.sh` (same cap, same lock). The three tasks were replayed in order, RED then GREEN, in a fresh copy of `main` at `5fe4d65` with the same overlay (`stages/4R/run_stages_4r.sh`, log `4r-stages.log`); every "Expected" line below is that replay's output, and its files are byte-identical to the replica's. Further evidence under `stages/4R/`: the per-commit tier with all three tasks (`4r-per-commit-tier.log`), every per-commit test of the three tasks in one one-worker session (`4r-per-test-evidence.log`), the nightly report test (`4r-report-mid.log`), the dry-run report of the H2 systems and `naphthalene` (`report-small-systems.log`, summarized in `report-summary.md`), the `--large` path on a stand-in (`probes/p4r/standin_large.sh`, `large-standin.log`), the projections of every `fe2s2`, `fe4s4` and FeMoco-54 program (`probes/p4r/project_large.py`, `projections-large.log`), the size measures of the extra rows (`probes/p4r/probe_size_ops.py`), the QPE wire counts and the 4 GB cap's effective limit (`probes/p4r/probe_qpe_wires.py`), the FeMoco-54 decomposition and iteration counts (`decomposition_4r.py`, `decomposition.md`, `iteration-counts.md`), the gate counts (`probe-gates.log`), the first walk compiles at the default precisions (`probe-walk-compiles.log`), dfthcbe's rotation cost in `.venv-ref` (`probe-zpow-ref.log`), the docstring audit and its mutants (`docstring-audit.log`, `mutate_docstrings_4r.py`, `docstring-mutants.log`) and the document edits (`make_doc_edits_4r.py`, `doc-edits.md`). Revision 2's runs waited 12 minutes for the orchestrator's hold on the lock (`lock-waits.log`); revisions 3 and 4 did not wait.
 
 **Load.** At most 2 pytest workers ran at any time and one process that compiled or ran pytest at a time (the shared lock), each under the watchdog with a 3,000 MB cap; the largest process tree was the per-commit tier, 2,232 MB, and the largest single compile was the `naphthalene` walk, 634 MB. Nothing above `naphthalene` was compiled: `fe2s2`, `fe4s4` and FeMoco-54 were built in tape mode only (their rows, 46 and 49, and their gates from the resource functions, at most 177 MB). The full per-commit tier ran once in each revision. No load-limit event occurred.
@@ -794,7 +796,7 @@ The per-commit tier (`scripts/test.sh -m "not slow and not release" -q`) counts 
 | --- | ---: | ---: | ---: | --- |
 | 4.3 | 1112 | 63 (`test_report.py` 63 of 64) | 1175 = 1112 + 63 | 1 `slow` (`test_report_mid`) |
 | 4.4 | 1175 | 46 (`test_docstrings.py`) | 1221 = 1175 + 46 | none |
-| 4.5 | 1221 | 1 (`test_femoco_cache.py` 1 of 2) | 1222 = 1221 + 1 | 1 `release` (`test_femoco_cache`) |
+| 4.5 | 1270 | 1 (`test_femoco_cache.py` 1 of 2) | 1271 = 1270 + 1 | 1 `release` (`test_femoco_cache`) |
 
 Revision 2 added four per-commit tests to Task 4.3 (`test_every_large_row_projects`, `test_large_stops_after_a_refusal_at_femoco`, `test_large_stops_after_a_kill`, `test_reason_codes_at_femoco`) and revision 3 three more (`test_large_sequence_projects_fe4s4_after_fe2s2`, `test_bounded_projection_takes_every_measurement`, `test_qpe_summary_and_wire_boundaries`), so every later count is 7 above revision 1's; revision 4 changed the assertions of two tests and added none. Dry run with all three tasks: `1215 passed in 467.97s`, peak 2,232 MB, no warnings summary, 432 s inside the 15-minute budget (revision 3: 627.16 s with the reviewer's and an implementer's tests running in parallel; revision 2: 462.53 s; `4r-per-commit-tier.log`, with `TMPDIR` outside the workspace so that `tests/test_infrastructure.py` passes). Every per-commit test of the three tasks, 105, ran in one session with one worker under the watchdog with `--durations`: `105 passed, 2 deselected in 53.70s` at a session peak of 567 MB, which bounds every test's peak. The longest was `test_every_large_row_projects`, 3.6 s (the rows and gate graphs of six systems, 3.2 s of work in a fresh process: `probes/p4r/profile_projects.py`; `test_large_sequence_projects_fe4s4_after_fe2s2` reuses them within a worker); then `test_report_fails_on_mismatch` (3.1 s: two runs of `main`, one compile in a subprocess), the `C(ZeroReflection)` compiles (2.7 and 2.6 s), the walk, QPE and L4 compiles (1.5 to 2.0 s) and the FeMoco-54 `main --rows` that two tests share (1.4 s, once per worker); every other phase (setup, call or teardown) of every test, the 42 documentation tests among them, is below 1.0 s (`4r-per-test-evidence.log`; revision 3's session: 74.42 s, 608 MB). The nightly test: `test_report_mid` alone: `1 passed in 226.61s`, process tree 1,181 MB (`4r-report-mid.log`); the nightly tier grows by about 4 minutes against its 4-hour budget.
 
@@ -4512,7 +4514,7 @@ Report the RED output of Step 2 and the counts of Steps 8 and 9. The orchestrato
 
 **Acceptance tests** (2 tests: 1 per commit, 1 `release` and `femoco`):
 - `test_stale_femoco_entry_names_the_recompile` (per commit): an entry of another code hash is no measurement; the check names `scripts/resource_report.py --large femoco54`.
-- `test_femoco_cache` (`release`, `femoco`): the current entries of `femoco54/DFTHCWalk` and `femoco54/ControlledDFTHCWalk` hold T = 9,793, M = 2,524, A = 8,675 and T = 9,795, M = 2,524, A = 8,677, gates within the gate set, the environment, the compile time and the peak memory; the partition rows times their calls per walk equal those totals exactly; the report's FeMoco-54 QPE summary gives T, M, A and wires from the cached controlled walk for t = 1, 2, 3, 10, 20, 23 (A = (2^t − 1) A_C(W) + (t^3 − t)/6), and `costs.iterative_qpe` agrees for t = 1, 2, 3. Nothing is compiled.
+- `test_femoco_cache` (`release`, `femoco`): the current entries of `femoco54/DFTHCWalk` and `femoco54/ControlledDFTHCWalk` hold T = 9,793, M = 2,524, A = 8,675 and T = 9,795, M = 2,524, A = 8,677, gates within the gate set, the environment, the compile time and the peak memory; the partition rows times their calls per walk, plus in M the block encodings' own junk measurements (`costs.junk_measurements`, 852 at FeMoco-54; revision 8), equal those totals exactly; the report's FeMoco-54 QPE summary gives T, M, A and wires from the cached controlled walk for t = 1, 2, 3, 10, 20, 23 (A = (2^t − 1) A_C(W) + (t^3 − t)/6), and `costs.iterative_qpe` agrees for t = 1, 2, 3. Nothing is compiled.
 
 **Definition of done:** the RED run of Step 2; the orchestrator's compile (Step 4) with two ledger rows; `test_femoco_cache` passes (Step 5); the regenerated report committed. D-3 met; then G4 can complete.
 
@@ -4528,8 +4530,9 @@ Nothing here compiles. The release-tier test reads ``docs/resources.json``: the 
 current code hash for each program holds the counts of spec 9.24 (walk T = 9,793, M = 2,524,
 A = 8,675; controlled walk T = 9,795, M = 2,524, A = 8,677), the code hash, the environment, the
 wall time and the peak memory, and the partition rows of the report (tape mode, no compile) times
-their calls per walk give exactly the cached T, M and A. A missing or stale entry fails and names
-the recompile, which only the orchestrator runs.
+their calls per walk, plus in M the block encodings' own junk measurements
+(:func:`dfthc.costs.junk_measurements`; spec 16, Q-1 variant (b)), give exactly the cached T, M
+and A. A missing or stale entry fails and names the recompile, which only the orchestrator runs.
 """
 
 import importlib.util
@@ -4605,10 +4608,10 @@ def test_stale_femoco_entry_names_the_recompile():
 @pytest.mark.femoco
 def test_femoco_cache(monkeypatch):
     """D-3 from the cache: the current entries hold spec 9.24's counts with their provenance,
-    and the sum over the partition rows of calls per walk times the closed form equals the cached
-    walk and controlled-walk totals of T, M and A; the report's FeMoco-54 QPE summary gives T, M
-    and A from the cached controlled walk (spec 11.3; A = (2^t - 1) A_C(W) + (t^3 - t)/6).
-    Nothing is compiled."""
+    and the sum over the partition rows of calls per walk times the closed form, plus in M the
+    block encodings' junk measurements, equals the cached walk and controlled-walk totals of T, M
+    and A; the report's FeMoco-54 QPE summary gives T, M and A from the cached controlled walk
+    (spec 11.3; A = (2^t - 1) A_C(W) + (t^3 - t)/6). Nothing is compiled."""
     monkeypatch.setattr(report, "compile_counts", lambda *args: pytest.fail("no compile"))
     monkeypatch.setattr(report, "measure", lambda *args: pytest.fail("no compile"))
     record = json.loads((REPO / "docs" / "resources.json").read_text())
@@ -4617,11 +4620,12 @@ def test_femoco_cache(monkeypatch):
     s = report.build_system("femoco54")
     rows = report.build_rows(s)
     cache = record["compiled"]
+    junk = costs.junk_measurements(FEMOCO54).measurements
     for program, calls in (("DFTHCWalk", "calls"), ("ControlledDFTHCWalk", "controlled_calls")):
         entry = report.current(cache, f"femoco54/{program}", hash_)
         parts = [row for row in rows if row.partition and getattr(row, calls)]
         total = (sum(getattr(r, calls) * r.closed.toffoli for r in parts),
-                 sum(getattr(r, calls) * r.closed.measurements for r in parts),
+                 sum(getattr(r, calls) * r.closed.measurements for r in parts) + junk,
                  sum(getattr(r, calls) * r.uncomputes for r in parts))
         assert total == (entry["toffoli"], entry["measurements"],
                          entry["measured_and_uncomputes"]) == EXPECTED[program]
@@ -4651,7 +4655,7 @@ Expected: FAIL, `1 failed`: `femoco_cache_problems` lists `femoco54/DFTHCWalk: n
 - [ ] **Step 3: Run the per-commit tier and the linter, commit, and stop**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1222 passed` (1221 + 1).
+Expected: `1271 passed` (1270 + 1).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
