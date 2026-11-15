@@ -35,6 +35,8 @@ This file holds Tasks 4.3, 4.4 and 4.5 of the master plan (`docs/superpowers/pla
 
 **Revision 5** (2026-11-15, by the orchestrator, at approval after the GPT-5.6 re-check `.superpowers/sdd/phase4r-plan-review-4.md`: Approved, 0 Critical, 0 Important, 0 Minor). The replica now holds Task 4.1's merged files (the QPE plan's revision 4): `src/dfthc/qpe.py`, whose only change is `ControlledWalkPower`'s docstring, and `tests/integration/test_qpe_toy.py` and `tests/integration/test_qpe_walk.py` with the two review tests. The code hash is unchanged (`2e5482ad...` before and after), so the regenerated report stays current. The replica collects `1217/1328 tests collected (111 deselected)` per commit, and `tests/integration/test_qpe_toy.py` with `test_reason_codes_at_femoco` and `test_dfthcbe_blocks_equal_the_call_graph` passes there (`25 passed`, one worker). Every expected per-commit count rises by 2: the base is 1112 (the QPE plan's revision 4, after Task 4.2), then 1174, 1216 and 1217. The measured runs quoted below (the replay, the one-worker evidence, the tier's `1215 passed`) predate this and are kept as measured.
 
+**Revision 6** (2026-11-15, by the orchestrator, after Task 4.3's review `.superpowers/sdd/task-4.3-review-1.md`: GPT-5.6, Needs fixes, 0 Critical, 2 Important, 0 Minor; the report data and the production code were correct). Both findings were test gaps in the large-run safety rules, and the review's test-only fixes are applied: `test_large_compile_is_watched` asserts that the watched run gets `LARGE_TIMEOUT_S` unchanged (I-1: a doubled timeout survived), and the stop test, renamed `test_large_stops_after_a_failed_or_killed_compile`, runs for a `killed` and a `failed` first row (I-2: a stop on `killed` only survived), + 1 per commit. No hashed file changed, so the committed report stays current (code hash `2e5482ad...`). Every expected per-commit count from Task 4.3 on rises by 1: 63 for Task 4.3, then 1175, 1217 and 1218. The measured runs quoted below predate this.
+
 **Code provenance.** Every code block below was executed on 2026-11-14 in a scratch replica of the repository (`.scratch/plan-check/repo-phase4r`, not committed): `git archive` of local `main` at `5fe4d65` (Task 3.5 merged at `329ede8`, the assembly plan at revision 6; the later commits up to `5fe4d65` touch only the ledger), plus the six files of Tasks 4.1 and 4.2 (QPE plan, revision 3), each written from the last code block that plan on `main` gives (`stages/4R/check_overlay_blocks.py`, `overlay-blocks.log`: `repo-phase4q` equals those blocks, `tests/test_qpe.py` up to one trailing blank line that the plan assembly strips; the eight files of Tasks 3.3 to 3.5 on `main` equal the assembly plan's blocks). The replica is not a git repository, so the dry run ran pytest the way `scripts/test.sh` does (the same environment, 2 workers, `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0`, lowered priority) through `.scratch/plan-check/p4rtest.sh`, which runs every session under the watchdog with a 3,000 MB cap and a session lock; every script ran through `p4rrun.sh` (same cap, same lock), and the `.venv-ref` scripts through `ref_run.sh` (same cap, same lock). The three tasks were replayed in order, RED then GREEN, in a fresh copy of `main` at `5fe4d65` with the same overlay (`stages/4R/run_stages_4r.sh`, log `4r-stages.log`); every "Expected" line below is that replay's output, and its files are byte-identical to the replica's. Further evidence under `stages/4R/`: the per-commit tier with all three tasks (`4r-per-commit-tier.log`), every per-commit test of the three tasks in one one-worker session (`4r-per-test-evidence.log`), the nightly report test (`4r-report-mid.log`), the dry-run report of the H2 systems and `naphthalene` (`report-small-systems.log`, summarized in `report-summary.md`), the `--large` path on a stand-in (`probes/p4r/standin_large.sh`, `large-standin.log`), the projections of every `fe2s2`, `fe4s4` and FeMoco-54 program (`probes/p4r/project_large.py`, `projections-large.log`), the size measures of the extra rows (`probes/p4r/probe_size_ops.py`), the QPE wire counts and the 4 GB cap's effective limit (`probes/p4r/probe_qpe_wires.py`), the FeMoco-54 decomposition and iteration counts (`decomposition_4r.py`, `decomposition.md`, `iteration-counts.md`), the gate counts (`probe-gates.log`), the first walk compiles at the default precisions (`probe-walk-compiles.log`), dfthcbe's rotation cost in `.venv-ref` (`probe-zpow-ref.log`), the docstring audit and its mutants (`docstring-audit.log`, `mutate_docstrings_4r.py`, `docstring-mutants.log`) and the document edits (`make_doc_edits_4r.py`, `doc-edits.md`). Revision 2's runs waited 12 minutes for the orchestrator's hold on the lock (`lock-waits.log`); revisions 3 and 4 did not wait.
 
 **Load.** At most 2 pytest workers ran at any time and one process that compiled or ran pytest at a time (the shared lock), each under the watchdog with a 3,000 MB cap; the largest process tree was the per-commit tier, 2,232 MB, and the largest single compile was the `naphthalene` walk, 634 MB. Nothing above `naphthalene` was compiled: `fe2s2`, `fe4s4` and FeMoco-54 were built in tape mode only (their rows, 46 and 49, and their gates from the resource functions, at most 177 MB). The full per-commit tier ran once in each revision. No load-limit event occurred.
@@ -788,9 +790,9 @@ The per-commit tier (`scripts/test.sh -m "not slow and not release" -q`) counts 
 
 | Task | Base | Own per-commit | Expected per-commit tier | Own nightly and release tests |
 | --- | ---: | ---: | ---: | --- |
-| 4.3 | 1112 | 62 (`test_report.py` 62 of 63) | 1174 = 1112 + 62 | 1 `slow` (`test_report_mid`) |
-| 4.4 | 1174 | 42 (`test_docstrings.py`) | 1216 = 1174 + 42 | none |
-| 4.5 | 1216 | 1 (`test_femoco_cache.py` 1 of 2) | 1217 = 1216 + 1 | 1 `release` (`test_femoco_cache`) |
+| 4.3 | 1112 | 63 (`test_report.py` 63 of 64) | 1175 = 1112 + 63 | 1 `slow` (`test_report_mid`) |
+| 4.4 | 1175 | 42 (`test_docstrings.py`) | 1217 = 1175 + 42 | none |
+| 4.5 | 1217 | 1 (`test_femoco_cache.py` 1 of 2) | 1218 = 1217 + 1 | 1 `release` (`test_femoco_cache`) |
 
 Revision 2 added four per-commit tests to Task 4.3 (`test_every_large_row_projects`, `test_large_stops_after_a_refusal_at_femoco`, `test_large_stops_after_a_kill`, `test_reason_codes_at_femoco`) and revision 3 three more (`test_large_sequence_projects_fe4s4_after_fe2s2`, `test_bounded_projection_takes_every_measurement`, `test_qpe_summary_and_wire_boundaries`), so every later count is 7 above revision 1's; revision 4 changed the assertions of two tests and added none. Dry run with all three tasks: `1215 passed in 467.97s`, peak 2,232 MB, no warnings summary, 432 s inside the 15-minute budget (revision 3: 627.16 s with the reviewer's and an implementer's tests running in parallel; revision 2: 462.53 s; `4r-per-commit-tier.log`, with `TMPDIR` outside the workspace so that `tests/test_infrastructure.py` passes). Every per-commit test of the three tasks, 105, ran in one session with one worker under the watchdog with `--durations`: `105 passed, 2 deselected in 53.70s` at a session peak of 567 MB, which bounds every test's peak. The longest was `test_every_large_row_projects`, 3.6 s (the rows and gate graphs of six systems, 3.2 s of work in a fresh process: `probes/p4r/profile_projects.py`; `test_large_sequence_projects_fe4s4_after_fe2s2` reuses them within a worker); then `test_report_fails_on_mismatch` (3.1 s: two runs of `main`, one compile in a subprocess), the `C(ZeroReflection)` compiles (2.7 and 2.6 s), the walk, QPE and L4 compiles (1.5 to 2.0 s) and the FeMoco-54 `main --rows` that two tests share (1.4 s, once per worker); every other phase (setup, call or teardown) of every test, the 42 documentation tests among them, is below 1.0 s (`4r-per-test-evidence.log`; revision 3's session: 74.42 s, 608 MB). The nightly test: `test_report_mid` alone: `1 passed in 226.61s`, process tree 1,181 MB (`4r-report-mid.log`); the nightly tier grows by about 4 minutes against its 4-hour budget.
 
@@ -890,7 +892,7 @@ GATE_SET = {
 | `scripts/make_report_fixture.py` | 4.3 | dfthcbe's call graph at the report's parameter sets (`.venv-ref` only) |
 | `tests/fixtures/dfthcbe/report_toffolis.json` | 4.3 | its output, read by the port's test |
 | `scripts/resource_report.py` | 4.3 | the report: rows, compiles, checks, cache, `--large`, `docs/resources.md` and `.json` |
-| `tests/report/test_report.py` | 4.3 | the report's tests (62 per commit, 1 nightly) |
+| `tests/report/test_report.py` | 4.3 | the report's tests (63 per commit, 1 nightly) |
 | `docs/resources.md`, `docs/resources.json` | 4.3, 4.5 | generated |
 | `docs/architecture.md`, `docs/conventions.md`, `docs/verification.md` | 4.4 | new documents |
 | `docs/limitations.md`, `docs/environment.md` | 4.4 | consolidated, refreshed |
@@ -912,13 +914,13 @@ GATE_SET = {
 - Consumes: `dfthc.costs` (every spec 9.24 function, `cheapest_block_bits`, `truncated_unary`, `measured_and_uncomputes`, `toffoli_only`); `dfthc.compile` (`FIXED_DECOMPS`, `GATE_SET`, `compiled_resources`, `surviving_dfthc_operators`, `ANALYZE_NAMES`); `dfthc.data.factors` (`load_factors`, `random_factors`, `SYSTEMS`); `dfthc.data.tables.WalkTables`; `dfthc.ops.qroam` (`QROAMRead.visited_ranges`, `QROAMRead.loaded_ranges`, `QROAMErase.fixup_high_ranges`, `PhaseFixup.required_wires`, `PhaseFixup.address_order`); `dfthc.ops.reflections.ZeroReflection`; `dfthc.ops.walk` (`DFTHCWalk`, `ControlledDFTHCWalk`); `dfthc.params` (`FEMOCO54`, `H2_STO3G_TEST`, `WalkParams`, `lg`, `odd_part`); Task 4.1's `dfthc.qpe` (`ControlledWalkPower`, `qpe_program`, `spare_wires_needed`); `dfthc.registers.WalkLayout`; `dfthc.testing.watchdog` (`run_watched`, `MEMORY_CAP_MB`, `effective_limit_mb`, `within_effective_limit`); `dfthc.testing.fixtures.load_dfthcbe_fixture`; Task 1A.6's `tests/fixtures/dfthcbe/femoco_block_toffolis.json`.
 - Produces: `dfthc.costs_reference.paper_table3(p) -> dict[str, int]`, `dfthcbe_blocks(p) -> dict[str, int]`, `delta_causes(p) -> dict[str, tuple[dict[str, int], dict[str, int]]]` (per row key, the contribution of each code against dfthcbe and against the paper), `iteration_counts(p) -> dict[str, tuple[int, int, int, int]]` (each unary iteration as ours, the intermediate, dfthcbe's and the paper's count), `iteration_causes(p) -> dict[str, tuple[dict[str, int], dict[str, int]]]` (each unary iteration's contributions by code against dfthcbe and against the paper, zeros included), `default_params(N, R, B, C, n_plus) -> WalkParams`, `popcount`, `aligned_blocks`, `DEFAULT_PRECISIONS`, `PAPER_QUBITS_FEMOCO`; `dfthc.testing.provenance.code_hash(root=REPO) -> str`, `hashed_files(root=REPO)`, `environment(root=REPO) -> dict`, `project_compile(points, gates, *, cap_mb=MEMORY_CAP_MB, time_limit_s=3600) -> dict` (keys `allowed`, `reason`, `method` (`bounded` or `k1`), `gates`, `seconds`, `peak_mb`, `limits`, `points`, and for `k1` also `time_exponent` and `mb_per_1000_gates`), `LOCK_FILE`, `REPORT_SCRIPT`; `scripts/resource_report.py` with `main(argv) -> int` and, for Task 4.5's test, `build_system(name) -> System`, `build_rows(s) -> list[Row]` (`Row.id`, `.calls`, `.controlled_calls`, `.partition`, `.closed` (`Cost`), `.uncomputes`, `.wires`), `current(cache, key, hash_) -> dict | None`, `compile_counts`, `measure`, `FEMOCO_PROGRAMS`; and `gates(rows) -> dict[str, int]`, `family(row) -> str`, `projection(cache, row, hash_, size) -> dict`, `run_system(...)`.
 
-**Acceptance tests** (63 tests: 62 per commit, 1 `slow`):
+**Acceptance tests** (64 tests: 63 per commit, 1 `slow`):
 - `test_report_h2_rows_and_columns` (per commit): the 48 rows at `H2_STO3G_TEST` in order, the partition and its calls, the walks' closed forms and qubits (63, 64; QPE t = 3: 67), levels, steps, Clifford kinds; `main --rows` (no compile) writes both files, every row `pending` with all 23 json keys, the walk's dfthcbe 167 and paper 205 with deltas −9 and −47 and their codes, every row's codes nonzero and summing to its deltas (`ControlledRefT2` against the paper: `ref-unif` −1, `ctrl-ref-t2` +1 for a delta of 0), and every row in the markdown table.
 - `test_report_h2[row]` (48, per commit, `compiled`): each program compiles in this process to exactly its closed T, M and A on exactly its qubits.
 - `test_report_mid` (`slow`, `compiled`, `subprocess`): `main --systems naphthalene`, every program in its own watched subprocess, exit 0, every row measured and equal to its closed form (walk 1,913 / 502 / 1,678, controlled 1,915 / 502 / 1,680), `MID_NAPHTHALENE`'s parameters.
 - `test_report_fails_on_mismatch` (`compiled`, `subprocess`): a monkeypatched `costs.spin_swap` makes `main` exit 1 with the mismatch named; a removed reason contribution makes it exit 1 with the unexplained delta named.
-- `test_large_compile_is_watched` (`subprocess`): `--large` on a stand-in that allocates 400 MB under a 200 MB cap is killed (`memory`, no survivors) and recorded as killed, not as a measurement; a projection of tens of GB is refused with its projection and no compile.
-- `test_large_stops_after_a_refusal_at_femoco`, `test_large_stops_after_a_kill` (no compile; the projection and the watched run monkeypatched, on `H2_STO3G_TEST`'s rows under the names `femoco54` and `fe2s2`): a refused `DFTHCWalk` at FeMoco-54, or a killed first row at a large system, stops the run; the next row is never measured, is recorded `skipped`, and the log names the escalation.
+- `test_large_compile_is_watched` (`subprocess`): `--large` on a stand-in that allocates 400 MB under a 200 MB cap is killed (`memory`, no survivors) and recorded as killed, not as a measurement, and the watched run gets `LARGE_TIMEOUT_S` unchanged; a projection of tens of GB is refused with its projection and no compile.
+- `test_large_stops_after_a_refusal_at_femoco`, `test_large_stops_after_a_failed_or_killed_compile` (2: `killed`, `failed`; no compile; the projection and the watched run monkeypatched, on `H2_STO3G_TEST`'s rows under the names `femoco54` and `fe2s2`): a refused `DFTHCWalk` at FeMoco-54, or a killed or failed first row at a large system, stops the run; the next row is never measured, is recorded `skipped`, and the log names the escalation.
 - `test_every_large_row_projects` (no compile): from a synthetic cache with the real rows and gates of the four small systems and made-up seconds and MB, all 46 rows at each of `fe2s2` and `fe4s4` have a size measure and an allowed projection, by both methods.
 - `test_large_sequence_projects_fe4s4_after_fe2s2` (no compile): with synthetic `fe2s2` entries added, every `fe4s4` program projects from its family's entries including `fe2s2`'s (the extrapolated ones through the `fe2s2` point, the bounded ones as the family's maximum, which a made-up 7,000 MB `fe2s2` `SpinMux` entry sets for the `fe4s4` `SpinMux`).
 - `test_bounded_projection_takes_every_measurement`: non-monotone points (100 gates, 3,500 s, 7,000 MB) and (200 gates, 10 s, 100 MB) project a 150-gate target to 3,500 s and 7,000 MB; refused under the 4 GB cap, and under 60 minutes when the dearer point took 3,700 s.
@@ -927,7 +929,7 @@ GATE_SET = {
 - `test_qpe_summary_and_wire_boundaries` (no compile): the FeMoco-54 QPE summary's T, M and A from the controlled walk (A = 8,677, 26,032, 60,743 at t = 1, 2, 3), A in the basis sentence and the table; the QPE wires `H2_STO3G_TEST` 67, 68, 70 at t = 3, 4, 5 and FeMoco-54 1,586, 1,587, 1,589 at t = 21, 22, 23.
 - `test_dfthcbe_blocks_equal_the_call_graph` (the port against the fixture at the eight parameter sets and Task 1A.6's counts; the fixture's tail walk is N + s(RC) − 2, the split of `prefix-stops` and `iter-const`, and the intermediate is dfthcbe's walk on the outer read, the outer erase's fix-up and the SF fix-up), `test_paper_table3_reproduces_table_iii`, `test_project_compile_is_the_k1_method` (the K-1 extrapolation and the bounded case, the maximum over all points).
 
-**Definition of done:** RED seen; `62 passed` per commit and `1 passed` nightly, targeted; the report of the H2 systems and `naphthalene` generated (exit 0); the per-commit tier passes; `ruff check .` clean; one commit; then the implementer stops for the orchestrator's `--large fe2s2` and `--large fe4s4` (Step 12), after which the regenerated report is committed on the branch.
+**Definition of done:** RED seen; `63 passed` per commit and `1 passed` nightly, targeted; the report of the H2 systems and `naphthalene` generated (exit 0); the per-commit tier passes; `ruff check .` clean; one commit; then the implementer stops for the orchestrator's `--large fe2s2` and `--large fe4s4` (Step 12), after which the regenerated report is committed on the branch.
 
 - [ ] **Step 1: Write the failing test file**
 
@@ -1132,6 +1134,7 @@ def test_large_compile_is_watched(tmp_path, monkeypatch):
     entry = record["compiled"]["H2_STO3G_TEST/SpinSwap"][-1]
     assert (entry["status"], entry["reason"]) == ("killed", "memory")
     assert entry["watchdog"]["cap_mb"] == 200 and entry["watchdog"]["survivors"] == []
+    assert entry["watchdog"]["timeout_s"] == report.LARGE_TIMEOUT_S
     row = next(r for r in record["systems"]["H2_STO3G_TEST"]["rows"] if r["id"] == "SpinSwap")
     assert (row["status"], row["measured"]) == ("killed", None)
 
@@ -1174,28 +1177,30 @@ def test_large_stops_after_a_refusal_at_femoco(monkeypatch):
     assert any("stopped; escalate to the user" in line for line in log)
 
 
-def test_large_stops_after_a_kill(monkeypatch):
-    """Under --large, the first killed compile stops the system's run: the next program is never
-    measured and is recorded as skipped, and the log names the escalation."""
+@pytest.mark.parametrize("status", ["killed", "failed"])
+def test_large_stops_after_a_failed_or_killed_compile(monkeypatch, status):
+    """Under --large, the first killed or failed compile stops the system's run: the next
+    program is never measured and is recorded as skipped, and the log names the escalation."""
     s, rows = _standin("fe2s2")
     monkeypatch.setattr(report, "projection", lambda *args: {"allowed": True,
                                                               "reason": "within the limits"})
     measured = []
 
-    def killed_once(system, row, *args):
-        assert not measured, "the run continued after a kill"
+    def stops_once(system, row, *args):
+        assert not measured, f"the run continued after a {status} compile"
         measured.append(row.id)
-        return {"code_hash": "1" * 64, "environment": {}, "status": "killed", "reason": "memory",
+        return {"code_hash": "1" * 64, "environment": {}, "status": status,
+                "reason": "memory" if status == "killed" else "compile",
                 "watchdog": {"seconds": 1.0, "peak_mb": 7700.0}}
 
-    monkeypatch.setattr(report, "measure", killed_once)
+    monkeypatch.setattr(report, "measure", stops_once)
     cache = {}
     log = report.run_system(s, rows, cache, "1" * 64, projected=True,
                             only={"SpinMux", "SpinSwap"})
     assert measured == ["SpinMux"]
     assert [cache[f"fe2s2/{r}"][-1]["status"] for r in ("SpinMux", "SpinSwap")] == [
-        "killed", "skipped"]
-    assert any("stopped; the orchestrator reports the killed compile" in line for line in log)
+        status, "skipped"]
+    assert any(f"stopped; the orchestrator reports the {status} compile" in line for line in log)
 
 
 @functools.cache
@@ -3615,7 +3620,7 @@ if __name__ == "__main__":
 - [ ] **Step 8: Run the per-commit tests**
 
 Run: `scripts/test.sh tests/report/test_report.py -q -m "not slow and not release"`
-Expected: `62 passed` (dry run 79 s with 2 workers on a busy machine, 1,145 MB for the session).
+Expected: `63 passed` (dry run 79 s with 2 workers on a busy machine, 1,145 MB for the session, before the review's test).
 
 - [ ] **Step 9: Run the nightly test**
 
@@ -3632,7 +3637,7 @@ Expected: 190 lines `<system>/<row>: compiled (<s> s, <MB> MB)` (48 for each H2 
 - [ ] **Step 11: Run the per-commit tier and the linter, and commit**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1174 passed` (1112 + 62).
+Expected: `1175 passed` (1112 + 63).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -4431,7 +4436,7 @@ Expected: `42 passed` (dry run 3.3 s).
 - [ ] **Step 9: Run the per-commit tier and the linter, and commit**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1216 passed` (1174 + 42).
+Expected: `1217 passed` (1175 + 42).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -4601,7 +4606,7 @@ Expected: FAIL, `1 failed`: `femoco_cache_problems` lists `femoco54/DFTHCWalk: n
 - [ ] **Step 3: Run the per-commit tier and the linter, commit, and stop**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1217 passed` (1216 + 1).
+Expected: `1218 passed` (1217 + 1).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
