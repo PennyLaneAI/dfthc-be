@@ -149,21 +149,24 @@ def pair(key, seed=5):
     return build(p, seed)
 
 
-def measure_x(wires):
+def measure_x(wires, postselect=None):
+    """``H`` and ``qp.measure(q, reset=True)`` on every wire, postselected on the bits of
+    ``postselect`` if it is given."""
     outcomes = []
-    for wire in wires:
+    for i, wire in enumerate(wires):
         qp.H(wire)
-        outcomes.append(qp.measure(wire, reset=True))
+        outcomes.append(qp.measure(wire, reset=True,
+                                   postselect=None if postselect is None else postselect[i]))
     return outcomes
 
 
-def round_trip(pr, order=lambda outcomes: outcomes):
-    """The phase gradient, the prepare, the junk measurement and the unprepare from the
-    outcomes, passed in the order ``order`` gives."""
+def round_trip(pr, order=lambda outcomes: outcomes, postselect=None):
+    """The phase gradient, the prepare, the junk measurement (postselected on ``postselect`` if
+    it is given) and the unprepare from the outcomes, passed in the order ``order`` gives."""
     def qfunc():
         qp.PhaseGradientStatePrep(pr.prepare_wires["phase_grad"])
         pr.prepare(*pr.args, **pr.prepare_wires)
-        outcomes = measure_x(pr.prepare_wires[pr.junk])
+        outcomes = measure_x(pr.prepare_wires[pr.junk], postselect)
         pr.unprepare(order(outcomes), *pr.args, **pr.unprepare_wires)
 
     return qfunc
@@ -262,13 +265,36 @@ def expected_state(num_wires, gradient_wires, inputs=()):
 @pytest.mark.compiled
 def test_lightning_round_trip_with_two_seeds():
     """The compiled round trip at H2_STO3G_TEST's outer shape (19 wires): every register returns
-    to |0> and the phase gradient is unchanged, for two measurement seeds (smoke runs; the
-    certificates prove every outcome)."""
+    to |0> and the phase gradient is unchanged, for two measurement seeds (smoke runs: the
+    certificates prove every outcome on the tape path, and the postselected test below fixes the
+    junk outcomes of the compiled path)."""
     pr = pair("outer-sto3g")
     expected = expected_state(pr.num_wires, pr.prepare_wires["phase_grad"])
     for seed in range(2):
         state = lightning(pr.num_wires, round_trip(pr), seed)
         assert np.allclose(state, expected, rtol=0, atol=1e-10), seed
+
+
+@pytest.mark.compiled
+@pytest.mark.parametrize("key", ["outer-sto3g", "inner-small"])
+def test_lightning_round_trip_with_postselected_junk(key):
+    """The compiled path of the junk outcomes, deterministically: the junk measurements are
+    postselected on the unit pattern 1, 0, ..., 0 (analytic lightning.qubit honours postselection
+    under capture and renormalizes), so the unprepare receives a traced bool array of known
+    content. The inputs (x_o of the inner pair in |+>) come back, every other register |0> and the
+    phase gradient unchanged. The pattern is neither zero nor a palindrome, so junk outcomes that
+    the capture branch of the canonicalization reverses or drops leave a phase, which the sampled
+    lightning tests see only for some seeds."""
+    pr = pair(key)
+    pattern = [1] + [0] * (len(pr.prepare_wires[pr.junk]) - 1)
+
+    def body():
+        for wire in pr.inputs:
+            qp.H(wire)
+        round_trip(pr, postselect=pattern)()
+
+    expected = expected_state(pr.num_wires, pr.prepare_wires["phase_grad"], pr.inputs)
+    assert np.allclose(lightning(pr.num_wires, body, 0), expected, rtol=0, atol=1e-10)
 
 
 # ------------------------------------------------- a caller inside another operator's rule
