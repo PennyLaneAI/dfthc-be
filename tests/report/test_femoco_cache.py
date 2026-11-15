@@ -24,6 +24,7 @@ from dfthc.testing.provenance import code_hash
 
 REPO = Path(__file__).resolve().parents[2]
 EXPECTED = {"DFTHCWalk": (9793, 2524, 8675), "ControlledDFTHCWalk": (9795, 2524, 8677)}
+EXPECTED_WIRES = {"DFTHCWalk": 1102, "ControlledDFTHCWalk": 1103}
 RECOMPILE = ("scripts/resource_report.py --large femoco54 (the orchestrator, alone, under the "
              "watchdog; master plan 12.9 and Task 4.5)")
 
@@ -56,8 +57,18 @@ def femoco_cache_problems(record: dict, hash_: str) -> list[str]:
         counts = (entry["toffoli"], entry["measurements"], entry["measured_and_uncomputes"])
         if counts != expected:
             problems.append(f"{key}: cached T, M, A {counts} != {expected}")
-        if not set(entry["counts"]) <= ANALYZE_NAMES:
-            problems.append(f"{key}: gates outside the gate set {set(entry['counts'])}")
+        gates = entry["counts"]
+        outside = set(gates) - ANALYZE_NAMES
+        if outside:
+            problems.append(f"{key}: gates outside the gate set {outside}")
+        analyzed = (gates.get("Toffoli", 0) + gates.get("TemporaryAND", 0),
+                    gates.get("MidCircuitMeasure", 0),
+                    gates.get("Adjoint(TemporaryAND)", 0))
+        if analyzed != counts:
+            problems.append(f"{key}: gate dictionary gives T, M, A {analyzed} != {counts}")
+        if entry.get("num_wires") != EXPECTED_WIRES[program]:
+            problems.append(f"{key}: cached wires {entry.get('num_wires')} != "
+                            f"{EXPECTED_WIRES[program]}")
         for field in ("environment", "seconds"):
             if not entry.get(field):
                 problems.append(f"{key}: no {field}")
@@ -104,12 +115,13 @@ def test_femoco_cache(monkeypatch):
                  sum(getattr(r, calls) * r.uncomputes for r in parts))
         assert total == (entry["toffoli"], entry["measurements"],
                          entry["measured_and_uncomputes"]) == EXPECTED[program]
+    walk = report.current(cache, "femoco54/DFTHCWalk", hash_)
     cwalk = report.current(cache, "femoco54/ControlledDFTHCWalk", hash_)
     summary = record["systems"]["femoco54"]
     assert summary["qpe_basis"].startswith("T, M and A from the compiled controlled walk")
     for bits in (1, 2, 3, 10, 20, 23):
         expected = {"toffoli": (2**bits - 1) * cwalk["toffoli"] + (bits**3 - bits) // 6,
-                    "measurements": (2**bits - 1) * cwalk["measurements"] + bits,
+                    "measurements": (2**bits - 1) * walk["measurements"] + bits,
                     "measured_and_uncomputes": (2**bits - 1) * cwalk["measured_and_uncomputes"]
                     + (bits**3 - bits) // 6, "wires": report.qpe_wires(s, bits)}
         assert summary["qpe"][str(bits)] == expected, bits
