@@ -16,7 +16,7 @@ Each layer depends only on the layers below it (spec 5.1).
 | --- | --- | --- |
 | L0, classical data | factors, parameters, alias and angle tables, the encoded Hamiltonian, fermion matrices; NumPy only | `dfthc.params`, `dfthc.registers`, `dfthc.data.factors`, `dfthc.data.sos`, `dfthc.data.alias`, `dfthc.data.angles`, `dfthc.data.tables`, `dfthc.data.encoded`, `dfthc.data.fermion` |
 | L1, primitives | `PhaseGradientRotation`, `FlaggedUniformPrep`, `QROAMRead`, `PhaseFixup`, `QROAMErase`, `ZeroReflection`; the unary-iteration helper | `dfthc.ops.phase_gradient`, `dfthc.ops.uniform`, `dfthc.ops.qroam`, `dfthc.ops.reflections`, `dfthc.ops.unary`, `dfthc.ops._validate` |
-| L2, paper blocks | `OuterPrepare`, `OuterUnprepare`, `InnerPrepare`, `InnerUnprepare`, `InnerSigns`, `TailAngleLoad`, `SFAngleLoad`, `AngleErase`, `SpinMux`, `SpinSwap`, `GivensRotation`, `GivensLadder`, `GivensLadderDagger`, `MajoranaGate`, `InnerSelect`, `InnerSelectDagger`, `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB` | `dfthc.ops.prepare`, `dfthc.ops.angle_data`, `dfthc.ops.spin`, `dfthc.ops.givens`, `dfthc.ops.majorana`, `dfthc.ops.select`, `dfthc.ops.reflections` |
+| L2, paper blocks | `OuterPrepare`, `OuterUnprepare`, `OuterUnprepareFromOutcomes`, `InnerPrepare`, `InnerUnprepare`, `InnerUnprepareFromOutcomes`, `InnerSigns`, `TailAngleLoad`, `SFAngleLoad`, `AngleErase`, `SpinMux`, `SpinSwap`, `GivensRotation`, `GivensLadder`, `GivensLadderDagger`, `MajoranaGate`, `InnerSelect`, `InnerSelectDagger`, `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB` | `dfthc.ops.prepare`, `dfthc.ops.angle_data`, `dfthc.ops.spin`, `dfthc.ops.givens`, `dfthc.ops.majorana`, `dfthc.ops.select`, `dfthc.ops.reflections` |
 | L3, assembly | `DFTHCBlockEncoding`, `ControlledDFTHCBlockEncoding`, `DFTHCWalk`, `ControlledDFTHCWalk`; `WalkLayout` | `dfthc.ops.walk`, `dfthc.registers` |
 | L4, application | `ControlledWalkPower`, `QPERound`, the driver `iterative_phase_estimation` (a plain quantum function, spec 2.1 R-4), `qpe_program`, the energy helpers | `dfthc.qpe` |
 | Tooling | gate set, pins and the compile helper; closed-form costs; the paper's and dfthcbe's costs; test support | `dfthc.compile`, `dfthc.costs`, `dfthc.costs_reference`, `dfthc.testing.resources`, `dfthc.testing.sparse_sim`, `dfthc.testing.tape`, `dfthc.testing.walk_sim`, `dfthc.testing.toy_walk`, `dfthc.testing.fixtures`, `dfthc.testing.canary`, `dfthc.testing.watchdog`, `dfthc.testing.provenance` |
@@ -53,10 +53,11 @@ the T2 reflection (`ControlledRefT2`), followed by `ControlledRefAB`: on ancilla
 rest is `U^dag U = I` (spec 3.3). `ControlledWalkPower` repeats it with one `qp.for_loop`, and each
 `QPERound` applies `H`, the walk power `2**j` times and the feed-forward phase corrections
 (`PhaseGradientRotation` under `qp.cond`) on wires borrowed from the walk's `work` pool
-(spec 11.1). `PhaseFixup` is the operator form of the erase fix-up that `QROAMErase` and
-`AngleErase` emit through `dfthc.ops.qroam.emit_phase_fixup`; the walk does not call it as an
-operator. The toy walk of spec 11.4 (`ToyWalk`, `ControlledToyWalk`, `ToyControlledWalkPower` in
-`dfthc.testing.toy_walk`) checks the phase estimation exactly.
+(spec 11.1). `PhaseFixup` is the operator form of the erase fix-up that `QROAMErase`,
+`AngleErase` and the unprepares from outcomes (through
+`dfthc.ops.qroam.emit_erase_from_outcomes`) emit through `dfthc.ops.qroam.emit_phase_fixup`; the
+walk does not call it as an operator. The toy walk of spec 11.4 (`ToyWalk`, `ControlledToyWalk`,
+`ToyControlledWalkPower` in `dfthc.testing.toy_walk`) checks the phase estimation exactly.
 
 ## Registers
 
