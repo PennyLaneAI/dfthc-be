@@ -37,6 +37,8 @@ This file holds Tasks 4.3, 4.4 and 4.5 of the master plan (`docs/superpowers/pla
 
 **Revision 6** (2026-11-15, by the orchestrator, after Task 4.3's review `.superpowers/sdd/task-4.3-review-1.md`: GPT-5.6, Needs fixes, 0 Critical, 2 Important, 0 Minor; the report data and the production code were correct). Both findings were test gaps in the large-run safety rules, and the review's test-only fixes are applied: `test_large_compile_is_watched` asserts that the watched run gets `LARGE_TIMEOUT_S` unchanged (I-1: a doubled timeout survived), and the stop test, renamed `test_large_stops_after_a_failed_or_killed_compile`, runs for a `killed` and a `failed` first row (I-2: a stop on `killed` only survived), + 1 per commit. No hashed file changed, so the committed report stays current (code hash `2e5482ad...`). Every expected per-commit count from Task 4.3 on rises by 1: 63 for Task 4.3, then 1175, 1217 and 1218. The measured runs quoted below predate this.
 
+**Revision 7** (2026-11-15, by the orchestrator, after Task 4.4's review `.superpowers/sdd/task-4.4-review-1.md`: GPT-5.6, Needs fixes, 0 Critical, 2 Important, 4 Minor; 3 of 13 targeted mutants survived the audit). The replica holds the reviewed `tests/test_docstrings.py` and four reviewed documents (`environment.md` unchanged). The audit now finds `Operator2` subclasses recursively in `dfthc.ops` (re-exports included) and in `dfthc.qpe`, keyed by qualified name, and requires the summary line before the Action section (I-1); the link test covers every Markdown document under `docs/` outside `superpowers/` (10) and checks anchors, and an L-number may appear only once (I-2). The documents' factual fixes: the verification guide's test locations and resource coverage, and Task 4.5 in the future tense (M-1); the architecture's report rows, the exact code-hash inputs and a direct ledger link (M-2); the conventions' comparator and QPE registers and `QPERound`'s flat `walk_wires` (M-3); the limitations' date and provenance sentence (M-4). No hashed file changed, so the committed report stays current. Task 4.4 has 46 tests (RED `2 failed, 41 passed`, measured on `main` with only the test file), so every expected per-commit count from Task 4.4 on rises by 4: 1221 for Task 4.4 and 1222 for Task 4.5. Since this revision, per-commit tests read `docs/` (including `agents/LEDGER.md`): a tree that differs from a tested one only in `docs/` needs `tests/test_docstrings.py` rerun before its tier result carries.
+
 **Code provenance.** Every code block below was executed on 2026-11-14 in a scratch replica of the repository (`.scratch/plan-check/repo-phase4r`, not committed): `git archive` of local `main` at `5fe4d65` (Task 3.5 merged at `329ede8`, the assembly plan at revision 6; the later commits up to `5fe4d65` touch only the ledger), plus the six files of Tasks 4.1 and 4.2 (QPE plan, revision 3), each written from the last code block that plan on `main` gives (`stages/4R/check_overlay_blocks.py`, `overlay-blocks.log`: `repo-phase4q` equals those blocks, `tests/test_qpe.py` up to one trailing blank line that the plan assembly strips; the eight files of Tasks 3.3 to 3.5 on `main` equal the assembly plan's blocks). The replica is not a git repository, so the dry run ran pytest the way `scripts/test.sh` does (the same environment, 2 workers, `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0`, lowered priority) through `.scratch/plan-check/p4rtest.sh`, which runs every session under the watchdog with a 3,000 MB cap and a session lock; every script ran through `p4rrun.sh` (same cap, same lock), and the `.venv-ref` scripts through `ref_run.sh` (same cap, same lock). The three tasks were replayed in order, RED then GREEN, in a fresh copy of `main` at `5fe4d65` with the same overlay (`stages/4R/run_stages_4r.sh`, log `4r-stages.log`); every "Expected" line below is that replay's output, and its files are byte-identical to the replica's. Further evidence under `stages/4R/`: the per-commit tier with all three tasks (`4r-per-commit-tier.log`), every per-commit test of the three tasks in one one-worker session (`4r-per-test-evidence.log`), the nightly report test (`4r-report-mid.log`), the dry-run report of the H2 systems and `naphthalene` (`report-small-systems.log`, summarized in `report-summary.md`), the `--large` path on a stand-in (`probes/p4r/standin_large.sh`, `large-standin.log`), the projections of every `fe2s2`, `fe4s4` and FeMoco-54 program (`probes/p4r/project_large.py`, `projections-large.log`), the size measures of the extra rows (`probes/p4r/probe_size_ops.py`), the QPE wire counts and the 4 GB cap's effective limit (`probes/p4r/probe_qpe_wires.py`), the FeMoco-54 decomposition and iteration counts (`decomposition_4r.py`, `decomposition.md`, `iteration-counts.md`), the gate counts (`probe-gates.log`), the first walk compiles at the default precisions (`probe-walk-compiles.log`), dfthcbe's rotation cost in `.venv-ref` (`probe-zpow-ref.log`), the docstring audit and its mutants (`docstring-audit.log`, `mutate_docstrings_4r.py`, `docstring-mutants.log`) and the document edits (`make_doc_edits_4r.py`, `doc-edits.md`). Revision 2's runs waited 12 minutes for the orchestrator's hold on the lock (`lock-waits.log`); revisions 3 and 4 did not wait.
 
 **Load.** At most 2 pytest workers ran at any time and one process that compiled or ran pytest at a time (the shared lock), each under the watchdog with a 3,000 MB cap; the largest process tree was the per-commit tier, 2,232 MB, and the largest single compile was the `naphthalene` walk, 634 MB. Nothing above `naphthalene` was compiled: `fe2s2`, `fe4s4` and FeMoco-54 were built in tape mode only (their rows, 46 and 49, and their gates from the resource functions, at most 177 MB). The full per-commit tier ran once in each revision. No load-limit event occurred.
@@ -791,8 +793,8 @@ The per-commit tier (`scripts/test.sh -m "not slow and not release" -q`) counts 
 | Task | Base | Own per-commit | Expected per-commit tier | Own nightly and release tests |
 | --- | ---: | ---: | ---: | --- |
 | 4.3 | 1112 | 63 (`test_report.py` 63 of 64) | 1175 = 1112 + 63 | 1 `slow` (`test_report_mid`) |
-| 4.4 | 1175 | 42 (`test_docstrings.py`) | 1217 = 1175 + 42 | none |
-| 4.5 | 1217 | 1 (`test_femoco_cache.py` 1 of 2) | 1218 = 1217 + 1 | 1 `release` (`test_femoco_cache`) |
+| 4.4 | 1175 | 46 (`test_docstrings.py`) | 1221 = 1175 + 46 | none |
+| 4.5 | 1221 | 1 (`test_femoco_cache.py` 1 of 2) | 1222 = 1221 + 1 | 1 `release` (`test_femoco_cache`) |
 
 Revision 2 added four per-commit tests to Task 4.3 (`test_every_large_row_projects`, `test_large_stops_after_a_refusal_at_femoco`, `test_large_stops_after_a_kill`, `test_reason_codes_at_femoco`) and revision 3 three more (`test_large_sequence_projects_fe4s4_after_fe2s2`, `test_bounded_projection_takes_every_measurement`, `test_qpe_summary_and_wire_boundaries`), so every later count is 7 above revision 1's; revision 4 changed the assertions of two tests and added none. Dry run with all three tasks: `1215 passed in 467.97s`, peak 2,232 MB, no warnings summary, 432 s inside the 15-minute budget (revision 3: 627.16 s with the reviewer's and an implementer's tests running in parallel; revision 2: 462.53 s; `4r-per-commit-tier.log`, with `TMPDIR` outside the workspace so that `tests/test_infrastructure.py` passes). Every per-commit test of the three tasks, 105, ran in one session with one worker under the watchdog with `--durations`: `105 passed, 2 deselected in 53.70s` at a session peak of 567 MB, which bounds every test's peak. The longest was `test_every_large_row_projects`, 3.6 s (the rows and gate graphs of six systems, 3.2 s of work in a fresh process: `probes/p4r/profile_projects.py`; `test_large_sequence_projects_fe4s4_after_fe2s2` reuses them within a worker); then `test_report_fails_on_mismatch` (3.1 s: two runs of `main`, one compile in a subprocess), the `C(ZeroReflection)` compiles (2.7 and 2.6 s), the walk, QPE and L4 compiles (1.5 to 2.0 s) and the FeMoco-54 `main --rows` that two tests share (1.4 s, once per worker); every other phase (setup, call or teardown) of every test, the 42 documentation tests among them, is below 1.0 s (`4r-per-test-evidence.log`; revision 3's session: 74.42 s, 608 MB). The nightly test: `test_report_mid` alone: `1 passed in 226.61s`, process tree 1,181 MB (`4r-report-mid.log`); the nightly tier grows by about 4 minutes against its 4-hour budget.
 
@@ -896,7 +898,7 @@ GATE_SET = {
 | `docs/resources.md`, `docs/resources.json` | 4.3, 4.5 | generated |
 | `docs/architecture.md`, `docs/conventions.md`, `docs/verification.md` | 4.4 | new documents |
 | `docs/limitations.md`, `docs/environment.md` | 4.4 | consolidated, refreshed |
-| `tests/test_docstrings.py` | 4.4 | the docstring audit and the documentation tests (42 per commit) |
+| `tests/test_docstrings.py` | 4.4 | the docstring audit and the documentation tests (46 per commit) |
 | `tests/report/test_femoco_cache.py` | 4.5 | the cached FeMoco-54 compile (1 per commit, 1 release) |
 
 **Shell conventions.** Run commands from the worktree root of your lane. `VENV="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.venv"` locates the shared environment and `REF="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")/.venv-ref"` the reference environment, as in the earlier plans.
@@ -3681,12 +3683,12 @@ git commit -m "Report: the fe2s2 and fe4s4 compiles"
 - Consumes: every `Operator2` class of `dfthc.ops` and `dfthc.qpe` and its docstring; `dfthc.costs`; Task 4.3's `docs/resources.md` and `docs/resources.json` (linked from the new documents); `tests/canary/test_*.py` (the canary names).
 - Produces: the documentation set of spec 5.2 (D-6); nothing for later tasks to import.
 
-**Acceptance tests** (42 tests, all per commit):
-- `test_every_operator_is_audited`: 32 classes, among them `PhaseGradientRotation`, `QROAMRead`, `DFTHCWalk`, `ControlledDFTHCWalk`, `ControlledWalkPower`, `QPERound`.
-- `test_docstring_has_the_nine_sections_in_order[name]` (32): a summary line; the nine sections of spec 9.0 in order, each once; the cost section names at least one `dfthc.costs` function and only existing ones; the example calls `compiled_resources`.
-- `test_the_documentation_set_exists`; `test_documentation_links_resolve[document]` (6: `architecture.md`, `conventions.md`, `environment.md`, `limitations.md`, `resources.md`, `verification.md`); `test_limitations_match_the_canaries_and_spec_14`; `test_architecture_names_every_operator`.
+**Acceptance tests** (46 tests, all per commit):
+- `test_every_operator_is_audited`: 32 classes, found recursively in `dfthc.ops` (re-exports included) and in `dfthc.qpe`, among them `PhaseGradientRotation`, `QROAMRead`, `DFTHCWalk`, `ControlledDFTHCWalk`, `ControlledWalkPower`, `QPERound`.
+- `test_docstring_has_the_nine_sections_in_order[qualified_name]` (32): a summary line before the Action section; the nine sections of spec 9.0 in order, each once; the cost section names at least one `dfthc.costs` function and only existing ones; the example calls `compiled_resources`.
+- `test_the_documentation_set_exists`; `test_documentation_links_resolve[document]` (10: every Markdown document under `docs/` outside `superpowers/`: `agents/HANDOFF.md`, `agents/LEDGER.md`, `architecture.md`, `conventions.md`, `environment.md`, `limitations.md`, `resources.md`, the two `upstream/` drafts, `verification.md`; each relative link resolves inside `docs/`, with its anchor); `test_limitations_match_the_canaries_and_spec_14` (each L-number once); `test_architecture_names_every_operator`.
 
-**Definition of done:** RED seen; `42 passed` targeted; the per-commit tier passes; `ruff check .` clean; one commit. D-6 met.
+**Definition of done:** RED seen; `46 passed` targeted; the per-commit tier passes; `ruff check .` clean; one commit. D-6 met.
 
 - [ ] **Step 1: Write the failing test file**
 
@@ -3706,7 +3708,9 @@ import importlib
 import inspect
 import pkgutil
 import re
+from collections import Counter
 from pathlib import Path
+from urllib.parse import unquote
 
 import pytest
 from pennylane.core import Operator2
@@ -3737,13 +3741,14 @@ LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 
 
 def operator_classes() -> dict[str, type]:
-    """Every Operator2 subclass defined in a module of dfthc.ops or in dfthc.qpe."""
-    modules = [importlib.import_module(f"dfthc.ops.{info.name}")
-               for info in pkgutil.iter_modules(dfthc.ops.__path__)]
+    """Every Operator2 subclass reachable from dfthc.ops (recursively) or dfthc.qpe."""
+    modules = [dfthc.ops]
+    modules.extend(importlib.import_module(info.name)
+                   for info in pkgutil.walk_packages(dfthc.ops.__path__, prefix="dfthc.ops."))
     modules.append(importlib.import_module("dfthc.qpe"))
-    return {cls.__name__: cls for module in modules
-            for _, cls in inspect.getmembers(module, inspect.isclass)
-            if issubclass(cls, Operator2) and cls.__module__ == module.__name__}
+    classes = {cls for module in modules for _, cls in inspect.getmembers(module, inspect.isclass)
+               if cls is not Operator2 and issubclass(cls, Operator2)}
+    return {f"{cls.__module__}.{cls.__qualname__}": cls for cls in classes}
 
 
 CLASSES = operator_classes()
@@ -3752,16 +3757,19 @@ CLASSES = operator_classes()
 def test_every_operator_is_audited():
     """The 30 operators of dfthc.ops (spec 9.1 to 9.22) and the two of dfthc.qpe (9.23, 11.1)."""
     assert len(CLASSES) == 32
+    names = {cls.__name__ for cls in CLASSES.values()}
     assert {"PhaseGradientRotation", "QROAMRead", "DFTHCWalk", "ControlledDFTHCWalk",
-            "ControlledWalkPower", "QPERound"} <= set(CLASSES)
+            "ControlledWalkPower", "QPERound"} <= names
 
 
-@pytest.mark.parametrize("name", sorted(CLASSES))
-def test_docstring_has_the_nine_sections_in_order(name):
+@pytest.mark.parametrize("qualified_name", sorted(CLASSES))
+def test_docstring_has_the_nine_sections_in_order(qualified_name):
     """Spec 9.0: a summary line, then the nine sections in order, each once; the cost section
     names at least one dfthc.costs function and only existing ones; the example calls
     compiled_resources."""
-    doc = inspect.getdoc(CLASSES[name]) or ""
+    cls = CLASSES[qualified_name]
+    name = cls.__name__
+    doc = inspect.getdoc(cls) or ""
     lines = doc.splitlines()
     assert lines and lines[0].strip(), f"{name} has no summary line"
     starts = []
@@ -3770,6 +3778,7 @@ def test_docstring_has_the_nine_sections_in_order(name):
         assert len(found) == 1, f"{name}: section '{title}' found {len(found)} times"
         starts.append(found[0])
     assert starts == sorted(starts), f"{name}: sections out of order"
+    assert starts[0] > 0, f"{name}: the summary must precede the Action section"
     cost = "\n".join(lines[starts[6]:starts[7]])
     named = re.findall(r"dfthc\.costs\.(\w+)", cost)
     assert named, f"{name}: the cost section names no dfthc.costs function"
@@ -3784,16 +3793,43 @@ def test_the_documentation_set_exists():
     assert not missing
 
 
-@pytest.mark.parametrize("document", sorted(p.name for p in DOCS.glob("*.md")))
+def markdown_anchors(text: str) -> set[str]:
+    """GitHub-style anchors for the Markdown headings used by this repository."""
+    anchors, counts = set(), Counter()
+    for heading in re.findall(r"^#{1,6}\s+(.+?)\s*#*\s*$", text, re.M):
+        heading = re.sub(r"`([^`]*)`", r"\1", heading)
+        heading = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", heading)
+        slug = re.sub(r"[^\w\s-]", "", heading.lower())
+        slug = re.sub(r"\s+", "-", slug.strip())
+        suffix = counts[slug]
+        counts[slug] += 1
+        anchors.add(f"{slug}-{suffix}" if suffix else slug)
+    return anchors
+
+
+DOCUMENT_PATHS = tuple(sorted(path.relative_to(DOCS) for path in DOCS.rglob("*.md")
+                              if "superpowers" not in path.relative_to(DOCS).parts))
+
+
+@pytest.mark.parametrize("document", DOCUMENT_PATHS, ids=lambda path: path.as_posix())
 def test_documentation_links_resolve(document):
-    """Every relative link of a top-level document points to an existing file (anchors are
-    stripped; web links are not followed)."""
+    """Every relative link in every Markdown document resolves, including its anchor."""
     path = DOCS / document
     broken = []
     for target in LINK.findall(path.read_text()):
-        if target.startswith(("http://", "https://", "mailto:", "#")):
+        if target.startswith(("http://", "https://", "mailto:")):
             continue
-        if not (path.parent / target.split("#", 1)[0]).exists():
+        relative, _, anchor = target.partition("#")
+        target_path = path if not relative else path.parent / unquote(relative)
+        try:
+            target_path.resolve().relative_to(DOCS.resolve())
+        except ValueError:
+            broken.append(target)
+            continue
+        if not target_path.is_file():
+            broken.append(target)
+            continue
+        if anchor and unquote(anchor) not in markdown_anchors(target_path.read_text()):
             broken.append(target)
     assert not broken, f"{document}: {broken}"
 
@@ -3802,7 +3838,8 @@ def test_limitations_match_the_canaries_and_spec_14():
     """docs/limitations.md has an entry for every limitation L-1 to L-27 of spec 14, and every
     canary it names is a test function in tests/canary."""
     text = (DOCS / "limitations.md").read_text()
-    assert sorted({int(n) for n in re.findall(r"\*\*L-(\d+)\b", text)}) == list(range(1, 28))
+    numbers = [int(n) for n in re.findall(r"\*\*L-(\d+)\b", text)]
+    assert Counter(numbers) == Counter(range(1, 28))
     canaries = set()
     for path in (REPO / "tests" / "canary").glob("test_*.py"):
         canaries |= set(re.findall(r"^def (test_\w+)", path.read_text(), re.M))
@@ -3813,7 +3850,7 @@ def test_limitations_match_the_canaries_and_spec_14():
 def test_architecture_names_every_operator():
     """docs/architecture.md names every audited operator class and every dfthc module."""
     text = (DOCS / "architecture.md").read_text()
-    assert [name for name in CLASSES if f"`{name}`" not in text] == []
+    assert [cls.__name__ for cls in CLASSES.values() if f"`{cls.__name__}`" not in text] == []
     modules = [path.relative_to(REPO / "src").with_suffix("").as_posix().replace("/", ".")
                for path in (REPO / "src" / "dfthc").rglob("*.py") if path.name != "__init__.py"]
     assert [module for module in modules if f"`{module}`" not in text] == []
@@ -3822,7 +3859,7 @@ def test_architecture_names_every_operator():
 - [ ] **Step 2: Run it to confirm it fails**
 
 Run: `scripts/test.sh tests/test_docstrings.py -q`
-Expected: FAIL, `2 failed, 37 passed`: `test_the_documentation_set_exists` (`architecture.md`, `conventions.md`, `verification.md` missing) and `test_architecture_names_every_operator` (`FileNotFoundError`). The 32 docstring tests pass already: every class has the nine sections as merged (section "Docstring audit").
+Expected: FAIL, `2 failed, 41 passed`: `test_the_documentation_set_exists` (`architecture.md`, `conventions.md`, `verification.md` missing) and `test_architecture_names_every_operator` (`FileNotFoundError`). The 32 docstring tests pass already: every class has the nine sections as merged (section "Docstring audit").
 
 - [ ] **Step 3: Write the architecture**
 
@@ -3855,8 +3892,8 @@ Each layer depends only on the layers below it (spec 5.1).
 ## The walk, call by call
 
 The walk `W = REF_{A u B} BE` is one program. The tree below is the pinned rules' call structure
-(spec 3.5 gives the steps); the resource report has one row per distinct call
-([`resources.md`](resources.md)).
+(spec 3.5 gives the steps); the resource report has one row per distinct operator call, plus
+explicit auxiliary and L4 program rows ([`resources.md`](resources.md)).
 
 ```text
 DFTHCWalk                                steps 1-28
@@ -3941,9 +3978,10 @@ dfthcbe's per-block formulas, checked against dfthcbe's own call graph.
 [`resources.json`](resources.json): one row per program, measured where compiled, with the
 closed form, dfthcbe's and the paper's values, the deltas and the reason codes that explain them,
 each with its contribution (`dfthc.costs_reference.delta_causes`; spec 13.3). Its compiles are
-cached with `dfthc.testing.provenance.code_hash()`, which covers the package and the report script
-and ignores docstrings and comments, so the single FeMoco-54 compile of the walk and the
-controlled walk (Task 4.5) stays valid until the code changes.
+cached with `dfthc.testing.provenance.code_hash()`, which covers `src/dfthc` outside
+`dfthc.testing`, the report script and `requirements-nightly.lock`, while ignoring Python
+docstrings and comments. After Task 4.5, the FeMoco-54 walk and controlled-walk compiles can be
+reused while that hash matches.
 
 ## Further reading
 
@@ -3952,6 +3990,7 @@ controlled walk (Task 4.5) stays valid until the code changes.
 - [`limitations.md`](limitations.md): the PennyLane and Catalyst limitations and their canaries.
 - [`environment.md`](environment.md): the environment, the load limits and the commands.
 - [`agents/HANDOFF.md`](agents/HANDOFF.md): the shared context of the development agents.
+- [`agents/LEDGER.md`](agents/LEDGER.md): task status, decisions and heavy-run evidence.
 ````
 
 - [ ] **Step 4: Write the conventions**
@@ -4018,12 +4057,15 @@ Reflections are exact, global sign included: `2|0><0| - I` is a multi-controlled
 ## Wires and registers (spec 6.7)
 
 - Integers in registers are big-endian: the first wire is the most significant bit.
-- Register names follow dfthcbe: `x_o`, `succ_x_o`, `sigma_1`, `m_x_o`, `less_than_x_o`,
+- Core register names follow dfthcbe: `x_o`, `succ_x_o`, `sigma_1`, `m_x_o`, `less_than_x_o`,
   `alt_x_o`, `keep_x_o`, `junk_x_o`, `b`, `succ_b`, `sigma_0`, `m_b`, `less_than_b`, `alt_b`,
   `keep_b`, `sgn`, `d_sgn`, `r`, `junk_b`, `angles`, `G0`, `G1`, `b_neq_B`, `sg`, `psi_up`,
-  `psi_dn`, `phase_grad`, `work`.
-- The assembly operators take `WalkLayout`'s groups; every other operator takes the registers of
-  its spec 9 table by name, and a composite passes each child only the registers it needs.
+  `psi_dn`, `phase_grad`, `work`. `WalkLayout` also names the persistent comparator registers
+  `succ_work_x_o`, `cmp_work_x_o`, `succ_work_b`, `cmp_work_b`; QPE adds `qpe_control` and
+  `qpe_grad`.
+- The L3 assembly operators and `ControlledWalkPower` take `WalkLayout`'s groups. `QPERound`
+  takes `control`, `qpe_grad` and the walk groups once as flat `walk_wires`; L1 and L2 operators
+  take their spec 9 registers by name. A composite passes each child only the registers it needs.
 - One operator's registers are distinct qubits: two registers that share a wire do not compile.
 
 ## Arguments and tables
@@ -4059,11 +4101,11 @@ measured erase. Resources are asserted exactly against closed forms.
 | Code | What it establishes | Where |
 | --- | --- | --- |
 | T1 | classical data: tables, normalizations, both offset frames, the encoded model, agreement with dfthcbe's fixtures | `tests/data/` |
-| T2 | rule validity: declared resources equal emitted operators (`qp.testing.assert_valid_decomp_rule`) | each operator's module in `tests/ops/` |
-| T3 | semantics against NumPy references, compiled on `lightning.qubit` or on the sparse simulator | `tests/ops/` |
-| T4 | exact T, M and A against `dfthc.costs` at `H2_STO3G_TEST`, `H2_631G_TEST` (per commit) and `MID_NAPHTHALENE` (nightly); FeMoco-54 on the closed forms | `tests/ops/`, `tests/integration/test_walk_counts.py`, `tests/integration/test_qpe_counts.py`, `tests/test_costs.py` |
-| T5 | gate-set closure at `level="user"` and no dfthc operator left at `level="device"` | `tests/ops/` |
-| T6 | the pinned rules are chosen (count signatures, verbose rule listings) and the inventory test: no modified dfthc composite is captured | `tests/ops/`, `tests/ops/test_walk.py` |
+| T2 | rule validity: declared resources equal emitted operators (`qp.testing.assert_valid_decomp_rule`) | `tests/ops/`, `tests/test_qpe.py` |
+| T3 | semantics against NumPy references, compiled on `lightning.qubit` or on the sparse simulator | `tests/ops/`, `tests/integration/` |
+| T4 | exact T, M and A against `dfthc.costs`: table-bearing blocks at the two H2 presets (per commit) and `MID_NAPHTHALENE` (nightly), table-free blocks over representative widths, the QPE round and program at H2 sizes, and FeMoco-54 on closed forms | `tests/ops/`, `tests/test_qpe.py`, `tests/integration/test_walk_counts.py`, `tests/integration/test_qpe_counts.py`, `tests/test_costs.py` |
+| T5 | gate-set closure at `level="user"` and no dfthc operator left at `level="device"` | `tests/ops/`, `tests/test_qpe.py` |
+| T6 | the pinned rules are chosen (count signatures, verbose rule listings) and the inventory test: no modified dfthc composite is captured | `tests/ops/`, `tests/test_qpe.py`, `tests/ops/test_walk.py` |
 | T7 | canaries: one test per claim of every known limitation | `tests/canary/` |
 | T8 | end-to-end checks E-1 to E-4 | `tests/integration/test_end_to_end.py` |
 
@@ -4110,14 +4152,17 @@ simulator against the encoded block's exact phase distribution
 
 ## Resources
 
-Every operator's compiled T, M and A equal `dfthc.costs` at three sizes; the FeMoco-54 values
-(walk 9,793 Toffolis, controlled walk 9,795, M = 2,524, A = 8,675 and 8,677) are asserted on the
-closed forms per commit. The resource report compiles every program of the walk at the H2 systems
-and `naphthalene` (and `fe2s2`, `fe4s4` as heavy runs), checks each against its closed form, and
-checks that the partition rows times their calls give the compiled walk. The FeMoco-54 walk and
-controlled walk are compiled once (Task 4.5) and cached in [`resources.json`](resources.json);
-`tests/report/test_femoco_cache.py` (release tier) asserts the cached counts while the code hash
-matches.
+Every compiled T, M and A count equals `dfthc.costs`. Table-bearing blocks use the two H2 presets
+per commit and `MID_NAPHTHALENE` nightly; table-free blocks use representative register widths,
+including FeMoco-54 widths where inexpensive. The QPE tests compile the round and full program at
+H2 sizes and `ControlledWalkPower` at `MID_NAPHTHALENE`. The FeMoco-54 values (walk 9,793
+Toffolis, controlled walk 9,795, M = 2,524, A = 8,675 and 8,677) are asserted on the closed forms
+per commit. The resource report compiles every program of the walk at the H2 systems and
+`naphthalene` (and `fe2s2`, `fe4s4` as heavy runs), checks each against its closed form, and
+checks that the partition rows times their calls give the compiled walk. Task 4.5 will compile
+the FeMoco-54 walk and controlled walk once and cache them in [`resources.json`](resources.json);
+`tests/report/test_femoco_cache.py` (release tier) will assert the cached counts while the code
+hash matches.
 
 ## Tiers (spec 12.6)
 
@@ -4144,9 +4189,9 @@ One entry per limitation of spec section 14, with the behaviour the canary in `t
 pins today. A flipped canary is a signal to revisit the mitigation, not a failure to hide. All
 observations are from 2026-11-11 (PennyLane 0.46.0.dev151, Catalyst 0.16.0.dev140) unless an entry
 gives its own date. Entries marked **changed** differ from the spec's original wording. As of Task
-4.4 (2026-11-14) spec section 14 matches this file entry for entry, L-1 to L-27, with L-26 (Task
-0.4b) and L-27 (Task 0.2c); `tests/test_docstrings.py` checks that every limitation has an entry
-and that every canary named here exists.
+4.4 (2026-11-15), this file consolidates L-1 to L-27, including L-26 (Task 0.4b), L-27 (Task
+0.2c) and the ledger's later canary-state updates; `tests/test_docstrings.py` checks that every
+limitation has an entry and that every canary named here exists.
 
 ## Decomposition rules, pins, control and templates
 
@@ -4292,7 +4337,7 @@ and that every canary named here exists.
   The benchmark programs disable the decoration-time compile (L-27). On the development laptop
   (2026-11-12, after Task 0.2c) the ratio was 55, and one 8,640-entry table took 25 s wall, 25 s
   CPU and 973 MB (Task 0.4, with the decoration-time compile and under memory pressure: ratio 84,
-  37 s wall, 36 s CPU, 1.5 GB). Mitigation: few distinct table operators
+  37 s wall, 36 s CPU and 1.5 GB). Mitigation: few distinct table operators
   per walk; the K-1 budget.
 - **L-22, unresolved loops give symbolic counts.** Shared with L-12 and L-17
   (`test_select_swap_qrom_counts_are_symbolic`, `test_dynamic_loop_counts_are_symbolic`).
@@ -4431,12 +4476,12 @@ Bumps are orchestrator work, done at a phase gate.
 - [ ] **Step 8: Run the tests**
 
 Run: `scripts/test.sh tests/test_docstrings.py -q`
-Expected: `42 passed` (dry run 3.3 s).
+Expected: `46 passed` (2.1 s, after the review's fixes).
 
 - [ ] **Step 9: Run the per-commit tier and the linter, and commit**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1217 passed` (1175 + 42).
+Expected: `1221 passed` (1175 + 46).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
@@ -4606,7 +4651,7 @@ Expected: FAIL, `1 failed`: `femoco_cache_problems` lists `femoco54/DFTHCWalk: n
 - [ ] **Step 3: Run the per-commit tier and the linter, commit, and stop**
 
 Run: `scripts/test.sh -m "not slow and not release" -q`
-Expected: `1218 passed` (1217 + 1).
+Expected: `1222 passed` (1221 + 1).
 
 Run: `"$VENV/bin/ruff" check .`
 Expected: `All checks passed!`
