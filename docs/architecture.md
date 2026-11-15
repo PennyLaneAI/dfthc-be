@@ -1,0 +1,125 @@
+# Architecture
+
+This package builds the DFTHC block encoding of Low et al. (PRX 15, 041016 (2025);
+arXiv:2502.15882), its qubitized walk, the controlled walk and an iterative phase estimation,
+as PennyLane `Operator2` building blocks. Programs compile with `qp.qjit(capture=True)` and
+`qp.decompose` to a Toffoli-level gate set, and `qp.analyze` counts their resources exactly. The
+design is fixed by the specification
+([`superpowers/specs/2026-11-11-dfthc-pennylane-design.md`](superpowers/specs/2026-11-11-dfthc-pennylane-design.md),
+cited as "spec N.M"); this page maps it onto the code.
+
+## Layers
+
+Each layer depends only on the layers below it (spec 5.1).
+
+| Layer | Content | Modules |
+| --- | --- | --- |
+| L0, classical data | factors, parameters, alias and angle tables, the encoded Hamiltonian, fermion matrices; NumPy only | `dfthc.params`, `dfthc.registers`, `dfthc.data.factors`, `dfthc.data.sos`, `dfthc.data.alias`, `dfthc.data.angles`, `dfthc.data.tables`, `dfthc.data.encoded`, `dfthc.data.fermion` |
+| L1, primitives | `PhaseGradientRotation`, `FlaggedUniformPrep`, `QROAMRead`, `PhaseFixup`, `QROAMErase`, `ZeroReflection`; the unary-iteration helper | `dfthc.ops.phase_gradient`, `dfthc.ops.uniform`, `dfthc.ops.qroam`, `dfthc.ops.reflections`, `dfthc.ops.unary`, `dfthc.ops._validate` |
+| L2, paper blocks | `OuterPrepare`, `OuterUnprepare`, `InnerPrepare`, `InnerUnprepare`, `InnerSigns`, `TailAngleLoad`, `SFAngleLoad`, `AngleErase`, `SpinMux`, `SpinSwap`, `GivensRotation`, `GivensLadder`, `GivensLadderDagger`, `MajoranaGate`, `InnerSelect`, `InnerSelectDagger`, `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB` | `dfthc.ops.prepare`, `dfthc.ops.angle_data`, `dfthc.ops.spin`, `dfthc.ops.givens`, `dfthc.ops.majorana`, `dfthc.ops.select`, `dfthc.ops.reflections` |
+| L3, assembly | `DFTHCBlockEncoding`, `ControlledDFTHCBlockEncoding`, `DFTHCWalk`, `ControlledDFTHCWalk`; `WalkLayout` | `dfthc.ops.walk`, `dfthc.registers` |
+| L4, application | `ControlledWalkPower`, `QPERound`, the driver `iterative_phase_estimation` (a plain quantum function, spec 2.1 R-4), `qpe_program`, the energy helpers | `dfthc.qpe` |
+| Tooling | gate set, pins and the compile helper; closed-form costs; the paper's and dfthcbe's costs; test support | `dfthc.compile`, `dfthc.costs`, `dfthc.costs_reference`, `dfthc.testing.resources`, `dfthc.testing.sparse_sim`, `dfthc.testing.tape`, `dfthc.testing.walk_sim`, `dfthc.testing.toy_walk`, `dfthc.testing.fixtures`, `dfthc.testing.canary`, `dfthc.testing.watchdog`, `dfthc.testing.provenance` |
+
+## The walk, call by call
+
+The walk `W = REF_{A u B} BE` is one program. The tree below is the pinned rules' call structure
+(spec 3.5 gives the steps); the resource report has one row per distinct operator call, plus
+explicit auxiliary and L4 program rows ([`resources.md`](resources.md)).
+
+```text
+DFTHCWalk                                steps 1-28
+  DFTHCBlockEncoding                     1-27: U^dag REF_T2 U
+    OuterPrepare                         1-4: FlaggedUniformPrep, QROAMRead, keep test, CSWAPs
+    InnerPrepare (round 1)               5-8: FlaggedUniformPrep (two PhaseGradientRotations), QROAMRead
+    InnerSigns                           9
+    InnerSelect                          10-18
+      TailAngleLoad, SFAngleLoad         10, 11 (each a QROAMRead)
+      SpinMux, SpinSwap                  12, 13
+      GivensLadder                       14 (GivensRotation per rung)
+      MajoranaGate                       15
+      GivensLadderDagger                 16 (adjoint GivensRotation per rung)
+      SpinSwap, SpinMux                  17
+      AngleErase                         18
+    InnerUnprepare                       19-22: CSWAPs, comparator adjoint, QROAMErase, adjoint FlaggedUniformPrep
+    RefT2                                23 (ZeroReflection)
+    InnerPrepare (round 2), InnerSelectDagger (adjoint MajoranaGate), InnerSigns, InnerUnprepare
+    OuterUnprepare                       24-27: CSWAPs, comparator adjoint, QROAMErase, adjoint FlaggedUniformPrep
+  RefAB                                  28 (ZeroReflection)
+```
+
+The controlled walk `ControlledDFTHCWalk` is `ControlledDFTHCBlockEncoding`, which controls only
+the T2 reflection (`ControlledRefT2`), followed by `ControlledRefAB`: on ancillas in `|0>` the
+rest is `U^dag U = I` (spec 3.3). `ControlledWalkPower` repeats it with one `qp.for_loop`, and each
+`QPERound` applies `H`, the walk power `2**j` times and the feed-forward phase corrections
+(`PhaseGradientRotation` under `qp.cond`) on wires borrowed from the walk's `work` pool
+(spec 11.1). `PhaseFixup` is the operator form of the erase fix-up that `QROAMErase` and
+`AngleErase` emit through `dfthc.ops.qroam.emit_phase_fixup`; the walk does not call it as an
+operator. The toy walk of spec 11.4 (`ToyWalk`, `ControlledToyWalk`, `ToyControlledWalkPower` in
+`dfthc.testing.toy_walk`) checks the phase estimation exactly.
+
+## Registers
+
+`dfthc.registers.WalkLayout.from_params(params, qpe_bits=0)` gives every register named wires in
+the groups `system`, `outer`, `inner`, `select`, `phase_grad` and `work` (spec 10.1). The assembly
+operators take the groups and split them once with `WalkLayout.split_group`; every block they call
+takes only the registers its spec 9 table names (spec 9.0, wire passing).
+
+| Group | `H2_STO3G_TEST` | FeMoco-54 |
+| --- | ---: | ---: |
+| `system` (`psi_up`, `psi_dn`) | 4 | 108 |
+| `outer` | 16 | 143 |
+| `inner` | 23 | 455 |
+| `select` (`angles`, `G0`, `G1`, `b_neq_B`, `sg`) | 8 | 799 |
+| `phase_grad` | 4 | 15 |
+| `work` (the shared pool) | 8 | 44 |
+| **walk** | **63** | **1,564** |
+
+The controlled walk adds one control wire; the QPE adds `qpe_control` and `qpe_grad` (t wires),
+its corrections borrow the work pool, and spare wires follow only where 2t - 1 exceeds the pool
+(spec 11.3). The comparators' work registers stay dirty from a prepare to its unprepare and belong
+to their group, never to `work` (spec 10.2).
+
+## Compilation
+
+`dfthc.compile.compiled_resources(qfunc, num_wires)` compiles a program once (spec 7.2):
+`qp.qjit(capture=True)` around `qp.decompose(gate_set=GATE_SET, fixed_decomps=FIXED_DECOMPS)`
+around a `null.qubit` QNode, analyzed by `qp.analyze`. It returns T (Toffoli plus
+`TemporaryAND`), M (`MidCircuitMeasure`) and A (`Adjoint(TemporaryAND)`), and fails if the counts
+are symbolic or an operation outside the gate set remains. Four rules carry the design
+(spec 7.4):
+
+- every dfthc operator has exactly one decomposition rule per key, registered and pinned with
+  `dfthc.compile.register_rule`;
+- every ancilla is an explicit wire argument, and every operator states
+  `required_wires(**compilable_args)`;
+- the adjoint and controlled forms of the composites are explicit classes (`OuterUnprepare`,
+  `InnerUnprepare`, `InnerSelectDagger`, `GivensLadderDagger`, `ControlledRefT2`,
+  `ControlledRefAB`, `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk`); no program calls
+  `qp.adjoint` or `qp.ctrl` on a composite, because Catalyst would capture the generic candidate
+  of its whole subtree (the K-1 memory finding), and an inventory test checks it;
+- `QROAMRead` loads each unary leaf with one `qp.for_loop` over a dynamic `int64` table array
+  (spec 9.3), so the FeMoco-54 walk compiles in a few GB.
+
+## Costs and the resource report
+
+`dfthc.costs` implements the closed forms of spec 9.24; every compiled count in the tests equals
+one of them exactly. `dfthc.costs_reference` evaluates the paper's Table III formulas and ports
+dfthcbe's per-block formulas, checked against dfthcbe's own call graph.
+`scripts/resource_report.py` writes [`resources.md`](resources.md) and
+[`resources.json`](resources.json): one row per program, measured where compiled, with the
+closed form, dfthcbe's and the paper's values, the deltas and the reason codes that explain them,
+each with its contribution (`dfthc.costs_reference.delta_causes`; spec 13.3). Its compiles are
+cached with `dfthc.testing.provenance.code_hash()`, which covers `src/dfthc` outside
+`dfthc.testing`, the report script and `requirements-nightly.lock`, while ignoring Python
+docstrings and comments. After Task 4.5, the FeMoco-54 walk and controlled-walk compiles can be
+reused while that hash matches.
+
+## Further reading
+
+- [`conventions.md`](conventions.md): indices, signs, fermions, angles, registers.
+- [`verification.md`](verification.md): what each test establishes and how to run the tiers.
+- [`limitations.md`](limitations.md): the PennyLane and Catalyst limitations and their canaries.
+- [`environment.md`](environment.md): the environment, the load limits and the commands.
+- [`agents/HANDOFF.md`](agents/HANDOFF.md): the shared context of the development agents.
+- [`agents/LEDGER.md`](agents/LEDGER.md): task status, decisions and heavy-run evidence.

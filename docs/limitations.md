@@ -2,9 +2,11 @@
 
 One entry per limitation of spec section 14, with the behaviour the canary in `tests/canary/`
 pins today. A flipped canary is a signal to revisit the mitigation, not a failure to hide. All
-observations are from 2026-11-11 (PennyLane 0.46.0.dev151, Catalyst 0.16.0.dev140). Entries marked
-**changed** differ from the spec's original wording; as of Task 0.4, spec section 14 matches this
-file.
+observations are from 2026-11-11 (PennyLane 0.46.0.dev151, Catalyst 0.16.0.dev140) unless an entry
+gives its own date. Entries marked **changed** differ from the spec's original wording. As of Task
+4.4 (2026-11-15), this file consolidates L-1 to L-27, including L-26 (Task 0.4b), L-27 (Task
+0.2c) and the ledger's later canary-state updates; `tests/test_docstrings.py` checks that every
+limitation has an entry and that every canary named here exists.
 
 ## Decomposition rules, pins, control and templates
 
@@ -33,8 +35,9 @@ file.
   `for_loop`, `cond` and a nested operator) compiles to `{"PauliX": "4"}`; the IRMapping crash was
   not reproduced. The canary fails if the crash returns; it cannot detect a fix. Canary:
   `test_auto_adjoint_with_nested_control_flow`. Mitigation kept: no control flow in auto-adjointed
-  bodies (spec 7.4 rule 4). Since G0 the looped `QROAMRead` and `ControlledWalkPower` are never
-  adjointed or controlled by construction (spec 7.4 rule 6), which the inventory test checks.
+  bodies (spec 7.4 rule 4). Since G0 the looped `QROAMRead`, `ControlledWalkPower` and
+  `ToyControlledWalkPower` are never adjointed or controlled by construction (spec 7.4 rule 6),
+  which the inventory test checks.
 - **L-7, `C(ChangeOpBasis)` loses its saving under capture** (pennylane#10357). Controlling
   `change_op_basis(CNOT, Z, CNOT)` gives two Toffolis instead of zero. Canary:
   `test_controlled_change_op_basis_controls_everything`. Mitigation: the explicit controlled
@@ -149,7 +152,7 @@ file.
   The benchmark programs disable the decoration-time compile (L-27). On the development laptop
   (2026-11-12, after Task 0.2c) the ratio was 55, and one 8,640-entry table took 25 s wall, 25 s
   CPU and 973 MB (Task 0.4, with the decoration-time compile and under memory pressure: ratio 84,
-  37 s wall, 36 s CPU, 1.5 GB). Mitigation: few distinct table operators
+  37 s wall, 36 s CPU and 1.5 GB). Mitigation: few distinct table operators
   per walk; the K-1 budget.
 - **L-22, unresolved loops give symbolic counts.** Shared with L-12 and L-17
   (`test_select_swap_qrom_counts_are_symbolic`, `test_dynamic_loop_counts_are_symbolic`).
