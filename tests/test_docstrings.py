@@ -154,15 +154,20 @@ def test_documentation_links_resolve(document):
 
 def test_limitations_match_the_canaries_and_spec_14():
     """docs/limitations.md has an entry for every limitation L-1 to L-27 of spec 14, and every
-    canary it names is a test function in tests/canary."""
+    canary it names is a test function in tests/canary; spec 14 has the same entries and names
+    the same canaries (final review m-31)."""
     text = (DOCS / "limitations.md").read_text()
-    numbers = [int(n) for n in re.findall(r"\*\*L-(\d+)\b", text)]
-    assert Counter(numbers) == Counter(range(1, 28))
+    spec = spec_section("## 14.", "## 15.")
+    for where, document in (("limitations.md", text), ("spec 14", spec)):
+        numbers = [int(n) for n in re.findall(r"\*\*L-(\d+)\b", document)]
+        assert Counter(numbers) == Counter(range(1, 28)), where
     canaries = set()
     for path in (REPO / "tests" / "canary").glob("test_*.py"):
         canaries |= set(re.findall(r"^def (test_\w+)", path.read_text(), re.M))
     named = set(re.findall(r"`(test_\w+)`", text))
     assert named and named <= canaries, sorted(named - canaries)
+    in_spec = set(re.findall(r"`(test_\w+)`", spec))
+    assert in_spec == named, (sorted(in_spec - named), sorted(named - in_spec))
 
 
 def test_every_l6_mitigation_names_the_three_looped_operators():
