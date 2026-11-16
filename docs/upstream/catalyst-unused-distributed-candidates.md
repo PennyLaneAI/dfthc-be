@@ -276,7 +276,7 @@ state were converted.
 
 ### Impact in a real program
 
-We compile a qubitization walk (a DFTHC block encoding, PRX 10.1103/pb2g-j9cw) and its controlled version as one program each,
+We compile a qubitization walk (a DFTHC block encoding, Phys. Rev. X 15, 041016 (2025), DOI 10.1103/pb2g-j9cw) and its controlled version as one program each,
 with pinned measured-uncompute `Adjoint` rules and pinned `C` rules that control only the reflections. Measurements on a
 stand-in with the walk's structure (process-tree footprint; identical analyzed counts in every case):
 

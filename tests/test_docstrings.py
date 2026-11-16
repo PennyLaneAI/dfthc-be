@@ -214,6 +214,18 @@ def test_architecture_assigns_each_module_to_one_layer():
     assert layers and [module for module, count in layers.items() if count > 1] == []
 
 
+PAPER_CITATION = "Phys. Rev. X 15, 041016 (2025), DOI 10.1103/pb2g-j9cw"
+"""The paper as the spec's reference gives it, with its DOI."""
+
+
+@pytest.mark.parametrize("draft", sorted((DOCS / "upstream").glob("*.md")), ids=lambda p: p.name)
+def test_upstream_drafts_cite_the_paper_in_full(draft):
+    """Every mention of the paper's DOI in an upstream draft is the full citation (final review
+    m-32): journal, volume, article number and year, then the DOI."""
+    text = " ".join(draft.read_text().split())
+    assert text.count("10.1103/pb2g-j9cw") == text.count(PAPER_CITATION)
+
+
 def test_spec_11_3_gives_the_qpe_wire_totals_of_the_layout():
     """Spec 11.3's wire totals of the QPE program (final review I-4) are the walk's wires plus
     the QPE control, read from WalkLayout (no compile), plus t gradient wires: 56 + t at
