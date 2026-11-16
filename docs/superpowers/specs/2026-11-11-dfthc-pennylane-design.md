@@ -3,8 +3,8 @@
 | | |
 | --- | --- |
 | Date | 2026-11-11 |
-| Status | Written for user review; the implementation plan is written after approval |
-| Branch | `docs/design-spec` (local only) |
+| Status | Implemented; source of truth for the code on `main` |
+| Branch | `main` |
 | Paper | G. H. Low et al., "Fast quantum simulation of electronic structure by spectral amplification", Phys. Rev. X 15, 041016 (2025), arXiv:2502.15882. Called "the paper" below. |
 | Reference implementation | [Covestro-HPQC/dfthcbe](https://github.com/Covestro-HPQC/dfthcbe) at commit `930255020cec30172e0a7d17c0071d9476a687d1` (Qualtran). Called "dfthcbe" below. |
 | Toolchain snapshot | PennyLane `0.46.0.dev151`, Catalyst `0.16.0.dev140`, Lightning `0.46.0.dev34` (nightlies of 2026-11-11) |
@@ -318,7 +318,7 @@ The system is layered. Each layer depends only on the layers below it.
 | --- | --- | --- |
 | L0, classical data | Factors, parameters, alias and angle tables, the encoded-Hamiltonian model, fermion matrices. NumPy and SciPy only. | none |
 | L1, primitives | `PhaseGradientRotation`, `FlaggedUniformPrep`, `QROAMRead`, `PhaseFixup`, `QROAMErase`, `ZeroReflection`, and the unary-iteration helper | L0 table formats; PennyLane primitives |
-| L2, paper blocks | `OuterPrepare`, `OuterUnprepare`, `InnerPrepare`, `InnerUnprepare`, `InnerSigns`, `TailAngleLoad`, `SFAngleLoad`, `SpinMux`, `SpinSwap`, `GivensRotation`, `GivensLadder`, `GivensLadderDagger`, `MajoranaGate`, `AngleErase`, `InnerSelect`, `InnerSelectDagger`, `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB` | L1 |
+| L2, paper blocks | `OuterPrepare`, `OuterUnprepare`, `OuterUnprepareFromOutcomes`, `InnerPrepare`, `InnerUnprepare`, `InnerUnprepareFromOutcomes`, `InnerSigns`, `TailAngleLoad`, `SFAngleLoad`, `SpinMux`, `SpinSwap`, `GivensRotation`, `GivensLadder`, `GivensLadderDagger`, `MajoranaGate`, `AngleErase`, `InnerSelect`, `InnerSelectDagger`, `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB` | L1 |
 | L3, assembly | `DFTHCBlockEncoding`, `DFTHCWalk` and their controlled classes `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk`; `WalkLayout` | L2 |
 | L4, application | `ControlledWalkPower`, `QPERound`, the iterative QPE driver (a quantum function, §11.1), phase-to-energy conversion | L3 |
 | Tooling | `dfthc.compile` (gate set, pins, compile and analyze helpers), `dfthc.costs` (closed forms), `dfthc.testing` (sparse simulator, fixtures, toy walk), resource report | all layers, read-only |
@@ -352,11 +352,12 @@ dfthc-be/
       encoded.py              the Hamiltonian and normalization the circuit encodes (§8.5)
     ops/
       unary.py                unary-iteration helper (Python function used inside rules)
+      _validate.py            constructor checks shared by every operator (§9.0)
       phase_gradient.py       PhaseGradientRotation
       uniform.py              FlaggedUniformPrep
       qroam.py                QROAMRead, PhaseFixup, QROAMErase
       reflections.py          ZeroReflection, RefT2, RefAB, ControlledRefT2, ControlledRefAB
-      prepare.py              OuterPrepare, OuterUnprepare, InnerPrepare, InnerUnprepare, InnerSigns
+      prepare.py              OuterPrepare, OuterUnprepare, OuterUnprepareFromOutcomes, InnerPrepare, InnerUnprepare, InnerUnprepareFromOutcomes, InnerSigns
       angle_data.py           TailAngleLoad, SFAngleLoad, AngleErase
       spin.py                 SpinMux, SpinSwap
       givens.py               GivensRotation, GivensLadder, GivensLadderDagger
@@ -373,12 +374,14 @@ dfthc-be/
       resources.py            assertions on compiled resources, warning filters
       watchdog.py             memory and time watchdog for heavy runs (§15)
       provenance.py           code hash and environment record of cached compiles (§13.3)
+      canary.py               run_snippet(): canary snippets in a fresh Python process (§14)
   tests/
     conftest.py  data/  ops/  integration/  sim/  canary/  report/  fixtures/
   docs/
     architecture.md  conventions.md  environment.md  limitations.md  verification.md
     resources.md, resources.json (generated; the json also caches large compiles, §13.3)
     agents/HANDOFF.md  agents/LEDGER.md
+    upstream/ (drafts of upstream issues with their reproducers; agents never file them)
     superpowers/specs/ (this file)  superpowers/plans/ (the implementation plan)
 ```
 
@@ -468,7 +471,7 @@ These conventions follow dfthcbe unless stated otherwise, so blocks can be compa
 
 ### 6.6 Reflections and global phases
 
-- $\mathrm{REF}_X = 2\lvert 0\rangle\langle 0\rvert_X - I$ and $\mathrm{REF}_{T_2} = 2\Pi_{T_2} - I$ are implemented exactly, including the global sign: uncontrolled with `GlobalPhase`, controlled with a `Z` on the control (§9.6).
+- $\mathrm{REF}_X = 2\lvert 0\rangle\langle 0\rvert_X - I$ and $\mathrm{REF}_{T_2} = 2\Pi_{T_2} - I$ are implemented exactly, including the global sign: uncontrolled with `GlobalPhase`, controlled with a `Z` on the control, and, for `C(ZeroReflection)` with control value 0, also an uncontrolled `GlobalPhase(π)`, because the multi-controlled Z then acts on the control's $\lvert 0\rangle$ and $XZX = -Z$ (§9.6).
 - Generic `C(GlobalPhase)` is never used, because its rule produces a phase shift, which is outside the gate set.
 
 ### 6.7 Wires and registers
@@ -507,8 +510,8 @@ pip freeze > requirements-nightly.lock
   - A subprocess canary checks both behaviours (§14, L-18).
 - **Keep the lock file.** `--pre` with the TestPyPI extra index also pulls dev builds of transitive dependencies (for example `termcolor 3.3.1.dev66` and `urllib3 2.8.1.dev35`). `requirements-nightly.lock` records the exact set.
 - **Do not install the package in editable mode.** Use pytest's `pythonpath = ["src"]`, so every git worktree runs against the shared `.venv` with its own sources.
-- **Filter the built-in warning noise.** Excluded-rule warnings for PennyLane's own rules print on every compile: `Excluded the <rule> decomposition rule for <op> since --decompose-lowering cannot work with multiple registers yet` for `_ppm`, `_lattice_surgery_ppm`, `_toffoli_elbow`, `_cphase_to_single_phase` and the MCX `*_worker(s)` rules, and `Skipped the _adjoint_temporary_and(_ppm) decomposition rule for C(Adjoint(TemporaryAND)){control_values:[tensor<2xi1>]}{wires:3}{}: it contains a mid-circuit measurement, which cannot be placed in a control region.` `dfthc.testing.resources` filters exactly these.
-- **The "could not be parsed" error means there is no decomposition path.** The text is `failed to load built-in decomposition rules from '...mlirbc': the rules file could not be parsed`. Catalyst tries the bytecode file only as a fallback after its solver failed. Look in stderr for `Decomposition rule not found for operator '<op>'`. The file itself is intentionally not shipped (R-3).
+- **Filter the built-in warning noise.** Excluded-rule warnings for PennyLane's own rules print on every compile: `Excluded the <rule> decomposition rule for <op> since --decompose-lowering cannot work with multiple registers yet` for `_ppm`, `_lattice_surgery_ppm`, `_toffoli_elbow`, `_cphase_to_single_phase`, `use_allocation(...)` and the MCX `*_worker(s)` rules; `Skipped the _adjoint_temporary_and(_ppm) decomposition rule for C(Adjoint(TemporaryAND)){control_values:[tensor<2xi1>]}{wires:3}{}: it contains a mid-circuit measurement, which cannot be placed in a control region.`; and the `qp.analyze` UserWarning "unable to determine the branch", one flag per compiled module. `dfthc.testing.resources` filters exactly these.
+- **The "could not be parsed" text alone proves nothing.** The text is `failed to load built-in decomposition rules from '...mlirbc': the rules file could not be parsed`. A failed compile prints it, because Catalyst tries the bytecode file as a fallback after its solver failed, but a successful verbose compile prints it too (spike T6). The cause of a failure is the `Decomposition rule not found for operator '<op>'` line of the same message. The file itself is intentionally not shipped (R-3).
 - **Activating the venv is recommended but not required.** Calling `.venv/bin/python` directly also works with in-call rule lowering.
 
 **Machine limits.** The development laptop has 10 cores and 16 GB, and the user works on it while agents run. `scripts/test.sh` runs 2 xdist workers by default (`DFTHC_TEST_WORKERS` overrides) at lowered priority: `nice -n 10`, or, in the agent sandbox, which forbids setpriority(), the utility QoS clamp of `taskpolicy`. Each process tree has a sampled 8 GB memory cap: macOS enforces no memory limit (`setrlimit` rejects lowering `RLIMIT_AS`, `RLIMIT_RSS` and `RLIMIT_DATA`), so the watchdog kills a tree at the first sample above 7.5 GB, and the overshoot is bounded by one 50 ms sampling interval of growth. The heavy-process and large-compile policy is in §15.
@@ -595,7 +598,7 @@ Each rule exists because of a confirmed limitation (§14).
    - PennyLane primitives that we use under an adjoint (`SemiAdder`, the comparators) are covered by Phase 0 capability tests (K-7).
 5. **Measurement-based uncompute.**
    - It lives only in dedicated erase operators (`QROAMErase`, `AngleErase`), in the base rules of the unprepare classes `OuterUnprepare` and `InnerUnprepare` (§9.7, §9.8), which call `QROAMErase`, in the base rules of their siblings `OuterUnprepareFromOutcomes` and `InnerUnprepareFromOutcomes`, which measure the read's target and apply the fix-up themselves, and in the block encodings' rules, which X-measure each read's junk right after its prepare (§9.21; §16, Q-1 variant (b)). Their resource functions declare the measurements.
-   - An operator that contains a measurement is never placed under `qp.ctrl`, because Catalyst rejects measurements in control regions.
+   - An operator that contains a measurement is never placed under `qp.ctrl`, because Catalyst skips the measuring rule in a control region and silently controls a unitary inverse where one exists (L-2, rule 12).
 6. **Adjoint and controlled forms of composites are operator classes (G0, K-1 lever X).**
    - Every adjoint or controlled form of a dfthc composite that a program uses is an `Operator2` of its own whose base rule is the construction: `OuterUnprepare`, `InnerUnprepare`, `InnerSelectDagger`, `GivensLadderDagger`, `ControlledRefT2`, `ControlledRefAB`, `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk` and `ControlledToyWalk` (§7.5). No rule and no program calls `qp.adjoint` or `qp.ctrl` on a dfthc composite.
    - *Why.* For every requested modified target Catalyst synthesizes the generic distributed `Adjoint`/`C` candidate, the base rule's body inside an adjoint or control region, and requests the same modifier of every operator in it, so whole subtrees are captured and lowered again although the pinned rule is chosen. In the K-1 stand-in these copies were 95–99% of the distributed IR (Task 0.9d); without them, and with per-leaf loads, the FeMoco-54 controlled walk compiled in 2,648 MB (decision "K-1 at G0"; upstream issue drafted). An explicit class requests no modified form, so nothing is synthesized.
@@ -700,8 +703,9 @@ Validation covers four things:
   - $N \ge 2$ and $R, B, C \ge 1$;
   - $b_{\mathrm{rot}} \ge 3$, $b_{k1}, b_{k2} \ge 1$, and $3 \le s_u \le b_{\mathrm{grad}}$;
   - $0 \le k_1 \le w_x$ and $0 \le k_2 \le w_b$;
-  - $0 \le k_{e1} \le w_x$ and $0 \le k_{e2} \le \lg(RC)$.
-- **Block-bit defaults** come from `dfthc.costs.cheapest_block_bits`, which minimizes our closed-form Toffoli count, as dfthcbe does. The resource report gives every vendored system Table III's precisions ($b_{\mathrm{rot}} = b_{k1} = b_{k2} = 15$, $s_u = 7$) with these block bits (`dfthc.costs_reference.default_params`), its "default precisions" (§13.3).
+  - $0 \le k_{e1} \le w_x$ and $0 \le k_{e2} \le \lg(RC)$;
+  - $2^{w_b} \le (N - 1)\,b_{\mathrm{rot}} + 1$: the select's SF fix-up one-hot over the $w_b$ bits of `b` fits the reset angle and `b_neq_B` wires (§9.17), which no block-bit choice can change.
+- **Block-bit defaults** come from `dfthc.costs.cheapest_block_bits`, which minimizes our closed-form Toffoli count, as dfthcbe does, among the block bits whose erase one-hots fit their measured target and junk wires: $2^{k_{e1}} \le K_1 d_1$ and $2^{k_{e2} + w_b} \le K_2 d_2$ (§9.7, §9.8). The resource report gives every vendored system Table III's precisions ($b_{\mathrm{rot}} = b_{k1} = b_{k2} = 15$, $s_u = 7$) with these block bits (`dfthc.costs_reference.default_params`), its "default precisions" (§13.3).
 
 Presets:
 
@@ -911,7 +915,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Wires | `zero_wires`, `one_wires` (either may be empty, but their total size $n_w$ must be at least 1; the constructor raises `ValueError` for $n_w = 0$), `work` (for the multi-controlled Z) |
 | Rule | Multi-controlled Z with control values 0 on `zero_wires` and 1 on `one_wires`, giving $I - 2\Pi$, then `GlobalPhase(π)`. For $n_w \ge 2$, the multi-controlled Z is a `MultiControlledX` with $n_w - 1$ controls and $\max(n_w - 3, 0)$ zeroed `work` wires, with its target conjugated by `H` (and by `X` if the target's pattern value is 0). PennyLane decomposes it into one `Toffoli` and a `TemporaryAND` ladder with measured uncompute (probed, §9.24). For $n_w = 1$ PennyLane rejects a one-wire `MultiControlledX` ("acts on at least 2 wires"), so the multi-controlled Z is a `Z` on the single pattern wire, conjugated by `X` if its pattern value is 0. |
 | Adjoint | Self-adjoint (pinned) |
-| Control | Explicit `C(ZeroReflection)` (pinned): multi-controlled Z over control ∪ pattern, then `Z` on the control. This gives exactly $\lvert 0\rangle\langle 0\rvert \otimes I + \lvert 1\rangle\langle 1\rvert \otimes (2\Pi - I)$, because $Z_c\cdot C(I - 2\Pi)$ equals that operator. For $n_w = 1$ the multi-controlled Z is a `CZ` between the control and the pattern wire, conjugated by `X` on the pattern wire if its pattern value is 0. |
+| Control | Explicit `C(ZeroReflection)` (pinned), one control wire of control value $v$ (`ValueError` for more): multi-controlled Z over control ∪ pattern with $v$ as the control's control value (under capture a dynamic argument, used rather than read), then `Z` on the control and `GlobalPhase(π(1 − v))`. This gives exactly $\lvert v\rangle\langle v\rvert \otimes (2\Pi - I) + \lvert \bar v\rangle\langle \bar v\rvert \otimes I$: for $v = 1$, $Z_c\cdot C(I - 2\Pi)$ equals it; for $v = 0$ the `Z` gives $-1$ on the wrong branch, and the phase $-1$ corrects it. For $n_w = 1$ the multi-controlled Z has the control as its only control. |
 | Cost | For $n_w$ wires in total: $T = \max(n_w - 2, 0)$, a `MultiControlledX` with $n_w - 1$ controls; controlled $T = n_w - 1$. $M = 0$. Unit tests cover $n_w = 1, 2, 3$ and a case with $n_w \ge 4$, each for both pattern values of the target wire, uncontrolled and controlled. |
 
 ### 9.7 `OuterPrepare` (steps 1–4) and `OuterUnprepare` (steps 24–27)
@@ -933,7 +937,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Wires | `x_o` (read-only), `b` ($w_b$), `succ_b`, `succ_work_b` ($\lg l_b - 1$), `sigma_0`, `m_b` ($b_{k2}$), `less_than_b`, `cmp_work_b` ($b_{k2} - 1$), `alt_b` ($w_b$), `keep_b` ($b_{k2}$), `sgn`, `d_sgn`, `r` ($w_r$), `junk_b` ($(K_2-1) d_2$), `phase_grad`, `work`. Here $l_b$ is the odd part of $B+1$. The `*_work` registers stay dirty from prepare to unprepare. |
 | Compilable | $N, R, B, C$, the inner tables `alt`, `keep`, `sgn`, `d_sgn` (shape $(RC, B+1)$; the arguments are named `sgn_table` and `d_sgn_table`, because `sgn` and `d_sgn` name wire registers), $b_{k2}$, $k_2$, $k_{e2}$ with $2^{k_{e2} + w_b} \le K_2 d_2$ (no `extra_onehot`; the constructors check it), $s_u$ |
 | Base rule | 1. `FlaggedUniformPrep(L=B+1)` on (`b`, `succ_b`). 2. `H` on `sigma_0` and `m_b`. 3. `QROAMRead` with rows $x_o \in [0, RC)$, block axis $b \in [0, B+1)$ with $k_2$ block bits, and entries (alt, keep, sgn, d_sgn, $\lfloor x_o/C\rfloor$); its `leaf_words` are built in the rule from the compilable inner tables. 4. `LeftQuantumComparator(keep_b, m_b, less_than_b, cmp_work_b, "<=")`. 5. $w_b$ `CSWAP`s for alt and `b`. One-body rows load nothing, and the uniform preparation of $b$ runs unconditionally (as in dfthcbe). |
-| Post | `x_o` is unchanged. On an SF row $x_o = x < RC$ the $\mathrm{succ}_b = 1$ part is $e^{i\varphi_b}\sqrt{1 - P_{\mathrm{fail}}(B + 1, s_u)}\,\sum_b \sqrt{\tilde q_x(b)}\lvert b\rangle\lvert\mathrm{garb}_{x,b}\rangle \otimes \lvert +\rangle_{\sigma_0}$, with $\tilde q_x$ the $b_{k2}$-bit alias distribution of row $x$, $P_{\mathrm{fail}}(B + 1, s_u)$ = `uniform_failure_probability(B + 1, s_u)` and $e^{i\varphi_b}$ the success phase of `FlaggedUniformPrep` ($\varphi_b = 2.051$ at FeMoco-54); `sgn`, `d_sgn` and $r = \lfloor x/C\rfloor$ hold the drawn entry's columns, and every basis term has the uniform preparation's amplitude for the drawn $b_0$ over $\sqrt{2^{b_{k2}+1}}$. Where the selected target entry is zero (one-body rows, failed $x_o$, and failed $b_0 > B$, which have $\mathrm{succ}_b = 0$; the junk may hold other entries of a visited block): $\mathrm{less\_than}_b = 1$, the swap leaves $b = 0$ and $b_0$ in `alt_b`, and `sgn` $=$ `d_sgn` $= r = 0$ (§8.5). |
+| Post | `x_o` is unchanged. On an SF row $x_o = x < RC$ the $\mathrm{succ}_b = 1$ part is $e^{i\varphi_b}\sqrt{1 - P_{\mathrm{fail}}(B + 1, s_u)}\,\sum_b \sqrt{\tilde q_x(b)}\lvert b\rangle\lvert\mathrm{garb}_{x,b}\rangle \otimes \lvert +\rangle_{\sigma_0}$, with $\tilde q_x$ the $b_{k2}$-bit alias distribution of row $x$, $P_{\mathrm{fail}}(B + 1, s_u)$ = `uniform_failure_probability(B + 1, s_u)` and $e^{i\varphi_b}$ the success phase of `FlaggedUniformPrep` ($\varphi_b = 2.051$ at FeMoco-54); `sgn`, `d_sgn` and $r = \lfloor x/C\rfloor$ hold the drawn entry's columns, and every basis term has the uniform preparation's amplitude for the drawn $b_0$ over $\sqrt{2^{b_{k2}+1}}$. Where the selected target entry is zero (one-body rows, $x_o \ge X_o$, and failed $b_0 > B$, which have $\mathrm{succ}_b = 0$; the junk may hold other entries of a visited block): $\mathrm{less\_than}_b = 1$, the swap leaves $b = 0$ and $b_0$ in `alt_b`, and `sgn` $=$ `d_sgn` $= r = 0$ (§8.5). $x_o \ge X_o$ is an input the walk never presents: `OuterPrepare`'s swap maps a failed draw to $x_o = 0$, an SF row, where the inner signs cancel between the two rounds and $\mathrm{REF}_{T_2}$ gives $-I$. |
 | `InnerUnprepare` (own class, pinned base rule; same wires and compilable arguments as `InnerPrepare`) | `CSWAP`s, adjoint comparator (measured uncompute), `QROAMErase` (one-hot over the low $k_{e2}$ bits of $x_o$ and all bits of $b$), `H`s, adjoint `FlaggedUniformPrep` |
 | `InnerUnprepareFromOutcomes` (own class, pinned base rule; §16, Q-1 variant (b); the walk's inner unprepare) | Wires: `InnerPrepare`'s except `junk_b`, then `extra_onehot` ($\max(2^{k_{e2} + w_b} - d_2, 0)$ wires in $\lvert 0\rangle$, which the block encoding lends from the start of the measured junk wires; 102 at FeMoco-54, whose one-hot needs 128 wires and whose target has 26). Compilable: `InnerPrepare`'s. Dynamic: `junk_outcomes`, the $(K_2 - 1) d_2$ outcomes of the junk measurement right after the prepare, in the junk register's wire order. Base rule: as `OuterUnprepareFromOutcomes`'s on the inner registers (`H` and `qp.measure(q, reset=True)` on `alt_b ‖ keep_b ‖ sgn ‖ d_sgn ‖ r`; one-hot over the low $k_{e2}$ bits of $x_o$ and all bits of $b$). Never adjointed or controlled |
 | Cost | Prepare $T = F(B+1) + T_{\mathrm{read,in}} + b_{k2} + w_b$; unprepare $T = w_b + T_{\mathrm{erase,in}} + F^\dagger(B+1)$, $M = K_2 d_2$ (§9.24). At FeMoco-54: prepare $18 + 933 + 15 + 5 = 971$; unprepare $5 + 196 + 16 = 217$, $M = 416$; `InnerUnprepareFromOutcomes` the same $T$, $M = d_2 = 26$ (the block encoding measures the other $(K_2 - 1) d_2 = 390$). |
@@ -1232,7 +1236,7 @@ All gates are in the gate set:
 
 ### 11.3 Resources
 
-The QPE program compiles at the `H2_STO3G_TEST` and `H2_631G_TEST` presets for $t \in \{1, 2, 3\}$; it is not compiled at FeMoco-54 shape (§15). Its worst-case cost is $T = (2^t - 1)\,T_{C(W)} + (t^3 - t)/6$ and $M = (2^t - 1)\,M_W + t$ (§9.24), with every correction conditional counted at its maximum branch. The compiled counts at the test presets must equal this closed form exactly. At FeMoco-54 the report evaluates it with $T_{C(W)}$ and $M_W$ from the single compile of the walk and controlled walk (§13.3), for $t \le 3$ and for larger $t$. The program's wires are `WalkLayout`'s with `qpe_bits` $= t$, the corrections in the `work` pool (§11.1): $64 + t$ at `H2_STO3G_TEST` for $t \le 4$, $1{,}565 + t$ at FeMoco-54 for $t \le 22$; beyond, the $2t - 45$ spare wires of §11.1 follow at FeMoco-54.
+The QPE program compiles at the `H2_STO3G_TEST` and `H2_631G_TEST` presets for $t \in \{1, 2, 3\}$; it is not compiled at FeMoco-54 shape (§15). Its worst-case cost is $T = (2^t - 1)\,T_{C(W)} + (t^3 - t)/6$ and $M = (2^t - 1)\,M_W + t$ (§9.24), with every correction conditional counted at its maximum branch. The compiled counts at the test presets must equal this closed form exactly. At FeMoco-54 the report evaluates it with $T_{C(W)}$ and $M_W$ from the single compile of the walk and controlled walk (§13.3), for $t \le 3$ and for larger $t$. The program's wires are `WalkLayout`'s with `qpe_bits` $= t$, the corrections in the `work` pool (§11.1): $56 + t$ at `H2_STO3G_TEST` for $t \le 4$, $1{,}103 + t$ at FeMoco-54 for $t \le 22$; beyond, the $2t - 45$ spare wires of §11.1 follow at FeMoco-54.
 
 ### 11.4 Toy-size validation
 
@@ -1354,8 +1358,8 @@ Correctness for every outcome of an erase block is proved with GF(2) linearity, 
 
 | Tier | Command | Content | Budget |
 | --- | --- | --- | --- |
-| Per commit | `scripts/test.sh -m "not slow and not release"` | T1; T2; T3, T4 and T6 at small sizes; T5; non-subprocess canaries; simulator differential tests | 15 min |
-| Nightly (phase gates) | `scripts/test.sh -m "slow and not release"` | the §12.5 certificates; E-1 under S0 on all 16 inputs and under S1 on 4 fixed inputs ($\lvert 00\rangle\lvert 00\rangle$, $\lvert 10\rangle\lvert 00\rangle$, $\lvert 10\rangle\lvert 10\rangle$, $\lvert 11\rangle\lvert 11\rangle$ in $\psi_\uparrow \otimes \psi_\downarrow$); E-2 ($k = 1, 2$) and E-3 (three control states) under S0 on the 4 fixed inputs; E-4 on all 16 inputs under the alternating and a seeded schedule; E-1 under S0 on all 16 inputs and E-2 under S0 on the 4 fixed inputs of `FAILS_C3`; T4 at `MID_NAPHTHALENE` for the composite operators, walk and controlled walk; subprocess canaries; the compile-time benchmark | 4 h |
+| Per commit | `scripts/test.sh -m "not slow and not release"` | T1; T2; T3, T4 and T6 at small sizes; T5; every canary except the L-21 compile-time benchmark (subprocess canaries included); simulator differential tests | 15 min |
+| Nightly (phase gates) | `scripts/test.sh -m "slow and not release"` | the §12.5 certificates; E-1 under S0 on all 16 inputs and under S1 on 4 fixed inputs ($\lvert 00\rangle\lvert 00\rangle$, $\lvert 10\rangle\lvert 00\rangle$, $\lvert 10\rangle\lvert 10\rangle$, $\lvert 11\rangle\lvert 11\rangle$ in $\psi_\uparrow \otimes \psi_\downarrow$); E-2 ($k = 1, 2$) and E-3 (three control states) under S0 on the 4 fixed inputs; E-4 on all 16 inputs under the alternating and a seeded schedule; E-1 under S0 on all 16 inputs and E-2 under S0 on the 4 fixed inputs of `FAILS_C3`; T4 at `MID_NAPHTHALENE` for the composite operators, walk and controlled walk; the L-21 compile-time benchmark | 4 h |
 | Release (once, Phase 5) | `scripts/test.sh` | everything, plus E-1 and E-3 on all 16 inputs under S1, E-1 and E-3 under one seeded random schedule on the 4 fixed inputs, `H2_631G_TEST` E-1 on its 28 two-electron inputs under S0, and the FeMoco-54 counts from the cache while the code hash matches (§13.3) | 8 h |
 
 The release tier is reduced from the original plan (12 h with every core; E-1 and E-3 under two seeded schedules on all 16 inputs; FeMoco compiles). The §12.5 certificates already prove every erase outcome, so end-to-end schedules are smoke tests, and the nightly runs at the gates already cover the rest. Phase 3 projects the release run from per-input timings; if the projection exceeds 8 h, the orchestrator escalates with options before Phase 5.
@@ -1398,7 +1402,7 @@ Toffolis per walk at FeMoco-54.
 
 Ours minus the paper is −204, by cause:
 - **Givens ladders: −424.** Each $R_z$ costs $b_{\mathrm{rot}} - 1$ Toffolis with Qualtran's `ControlledAddOrSubtract`, as in dfthcbe. The paper counts $b_{\mathrm{rot}}$.
-- **Inner reads: +186.** Our swapped inner entry has $d_2 = 26$ bits (alt, keep, sgn, d_sgn and $r$), against the 20-bit entries of the paper's Table III.
+- **Inner reads: +186:** the 26-bit swapped entry against Table III's 20 bits (+180: `flat-r` +120, `sign-bits` +60; our entry $d_2 = 26$ holds alt, keep, sgn, d_sgn and $r$) and exact boundaries (+6: `exact-iter` +10, `iter-const` −4).
 - **Angle loads and erases, and the inner erase: +80**, after moving the paper's tail fixup to step 18. These come from exact boundaries in place of pruned iteration, and from one-hot padding.
 - **Uniform preparations and the outer erase: −46.** Measured comparator uncomputes (free comparator adjoints) and PennyLane's $(n-1)$-Toffoli classical comparator, partly offset by the rotations' $s - 1$ Toffolis each (Qualtran's cost $s - 2$). dfthcbe's AND-ladder uncompute is measured too, so it is not a source of the difference.
 - **Remaining terms: net 0.** Outer read +3 (`exact-iter` +5, `iter-const` −2), spin multiplexer +4 (`mux`; Table III has no row, while App. B.3 and B.7.1 count 2 per select), Majorana gate −4 (`maj-and`), reflections −3 (`ref-unif` −1 on $\mathrm{REF}_{T_2}$; `ref-target` −1 and `qpe-ctrl` −1 on $\mathrm{REF}_{\mathcal A\cup\mathcal B}$).
@@ -1470,7 +1474,7 @@ A row's reason codes are the causes with a nonzero contribution to its delta, ea
    - *Canary:* `test_allocating_rule_is_excluded`.
 2. **L-2: Measurement rules are skipped inside adjoint or control regions.** Rules that declare measurements are skipped when they would be wrapped in such a region, on both the Catalyst side and the PennyLane side ([pennylane#9629](https://github.com/PennyLaneAI/pennylane/pull/9629)). Explicit `Adjoint(Op)` rules taking `base`, and plain explicit `C(Op)` rules, are kept. `C(Adjoint(Op))` skips the measuring adjoint rule; the solver then controls the unitary inverse of `Op`'s base rule if one exists, and has no path otherwise (observed 2026-11-11).
    - *Mitigation:* §7.4, rules 5 and 6. Since G0 it is structural: no program wraps a dfthc composite in an adjoint or a control (rule 6), so no measuring rule is wrapped, and the expected "Skipped ..." warning appears only in tests that wrap an erase on purpose.
-   - *Canary:* `test_measuring_adjoint_rule_has_no_controlled_path`.
+   - *Canaries:* `test_measuring_adjoint_rule_has_no_controlled_path` (the controlled unitary inverse) and `test_measuring_adjoint_without_unitary_inverse_has_no_path` (subprocess; no path).
 3. **L-3: Rule selection is cost-based.** With unweighted counts, the solver preferred an auto-derived unitary inverse over an explicit measured adjoint rule. A Toffoli-weighted gate set or `fixed_decomps` fixed it.
    - *Mitigation:* §7.3, §7.5, T6.
    - *Canary:* `test_unweighted_solver_prefers_unitary_inverse`.
@@ -1481,13 +1485,13 @@ A row's reason codes are the causes with a nonzero contribution to its delta, ea
    - *Mitigation:* compilable structure arguments (§7.4, rule 3); the FeMoco-size compile check in Phase 0 (K-1).
    - *Canaries:* `test_rule_branch_on_dynamic_value_is_not_specialized` (abstract specialization). The per-variant compile and large-table compile-time claims are pinned by L-21's canary and benchmark.
 6. **L-6: Adjoint lowering can crash.** It hits an `IRMapping` assertion on nested `for_loop` or `cond` inside adjoint regions ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)). The canary's reproducer compiled on 2026-11-11 (not reproduced; regression sentinel); the issue is open, so the mitigation stays. The canary fails if the crash returns; it cannot detect a fix.
-   - *Mitigation:* no loops or conditionals in auto-adjointed bodies (§7.4, rule 4). Since G0 the looped `QROAMRead` and `ControlledWalkPower` are never adjointed or controlled by construction (§7.4 rule 6), so no loop sits under an adjoint or control region; the inventory test (§12.1, T6) checks it per program.
+   - *Mitigation:* no loops or conditionals in auto-adjointed bodies (§7.4, rule 4). Since G0 the looped `QROAMRead`, `ControlledWalkPower` and `ToyControlledWalkPower` are never adjointed or controlled by construction (§7.4 rule 6), so no loop sits under an adjoint or control region; the inventory test (§12.1, T6) checks it per program.
    - *Canary:* `test_auto_adjoint_with_nested_control_flow` (subprocess).
 7. **L-7: `C(ChangeOpBasis)` loses its saving under capture.** The "control only the middle" saving is lost ([pennylane#10357](https://github.com/PennyLaneAI/pennylane/issues/10357)).
    - *Mitigation:* the explicit controlled classes `ControlledDFTHCWalk` and `ControlledDFTHCBlockEncoding` (§7.4 rule 6).
    - *Canary:* `test_controlled_change_op_basis_controls_everything`.
 8. **L-8: Generic controlled wrapping adds Xs.** It counts one `PauliX` per control wire ([pennylane#10080](https://github.com/PennyLaneAI/pennylane/issues/10080)).
-   - *Mitigation:* explicit controlled classes with control value 1 (§7.4 rule 6); `C(ZeroReflection)`, the one `C(...)` rule left, also has control value 1.
+   - *Mitigation:* explicit controlled classes with control value 1 (§7.4 rule 6); `C(ZeroReflection)`, the one `C(...)` rule left, takes one control wire of either value (§9.6), and its multi-controlled Z flips a control of value 0 with a conditional `PauliX` (PennyLane's MCX rules, counted at the maximum branch), so both values give the same counts; no walk or QPE program requests it.
    - *Canary:* `test_generic_ctrl_adds_paulix_per_control`.
 9. **L-9: Function calls inside control regions are not decomposed.** On 2026-11-11 a controlled `qp.capture.subroutine` leaves `C(PauliX)` undecomposed at `level="user"`, and compiling for execution fails ([catalyst#3330](https://github.com/PennyLaneAI/catalyst/pull/3330), [catalyst#3384](https://github.com/PennyLaneAI/catalyst/issues/3384)).
    - *Mitigation:* no `Subroutine`; explicit controlled classes (§7.4 rule 6).
@@ -1531,10 +1535,10 @@ A row's reason codes are the causes with a nonzero contribution to its delta, ea
     - *Canaries:*
       - `test_warnings_silenced_without_env` (subprocess, variable unset);
       - `test_warnings_visible_with_env` (subprocess, variable exported before start);
-      - `test_unreachable_op_reports_missing_rule` (subprocess).
+      - `test_unreachable_op_reports_missing_rule` (subprocess; the misleading text next to the named operator).
 19. **L-19: `UniformPrep` and `AliasSampling` need arbitrary rotations.** For a non-power-of-two size neither has a path to the Toffoli-level gate set; for a power-of-two size `AliasSampling` compiles (observed 2026-11-11).
     - *Mitigation:* `FlaggedUniformPrep`.
-    - *Canary:* `test_template_has_no_toffoli_level_path` (subprocess; parameterized for `UniformPrep` and `AliasSampling`).
+    - *Canaries:* `test_template_has_no_toffoli_level_path` (subprocess; parameterized for `UniformPrep` and `AliasSampling`) and `test_power_of_two_alias_sampling_compiles` (subprocess).
 20. **L-20: An undecomposed `Operator2` is decomposed by the device pass or rejected.** On 2026-11-11 such an `Operator2` is decomposed by the device pass if it has a rule, and fails to compile for execution if it has none; it no longer reaches runtime as a bare named gate ([catalyst#3430](https://github.com/PennyLaneAI/catalyst/pull/3430)).
     - *Mitigation:* the `level="device"` closure test of every composite operator (T5) asserts that no `OperatorOp` survives.
     - *Canary:* `test_undecomposed_operator_op_reaches_runtime`: at `level="user"` an `Operator2` listed in the gate set remains named; with a rule the device pass decomposes it, and without a rule compiling for execution fails.
@@ -1545,7 +1549,7 @@ A row's reason codes are the causes with a nonzero contribution to its delta, ea
     - *Mitigation:* loops unrolled in Python or with static bounds; T4 asserts `is_symbolic == False`.
     - *Canary:* shared with L-12 and L-17 (`test_select_swap_qrom_counts_are_symbolic`, `test_dynamic_loop_counts_are_symbolic`).
 23. **L-23: Canonicalizing list-valued dynamic `Operator2` arguments is the subclass's job** ([pennylane#10060](https://github.com/PennyLaneAI/pennylane/pull/10060), open).
-    - *Mitigation:* every dfthc operator with a dynamic argument converts lists to arrays in `__init__` (today `PhaseFixup` and `QPERound`).
+    - *Mitigation:* every dfthc operator with a dynamic argument converts lists to arrays in `__init__` (`QROAMRead`, `PhaseFixup`, `OuterUnprepareFromOutcomes`, `InnerUnprepareFromOutcomes` and `QPERound`).
     - *Canary:* `test_dynamic_list_argument_not_canonicalized`, which pins today's base-class behaviour for a list-valued dynamic argument.
 24. **L-24: Compilable integers must fit in signed 64 bits.** Larger values fail to compile (MLIR: large integer attributes are not supported).
     - *Mitigation:* wide table entries are tuples of 32-bit words (§8.4).
@@ -1553,7 +1557,7 @@ A row's reason codes are the causes with a nonzero contribution to its delta, ea
 25. **L-25: `qp.adjoint(OpClass)(*args)` traces positional arguments under capture,** so a compilable argument passed positionally is rejected.
     - *Mitigation:* apply adjoints as `qp.adjoint(Op(...))` (§7.4, rule 13).
     - *Canary:* `test_adjoint_of_class_traces_positional_arguments`.
-26. **L-26: Unsigned dynamic arguments get no decomposition rule.** On 2026-11-12 an `Operator2` whose dynamic argument is a `uint32` array warns "Failed to synthesize the distributed decomposition rules for <Op>: 'ui32'" and then fails with `CompileError` "Decomposition rule not found for operator '<Op>'", because Catalyst's `_MLIR_DTYPES_TO_PY_DTYPES` maps only `i1` to `i64` (and floats and complex numbers); the same operator with `int32` or `int64` data compiles.
+26. **L-26: Unsigned dynamic arguments get no decomposition rule.** On 2026-11-12 an `Operator2` whose dynamic argument is a `uint32` array warns "Failed to synthesize the distributed decomposition rules for <Op>: 'ui32'" and then fails with `CompileError` "Decomposition rule not found for operator '<Op>'", because Catalyst's `_MLIR_DTYPES_TO_PY_DTYPES` (`catalyst/decomposition/type_utils.py`) maps only `i1`, `i8`, `i16`, `i32` and `i64` (and floats and complex numbers); the same operator with `int32` or `int64` data compiles.
     - *Mitigation:* compilable table words are `int64` holding 32 data bits each (ledger decision "Table words are `int64`").
     - *Canary:* `test_unsigned_dynamic_argument_has_no_rule` (subprocess).
 27. **L-27: `qp.qjit` compiles a fully annotated function ahead of time at decoration.** Found by the Opus review of Task 0.9c on 2026-11-12; zero arguments are the case `compiled_resources` hits. `qp.qjit` AOT-compiles at decoration when every parameter has a Catalyst-supported type annotation (`params_are_annotated` in `catalyst/tracing/type_signatures.py`); a zero-argument function satisfies this rule vacuously. With `enable_aot_compilation=True` (the default), `QJIT.__init__` compiles a linked binary. `qp.analyze` creates a separate `QJIT` with AOT disabled and compiles through `mlir_opt`, so an analyze-only fully annotated program is compiled twice, the binary is never used, and the first capture stays in memory during the second compile. Measured on the K-1 stand-in (mid10 controlled walk): 2,552 MB and 73 s with the double compile, 1,536 MB and 26 s with the first compile switched off, identical counts.
@@ -1631,7 +1635,7 @@ The implementation plan specifies tasks, prompts and acceptance checks. This sec
    - *Fallback:* our own comparator operator with an explicit adjoint rule.
 8. **K-8: Nightly churn.**
    - *Resolution:* the lock file, the canaries and the bump procedure (§7.1); continuous.
-9. **K-9: Qubits above the paper's count** (§10.3).
+9. **K-9: Qubits per group above the paper's (total below it with Q-1 variant (b))** (§10.3).
    - *Resolution:* documented in the Phase 4 report.
 10. **K-10: Measurement-valued arrays as dynamic arguments.**
     - *Resolution, Phase 0 probe:* in tape mode and under capture, pass these measurement-valued arrays as dynamic `Operator2` arguments:

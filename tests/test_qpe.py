@@ -115,6 +115,20 @@ def test_controlled_walk_power_rule_is_valid(name, power):
     qp.testing.assert_valid_decomp_rule(op, _controlled_walk_power, check_matrix=False)
 
 
+@pytest.mark.parametrize(("name", "power"), [("sto3g", 2), ("fails-c3", 1)])
+def test_controlled_walk_power_children(name, power):
+    """The rule's loop body binds each group to its own register (tape mode, no compile; final
+    review m-8): it queues ``power`` ControlledDFTHCWalk operators whose registers are exactly
+    the walk power's groups, so a swap of two groups of equal size (system and phase_grad at
+    H2_STO3G_TEST) fails here per commit."""
+    c = walk_sim.case(name)
+    with qp.capture.pause(), qp.queuing.AnnotatedQueue() as queue:
+        _controlled_walk_power(power, *c.compilable, **c.groups(controlled=True))
+    assert [op.name for op in queue.queue] == ["ControlledDFTHCWalk"] * power
+    for op in queue.queue:
+        assert {group: list(getattr(op, group)) for group in op.wire_argnames} == c.groups(True)
+
+
 def test_controlled_walk_power_validates():
     """Spec 9.0: power at least 1; the controlled walk's checks (``ValueError``)."""
     c = walk_sim.case("sto3g")
@@ -239,9 +253,47 @@ def test_qpe_round_validates(change, match):
         QPERound(**arguments)
 
 
+def malformed_walk_compilable(change):
+    """ControlledWalkPower's compilable arguments at H2_STO3G_TEST after ``power``, changed."""
+    c = walk_sim.case("sto3g")
+    params, tables = c.compilable
+    if change == "angle":
+        tail = [list(row) for row in tables[6]]
+        tail[0][0] = 2 ** (c.params.b_rot - 1)
+        return params, (*tables[:6], tuple(map(tuple, tail)), tables[7])
+    if change == "fields":
+        return params, tables[:7]
+    return (params,)
+
+
+@pytest.mark.parametrize(("op_name", "change", "match"), [
+    ("ControlledWalkPower", "angle", r"angles must lie in \[0, 2\*\*\(b_rot - 1\)\)"),
+    ("ControlledWalkPower", "fields", "WalkTables needs 8 fields; got 7"),
+    ("ControlledWalkPower", "arity", "walk_compilable must hold ControlledWalkPower's compilable "
+                                     r"arguments after power, \('params', 'tables'\); got 1"),
+    ("ToyControlledWalkPower", "arity", "walk_compilable must hold ToyControlledWalkPower's "
+                                        r"compilable arguments after power, \(\); got 1"),
+], ids=["tail-angle", "table-fields", "arity", "toy-arity"])
+def test_qpe_round_validates_the_walk_powers_arguments(op_name, change, match):
+    """Spec 9.0 (final review I-2): QPERound checks the walk power's compilable arguments at
+    construction, through the walk power's validate_compilable, before it computes the wire
+    sizes; malformed tables raise ValueError there, not when the rule builds the walk power."""
+    layout = WalkLayout.from_params(H2_STO3G_TEST, qpe_bits=2)
+    if op_name == "ControlledWalkPower":
+        spec = walk_power_spec(H2_STO3G_TEST, walk_sim.case("sto3g").tables, layout)
+        compilable, wires = malformed_walk_compilable(change), spec.wires
+    else:
+        spec = toy_walk_power_spec(system=[60], ancilla=[61])
+        compilable, wires = (5,), [60, 61, 62, 63, 64]
+    with pytest.raises(ValueError, match=match):
+        QPERound(0, 2, [False, False], op_name, compilable, spec.wire_sizes, layout.qpe_control,
+                 layout.qpe_grad, wires)
+
+
 def test_register_walk_power_checks_the_class():
-    """A walk power registers once, and its scratch_argname is None or its last wire group
-    (the group QPERound's corrections borrow); a class without the attribute is refused."""
+    """A walk power registers once, its scratch_argname is None or its last wire group (the
+    group QPERound's corrections borrow), and it has a validate_compilable; a class without
+    either attribute is refused."""
     assert WALK_POWERS["ControlledWalkPower"].scratch_argname == "work"
     assert WALK_POWERS["ToyControlledWalkPower"].scratch_argname is None
     with pytest.raises(ValueError, match="ControlledWalkPower is already a registered"):
@@ -252,7 +304,9 @@ def test_register_walk_power_checks_the_class():
         register_walk_power(type("Middle", (), wires | {"scratch_argname": "system"}))
     with pytest.raises(ValueError, match="got ''"):
         register_walk_power(type("Undeclared", (), wires))
-    assert "Middle" not in WALK_POWERS and "Undeclared" not in WALK_POWERS
+    with pytest.raises(ValueError, match="Unchecked needs a static validate_compilable"):
+        register_walk_power(type("Unchecked", (), wires | {"scratch_argname": None}))
+    assert not {"Middle", "Undeclared", "Unchecked"} & set(WALK_POWERS)
 
 
 def test_spare_wires_needed():

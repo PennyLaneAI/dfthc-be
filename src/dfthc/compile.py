@@ -106,7 +106,8 @@ def compiled_resources(
     pins); an empty dict disables pinning. Raises ``AssertionError`` if the counts are symbolic
     or, at ``level="user"``, if an operation outside the gate set remains (T5). At
     ``level="device"`` it instead asserts that no dfthc operator survives, bare or under
-    ``C(...)`` and ``Adjoint(...)`` (L-20; :func:`surviving_dfthc_operators`); the record then
+    ``C(...)`` and ``Adjoint(...)`` (L-20; :func:`surviving_dfthc_operators`), and that every
+    remaining operation is native to the device (:func:`non_native_operations`); the record then
     holds only ``counts`` and ``num_wires``, with T, M and A set to ``None``, because the device
     pass rewrites ``TemporaryAND`` and ``Adjoint(TemporaryAND)`` into ``Toffoli``.
     """
@@ -134,6 +135,10 @@ def compiled_resources(
         surviving = surviving_dfthc_operators(counts, set(FIXED_DECOMPS) | set(pins))
         if surviving:
             raise AssertionError(f"dfthc operators reached level={level!r}: {surviving}")
+        foreign = non_native_operations(counts, dev)
+        if foreign:
+            raise AssertionError(f"operations not native to {device} remain at "
+                                 f"level={level!r}: {foreign}")
     user = level == "user"
     return CompiledResources(
         toffoli=counts.get("Toffoli", 0) + counts.get("TemporaryAND", 0) if user else None,
@@ -167,6 +172,19 @@ def surviving_dfthc_operators(
     """
     operators = dfthc_operator_names(keys)
     return sorted(name for name in names if operators.intersection(_IDENTIFIER.findall(name)))
+
+
+def non_native_operations(names: Iterable[str], device) -> list[str]:
+    """The gate ``names`` that ``device`` does not run natively, mid-circuit measurements aside:
+    by the capabilities Catalyst compiles against (``catalyst.device.get_device_capabilities``),
+    an ``Adjoint(...)`` or ``C(...)`` form only where the device declares the base invertible or
+    controllable. A ``level="device"`` closure leaves none (spec 7.2): a custom operator, a
+    wrapper of one or a template that survived the device pass is named here."""
+    from catalyst.device import get_device_capabilities
+
+    capabilities = get_device_capabilities(device)
+    return sorted(name for name in names
+                  if name != "MidCircuitMeasure" and not capabilities.supports_operation(name))
 
 
 def mcm_parities(outcomes: Sequence, masks: Sequence[int]) -> list:

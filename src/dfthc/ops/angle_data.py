@@ -31,6 +31,7 @@ from dfthc.ops.qroam import (
     PhaseFixup,
     QROAMEmitter,
     QROAMRead,
+    dummy_wires,
     emit_phase_fixup,
 )
 from dfthc.ops.unary import as_resources
@@ -375,13 +376,25 @@ def _tail_fixup(N: int, R: int, C: int) -> dict:
             "onehot_bits": 0, "control_value": None}
 
 
-def _dummy_wires(sizes: dict[str, int]) -> dict[str, range]:
-    """Consecutive integer wires for every register: what the resource function counts on."""
-    wires, start = {}, 0
-    for name, size in sizes.items():
-        wires[name] = range(start, start + size)
-        start += size
-    return wires
+def check_erase_arguments(tail_angles, sf_angles, n_plus, N, R, B, C, b_rot,
+                          sf_onehot_bits) -> tuple:
+    """:class:`AngleErase`'s compilable arguments, in its order, as canonical tuples and ints,
+    each checked against its domain (spec 9.0; ``ValueError`` otherwise). ``InnerSelect``, which
+    passes its own to the erase, checks them here too, so both give the same messages."""
+    N = check_int("N", N, low=2)
+    C = check_int("C", C, low=1)
+    sf_angles, R, B, b_rot = SFAngleLoad._check(sf_angles, R, B, b_rot)
+    rows = canonical_ints("tail_angles", tail_angles)
+    if not isinstance(rows, tuple) or len(rows) != N or len(sf_angles[0][0]) != N - 1:
+        raise ValueError(f"tail_angles must have N = {N} rows and sf_angles N - 1 = {N - 1} "
+                         "angles per entry")
+    tail_angles, n_plus, _, _, _ = TailAngleLoad._check(rows, n_plus, R * C, N + R * C, b_rot)
+    sf_onehot_bits = check_int("the SF one-hot bits", sf_onehot_bits, low=0, high=lg(B + 1))
+    if sf_onehot_bits and 2**sf_onehot_bits > (N - 1) * b_rot + 1:
+        raise ValueError(f"the SF one-hot over {sf_onehot_bits} bits needs {2**sf_onehot_bits} "
+                         f"wires, more than the {(N - 1) * b_rot + 1} reset angle and b_neq_B "
+                         "wires")
+    return tail_angles, sf_angles, n_plus, N, R, B, C, b_rot, sf_onehot_bits
 
 
 class AngleErase(Operator2):
@@ -473,20 +486,9 @@ class AngleErase(Operator2):
 
     def __init__(self, tail_angles, sf_angles, n_plus, N, R, B, C, b_rot, sf_onehot_bits,
                  angles, b_neq_B, G0, G1, x_o, r, b, work):
-        N = check_int("N", N, low=2)
-        C = check_int("C", C, low=1)
-        sf_angles, R, B, b_rot = SFAngleLoad._check(sf_angles, R, B, b_rot)
-        rows = canonical_ints("tail_angles", tail_angles)
-        if not isinstance(rows, tuple) or len(rows) != N or len(sf_angles[0][0]) != N - 1:
-            raise ValueError(f"tail_angles must have N = {N} rows and sf_angles N - 1 = {N - 1} "
-                             "angles per entry")
-        tail_angles, n_plus, _, _, _ = TailAngleLoad._check(rows, n_plus, R * C, N + R * C,
-                                                            b_rot)
-        sf_onehot_bits = check_int("sf_onehot_bits", sf_onehot_bits, low=0, high=lg(B + 1))
-        if sf_onehot_bits and 2**sf_onehot_bits > (N - 1) * b_rot + 1:
-            raise ValueError(f"the SF one-hot over {sf_onehot_bits} bits needs "
-                             f"{2**sf_onehot_bits} wires, more than the {(N - 1) * b_rot + 1} "
-                             "reset angle and b_neq_B wires")
+        (tail_angles, sf_angles, n_plus, N, R, B, C, b_rot,
+         sf_onehot_bits) = check_erase_arguments(tail_angles, sf_angles, n_plus, N, R, B, C, b_rot,
+                                                 sf_onehot_bits)
         check_wires("AngleErase",
                     {"angles": angles, "b_neq_B": b_neq_B, "G0": G0, "G1": G1, "x_o": x_o,
                      "r": r, "b": b, "work": work},
@@ -498,7 +500,9 @@ class AngleErase(Operator2):
     @staticmethod
     def required_wires(tail_angles, sf_angles, n_plus, N, R, B, C, b_rot,
                        sf_onehot_bits) -> dict[str, int]:
-        """Exact register sizes; ``work`` is the larger of the two fix-ups' needs."""
+        """Exact register sizes; ``work`` is the larger of the two fix-ups' needs. The tables and
+        ``n_plus`` change no size: ``required_wires`` takes every compilable argument (spec 7.4
+        rule 1)."""
         sf, tail = _sf_fixup(R, B, sf_onehot_bits), _tail_fixup(N, R, C)
         work = max(PhaseFixup.required_wires(**sf)["work"],
                    PhaseFixup.required_wires(**tail)["work"])
@@ -547,8 +551,8 @@ def _erase_body(emit, tail_angles, sf_angles, n_plus, N, R, B, C, b_rot, sf_oneh
 def _angle_erase_resources(tail_angles, sf_angles, n_plus, N, R, B, C, b_rot, sf_onehot_bits,
                            angles, b_neq_B, G0, G1, x_o, r, b, work):
     counter = QROAMEmitter(counting=True)
-    wires = _dummy_wires(AngleErase.required_wires(tail_angles, sf_angles, n_plus, N, R, B, C,
-                                                   b_rot, sf_onehot_bits))
+    wires = dummy_wires(AngleErase.required_wires(tail_angles, sf_angles, n_plus, N, R, B, C,
+                                                  b_rot, sf_onehot_bits))
     _erase_body(counter, tail_angles, sf_angles, n_plus, N, R, B, C, b_rot, sf_onehot_bits,
                 **wires)
     return as_resources(counter.counts)

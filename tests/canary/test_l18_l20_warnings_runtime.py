@@ -42,9 +42,10 @@ def test_warnings_visible_with_env():
 def test_unreachable_op_reports_missing_rule():
     """L-18 (catalyst#2767): no path gives the misleading "could not be parsed" error.
 
-    The real cause, "Decomposition rule not found for operator '<op>'", is in the same message.
-    The "could not be parsed" text is not asserted: a successful verbose compile prints it too
-    (spike T6), so it proves nothing. The evidence is the CompileError and the named operator.
+    The real cause, "Decomposition rule not found for operator '<op>'", is in the same message,
+    next to the misleading text, which this canary records so that a fix of catalyst#2767 flips
+    it. The text alone proves nothing: a successful verbose compile prints it too (spike T6). The
+    evidence of the failure is the CompileError and the named operator.
     """
     result = run_snippet(
         """
@@ -60,6 +61,7 @@ def test_unreachable_op_reports_missing_rule():
     )
     unreachable = outcome(result, "UNREACHABLE")
     assert unreachable.startswith("ERROR CompileError")
+    assert "the rules file could not be parsed" in unreachable
     assert "Decomposition rule not found for operator 'C(Adjoint(TemporaryAND))" in unreachable
 
 

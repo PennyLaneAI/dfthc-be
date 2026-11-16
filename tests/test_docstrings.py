@@ -20,9 +20,13 @@ from pennylane.core import Operator2
 
 import dfthc.ops
 from dfthc import costs
+from dfthc.params import FEMOCO54, H2_STO3G_TEST
+from dfthc.registers import WalkLayout
+from dfthc.testing.toy_walk import ToyControlledWalkPower
 
 REPO = Path(__file__).resolve().parents[1]
 DOCS = REPO / "docs"
+SPEC = DOCS / "superpowers" / "specs" / "2026-11-11-dfthc-pennylane-design.md"
 SECTIONS = (
     ("purpose and mathematical action", r"\*\*Action\b"),
     ("register table", r"\*\*Registers\.\*\*"),
@@ -56,6 +60,14 @@ def operator_classes() -> dict[str, type]:
 
 
 CLASSES = operator_classes()
+
+
+def spec_section(heading: str, next_heading: str) -> str:
+    """The spec's text from the line starting with ``heading`` to the one starting with
+    ``next_heading``."""
+    text = SPEC.read_text()
+    start = re.search(rf"^{re.escape(heading)}", text, re.M).start()
+    return text[start:re.search(rf"^{re.escape(next_heading)}", text[start:], re.M).start() + start]
 
 
 def test_every_operator_is_audited():
@@ -142,15 +154,91 @@ def test_documentation_links_resolve(document):
 
 def test_limitations_match_the_canaries_and_spec_14():
     """docs/limitations.md has an entry for every limitation L-1 to L-27 of spec 14, and every
-    canary it names is a test function in tests/canary."""
+    canary it names is a test function in tests/canary; spec 14 has the same entries and names
+    the same canaries (final review m-31)."""
     text = (DOCS / "limitations.md").read_text()
-    numbers = [int(n) for n in re.findall(r"\*\*L-(\d+)\b", text)]
-    assert Counter(numbers) == Counter(range(1, 28))
+    spec = spec_section("## 14.", "## 15.")
+    for where, document in (("limitations.md", text), ("spec 14", spec)):
+        numbers = [int(n) for n in re.findall(r"\*\*L-(\d+)\b", document)]
+        assert Counter(numbers) == Counter(range(1, 28)), where
     canaries = set()
     for path in (REPO / "tests" / "canary").glob("test_*.py"):
         canaries |= set(re.findall(r"^def (test_\w+)", path.read_text(), re.M))
     named = set(re.findall(r"`(test_\w+)`", text))
     assert named and named <= canaries, sorted(named - canaries)
+    in_spec = set(re.findall(r"`(test_\w+)`", spec))
+    assert in_spec == named, (sorted(in_spec - named), sorted(named - in_spec))
+
+
+def test_every_l6_mitigation_names_the_three_looped_operators():
+    """Spec 7.4 rule 4's looped operators, never adjointed or controlled, are the ones that spec
+    14's L-6, HANDOFF 7's L-6 row and docs/limitations.md's L-6 entry name, each with "never
+    adjointed or controlled" (final review m-23)."""
+    classes = {cls.__name__ for cls in CLASSES.values()} | {ToyControlledWalkPower.__name__}
+    rule_4 = re.search(r"`qp\.for_loop` appears in three operators.*",
+                       spec_section("### 7.4", "### 7.5")).group(0)
+    looped = set(re.findall(r"`(\w+)`", rule_4)) & classes
+    assert looped == {"QROAMRead", "ControlledWalkPower", "ToyControlledWalkPower"}
+    entries = {
+        "spec 14": re.search(r"\*\*L-6:.*?(?=\n7\. \*\*L-7)", spec_section("## 14.", "## 15."),
+                             re.S).group(0),
+        "HANDOFF 7": re.search(r"^\| L-6 \|.*$", (DOCS / "agents" / "HANDOFF.md").read_text(),
+                               re.M).group(0),
+        "limitations.md": re.search(r"\*\*L-6,.*?(?=\n- \*\*L-7)",
+                                    (DOCS / "limitations.md").read_text(), re.S).group(0),
+    }
+    for where, entry in entries.items():
+        assert set(re.findall(r"`(\w+)`", entry)) & classes == looped, where
+        assert "never adjointed or controlled" in " ".join(entry.split()), where
+
+
+def test_spec_14_l23_names_every_operator_with_a_dynamic_argument():
+    """Spec 14's L-23 mitigation names exactly the operators that declare dynamic arguments
+    and convert lists in ``__init__`` (final review m-24)."""
+    entry = re.search(r"\*\*L-23:.*?(?=\n24\. \*\*L-24)", spec_section("## 14.", "## 15."),
+                      re.S).group(0)
+    dynamic = {cls.__name__ for cls in CLASSES.values() if getattr(cls, "dynamic_argnames", ())}
+    assert dynamic == {"QROAMRead", "PhaseFixup", "OuterUnprepareFromOutcomes",
+                       "InnerUnprepareFromOutcomes", "QPERound"}
+    assert set(re.findall(r"`(\w+)`", entry)) & {c.__name__ for c in CLASSES.values()} == dynamic
+
+
+def test_architecture_assigns_each_module_to_one_layer():
+    """docs/architecture.md's layer table lists every module in one layer only (final review
+    m-28), so the page's claim that each layer depends only on lower ones can hold."""
+    text = (DOCS / "architecture.md").read_text()
+    table = text.split("## Layers", 1)[1].split("\n## ", 1)[0]
+    layers = Counter()
+    for row in re.findall(r"^\| (?:L\d|Tooling)[^|]*\|[^|]*\|([^|]*)\|$", table, re.M):
+        layers.update(re.findall(r"`(dfthc[\w.]*)`", row))
+    assert layers and [module for module, count in layers.items() if count > 1] == []
+
+
+PAPER_CITATION = "Phys. Rev. X 15, 041016 (2025), DOI 10.1103/pb2g-j9cw"
+"""The paper as the spec's reference gives it, with its DOI."""
+
+
+@pytest.mark.parametrize("draft", sorted((DOCS / "upstream").glob("*.md")), ids=lambda p: p.name)
+def test_upstream_drafts_cite_the_paper_in_full(draft):
+    """Every mention of the paper's DOI in an upstream draft is the full citation (final review
+    m-32): journal, volume, article number and year, then the DOI."""
+    text = " ".join(draft.read_text().split())
+    assert text.count("10.1103/pb2g-j9cw") == text.count(PAPER_CITATION)
+
+
+def test_spec_11_3_gives_the_qpe_wire_totals_of_the_layout():
+    """Spec 11.3's wire totals of the QPE program (final review I-4) are the walk's wires plus
+    the QPE control, read from WalkLayout (no compile), plus t gradient wires: 56 + t at
+    H2_STO3G_TEST and 1,103 + t at FeMoco-54."""
+    text = spec_section("### 11.3", "### 11.4")
+
+    def total(where: str) -> int:
+        match = re.search(rf"\$(\d[\d{{}},]*) \+ t\$ at {where}", text)
+        assert match, where
+        return int(re.sub(r"\D", "", match.group(1)))
+
+    assert total("`H2_STO3G_TEST`") == WalkLayout.from_params(H2_STO3G_TEST).num_wires + 1
+    assert total("FeMoco-54") == WalkLayout.from_params(FEMOCO54).num_wires + 1
 
 
 def test_architecture_names_every_operator():

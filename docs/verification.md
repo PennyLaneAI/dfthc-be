@@ -91,8 +91,8 @@ measurements in M) and the QPE summary, while the code hash matches.
 
 | Tier | Command | Content | Budget |
 | --- | --- | --- | --- |
-| per commit | `scripts/test.sh -m "not slow and not release"` | T1 to T6 at small sizes, canaries, simulator tests, the report at `H2_STO3G_TEST` | 15 min |
-| nightly (phase gates) | `scripts/test.sh -m "slow and not release"` | certificates, E-1 to E-4 under the nightly schedules, T4 at `MID_NAPHTHALENE`, the report at `naphthalene`, subprocess canaries | 4 h |
+| per commit | `scripts/test.sh -m "not slow and not release"` | T1 to T6 at small sizes, every canary except the L-21 compile-time benchmark (subprocess canaries included), simulator tests, the report at `H2_STO3G_TEST` | 15 min |
+| nightly (phase gates) | `scripts/test.sh -m "slow and not release"` | certificates, E-1 to E-4 under the nightly schedules, T4 at `MID_NAPHTHALENE`, the report at `naphthalene`, the L-21 compile-time benchmark | 4 h |
 | release (once) | `scripts/test.sh` | everything, with E-1 and E-3 under more schedules and the cached FeMoco-54 counts | 8 h |
 
 `scripts/test.sh` runs two workers at lowered priority (`DFTHC_TEST_WORKERS` overrides). One

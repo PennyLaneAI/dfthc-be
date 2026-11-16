@@ -3,6 +3,7 @@
 import contextlib
 import ctypes
 import errno
+import io
 import json
 import os
 import signal
@@ -127,6 +128,26 @@ def test_tree_memory_includes_grandchildren():
         proc.wait()
 
 
+def _record(start, footprint_mb=10.0):
+    """A libproc rusage record of a running process."""
+    info = watchdog._RusageInfoV2()
+    info.proc_start_abstime, info.phys_footprint = start, int(footprint_mb * 2**20)
+    return info
+
+
+def test_a_reaped_root_is_not_adopted_again(monkeypatch):
+    """Final review m-18: once the root has been reaped, a process that reuses its pid (another
+    start time) is not adopted, measured or killed: every scan starts from the root's pid."""
+    root = 424242
+    records = iter([_record(start=1), None, _record(start=2, footprint_mb=50.0)])
+    monkeypatch.setattr(watchdog, "_rusage", lambda pid: next(records) if pid == root else None)
+    monkeypatch.setattr(watchdog, "child_pids", lambda pid: [])
+    tree = watchdog._Tree(root)
+    assert tree.scan() == {root: 10.0}
+    assert tree.scan() == {}
+    assert tree.scan() == {}
+
+
 def test_kills_the_whole_tree_at_the_memory_cap():
     run = run_watched(tree_command(steps=8), cap_mb=200, timeout_s=60)
     assert run.killed == "memory"
@@ -135,6 +156,33 @@ def test_kills_the_whole_tree_at_the_memory_cap():
     assert run.returncode == -9
     assert run.survivors == []
     assert wait_until_gone(int(run.stdout.split()[0])), "the grandchild survived the kill"
+
+
+HOLDER = ("import os, time; chunk = os.urandom(130 * 2**20); print('ready', flush=True); "
+          "time.sleep({sleep})")
+"""A process that holds 130 MB of random bytes, then sleeps."""
+
+
+def test_kills_on_the_summed_memory_of_the_tree():
+    """Final review m-12: the kill decision samples the tree's summed footprint, not its largest
+    process. One 130 MB process stays below the kill point of cap_mb = 200 (187.5 MB); two such
+    siblings under one root exceed it together and are killed for memory."""
+    alone = run_watched([sys.executable, "-c", HOLDER.format(sleep=2)], cap_mb=200, timeout_s=30)
+    assert (alone.killed, alone.returncode) == (None, 0)
+    assert alone.peak_mb < watchdog.SAFETY_FRACTION * 200
+    siblings = textwrap.dedent(
+        f"""
+        import subprocess, sys
+        holder = {HOLDER.format(sleep=10)!r}
+        procs = [subprocess.Popen([sys.executable, "-c", holder]) for _ in range(2)]
+        for proc in procs:
+            proc.wait()
+        """
+    )
+    run = run_watched([sys.executable, "-c", siblings], cap_mb=200, timeout_s=30)
+    assert run.killed == "memory"
+    assert run.peak_mb > watchdog.SAFETY_FRACTION * 200
+    assert run.survivors == []
 
 
 def test_kills_at_the_safety_fraction_of_the_cap(monkeypatch):
@@ -332,9 +380,12 @@ def test_untraceable_descendant_holding_the_pipes_ends_the_run(
     start-up under load) the time limit ends the loop and both bounded final reads time out; with
     ``timeout_s=60`` the loop gives up ``_KILL_SECONDS`` after the root exited with nothing left
     to sample. The escaped child sleeps 15 s, longer than either path takes (at most
-    ``min(timeout_s, kill_seconds) + 2 * kill_seconds`` after the start). It publishes its pid to a
-    cleanup file before it leaves the session, so the ``finally`` block kills it even when the run
-    ends before the readiness file appears.
+    ``min(timeout_s, kill_seconds) + 2 * kill_seconds`` after the start). The bound asserts only
+    that property, that the run ends long before the child's sleep, with 3 s for Python's start-up
+    and the readiness handshake under load (final review m-21: 6 s and 13 s, against 3.2 s and
+    10.1 s measured alone). The child publishes its pid to a cleanup file before it leaves the
+    session, so the ``finally`` block kills it even when the run ends before the readiness file
+    appears.
     """
     monkeypatch.setattr(watchdog, "_KILL_SECONDS", kill_seconds)
     cleanup_file, ready_file = tmp_path / "escaped.pid", tmp_path / "escaped.ready"
@@ -350,9 +401,78 @@ def test_untraceable_descendant_holding_the_pipes_ends_the_run(
         with contextlib.suppress(FileNotFoundError, ProcessLookupError, ValueError):
             os.kill(int(cleanup_file.read_text()), signal.SIGKILL)
     assert run.killed == "watchdog error: an untraceable descendant holds the output pipes" + suffix
-    assert elapsed < min(timeout_s, kill_seconds) + 2 * kill_seconds + 1
+    assert elapsed < min(timeout_s, kill_seconds) + 2 * kill_seconds + 3
     assert run.stdout.split() == [cleanup_file.read_text()]
     assert ready_file.exists()
+
+
+def test_held_pipes_found_by_the_loop_are_closed_at_once(monkeypatch, tmp_path):
+    """Final review m-19: once the loop has given up on the held pipes (``_KILL_SECONDS`` after
+    nothing traceable was left), the final read closes them after one short read instead of two
+    more bounded waits, so the run ends ``_KILL_SECONDS`` after the root, as the module docstring
+    says. Only the final read is timed, so start-up and load do not enter."""
+    monkeypatch.setattr(watchdog, "_KILL_SECONDS", 2.0)
+    final_output, spent = watchdog._final_output, []
+
+    def timed(*args, **kwargs):
+        begin = time.monotonic()
+        try:
+            return final_output(*args, **kwargs)
+        finally:
+            spent.append(time.monotonic() - begin)
+
+    monkeypatch.setattr(watchdog, "_final_output", timed)
+    cleanup_file, ready_file = tmp_path / "escaped.pid", tmp_path / "escaped.ready"
+    command = [sys.executable, "-c", ESCAPE.format(sleep=15, cleanup_file=str(cleanup_file),
+                                                   ready_file=str(ready_file))]
+    try:
+        run = run_watched(command, timeout_s=60)
+    finally:
+        with contextlib.suppress(FileNotFoundError, ProcessLookupError, ValueError):
+            os.kill(int(cleanup_file.read_text()), signal.SIGKILL)
+    assert run.killed == "watchdog error: an untraceable descendant holds the output pipes"
+    assert run.stdout.split() == [cleanup_file.read_text()]
+    assert len(spent) == 1 and spent[0] < 1.0, spent
+
+
+class _RefusingProcess:
+    """A command whose output pipes stay open and which refuses SIGKILL."""
+
+    def __init__(self):
+        self.stdout, self.stderr = io.StringIO(), io.StringIO()
+
+    def communicate(self, timeout):
+        raise subprocess.TimeoutExpired("cmd", timeout, output=b"partial", stderr=b"")
+
+    def kill(self):
+        raise PermissionError(errno.EPERM, "Operation not permitted")
+
+    def poll(self):
+        return None
+
+
+def test_a_refused_kill_of_the_command_does_not_escape():
+    """Final review m-20 (ledger row L235): a command that refuses SIGKILL during the bounded
+    final reads still lets them end, with the output read so far and the pipes closed, instead
+    of a PermissionError out of run_watched's finally block that loses the record."""
+    proc = _RefusingProcess()
+    assert watchdog._final_output(proc) == ("partial", "", True)
+    assert proc.stdout.closed and proc.stderr.closed
+
+
+def test_command_line_reports_any_other_error(monkeypatch, capsys):
+    """Final review m-20 (ledger row L236): an exception other than WatchdogError, such as an
+    OSError from Popen, ends main with a WATCHDOG line that names it and status 3, not with a
+    traceback."""
+    def broken(*args, **kwargs):
+        raise OSError(errno.ENOEXEC, "Exec format error")
+
+    monkeypatch.setattr(watchdog, "run_watched", broken)
+    assert watchdog.main(["--", "true"]) == KILLED_EXIT_STATUS
+    line = capsys.readouterr().out.strip().splitlines()[-1]
+    assert line.startswith("WATCHDOG ")
+    assert json.loads(line.removeprefix("WATCHDOG "))["killed"] == (
+        "watchdog error: OSError: [Errno 8] Exec format error")
 
 
 def test_command_runs_at_lowered_priority():

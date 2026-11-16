@@ -28,8 +28,8 @@ from pennylane.core import Operator2
 from pennylane.typing import Wire
 
 from dfthc.compile import register_rule, resource_key
-from dfthc.ops._validate import canonical_ints, check_int, check_wires
-from dfthc.ops.angle_data import AngleErase, SFAngleLoad, TailAngleLoad
+from dfthc.ops._validate import check_wires
+from dfthc.ops.angle_data import AngleErase, SFAngleLoad, TailAngleLoad, check_erase_arguments
 from dfthc.ops.givens import GivensLadder, GivensLadderDagger
 from dfthc.ops.majorana import MajoranaGate
 from dfthc.ops.spin import SpinMux, SpinSwap
@@ -40,21 +40,11 @@ _WIRES = ("x_o", "succ_x_o", "sigma_1", "b", "succ_b", "sigma_0", "r", "angles",
 
 
 def _check(tail_angles, sf_angles, N, R, B, C, n_plus, b_rot, fixup_bits) -> tuple:
-    """The compilable arguments as canonical tuples and ints, each checked against its domain
-    (spec 9.0); ``ValueError`` otherwise. The domains are those of ``AngleErase``."""
-    N = check_int("N", N, low=2)
-    C = check_int("C", C, low=1)
-    sf_angles, R, B, b_rot = SFAngleLoad._check(sf_angles, R, B, b_rot)
-    rows = canonical_ints("tail_angles", tail_angles)
-    if not isinstance(rows, tuple) or len(rows) != N or len(sf_angles[0][0]) != N - 1:
-        raise ValueError(f"tail_angles must have N = {N} rows and sf_angles N - 1 = {N - 1} "
-                         "angles per entry")
-    tail_angles, n_plus, _, _, _ = TailAngleLoad._check(rows, n_plus, R * C, N + R * C, b_rot)
-    fixup_bits = check_int("fixup_bits", fixup_bits, low=0, high=lg(B + 1))
-    if fixup_bits and 2**fixup_bits > (N - 1) * b_rot + 1:
-        raise ValueError(f"the SF one-hot over fixup_bits = {fixup_bits} bits needs "
-                         f"{2**fixup_bits} wires, more than the {(N - 1) * b_rot + 1} reset angle "
-                         "and b_neq_B wires")
+    """The compilable arguments as canonical tuples and ints, checked against their domains by
+    ``AngleErase``'s validator (:func:`~dfthc.ops.angle_data.check_erase_arguments`, whose
+    ``sf_onehot_bits`` is ``fixup_bits``; spec 9.0); ``ValueError`` otherwise."""
+    tail_angles, sf_angles, n_plus, N, R, B, C, b_rot, fixup_bits = check_erase_arguments(
+        tail_angles, sf_angles, n_plus, N, R, B, C, b_rot, fixup_bits)
     return tail_angles, sf_angles, N, R, B, C, n_plus, b_rot, fixup_bits
 
 

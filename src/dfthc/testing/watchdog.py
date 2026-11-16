@@ -22,7 +22,8 @@ run as a watchdog failure, and the tree is killed; if libproc fails or a signal 
 the kill, the process group and every tracked pid get SIGKILL without verification. Processes are
 tracked by pid and start time, so a descendant that leaves the tree (its parent exited) or the
 process group (``setsid``) is still measured and killed; the start-time check confines the risk
-of signalling a reused pid to the few milliseconds between a scan and a signal. The one gap: a
+of signalling a reused pid to the few milliseconds between a scan and a signal, and the root's pid
+is retired once the root is reaped, so a process that reuses it is never adopted. The one gap: a
 descendant that leaves both the tree and the process group within one polling interval of being
 created cannot be traced. If such a descendant keeps the output pipes open, the run ends as a
 watchdog error 5 s after nothing traceable is left, and every final read of the output is bounded,
@@ -33,7 +34,8 @@ Command line, for heavy runs whose peak and wall time go into the ledger::
     PYTHONPATH=src python -m dfthc.testing.watchdog [--cap-mb 8192] [--timeout-min 60] -- CMD ...
 
 It passes the command's output through, then prints one line ``WATCHDOG {json}``, and exits with
-the command's status, or with 3 if the watchdog killed it or could not clean up after it.
+the command's status, or with 3 if the watchdog killed it, could not clean up after it or failed
+itself (the line then names the exception).
 """
 
 from __future__ import annotations
@@ -153,10 +155,13 @@ class _Tree:
     def __init__(self, root: int):
         self.root = root
         self.known: dict[int, int] = {}
+        self.root_retired = False
 
     def scan(self) -> dict[int, float]:
-        """Running processes of the tree and their footprints in MB; tracks new descendants."""
-        running, stack, seen = {}, [self.root, *self.known], set()
+        """Running processes of the tree and their footprints in MB; tracks new descendants. The
+        root's pid is retired once the root is gone, so a process that reuses it is not adopted."""
+        running, seen = {}, set()
+        stack = [*([] if self.root_retired else [self.root]), *self.known]
         while stack:
             pid = stack.pop()
             if pid in seen:
@@ -166,6 +171,7 @@ class _Tree:
             if info is None or self.known.setdefault(pid, info.proc_start_abstime) != (
                     info.proc_start_abstime):
                 self.known.pop(pid, None)  # gone, or the pid now belongs to another process
+                self.root_retired |= pid == self.root
                 continue
             if info.proc_exit_abstime:
                 continue
@@ -353,7 +359,7 @@ def run_watched(command: list[str], *, cap_mb: float = MEMORY_CAP_MB, timeout_s:
             survivors = tree.kill_without_libproc()
             killed = killed or f"watchdog error: {exc}"
         if out is None:
-            out, err, pipes_held = _final_output(proc)
+            out, err, pipes_held = _final_output(proc, held=killed == _PIPES_HELD)
             if pipes_held and killed != _PIPES_HELD:
                 killed = _PIPES_HELD + (f" (after {killed})" if killed else "")
     return WatchedRun(command=list(command), pid=proc.pid, returncode=proc.returncode,
@@ -362,22 +368,23 @@ def run_watched(command: list[str], *, cap_mb: float = MEMORY_CAP_MB, timeout_s:
                       priority=" ".join(prefix), stdout=out or "", stderr=err or "")
 
 
-def _final_output(proc: subprocess.Popen) -> tuple[str, str, bool]:
+def _final_output(proc: subprocess.Popen, *, held: bool = False) -> tuple[str, str, bool]:
     """The rest of the output, read with bounded waits, and whether the pipes stayed open.
 
-    If the pipes are still open after two waits of ``_KILL_SECONDS``, they are closed, and the
-    output read so far is returned.
+    If the pipes are still open after two waits of ``_KILL_SECONDS`` (the command is killed after
+    the first), they are closed, and the output read so far is returned. If the run already found
+    them ``held``, they are closed after one read of ``POLL_SECONDS``.
     """
-    try:
-        out, err = proc.communicate(timeout=_KILL_SECONDS)
-        return out, err, False
-    except subprocess.TimeoutExpired:
-        proc.kill()
-    try:
-        out, err = proc.communicate(timeout=_KILL_SECONDS)
-        return out, err, False
-    except subprocess.TimeoutExpired as exc:
-        partial = exc
+    waits = [POLL_SECONDS] if held else [_KILL_SECONDS, _KILL_SECONDS]
+    for attempt, wait in enumerate(waits):
+        try:
+            out, err = proc.communicate(timeout=wait)
+            return out, err, False
+        except subprocess.TimeoutExpired as exc:
+            partial = exc
+        if attempt == 0 and not held:
+            with contextlib.suppress(PermissionError, ProcessLookupError):
+                proc.kill()
     pipes = [stream for stream in (proc.stdout, proc.stderr) if stream is not None]
     for stream in pipes:
         stream.close()
@@ -403,9 +410,10 @@ def main(argv: list[str] | None = None) -> int:
     timeout_s = args.timeout_min * 60
     try:
         run = run_watched(command, cap_mb=args.cap_mb, timeout_s=timeout_s, capture=False)
-    except WatchdogError as exc:
-        record = {"command": command, "killed": f"watchdog error: {exc}", "cap_mb": args.cap_mb,
-                  "timeout_s": timeout_s}
+    except Exception as exc:  # every failure of the watchdog ends as a WATCHDOG line, status 3
+        reason = str(exc) if isinstance(exc, WatchdogError) else f"{type(exc).__name__}: {exc}"
+        record = {"command": command, "killed": f"watchdog error: {reason}",
+                  "cap_mb": args.cap_mb, "timeout_s": timeout_s}
         print("WATCHDOG", json.dumps(record), flush=True)
         return KILLED_EXIT_STATUS
     print("WATCHDOG", json.dumps(run.summary()), flush=True)

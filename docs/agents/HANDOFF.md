@@ -219,7 +219,7 @@ not run heavy processes throughout." The full policy is master plan section 12.9
 | One file or test | `scripts/test.sh tests/ops/test_x.py::test_name -q` |
 | Serial run (debugging) | `DFTHC_TEST_WORKERS=0 scripts/test.sh ... -x` |
 | Lint | `"$VENV/bin/ruff" check .` |
-| Canaries only | `scripts/test.sh tests/canary -q` |
+| Canaries only (the L-21 benchmark has its own row) | `scripts/test.sh tests/canary -m "not slow and not release" -q` |
 | Refresh the compile baseline (nightly bump only) | `DFTHC_UPDATE_COMPILE_BASELINE=1 DFTHC_TEST_WORKERS=0 scripts/test.sh tests/canary/test_l21_compile_time.py` |
 | Spike | `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python" spikes/<script>.py` |
 | Resource report (H2 systems and `naphthalene`; reuses current compiles) | `PYTHONPATH=src "$VENV/bin/python" scripts/resource_report.py` |
@@ -356,7 +356,7 @@ differs from the spec's original claim (observed 2026-11-11).
 | L-3 | Unweighted solver prefers the auto inverse over the measured rule | weighted gate set, pins, T6 |
 | L-4 | Pins apply to nested same-name operators | pin dfthc names only |
 | L-5 | Rules see dynamic arguments as tracers | structure in compilable arguments |
-| L-6 | Adjoint lowering can crash on nested control flow; **changed**: not reproduced | no control flow in auto-adjointed bodies; the looped `QROAMRead` is never adjointed (rule 6, inventory test) |
+| L-6 | Adjoint lowering can crash on nested control flow; **changed**: not reproduced | no control flow in auto-adjointed bodies; the looped `QROAMRead`, `ControlledWalkPower` and `ToyControlledWalkPower` are never adjointed or controlled (rule 6, inventory test) |
 | L-7 | `C(ChangeOpBasis)` controls compute and uncompute under capture | explicit controlled classes (rule 6) |
 | L-8 | Generic control adds PauliX gates | explicit controlled classes (rule 6) |
 | L-9 | Controlled function calls; **changed**: left undecomposed, execution fails | no `Subroutine`; explicit controlled classes |

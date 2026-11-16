@@ -1,10 +1,12 @@
 """Canaries L-12, L-13, L-14 and L-19: PennyLane templates (spec section 14)."""
 
+import json
+
 import numpy as np
 import pennylane as qp
 import pytest
 
-from dfthc.compile import GATE_SET
+from dfthc.compile import ANALYZE_NAMES, GATE_SET
 from dfthc.testing.canary import outcome, run_snippet
 
 pytestmark = [pytest.mark.canary, pytest.mark.compiled]
@@ -100,8 +102,7 @@ def test_mcx_without_work_wires_has_no_path():
 def test_template_has_no_toffoli_level_path(label, statement):
     """L-19: for a non-power-of-two size L = 5, both need arbitrary rotations, so no path exists.
 
-    For a power-of-two size (L = 4) AliasSampling compiles to the gate set (observed 2026-11-11),
-    because its uniform preparation is then Hadamards only.
+    The power-of-two case is ``test_power_of_two_alias_sampling_compiles``.
     """
     result = run_snippet(
         f"""
@@ -118,3 +119,25 @@ def test_template_has_no_toffoli_level_path(label, statement):
     template = outcome(result, label)
     assert template.startswith("ERROR CompileError")
     assert "Decomposition rule not found for operator" in template
+
+
+@pytest.mark.subprocess
+def test_power_of_two_alias_sampling_compiles():
+    """L-19, changed: for a power-of-two size (L = 4) AliasSampling compiles to the gate set
+    (observed 2026-11-11), because its uniform preparation is then Hadamards only."""
+    result = run_snippet(
+        """
+        @qp.qjit(capture=True, enable_aot_compilation=False)
+        @qp.decompose(gate_set=GATE_SET)
+        @qp.qnode(qp.device("null.qubit", wires=19))
+        def circuit():
+            qp.AliasSampling((0.1, 0.2, 0.3, 0.4), 3, target_wires=[0, 1],
+                             temp_wires=list(range(2, 13)), work_wires=list(range(13, 19)))
+            return qp.probs(wires=[0])
+
+        report("ALIAS_SAMPLING_4", lambda: counts(circuit))
+        """
+    )
+    alias = outcome(result, "ALIAS_SAMPLING_4")
+    assert alias.startswith("OK ")
+    assert set(json.loads(alias.removeprefix("OK "))) <= ANALYZE_NAMES

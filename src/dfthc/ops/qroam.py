@@ -167,7 +167,7 @@ def _concatenate(values, widths) -> int:
     return result
 
 
-def _dummy(sizes: dict[str, int]) -> dict[str, range]:
+def dummy_wires(sizes: dict[str, int]) -> dict[str, range]:
     """Consecutive integer wires for every register: what resource functions count on."""
     wires, start = {}, 0
     for name, size in sizes.items():
@@ -536,8 +536,8 @@ def _read_body(emit, leaf_words, address_widths, live_ranges, width, block_bits,
 def _qroam_read_resources(leaf_words, address_widths, live_ranges, width, block_bits,
                           control_value, address, target, junk, work, control):
     counter = QROAMEmitter(counting=True)
-    wires = _dummy(QROAMRead.required_wires(address_widths, live_ranges, width, block_bits,
-                                            control_value))
+    wires = dummy_wires(QROAMRead.required_wires(address_widths, live_ranges, width, block_bits,
+                                                 control_value))
     _read_body(counter, leaf_words, address_widths, live_ranges, width, block_bits,
                control_value, **wires)
     return as_resources(counter.counts)
@@ -762,7 +762,8 @@ def _phase_fixup_resources(parities, address_widths, covered, onehot_bits, contr
                            address, onehot, work, control):
     counter = QROAMEmitter(counting=True)
     size = len(PhaseFixup.address_order(address_widths, covered))
-    wires = _dummy(PhaseFixup.required_wires(address_widths, covered, onehot_bits, control_value))
+    wires = dummy_wires(PhaseFixup.required_wires(address_widths, covered, onehot_bits,
+                                                  control_value))
     _phase_fixup_body(counter, [True] * size, address_widths, covered, onehot_bits, control_value,
                       **wires)
     return as_resources(counter.counts)
@@ -938,8 +939,8 @@ def emit_erase_from_outcomes(junk_outcomes, *, table, address_widths, live_range
 def _qroam_erase_resources(table, address_widths, live_ranges, width, block_bits, control_value,
                            onehot_bits, address, target, junk, work, control, extra_onehot):
     counter = QROAMEmitter(counting=True)
-    wires = _dummy(QROAMErase.required_wires(table, address_widths, live_ranges, width,
-                                             block_bits, control_value, onehot_bits))
+    wires = dummy_wires(QROAMErase.required_wires(table, address_widths, live_ranges, width,
+                                                  block_bits, control_value, onehot_bits))
     _erase_body(counter, table, address_widths, live_ranges, width, block_bits, control_value,
                 onehot_bits, **wires)
     return as_resources(counter.counts)

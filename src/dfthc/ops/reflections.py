@@ -44,11 +44,16 @@ class ZeroReflection(Operator2):
     one-wire ``MultiControlledX``.
 
     **Adjoint and control.** ``Adjoint(ZeroReflection)`` is pinned: the operator is
-    self-inverse. ``C(ZeroReflection)`` is pinned, for one control wire with control value 1: the
-    multi-controlled Z over the control and the pattern, then ``Z`` on the control, which is
-    exactly :math:`|0\rangle\langle 0| \otimes I + |1\rangle\langle 1| \otimes (2\Pi - I)`; for
-    :math:`n_w = 1` a ``CZ``. The controlled rule uses :math:`\max(n_w - 2, 0)` of ``work``
-    (``ValueError`` if ``work`` is shorter); generic ``C(GlobalPhase)`` is never used.
+    self-inverse. ``C(ZeroReflection)`` is pinned, for one control wire of either control value
+    :math:`v` (``ValueError`` for more control wires). Under capture ``control_values`` is a
+    dynamic argument of PennyLane's controlled operator, so the rule uses :math:`v` rather than
+    reading it: the multi-controlled Z over the control (control value :math:`v`) and the pattern,
+    ``Z`` on the control and ``GlobalPhase(pi (1 - v))``, which is exactly
+    :math:`|v\rangle\langle v| \otimes (2\Pi - I) + |\bar v\rangle\langle \bar v| \otimes I`
+    (for :math:`v = 0` the ``Z`` puts -1 on the wrong branch, :math:`XZX = -Z`, and the phase -1
+    corrects it); for :math:`n_w = 1` the multi-controlled Z has the control alone. The controlled
+    rule uses :math:`\max(n_w - 2, 0)` of ``work`` (``ValueError`` if ``work`` is shorter);
+    generic ``C(GlobalPhase)`` is never used.
 
     **Cost.** :func:`dfthc.costs.zero_reflection`: :math:`T = \max(n_w - 2, 0)`, controlled
     :math:`n_w - 1` (one ``Toffoli`` and a ``TemporaryAND`` ladder with measured uncompute);
@@ -152,29 +157,26 @@ def _adjoint_zero_reflection(base):
 def _c_zero_reflection_resources(base, control_wires, control_values, work_wires,
                                  work_wire_type):
     controls, values, _, last = _pattern(base.zero_wires, base.one_wires)
-    if not controls:
-        return {qp.CZ: 1, qp.X: 2 * (last == 0), qp.Z: 1}
-    return {_mcx_key(len(controls) + 1, [1] + values): 1, qp.H: 2, qp.X: 2 * (last == 0),
-            qp.Z: 1}
+    return {_mcx_key(len(controls) + 1, [1, *values]): 1, qp.H: 2, qp.X: 2 * (last == 0),
+            qp.Z: 1, qp.GlobalPhase: 1}
 
 
 @qp.register_resources(_c_zero_reflection_resources)
 def _c_zero_reflection(base, control_wires, control_values, work_wires, work_wire_type):
+    if len(control_wires) != 1:
+        raise ValueError("C(ZeroReflection) supports exactly one control wire; got "
+                         f"{len(control_wires)}")
     controls, values, target, last = _pattern(base.zero_wires, base.one_wires)
-    control = control_wires[0]
+    # Under capture the control value is a dynamic argument of ControlledOp2, so it is used, not
+    # read: as an MCX control value and in the phase.
+    control, value = control_wires[0], control_values[0]
     needed = ZeroReflection.required_wires(len(base.zero_wires), len(base.one_wires), True)
     if len(base.work) < needed["work"]:
         raise ValueError(f"C(ZeroReflection) needs {needed['work']} work wires, got "
                          f"{len(base.work)}")
-    if controls:
-        _mcz([control, *controls], [1, *values], target, last, base.work)
-    else:
-        if last == 0:
-            qp.X(target)
-        qp.CZ([control, target])
-        if last == 0:
-            qp.X(target)
+    _mcz([control, *controls], [value, *values], target, last, base.work)
     qp.Z(control)
+    qp.GlobalPhase(qp.math.where(value, 0.0, np.pi))
 
 
 register_rule(ZeroReflection, _zero_reflection)
@@ -200,7 +202,7 @@ def _reflection_key(n_zero: int, n_one: int):
 def _controlled_reflection(control, zero_wires, one_wires, work) -> None:
     r""":math:`|0\rangle\langle 0| \otimes I + |1\rangle\langle 1| \otimes (2\Pi - I)` for at
     least two pattern wires: the multi-controlled Z over the control and the pattern, then ``Z``
-    on the control, as the ``C(ZeroReflection)`` rule builds it (spec 9.6)."""
+    on the control, as the ``C(ZeroReflection)`` rule builds it for control value 1 (spec 9.6)."""
     controls, values, target, last = _pattern(zero_wires, one_wires)
     _mcz([control, *controls], [1, *values], target, last, work)
     qp.Z(control)

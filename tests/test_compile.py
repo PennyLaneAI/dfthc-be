@@ -223,6 +223,28 @@ def test_device_level_rejects_surviving_dfthc_operator(monkeypatch, name):
         compiled_resources(lambda: None, num_wires=2, level="device")
 
 
+@pytest.mark.parametrize("name", ["ForeignOp", "C(ForeignOp)", "Adjoint(ForeignOp)",
+                                  "MultiControlledX", "TemporaryAND"])
+def test_device_level_rejects_any_operation_the_device_does_not_run(monkeypatch, name):
+    """T5 at level="device" (final review m-6, spec 7.2): a non-dfthc custom operator, a wrapper
+    of one, or a PennyLane template that survives the device pass fails the closure, as a dfthc
+    operator does. No compile can make one survive today (Catalyst rejects an operator without a
+    rule, L-20), so qp.analyze's result is injected; the native residue of the walks' programs,
+    mid-circuit measurements included, passes."""
+    def analyze(counts):
+        reported = SimpleNamespace(is_symbolic=False, counts=counts, num_wires=2)
+        return lambda circuit, level: lambda: SimpleNamespace(resources=reported)
+
+    native = {"Adjoint(S)": 1, "CNOT": 2, "CZ": 1, "GlobalPhase": 1, "Hadamard": 1,
+              "MidCircuitMeasure": 1, "PauliX": 1, "PauliZ": 1, "S": 1, "T": 1, "Toffoli": 1}
+    monkeypatch.setattr(qp, "analyze", analyze(native))
+    assert compiled_resources(lambda: None, num_wires=2, level="device").counts == native
+    monkeypatch.setattr(qp, "analyze", analyze(native | {name: 1}))
+    with pytest.raises(AssertionError, match=re.escape(f"not native to null.qubit remain at "
+                                                       f"level='device': ['{name}']")):
+        compiled_resources(lambda: None, num_wires=2, level="device")
+
+
 @pytest.mark.compiled
 def test_device_level_closure_of_decomposed_program():
     def qfunc():

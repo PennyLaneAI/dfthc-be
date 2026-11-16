@@ -12,7 +12,9 @@ Toffolis (``Toffoli + CSwap + And + T/4`` of Qualtran's ``QECGatesCost``, as dft
 as :func:`dfthc.costs_reference.dfthcbe_blocks` keys them. The test
 ``tests/report/test_report.py::test_dfthcbe_blocks_equal_the_call_graph`` compares that port with
 this file. Qualtran and dfthcbe are imported inside the functions, so the main environment can
-import this module's constants.
+import this module's constants. The fixture records the dfthcbe tree it was evaluated on as
+``scripts/make_dfthcbe_fixtures.py``'s provenance does: the source URL and digest and the
+installed package's digest (``installed_digest``).
 """
 
 from __future__ import annotations
@@ -26,9 +28,15 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "src"))
+sys.path.insert(0, str(REPO / "scripts"))
 from dfthc.costs_reference import default_params  # noqa: E402
 from dfthc.data.factors import SYSTEMS, load_factors  # noqa: E402
 from dfthc.params import FEMOCO54, H2_STO3G_TEST  # noqa: E402
+from make_dfthcbe_fixtures import (  # noqa: E402
+    DFTHCBE_SOURCE_SHA256,
+    DFTHCBE_SOURCE_URL,
+    installed_digest,
+)
 
 FIXTURE = "report_toffolis.json"
 DFTHCBE_COMMIT = "930255020cec30172e0a7d17c0071d9476a687d1"
@@ -102,6 +110,9 @@ def main(argv=None) -> None:
     sets = report_parameters()
     fixture = {
         "dfthcbe_commit": DFTHCBE_COMMIT,
+        "dfthcbe_source_url": DFTHCBE_SOURCE_URL,
+        "dfthcbe_source_sha256": DFTHCBE_SOURCE_SHA256,
+        "dfthcbe_installed_sha256": installed_digest(),
         "versions": {name: importlib.metadata.version(name)
                      for name in ("dfthcbe", "qualtran", "sympy")},
         "method": "DFTHCWalk.symbolic call graph evaluated at each parameter set; Toffolis = "

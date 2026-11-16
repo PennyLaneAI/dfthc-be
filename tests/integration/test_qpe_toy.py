@@ -324,5 +324,5 @@ def test_inventory_of_the_toy_qpe_program():
     names = captured_targets(lambda: toy_qpe(T), NUM_WIRES)
     assert {"QPERound", "ToyControlledWalkPower", "ControlledToyWalk",
             "PhaseGradientRotation"} <= set(names)
-    assert not [name for name in names if name.startswith("C(")]
+    assert not [name for name in names if "C(" in name]
     assert inventory(names) == set()

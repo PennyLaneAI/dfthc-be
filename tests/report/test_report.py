@@ -13,6 +13,7 @@ import dataclasses
 import functools
 import importlib.util
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -181,6 +182,37 @@ def test_report_fails_on_mismatch(tmp_path, monkeypatch, capsys):
                         str(tmp_path / "codes")]) == 1
     assert "SpinMux: delta -1 against dfthcbe != its reason codes {} (sum 0)" in (
         capsys.readouterr().err)
+
+
+def test_report_fails_on_a_partition_that_misses_the_walk(tmp_path, monkeypatch, capsys):
+    """Spec 13.3 step 4, the cross-check (final review m-14; no compile): a partition row whose
+    closed form is one Toffoli off makes the partition sum differ from the walk's closed form,
+    and the script exits 1."""
+    closed_form = report.closed_form
+
+    def shifted(name, op, p):
+        cost, uncomputes = closed_form(name, op, p)
+        if name == "SpinSwap":
+            cost = costs.Cost(cost.toffoli + 1, cost.measurements)
+        return cost, uncomputes
+
+    monkeypatch.setattr(report, "closed_form", shifted)
+    assert report.main(["--systems", "H2_STO3G_TEST", "--rows", "--out", str(tmp_path)]) == 1
+    err = capsys.readouterr().err
+    assert re.search(r"CHECK FAILED: H2_STO3G_TEST: partition \{[^}]*\} != closed DFTHCWalk",
+                     err), err
+
+
+@pytest.mark.compiled
+@pytest.mark.subprocess
+def test_report_fails_on_a_measurement_mismatch(tmp_path, monkeypatch, capsys):
+    """Spec 13.3 step 4, the M arm (final review m-14): a closed form whose M differs from the
+    compiled count, with T unchanged, makes the script exit 1 (one SpinSwap compile)."""
+    monkeypatch.setattr(costs, "spin_swap", lambda p: costs.Cost(p.N, 1))
+    assert report.main(["--systems", "H2_STO3G_TEST", "--rows", "SpinSwap", "--out",
+                        str(tmp_path)]) == 1
+    err = capsys.readouterr().err
+    assert "H2_STO3G_TEST/SpinSwap: measured {'toffoli': 2, 'measurements': 0," in err, err
 
 
 @pytest.mark.subprocess
@@ -368,7 +400,8 @@ def _copy_package(root: Path) -> Path:
 
 def test_cache_needs_matching_code_hash(tmp_path, monkeypatch):
     """code_hash() ignores docstrings, comments and dfthc/testing/ and sees the package's code,
-    the report script's code (its program builders) and the lock file; a cached entry of another
+    the report script's code (its program builders) and the lock file (one changed byte, final
+    review m-13); a cached entry of another
     code hash is kept as history and never shown as a current measurement, while an entry of the
     current hash is reused without compiling."""
     root = _copy_package(tmp_path / "copy")
@@ -392,6 +425,11 @@ def test_cache_needs_matching_code_hash(tmp_path, monkeypatch):
                                      "return qfunc, s.layout.num_wires + 1"))
     assert provenance.code_hash(root) != base
     script.write_text(source)
+    lock = root / provenance.LOCK_FILE
+    pinned = lock.read_bytes()
+    lock.write_bytes(bytes([pinned[0] ^ 1]) + pinned[1:])
+    assert provenance.code_hash(root) != base
+    lock.write_bytes(pinned)
     path.write_text(text.replace("return 2**ob - 2 if ob >= 1 else 0",
                                  "return 2**ob - 3 if ob >= 1 else 0"))
     assert provenance.code_hash(root) != base
@@ -480,37 +518,98 @@ def test_reason_codes_at_femoco(femoco_report):
 
 
 def test_qpe_summary_and_wire_boundaries(femoco_report):
-    """The FeMoco-54 QPE summary gives T, M and A from the controlled walk, A = (2^t - 1) A_C(W)
-    + (t^3 - t)/6 (the phase4-qpe plan's interface), in its record, its basis sentence and its
-    table; and the QPE wires step by two where the phase register grows a spare wire:
-    `H2_STO3G_TEST` 59, 60, 62 at t = 3, 4, 5 and FeMoco-54 1,124, 1,125, 1,127 at t = 21, 22,
-    23 (nothing is compiled)."""
+    """The FeMoco-54 QPE summary gives T and A from the controlled walk and M from the walk,
+    A = (2^t - 1) A_C(W) + (t^3 - t)/6 (the phase4-qpe plan's interface), in its record, its
+    basis sentence and its table; and the QPE wires step by two where the phase register grows a
+    spare wire: `H2_STO3G_TEST` 59, 60, 62 at t = 3, 4, 5 and FeMoco-54 1,124, 1,125, 1,127 at
+    t = 21, 22, 23 (nothing is compiled)."""
     record, markdown = femoco_report
     cwalk = next(r for r in record["rows"] if r["id"] == "ControlledDFTHCWalk")["closed"]
+    walk = next(r for r in record["rows"] if r["id"] == "DFTHCWalk")["closed"]
     assert cwalk["measured_and_uncomputes"] == 8677
     for bits in (1, 2, 3, 10, 20, 23):
         qpe = record["qpe"][str(bits)]
         assert (qpe["toffoli"], qpe["measurements"], qpe["measured_and_uncomputes"]) == (
             (2**bits - 1) * cwalk["toffoli"] + (bits**3 - bits) // 6,
-            (2**bits - 1) * cwalk["measurements"] + bits,
+            (2**bits - 1) * walk["measurements"] + bits,
             (2**bits - 1) * cwalk["measured_and_uncomputes"] + (bits**3 - bits) // 6)
     assert [record["qpe"][str(bits)]["measured_and_uncomputes"] for bits in (1, 2, 3)] == [
         8677, 26032, 60743]
     assert [record["qpe"][str(bits)]["wires"] for bits in (20, 23)] == [1123, 1127]
     assert "A = (2^t - 1) A_C(W) + (t^3 - t)/6" in record["qpe_basis"]
+    assert record["qpe_basis"].endswith("a compile with `--large femoco54` replaces them by the "
+                                        "compiled T_C(W), M_W and A_C(W).")
+    assert "Task" not in record["qpe_basis"]
     assert "| t | T | M | A | Qubits |" in markdown
     h2, femoco = report.build_system("H2_STO3G_TEST"), report.build_system("femoco54")
     assert [report.qpe_wires(h2, bits) for bits in (3, 4, 5)] == [59, 60, 62]
     assert [report.qpe_wires(femoco, bits) for bits in (21, 22, 23)] == [1124, 1125, 1127]
 
 
+def test_qpe_summary_takes_m_from_the_walk(tmp_path):
+    """Final review m-15: the FeMoco-54 QPE summary's M is (2^t - 1) M_W + t with the walk's M
+    (spec 9.24 and 11.3), T and A from the controlled walk. A cached controlled walk whose M
+    differs from the walk's (2,525 against the closed 2,524) leaves the summary's M on the walk's,
+    and its basis sentence says so, naming no task: the pair is recompiled per code hash (nothing
+    is compiled; the cached M fails the check, exit 1)."""
+    entry = {"code_hash": provenance.code_hash(), "status": "compiled", "toffoli": 9795,
+             "measurements": 2525, "measured_and_uncomputes": 8677, "num_wires": 1103,
+             "counts": {"Toffoli": 9795 - 8677, "TemporaryAND": 8677,
+                        "Adjoint(TemporaryAND)": 8677, "MidCircuitMeasure": 2525},
+             "seconds": 1.0, "watchdog": {"peak_mb": 1.0}}
+    (tmp_path / "resources.json").write_text(json.dumps(
+        {"compiled": {"femoco54/ControlledDFTHCWalk": [entry]}}))
+    assert report.main(["--systems", "femoco54", "--rows", "--out", str(tmp_path)]) == 1
+    record = json.loads((tmp_path / "resources.json").read_text())["systems"]["femoco54"]
+    for bits in (1, 2, 3, 23):
+        qpe = record["qpe"][str(bits)]
+        assert (qpe["toffoli"], qpe["measurements"], qpe["measured_and_uncomputes"]) == (
+            (2**bits - 1) * 9795 + (bits**3 - bits) // 6, (2**bits - 1) * 2524 + bits,
+            (2**bits - 1) * 8677 + (bits**3 - bits) // 6), bits
+    assert record["qpe_basis"].startswith("T and A from the compiled controlled walk, M from the "
+                                          "walk (`--large femoco54`, once each per code hash): ")
+    assert "Task" not in record["qpe_basis"]
+
+
+def test_femoco_summary_says_how_the_walks_are_compiled(femoco_report, tmp_path):
+    """Final review m-22: the FeMoco-54 summary states in the present tense how its walk and
+    controlled walk rows are measured, with no stale "until then": without a compile under the
+    current code hash they show their closed form; with both compiled (entries injected here,
+    nothing is compiled) their measured rows equal their closed forms."""
+    _, markdown = femoco_report
+    assert "until then" not in markdown
+    assert ("The walk and the controlled walk are compiled only with `--large femoco54`; without "
+            "a compile under the current code hash their rows above show their closed form.") in (
+        markdown)
+    entries = {}
+    for program, (toffoli, measurements, uncomputes, wires) in {
+            "DFTHCWalk": (9793, 2524, 8675, 1102),
+            "ControlledDFTHCWalk": (9795, 2524, 8677, 1103)}.items():
+        entries[f"femoco54/{program}"] = [{
+            "code_hash": provenance.code_hash(), "status": "compiled", "toffoli": toffoli,
+            "measurements": measurements, "measured_and_uncomputes": uncomputes,
+            "num_wires": wires, "seconds": 1.0, "watchdog": {"peak_mb": 1.0},
+            "counts": {"Toffoli": toffoli - uncomputes, "TemporaryAND": uncomputes,
+                       "Adjoint(TemporaryAND)": uncomputes, "MidCircuitMeasure": measurements}}]
+    (tmp_path / "resources.json").write_text(json.dumps({"compiled": entries}))
+    assert report.main(["--systems", "femoco54", "--rows", "--out", str(tmp_path)]) == 0
+    measured = (tmp_path / "resources.md").read_text()
+    assert "until then" not in measured
+    assert ("The walk and the controlled walk are compiled with `--large femoco54`, once each "
+            "per code hash; their measured rows above equal their closed forms.") in measured
+
+
 def test_qubit_summary_at_femoco(femoco_report):
     """The FeMoco-54 qubit section (spec 10.3, 13.2) after Q-1 variant (b): WalkLayout's 1,102
     wires by group against the paper's Table 3 groups, 1,131 in all (-29: outer +21, inner +12,
-    select +4, work -66); the junk registers' 462 wires share the angle wires and their 852
-    measurements per walk are the block encoding's own; the early junk measurement is no longer
-    an open question or a deferred refinement (nothing is compiled)."""
+    select +4, work -66); the junk registers, 72 and 390 wires (462 in the record), both alias
+    the start of the angle register, so together they take its first 390 wires (final review
+    m-22), and their 852 measurements per walk are the block encoding's own; the early junk
+    measurement is no longer an open question or a deferred refinement (nothing is compiled)."""
     record, markdown = femoco_report
+    assert ("The junk registers (72 and 390 wires, aliased onto the first 390 angle wires) are "
+            "X-measured right after each prepare") in markdown
+    assert "462 wires" not in markdown
     assert record["wires"] == 1102 and record["qubit_groups"] == {
         "system": 108, "outer": 71, "inner": 65, "select": 799, "phase_grad": 15, "work": 44}
     assert (record["junk_wires"], record["junk_measurements"]) == (462, 852)
@@ -529,8 +628,14 @@ def test_dfthcbe_blocks_equal_the_call_graph():
     scripts/make_report_fixture.py) at every parameter set of the report, and the 12 FeMoco-54
     block counts of Task 1A.6's fixture. The call graph's tail walk is its N leaves and its s(RC)
     stops on the dead SF prefix, truncated (-2), which is how iteration_causes takes the tail to
-    the paper; and the iteration intermediate is dfthcbe's walk where it is a valid circuit."""
+    the paper; and the iteration intermediate is dfthcbe's walk where it is a valid circuit. The
+    fixture records the dfthcbe tree it was evaluated on: the source URL and digest and the
+    installed package's digest of Task 1A.6's provenance, which tests/data/test_dfthcbe_fixtures.py
+    pins to SOURCE_SHA256 and INSTALLED_SHA256 (final review m-16)."""
     fixture = load_dfthcbe_fixture("report_toffolis.json")
+    provenance_ = load_dfthcbe_fixture("provenance.json")
+    digests = ("dfthcbe_source_url", "dfthcbe_source_sha256", "dfthcbe_installed_sha256")
+    assert {key: fixture.get(key) for key in digests} == {key: provenance_[key] for key in digests}
     for name, values in fixture["toffolis"].items():
         params = WalkParams(**fixture["parameters"][name])
         assert params == (FEMOCO54 if name == "femoco54" else report.build_system(name).params)

@@ -817,17 +817,21 @@ def report_system(s: System, rows: list[Row], cache: dict, hash_: str) -> tuple[
               "junk_measurements": costs.junk_measurements(p).measurements, "rows": records}
     if s.name == "femoco54":
         cwalk = next(r for r in records if r["id"] == "ControlledDFTHCWalk")
+        walk = next(r for r in records if r["id"] == "DFTHCWalk")
         basis = cwalk["measured"] or cwalk["closed"]
+        m_walk = (walk["measured"] or walk["closed"])["measurements"]
         formulas = ("T = (2^t - 1) T_C(W) + (t^3 - t)/6, M = (2^t - 1) M_W + t and "
                     "A = (2^t - 1) A_C(W) + (t^3 - t)/6, every correction at its maximum branch")
         record["qpe_basis"] = (
-            f"T, M and A from the compiled controlled walk (Task 4.5): {formulas}."
+            "T and A from the compiled controlled walk, M from the walk (`--large femoco54`, once "
+            f"each per code hash): {formulas}."
             if cwalk["measured"] else
-            f"T, M and A from the closed form of the controlled walk: {formulas}; Task 4.5 "
-            "replaces them by the compiled T_C(W), M_W and A_C(W).")
+            f"T and A from the closed form of the controlled walk, M from the walk: {formulas}; "
+            "a compile with `--large femoco54` replaces them by the compiled T_C(W), M_W and "
+            "A_C(W).")
         record["qpe"] = {str(bits): {
             "toffoli": (2**bits - 1) * basis["toffoli"] + (bits**3 - bits) // 6,
-            "measurements": (2**bits - 1) * basis["measurements"] + bits,
+            "measurements": (2**bits - 1) * m_walk + bits,
             "measured_and_uncomputes": (2**bits - 1) * basis["measured_and_uncomputes"]
             + (bits**3 - bits) // 6,
             "wires": qpe_wires(s, bits)} for bits in (1, 2, 3, 10, 20, 23)}
@@ -925,21 +929,26 @@ def femoco_summary(system: dict) -> list[str]:
     (Table III's attribution), the qubits, the QPE and the deferred refinements."""
     rows = {r["id"]: r for r in system["rows"]}
     parts = [r for r in system["rows"] if r["partition"] and r["calls"]]
+    walk, cwalk = rows["DFTHCWalk"], rows["ControlledDFTHCWalk"]
+    compiled = ("are compiled with `--large femoco54`, once each per code hash; their measured "
+                "rows above equal their closed forms."
+                if walk["measured"] and cwalk["measured"] else
+                "are compiled only with `--large femoco54`; without a compile under the current "
+                "code hash their rows above show their closed form.")
     lines = ["## FeMoco-54 summary (spec 13.1)", "",
              "Toffolis per walk: each partition row's calls per walk times its value. The walk "
-             "and the controlled walk are compiled once, in Task 4.5; until then they show their "
-             "closed form, marked in their rows above.", "",
+             f"and the controlled walk {compiled}", "",
              "| Row | Calls | Ours | dfthcbe | Paper |", "| --- | ---: | ---: | ---: | ---: |"]
     for r in parts:
         lines.append(f"| `{r['id']}` | {r['calls']} | {r['calls'] * r['closed']['toffoli']:,} "
                      f"| {_cell(None if r['dfthcbe'] is None else r['calls'] * r['dfthcbe'])} "
                      f"| {_cell(None if r['paper'] is None else r['calls'] * r['paper'])} |")
-    walk, cwalk = rows["DFTHCWalk"], rows["ControlledDFTHCWalk"]
     lines.append(f"| **walk** | 1 | **{walk['closed']['toffoli']:,}** | **{walk['dfthcbe']:,}** | "
                  f"**{walk['paper']:,}** |")
     m, a = walk["closed"]["measurements"], walk["closed"]["measured_and_uncomputes"]
     ca = cwalk["closed"]["measured_and_uncomputes"]
-    junk, junk_m = system["junk_wires"], system["junk_measurements"]
+    junk_m = system["junk_measurements"]
+    junk = WalkLayout.junk_sizes(WalkParams(**system["params"]))
     ours, paper = system["qubit_groups"], costs_reference.PAPER_QUBIT_GROUPS_FEMOCO
     qubit_rows = [f"| `{group}` | {ours[group]:,} | {paper[group]:,} | "
                   f"{ours[group] - paper[group]:+,} |" for group in ours]
@@ -963,8 +972,9 @@ def femoco_summary(system: dict) -> list[str]:
               f"Ours: {system['wires']:,} wires from `WalkLayout`; the paper: "
               f"{costs_reference.PAPER_QUBITS_FEMOCO:,} (its Table 3, under the names of our "
               f"groups: the persistent ancillas of each subroutine and, as `work`, its largest "
-              f"temporary count, the outer prepare's). The junk registers' {junk:,} wires are "
-              "X-measured right after each prepare and share the angle register's wires (spec 16, "
+              f"temporary count, the outer prepare's). The junk registers ({junk['junk_x_o']:,} "
+              f"and {junk['junk_b']:,} wires, aliased onto the first {max(junk.values()):,} angle "
+              "wires) are X-measured right after each prepare (spec 16, "
               "Q-1 variant (b)); the paper shares only its inner junk (313 temporaries) with its "
               "angles and adds the outer prepare's 110 temporaries.", "",
               "| Group | Ours | Paper | Ours - paper |", "| --- | ---: | ---: | ---: |",

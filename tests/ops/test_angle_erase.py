@@ -31,7 +31,8 @@ from dfthc.ops.angle_data import (
     _erase_body,
 )
 from dfthc.ops.qroam import QROAMEmitter
-from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE, WalkParams
+from dfthc.ops.select import InnerSelect
+from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE, WalkParams, lg
 from dfthc.testing.resources import chosen_rules, classify_rule_warning, verbose_program
 from dfthc.testing.sparse_sim import ForcedPolicy, SparseSimulator, SparseState
 from dfthc.testing.tape import decompose_for_simulation
@@ -151,12 +152,14 @@ def test_counts_with_other_one_hot_widths(name, ob):
 def test_fixup_high_ranges_agree_with_the_cost_model():
     """The erase's fix-up ranges are the oracle of dfthc.costs.angle_erase: at ob = w_b it equals
     the two fix-ups' closed forms at the presets, FeMoco-54 included, and on a grid of shapes with
-    R from 1 to 6, B from 1 to 8, N from 2 to 5, C from 1 to 3."""
+    R from 1 to 6, B from 1 to 8, N from 2 to 5, C from 1 to 3 whose select one-hot fits,
+    2**w_b <= (N - 1) b_rot + 1 (spec 8.3)."""
     assert AngleErase.sf_fixup_high_ranges(10, 27, 5) == [(0, 10, 4)]
     assert AngleErase.tail_fixup_high_ranges(54, 10, 27) == [(270, 324, 9)]
     grid = [WalkParams(N=n, R=r, B=b, C=c, n_plus=1, b_rot=4, b_k1=2, b_k2=2, s_u=3, k1=0, k2=0,
                        ke1=0, ke2=0)
-            for n, r, b, c in itertools.product(range(2, 6), range(1, 7), range(1, 9), (1, 2, 3))]
+            for n, r, b, c in itertools.product(range(2, 6), range(1, 7), range(1, 9), (1, 2, 3))
+            if 2 ** lg(b + 1) <= (n - 1) * 4 + 1]
     for p in [FEMOCO54, H2_STO3G_TEST, H2_631G_TEST, MID_NAPHTHALENE, *grid]:
         assert costs.angle_erase(p) == expected_cost(p, p.w_b), p
 
@@ -397,8 +400,35 @@ def test_required_wires():
     AngleErase(**args)
 
 
+DOMAIN_CHANGES = [
+    {"sf_onehot_bits": 3},
+    {"b_rot": 2, "tail_angles": ((1,), (0,)), "sf_angles": (((1,), (0,)), ((0,), (1,)))},
+    {"N": 3}, {"N": 1}, {"C": 0}, {"R": 0}, {"tail_angles": 3}, {"n_plus": 3},
+    {"sf_angles": (((1, 1), (2, 2)), ((3, 3), (0, 0)))},
+    {"sf_angles": (((1,), (4,)), ((3,), (0,)))},
+]
+"""Invalid compilable arguments of ``erase_args``: the one-hot range and capacity, the sizes, the
+table shapes and the angle range."""
+
+
+@pytest.mark.parametrize("change", DOMAIN_CHANGES)
+def test_select_and_erase_reject_the_same_domains_with_the_same_message(change):
+    """Final review m-4: InnerSelect checks its compilable arguments with AngleErase's validator
+    (its fixup_bits is the erase's sf_onehot_bits), so both reject every invalid domain before
+    any wire check, with the same message."""
+    erase = erase_args(**change)
+    select = {name: erase[name] for name in ("tail_angles", "sf_angles", "N", "R", "B", "C",
+                                             "n_plus", "b_rot")}
+    with pytest.raises(ValueError) as erase_error:
+        AngleErase(**erase)
+    with pytest.raises(ValueError) as select_error:
+        InnerSelect(**select, fixup_bits=erase["sf_onehot_bits"],
+                    **{name: [] for name in InnerSelect.wire_argnames})
+    assert str(select_error.value) == str(erase_error.value)
+
+
 @pytest.mark.parametrize(("change", "match"), [
-    ({"sf_onehot_bits": 3}, r"sf_onehot_bits must lie in \[0, 2\]"),
+    ({"sf_onehot_bits": 3}, r"SF one-hot bits must lie in \[0, 2\]"),
     ({"b_rot": 2, "angles": [0, 1], "tail_angles": ((1,), (0,)),
       "sf_angles": (((1,), (0,)), ((0,), (1,)))}, "needs 4 wires, more than the 3 reset angle"),
     ({"N": 3}, "tail_angles must have N = 3 rows"),

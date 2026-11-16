@@ -462,7 +462,7 @@ def test_required_wires():
 
 
 @pytest.mark.parametrize(("change", "match"), [
-    ({"fixup_bits": 3}, r"fixup_bits must lie in \[0, 2\]"),
+    ({"fixup_bits": 3}, r"SF one-hot bits must lie in \[0, 2\]"),
     ({"N": 3}, "tail_angles must have N = 3 rows"),
     ({"tail_angles": ((1,), (8,))}, r"angles must lie in \[0, 2\*\*\(b_rot - 1\)\)"),
     ({"n_plus": 3}, r"n_plus must lie in \[0, 2\]"),
