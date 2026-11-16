@@ -187,6 +187,17 @@ def test_every_l6_mitigation_names_the_three_looped_operators():
         assert "never adjointed or controlled" in " ".join(entry.split()), where
 
 
+def test_spec_14_l23_names_every_operator_with_a_dynamic_argument():
+    """Spec 14's L-23 mitigation names exactly the operators that declare dynamic arguments
+    and convert lists in ``__init__`` (final review m-24)."""
+    entry = re.search(r"\*\*L-23:.*?(?=\n24\. \*\*L-24)", spec_section("## 14.", "## 15."),
+                      re.S).group(0)
+    dynamic = {cls.__name__ for cls in CLASSES.values() if getattr(cls, "dynamic_argnames", ())}
+    assert dynamic == {"QROAMRead", "PhaseFixup", "OuterUnprepareFromOutcomes",
+                       "InnerUnprepareFromOutcomes", "QPERound"}
+    assert set(re.findall(r"`(\w+)`", entry)) & {c.__name__ for c in CLASSES.values()} == dynamic
+
+
 def test_spec_11_3_gives_the_qpe_wire_totals_of_the_layout():
     """Spec 11.3's wire totals of the QPE program (final review I-4) are the walk's wires plus
     the QPE control, read from WalkLayout (no compile), plus t gradient wires: 56 + t at
