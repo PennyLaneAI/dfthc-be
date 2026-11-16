@@ -566,13 +566,45 @@ def test_qpe_summary_takes_m_from_the_walk(tmp_path):
                                           "walk")
 
 
+def test_femoco_summary_says_how_the_walks_are_compiled(femoco_report, tmp_path):
+    """Final review m-22: the FeMoco-54 summary states in the present tense how its walk and
+    controlled walk rows are measured, with no stale "until then": without a compile under the
+    current code hash they show their closed form; with both compiled (entries injected here,
+    nothing is compiled) their measured rows equal their closed forms."""
+    _, markdown = femoco_report
+    assert "until then" not in markdown
+    assert ("The walk and the controlled walk are compiled only with `--large femoco54`; without "
+            "a compile under the current code hash their rows above show their closed form.") in (
+        markdown)
+    entries = {}
+    for program, (toffoli, measurements, uncomputes, wires) in {
+            "DFTHCWalk": (9793, 2524, 8675, 1102),
+            "ControlledDFTHCWalk": (9795, 2524, 8677, 1103)}.items():
+        entries[f"femoco54/{program}"] = [{
+            "code_hash": provenance.code_hash(), "status": "compiled", "toffoli": toffoli,
+            "measurements": measurements, "measured_and_uncomputes": uncomputes,
+            "num_wires": wires, "seconds": 1.0, "watchdog": {"peak_mb": 1.0},
+            "counts": {"Toffoli": toffoli - uncomputes, "TemporaryAND": uncomputes,
+                       "Adjoint(TemporaryAND)": uncomputes, "MidCircuitMeasure": measurements}}]
+    (tmp_path / "resources.json").write_text(json.dumps({"compiled": entries}))
+    assert report.main(["--systems", "femoco54", "--rows", "--out", str(tmp_path)]) == 0
+    measured = (tmp_path / "resources.md").read_text()
+    assert "until then" not in measured
+    assert ("The walk and the controlled walk are compiled with `--large femoco54`, once each "
+            "per code hash; their measured rows above equal their closed forms.") in measured
+
+
 def test_qubit_summary_at_femoco(femoco_report):
     """The FeMoco-54 qubit section (spec 10.3, 13.2) after Q-1 variant (b): WalkLayout's 1,102
     wires by group against the paper's Table 3 groups, 1,131 in all (-29: outer +21, inner +12,
-    select +4, work -66); the junk registers' 462 wires share the angle wires and their 852
-    measurements per walk are the block encoding's own; the early junk measurement is no longer
-    an open question or a deferred refinement (nothing is compiled)."""
+    select +4, work -66); the junk registers, 72 and 390 wires (462 in the record), both alias
+    the start of the angle register, so together they take its first 390 wires (final review
+    m-22), and their 852 measurements per walk are the block encoding's own; the early junk
+    measurement is no longer an open question or a deferred refinement (nothing is compiled)."""
     record, markdown = femoco_report
+    assert ("The junk registers (72 and 390 wires, aliased onto the first 390 angle wires) are "
+            "X-measured right after each prepare") in markdown
+    assert "462 wires" not in markdown
     assert record["wires"] == 1102 and record["qubit_groups"] == {
         "system": 108, "outer": 71, "inner": 65, "select": 799, "phase_grad": 15, "work": 44}
     assert (record["junk_wires"], record["junk_measurements"]) == (462, 852)
