@@ -44,8 +44,8 @@ Correctness is established in three ways:
 - for QPE, on a toy walk.
 
 At FeMoco-54, the exact cost formulas (§9.24, built on probed PennyLane primitive costs) give, per walk:
-- 9,793 Toffolis (9,795 for the controlled walk), against the paper's 9,997 and dfthcbe's 9,641;
-- 2,524 explicit erase measurements, and 11,199 physical measurements in total once the 8,675 measured AND uncomputes are included;
+- 9,790 Toffolis (9,792 for the controlled walk), against the paper's 9,997 and dfthcbe's 9,641;
+- 2,524 explicit erase measurements, and 11,196 physical measurements in total once the 8,672 measured AND uncomputes are included;
 - 1,102 qubits, with each read's junk measured right after its prepare (Q-1 variant (b), §16; 1,564 if the junk is kept to the erase), against the paper's 1,131.
 
 Differences are explained in a generated report, not tuned away.
@@ -278,6 +278,8 @@ Option 2 is also not viable for other reasons:
 
 Remedying Option 2 converges on Option 1. Option 3 re-implements primitives PennyLane provides and imports the refinements that R-7 defers.
 
+*Addendum (2026-11-16, Task 6.4).* The table-read comparison above covered only PennyLane's clean select-swap `QROM`. A clean `QROM` with $c - 1$ work wires has depth 1, so only its unary-iteration rule applies; used as the select stage over the block columns, followed by our CSWAP network, it reproduces `QROAMRead`'s state exactly with one Toffoli fewer per read (the root merge) and an IR that does not grow with the column count (the Phase 6 audit, `.scratch/pl-audit/B/report.md`, probes 2 and 3). `QROAMRead`'s select is now that `QROM` (§9.3): −3 Toffolis per FeMoco-54 walk. The angle loads keep our own unary iteration, because `QROM` has no lower address bound and no nesting, and so do the erase fix-ups, because `QROM` takes no measurement values in tape mode (§14, L-28).
+
 ### 4.3 Decision
 
 **Option 1, with a paper-faithful `QROAMRead`** (user decision, 2026-11-11):
@@ -287,25 +289,25 @@ Remedying Option 2 converges on Option 1. Option 3 re-implements primitives Penn
 
 ### 4.4 Decision record: changes since the reviewed design summary
 
-1. **`QROAMRead` replaces PennyLane `QROM`.** It is used for the alias reads and the angle loads, with the paper's construction (§9.3).
-2. **The erase phase fixup is our own construction** (`PhaseFixup` and its rule helper `emit_phase_fixup`, §9.4). It applies `CZ`/`Z` gates directly. It does not load parity bits through a `QROM` into a $\lvert -\rangle$ ancilla, because PennyLane's select-swap `QROM` adds complex phases unless its block size is 1 (§14, L-12). The fallback is plain unary iteration (§9.4).
+1. **`QROAMRead` wraps PennyLane `QROM` in the paper's construction.** It serves the alias reads: since Task 6.4 its select stage is a clean `QROM` pinned to the unary-iteration rule, followed by our CSWAP network and the measured erase (§9.3). The angle loads, which need a lower address bound and nesting, are unary-iteration table loads of their own (§9.10, §9.11).
+2. **The erase phase fixup is our own construction** (`PhaseFixup` and its rule helper `emit_phase_fixup`, §9.4). It applies `CZ`/`Z` gates directly. It does not load parity bits through a `QROM` into a $\lvert -\rangle$ ancilla, because PennyLane's select-swap `QROM` adds complex phases unless its block size is 1 (§14, L-12), and the leaf loop as `H · QROM(parities) · H` on the one-hot register does not run in tape mode, where the parities are `MeasurementValue`s (§14, L-28; probed by Task 6.4). The fallback is plain unary iteration (§9.4).
 3. **Explicit controlled constructions are required, not only tidier** ([pennylane#10357](https://github.com/PennyLaneAI/pennylane/issues/10357)). Since G0 they are operator classes, not `C(...)` rules (item 13).
 4. **Structure-determining data are compilable arguments** ([catalyst#3172](https://github.com/PennyLaneAI/catalyst/issues/3172)). If compile time at FeMoco size is too high, the remedies of §16 K-1 keep the walk a single compiled program. Otherwise work stops and is escalated.
-5. **Bodies of operators that are auto-adjointed contain no `qp.for_loop`/`qp.cond`** ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)). Since G0 the operators with loops, `QROAMRead` (item 12), `ControlledWalkPower` and its toy twin `ToyControlledWalkPower` (§11.4), are never adjointed or controlled, by construction (item 13).
+5. **Bodies of operators that are auto-adjointed contain no `qp.for_loop`/`qp.cond`** ([catalyst#3217](https://github.com/PennyLaneAI/catalyst/issues/3217)). Since G0 the operators with loops, `QROAMRead` (through its `QROM` select), `TailAngleLoad` and `SFAngleLoad` (item 12), `ControlledWalkPower` and its toy twin `ToyControlledWalkPower` (§11.4), are never adjointed or controlled, by construction (item 13).
 6. **Rule selection is asserted.** Tests use measurement-count signatures and, where the output is capturable, the verbose rule listing of `catalyst.passes.graph_decomposition`. Conditionals carry `qp.hint` branch probabilities.
 7. **Junk persists from read to erase in the baseline; Q-1 variant (b) measures it early.** With the junk kept, the qubit count exceeds the paper's (§10.3). Q-1 variant (b) (§16; the working choice of 2026-11-15, after K-10 passed, as the user preferred) X-measures each read's junk right after its prepare and passes the outcomes to the unprepares from outcomes, with no Toffoli penalty; the junk then shares the angle wires: 1,102 qubits at FeMoco-54, against the paper's 1,131 (§10.3).
 8. **Unary iteration is exact, not truncated** (decided by the user, §16 Q-4). Truncated iteration and aligned-block pruning are later optimizations.
    - *Choice.* A leaf flag fires only for in-range addresses, so out-of-range addresses (failed uniform preparations, one-body rows in the inner read) load nothing. The behaviour on every computational address is specified (§9.3), and failed $b$ branches act as $+I$ (§8.5).
    - *Alternative.* Truncated iteration, as in the Babbush et al. walk, Qualtran and dfthcbe. It routes some out-of-range addresses onto live leaves.
    - *Why exact.* With truncation, routed addresses load live data, so the erase fixup would have to reproduce the read's routing at a different block granularity, and the failure signs would need a classical model (dfthcbe's `failure_signs`). Exact iteration makes the loaded set easy to enumerate and every failed-branch sign trivially $+1$.
-   - *Cost at FeMoco-54 (§9.24).* +26 Toffolis per walk against truncated iteration in the alias reads and their erases (outer read 84 vs 79, inner reads 273 vs 268 each, outer fixup 22 vs 19, inner fixups 70 vs 66 each). A further +74 against dfthcbe's aligned-block-pruned angle loads and their fixups (tail 61 vs 56 and SF 291 vs 271 per load, SF fixup 41 vs 34 and tail fixup 61 vs 56 per erase); that pruning is a deferred refinement.
+   - *Cost at FeMoco-54 (§9.24).* +23 Toffolis per walk against truncated iteration in the alias reads and their erases (outer read's `QROM` select 83 vs 79; inner reads' `QROM` select over 540 columns 542 vs nested truncated $268 + 270$ each; outer fixup 22 vs 19, inner fixups 70 vs 66 each). A further +74 against dfthcbe's aligned-block-pruned angle loads and their fixups (tail 61 vs 56 and SF 291 vs 271 per load, SF fixup 41 vs 34 and tail fixup 61 vs 56 per erase); that pruning is a deferred refinement.
 9. **Givens rotations use dfthcbe's exact construction at $2(b_{\mathrm{rot}} - 1)$ Toffolis per rung** (decided, §16 Q-5).
    - *Construction (§9.14).* This is dfthcbe's `GivensRotationByPhaseGradient`, with Qualtran's `RzViaPhaseGradient`, which is a `ControlledAddOrSubtract`. Each $R_z(4\pi x/2^{b_{\mathrm{rot}}})$ on $q$ complements the phase-gradient register when $q = 0$, adds $x$ with an uncontrolled $b_{\mathrm{rot}}$-bit `SemiAdder`, and complements again. That subtracts $x$ exactly when $q = 0$ and adds it when $q = 1$, at $b_{\mathrm{rot}} - 1$ Toffolis. Angles are exact, $\theta = 4\pi x/2^{b_{\mathrm{rot}}}$, with dfthcbe's integer tables.
    - *Verification (2026-11-11).* The probe `.scratch/spec-final/probe_exact_givens.py` compares the dense action on the two mode qubits with the exact Givens matrix for $b = 3, 4$ and every $x < 2^{b-1}$, on all four basis inputs, so both parities. The worst deviation is $2.5\times 10^{-14}$, the sign is correct ($\lvert 01\rangle \mapsto \cos\theta\lvert 01\rangle + \sin\theta\lvert 10\rangle$), and the action on the mode qubits is unitary, so the ancillas come back unentangled. `qp.analyze` gives $2(b-1)$ Toffolis per rotation: 6 at $b = 4$, 28 at $b = 15$.
    - *What it supersedes.* The user chose the half-step grid to save 424 Toffolis per walk. This construction gives the same saving with exact angles and dfthcbe's tables, so it replaces the grid. It also replaces the earlier carry-in circuit, which cost $b_{\mathrm{rot}}$ per $R_z$ and had the wrong sign (review finding P-1).
 10. **Comparator work stays dirty until the unprepare.** PennyLane's comparators keep intermediate ANDs on their work wires, and their adjoints uncompute them by measurement at zero Toffolis (probed, §9.24). The keep-test and succ-flag comparator work wires therefore persist from prepare to unprepare as dedicated registers (§10.1). That costs 36 qubits and saves a comparator per unprepare.
 11. **No fallback redefines "done".** The complete walk and controlled walk must compile as single programs (D-3). Per-block compiles are diagnostics, never the deliverable (§16, K-1).
-12. **Per-leaf read loads (G0, K-1 lever P).** `QROAMRead` takes its data as a dynamic `int64` array with one row per unary leaf and loads each leaf with one `qp.for_loop` over its $K\cdot$`width` bits (§9.3). Measured in the K-1 stand-in (Task 0.9d): 77 captured equations per leaf against 46 per table entry, 945 leaf loops instead of 8,208 entry loops at FeMoco-54, identical T, M and A. The CNOT count becomes an upper bound.
+12. **Per-leaf read loads (G0, K-1 lever P).** Each table load takes its data as an array with one row per unary leaf and loads each leaf with one `qp.for_loop` over its bits. Measured in the K-1 stand-in (Task 0.9d): 77 captured equations per leaf against 46 per table entry, 945 leaf loops instead of 8,208 entry loops at FeMoco-54, identical T, M and A. The CNOT count becomes an upper bound. Since Task 6.4 `QROAMRead`'s select is PennyLane's `QROM`, whose unary rule runs one `qp.for_loop` over all columns of a dynamic bool array (§9.3), and the angle loads keep the per-leaf loops over bool rows built in their rules (§9.10, §9.11); the `int64` word packing of the dynamic data is gone.
 13. **Explicit adjoint and controlled classes (G0, K-1 lever X).** The adjoint and controlled forms of the composites are operator classes with their own pinned base rules: `OuterUnprepare`, `InnerUnprepare`, `InnerSelectDagger`, `GivensLadderDagger`, `ControlledRefT2`, `ControlledRefAB`, `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk` and `ControlledToyWalk`. No rule or program calls `qp.adjoint` or `qp.ctrl` on a dfthc composite (§7.4 rule 6). Reason: Catalyst synthesizes, captures and lowers the generic distributed `Adjoint`/`C` candidate of every requested modified target and of its whole subtree, although the pinned rule is chosen. These copies were 95–99% of the K-1 stand-in's distributed IR (Task 0.9d). With both levers the FeMoco-54 controlled-walk stand-in compiled in 51 s at 2,648 MB, against 2,566 MB projected, with exact counts; without either lever its projection was 12.6 GB. Every count and closed form is unchanged (decision "K-1 at G0"; an upstream Catalyst issue is drafted).
 
 ## 5. Architecture
@@ -620,6 +622,8 @@ Each rule exists because of a confirmed limitation (§14).
 
 `dfthc.compile.FIXED_DECOMPS` pins every rule registered for a dfthc operator, base and symbolic: one base rule per class (rule 7), the adjoint and controlled classes of rule 6 included. It never pins a PennyLane operator name: a pin also applies to nested instances of the same operator, and pinning PennyLane's `QROM` to select-swap broke the `QROM` nested inside it.
 
+`dfthc.compile.PENNYLANE_PINS` (Task 6.4) holds the one PennyLane pin: `QROM`, the select stage of `QROAMRead` (§9.3), to its unary-iteration rule `_qrom_unary_iteration`, which nests no `QROM`, so L-4 does not bite. Cost-based selection could otherwise pick the select-swap rule, whose counts are symbolic (L-12, L-22). `compiled_resources`, the tape decomposition of the simulator and the verbose rule listing pin both dictionaries; `register_rule` never adds to `PENNYLANE_PINS`, and the level-"device" closure does not count its names as dfthc operators.
+
 The adjoint and controlled classes (rule 6). Each base rule is the modified rule pinned here before G0, so every count and closed form is unchanged:
 
 | Class | Base rule | Replaces |
@@ -829,19 +833,21 @@ Steps 1 and 5; the adjoint appears in steps 22 and 27.
 
 ### 9.3 `QROAMRead`
 
-The paper's QROAM read for steps 2 and 6. It is also the engine of steps 10 and 11.
+The paper's QROAM read for steps 2 and 6. Since Task 6.4 (2026-11-16) its select stage is PennyLane's `QROM`; the angle loads of steps 10 and 11 (§9.10, §9.11) keep our own unary iteration.
 
 **Background.**
 - *Unary iteration* (Babbush et al. 2018) steps through address values with a ladder of AND gates, so that a flag qubit is 1 exactly when the address register holds the current value. It costs about one Toffoli per visited value.
 - A *QROAM read* (Berry et al. 2019) loads a whole block of $K$ table entries at each visited value, then moves the requested entry into the output with a *swap network* (a "select-swap" lookup). This trades extra qubits for fewer Toffolis.
 - In the paper's variant, the $K - 1$ entries that were not requested stay on extra qubits as *junk*. A measurement-based erase clears them, so the swap network never has to be undone: X measurements, either at the erase or early, then a phase fix-up at the erase. A caller may measure the junk right after the read; the paper's prepares measure it early, in the prepare, and the walk, under Q-1 variant (b) (§16), right after each enclosing prepare (steps 4 and 8), before any angle load.
-- The unary-iteration helper `dfthc.ops.unary` is a Python function that emits operators inside rules. It is an implementation technique rather than a building block, so it is not an `Operator2`. It is tested through `QROAMRead` with $k = 0$ and through `PhaseFixup`. We do not use PennyLane's `Select` (§14, L-13).
+- The read's *select stage* loads all $K$ entries of the requested block. PennyLane's `QROM` with `clean=True` does exactly that over the block columns: with $c - 1$ work wires for its $c$ control wires its depth is 1, so only its unary-iteration rule applies (`_qrom_unary_iteration`, pinned through `dfthc.compile.PENNYLANE_PINS`, §7.5). That rule takes dynamic bool data, is exact for addresses beyond its last column, treats extra most significant control wires as an enable on value 0, merges the root's two ANDs into CNOTs (one Toffoli fewer than our exact iteration on a range from 0), and runs one `qp.for_loop` over all columns. §4.2 compared only PennyLane's clean select-swap `QROM` (two selects, four swap networks), not this composition.
+- The unary-iteration helper `dfthc.ops.unary` is a Python function that emits operators inside rules. It is an implementation technique rather than a building block, so it is not an `Operator2`. It serves what `QROM` does not offer (§14, L-13): the angle loads' lower bound and nesting (§9.10, §9.11) and the fix-ups' phase leaves (§9.4). It is tested directly and through the angle loads and `PhaseFixup`. We do not use PennyLane's `Select` (§14, L-13).
 
 **Address model.**
 - **Registers and order.** The address consists of registers $A_1, \dots, A_p$ ($p \le 2$) of widths $w_i$, concatenated with $A_1$ most significant.
 - **Live ranges.** Each register has a live range $[lo_i, hi_i)$. Iteration is nested: $A_1$ outer, $A_p$ inner.
-- **Blocks.** The low $k$ bits of $A_p$ select a position inside a block of $K = 2^k$ entries. The unary iteration visits exactly the blocks $(a_1, \dots, a_{p-1}, a_p \gg k)$ whose address ranges intersect the live ranges. In a visited block, positions outside the live range hold padding entries of zeros.
-- **Exact iteration.** The `dfthc.ops.unary` helper is exact: a leaf flag is 1 if and only if the address's high part equals that leaf's value and lies in the iterated range. An address outside the range raises no flag. This differs from the truncated unary iteration that Qualtran and dfthcbe use, which can route an out-of-range address onto a live leaf. The cost is at most one extra Toffoli per address bit at each range end.
+- **Blocks.** The low $k$ bits of $A_p$ select a position inside a block of $K = 2^k$ entries. A block $(a_1, \dots, a_{p-1}, a_p \gg k)$ is *visited* if its addresses intersect the live ranges. In a visited block, positions outside the live range hold padding entries of zeros.
+- **Columns.** The select runs over the address bits above the low $k$, the block index $h = a \gg k$ of the concatenated address, and loads column $h$ for every $h$ from 0 to the last visited block; columns of unvisited blocks below it are zeros. For the inner read, $h = x_o \Vert b_{\mathrm{top}}$: its columns are contiguous when every value of $b_{\mathrm{top}}$ is visited, $\lceil (B+1)/K_2\rceil = 2^{w_b - k_2}$, which holds whenever $K_2 \ge 2^{w_b - 1}$ (FeMoco-54, both test presets, `MID_NAPHTHALENE`, `naphthalene`, `fe2s2`, `fe4s4`). Otherwise (the report's `h2_sto3g_R2_B2_C1` and `h2_631g_R2_B2_C2`, with $k_2 = 0$ and $B + 1 = 3$) every row but the last carries $2^{w_b - k_2} - \lceil (B+1)/K_2\rceil$ zero columns, the cheapest exact form with one `QROM` (the other order, $b_{\mathrm{top}} \Vert x_o$, pads more); at those two systems it costs what nested iteration did.
+- **Exact iteration.** Both iterations are exact: a leaf flag is 1 if and only if the address's high part equals that leaf's value and lies in the iterated range, and `QROM` loads nothing beyond its last column. This differs from the truncated unary iteration that Qualtran and dfthcbe use, which can route an out-of-range address onto a live leaf. The cost is at most one extra Toffoli per address bit at each range end.
 
 **Behaviour on every computational address** $a$ (also stated in the docstring and tested exhaustively, §12.1 T3):
 
@@ -857,14 +863,14 @@ The *loaded set* is the set of addresses in visited blocks (the first two rows).
 | | |
 | --- | --- |
 | Action | As in the table above |
-| Wires | `address` ($\sum_i w_i$), `target` (`width`), `junk` ($(K-1)\cdot$`width`), `work` (unary-iteration ancillas, per `required_wires`), `control` (0 or 1 wire) |
-| Arguments | Dynamic: `leaf_words`, an `int64` array of shape `(num_leaves, K, ceil(width/32))` that the caller (`OuterPrepare`, `InnerPrepare`, `TailAngleLoad`, `SFAngleLoad`) builds inside its rule from its compilable table with `QROAMRead.leaf_words_from_table`. Row $\ell$ belongs to the $\ell$-th unary leaf in visiting order, position $p$ to the address (leaf block $\ll k$) $\mid p$. It holds 32 data bits per word in wire order: bit $s$ of word $w$ is the bit for wire $32w + s$ of the position's register, which is entry bit `width` $- 1 - (32w + s)$, so the registers stay big-endian (§6.7) and the loop needs no index reversal. Padding and dead positions are zero. Concrete arrays are validated before the `int64` cast (integers in $[0, 2^{32})$, no booleans or floats; zero at padding and dead positions and beyond `width`); tracers and abstract arrays are checked for shape and an integer dtype (L-23, L-26). Compilable: `address_widths`, `live_ranges`, `width`, `block_bits` $k$, `control_value` (`None`, 0 or 1) |
+| Wires | `address` ($\sum_i w_i$), `target` (`width`), `junk` ($(K-1)\cdot$`width`), `work` ($c - 1$ for the select's $c$ control wires, none for $c \le 1$), `control` (0 or 1 wire) |
+| Arguments | Dynamic: `columns`, a bool array of shape `(num_columns, K * width)` (`QROAMRead.columns_shape`) that the caller (`OuterPrepare`, `InnerPrepare`) builds inside its rule from its compilable table with `QROAMRead.columns_from_table`. Row $h$ holds block $h$ before the swap network: bit $p\cdot$`width` $+ i$ is the bit for wire $i$ of position $p$'s register, entry bit `width` $- 1 - i$, so the registers stay big-endian (§6.7). Dead positions and unvisited columns are zero. Concrete arrays are checked for shape, bool dtype and zeros at dead positions; tracers and abstract arrays for shape and dtype (L-23). Compilable: `address_widths`, `live_ranges`, `width`, `block_bits` $k$, `control_value` (`None`, 0 or 1) |
 | Pre | `target`, `junk` and `work` are $\lvert 0\rangle$ |
 | Post | As in Action. `work` is $\lvert 0\rangle$, the address is unchanged. |
-| Rule | 1. Nested unary iteration over live blocks: the `dfthc.ops.unary` helper builds a `TemporaryAND` ladder whose uncompute is measured (`Adjoint(TemporaryAND)`). 2. At each block leaf, one `qp.for_loop` over its $K\cdot$`width` bits loads all $K$ entries into `target ‖ junk`: iteration $t$ takes position $p = \lfloor t/\text{width}\rfloor$ and bit $i = t \bmod \text{width}$ and applies a CNOT from the leaf flag onto `(target ‖ junk)`$[p\cdot\text{width} + i]$, conditioned on that bit of `leaf_words` (an `X` when the whole address is low and there is no enable, so no flag exists). No conditional surrounds the loop. 3. A swap-with-zero network on the low $k$ address bits moves the selected entry into `target`, using $(K-1)\cdot$`width` exact `CSWAP`s. |
-| Classical helpers | `QROAMRead.loaded_bits(table, address)` (defined above), checked against simulation for every computational address of small instances; `leaf_words_from_table`, `leaf_blocks` and `leaf_words_shape` build and describe the dynamic array. |
-| Adjoint and control | Never: the body has loops and data conditionals (§7.4 rule 4), and no adjoint or controlled form of a composite that contains the read is ever requested (§7.4 rule 6). Its data is erased by `QROAMErase` for a read whose junk is kept (the baseline unprepares, §9.7 and §9.8), by the unprepares from outcomes through `emit_erase_from_outcomes` for the walk's alias reads (§16, Q-1 variant (b)), and by `AngleErase` for the angle reads (§9.17). |
-| Cost | $T = U$(visited block ranges, $c$) $+ (2^k - 1)\cdot$`width`, with $U$ the exact unary-iteration count of §9.24 and $c = 1$ iff there is an enable control. $M = 0$. At FeMoco-54: outer $84 + 72 = 156$; inner $543 + 390 = 933$. The rule declares $K\cdot$`width` load CNOTs per leaf, or X gates for the flagless leaf (the whole address low and no enable), every position and bit with padding included, and is registered with `exact=False`: the CNOT count (the X count for the flagless leaf) is an upper bound, and `qp.analyze` reports the same bound, because it counts every unhinted load conditional. T, M and A do not depend on the data: T4 asserts them exactly and asserts the analyzed CNOT count, or X count for the flagless leaf, equal to the declared one. At FeMoco-54 the four reads of a walk have $81 + 540 + 54 + 270 = 945$ leaves. |
+| Rule | 1. The select: `qp.QROM(columns, control_wires=control ‖ high, target_wires=target ‖ junk, work_wires=work, clean=True)`, `high` the address wires above the low $k$, pinned to its unary-iteration rule: a `TemporaryAND` ladder whose uncompute is measured (`Adjoint(TemporaryAND)`), and one `qp.for_loop` over the columns whose loads are flag-controlled `MultiX` gates, one conditional CNOT per data bit. The enable is the most significant control wire, which loads only on 0; for `control_value = 1` it is `X`-conjugated. 2. A swap-with-zero network on the low $k$ address bits moves the selected entry into `target`, using $(K-1)\cdot$`width` exact `CSWAP`s. |
+| Classical helpers | `QROAMRead.loaded_bits(table, address)` (defined above), checked against simulation for every computational address of small instances; `columns_from_table`, `columns_shape` and `select_size` build and describe the dynamic array and the select. |
+| Adjoint and control | Never: its select has loops and data conditionals (§7.4 rule 4), and no adjoint or controlled form of a composite that contains the read is ever requested (§7.4 rule 6). Its data is erased by `QROAMErase` for a read whose junk is kept (the baseline unprepares, §9.7 and §9.8) and by the unprepares from outcomes through `emit_erase_from_outcomes` for the walk's alias reads (§16, Q-1 variant (b)). |
+| Cost | $T = N(c, C) + (2^k - 1)\cdot$`width`, with $N$ the ANDs of `QROM`'s unary rule (§9.24), $C$ the columns and $c$ the control wires (high address bits plus the enable). $M = 0$, $A = N(c, C)$. At FeMoco-54: outer $N(7, 81) + 72 = 83 + 72 = 155$; inner $N(10, 540) + 390 = 542 + 390 = 932$, one Toffoli each fewer than nested exact iteration (84 and 543). `QROM` declares one load gate per data bit, so the CNOT and X counts are upper bounds, and `qp.analyze` reports the same bounds; T, M and A do not depend on the data, and T4 asserts them exactly. |
 
 **Known deltas against dfthcbe (deferred refinements).**
 - $r$ is part of every inner entry, so it is carried through the swap: +60 per inner read at FeMoco-54. dfthcbe writes it as a "flat" target.
@@ -891,7 +897,7 @@ Passing measurement values as dynamic `Operator2` arguments is itself possible. 
 | Adjoint and control | Never adjointed or controlled |
 | Cost | $T = U$(covered high ranges, $c$) $+ O(\mathrm{ob})$, with $O(\mathrm{ob}) = 2^{\mathrm{ob}} - 2$ for ob $\ge 1$ and $O(0) = 0$ (§9.24). $M = 0$. |
 
-Validation is in §12.1, T3. The design deliberately avoids PennyLane's `QROM` here (§14, L-12).
+Validation is in §12.1, T3. The leaf loop could be `H · QROM(parities) · H` on the one-hot register (the conditional `CZ(flag, onehot[j])` is `H · CNOT · H` on the one-hot wire), which gives exact phases under capture with one Toffoli fewer per fix-up whose high range starts at 0. Task 6.4 (2026-11-16) probed it in tape mode first: `QROM` and its `MultiX` leaf reject `MeasurementValue` data (§14, L-28), so the fix-ups keep their conditional `CZ`s, which work in both modes (K-10).
 
 ### 9.5 `QROAMErase`
 
@@ -924,11 +930,11 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | --- | --- |
 | Wires | `x_o` ($w_x$), `succ_x_o`, `succ_work_x_o` ($\lg l_x - 1$), `sigma_1`, `m_x_o` ($b_{k1}$), `less_than_x_o`, `cmp_work_x_o` ($b_{k1} - 1$), `alt_x_o` ($w_x$), `keep_x_o` ($b_{k1}$), `junk_x_o` ($(K_1-1) d_1$), `phase_grad`, `work`. Here $l_x$ is the odd part of $X_o$. The two `*_work` registers stay dirty from prepare to unprepare (§4.4, item 10). |
 | Compilable | $X_o$, `alt` and `keep` (tuples of length $X_o$), $b_{k1}$, $k_1$, $k_{e1}$ with $2^{k_{e1}} \le K_1 d_1$ (the erase's one-hot fits in the reset `alt_x_o ‖ keep_x_o ‖ junk_x_o`, so `QROAMErase` needs no `extra_onehot`; the constructors check it), $s_u$ |
-| Base rule | 1. `FlaggedUniformPrep(L=X_o)` on (`x_o`, `succ_x_o`). 2. `H` on `m_x_o` and `sigma_1`. 3. `QROAMRead` of (alt ‖ keep) over $x_o \in [0, X_o)$ with $k_1$ block bits; its `leaf_words` are built in the rule from the compilable `alt` and `keep`. 4. `LeftQuantumComparator(keep_x_o, m_x_o, less_than_x_o, cmp_work_x_o, "<=")` writes $[\mathrm{keep} \le m]$. 5. $w_x$ `CSWAP`s swap `alt_x_o` and `x_o`, controlled by `less_than_x_o`. |
+| Base rule | 1. `FlaggedUniformPrep(L=X_o)` on (`x_o`, `succ_x_o`). 2. `H` on `m_x_o` and `sigma_1`. 3. `QROAMRead` of (alt ‖ keep) over $x_o \in [0, X_o)$ with $k_1$ block bits; its `columns` are built in the rule from the compilable `alt` and `keep`. 4. `LeftQuantumComparator(keep_x_o, m_x_o, less_than_x_o, cmp_work_x_o, "<=")` writes $[\mathrm{keep} \le m]$. 5. $w_x$ `CSWAP`s swap `alt_x_o` and `x_o`, controlled by `less_than_x_o`. |
 | Post | On $\mathrm{succ}_{x_o} = 1$: $e^{i\varphi}\sqrt{1 - P_{\mathrm{fail}}(X_o, s_u)}\,\sum_x \sqrt{\tilde p(x)}\lvert x\rangle\lvert\mathrm{garb}(x)\rangle \otimes \lvert +\rangle_{\sigma_1}$, with $\tilde p$ the $b_{k1}$-bit alias distribution, $P_{\mathrm{fail}}(X_o, s_u)$ = `uniform_failure_probability(X_o, s_u)` and $e^{i\varphi}$ the one phase of `FlaggedUniformPrep`'s $\mathrm{succ} = 1$ amplitudes ($\varphi = 0$ when $X_o$ is a power of two; $\varphi = 2.207$ at FeMoco-54). The read, the comparator and the swaps permute basis states, so every basis term has the amplitude $e^{i\varphi}\sqrt{(1 - P_{\mathrm{fail}}(X_o, s_u))/X_o}\,/\sqrt{2^{b_{k1}+1}}$. The failure part, of weight $P_{\mathrm{fail}}(X_o, s_u)$ and with $\mathrm{succ}_{x_o} = 0$, comes from drawn values $x_0 \ge X_o$: there the selected target entry `alt_x_o ‖ keep_x_o` is zero (the junk may hold other entries of a visited block), so $\mathrm{less\_than}_{x_o} = 1$ and the swap leaves $x_o = 0$ and $x_0$ in `alt_x_o`. The walk does not see the phase (the unprepare is the exact inverse); the factor enters only through $\tilde\Lambda$ (§8.5). |
 | `OuterUnprepare` (own class, pinned base rule; same wires and compilable arguments as `OuterPrepare`) | `CSWAP`s (self-inverse), adjoint comparator (measured uncompute; also cleans `cmp_work_x_o`), `QROAMErase`, `H` on `m_x_o` and `sigma_1`, adjoint `FlaggedUniformPrep` |
 | `OuterUnprepareFromOutcomes` (own class, pinned base rule; §16, Q-1 variant (b); the walk's outer unprepare) | Wires: `OuterPrepare`'s except `junk_x_o`, then `extra_onehot` ($\max(2^{k_{e1}} - d_1, 0)$ wires in $\lvert 0\rangle$, which the block encoding lends from the start of the measured junk wires; 0 at FeMoco-54). Compilable: `OuterPrepare`'s. Dynamic: `junk_outcomes`, the $(K_1 - 1) d_1$ outcomes of the junk measurement right after the prepare, in the junk register's wire order (the slots of `QROAMRead.junk_layout`). Base rule: the `CSWAP`s, the adjoint comparator, `H` and `qp.measure(q, reset=True)` on `alt_x_o ‖ keep_x_o`, the parities of the target and junk outcomes against the loaded bits (masks built in the rule from the compilable tables) and `emit_phase_fixup` over the loaded set with the reset target ‖ `extra_onehot` as its one-hot register (`dfthc.ops.qroam.emit_erase_from_outcomes`), `H` on `m_x_o` and `sigma_1`, the adjoint `FlaggedUniformPrep`. Never adjointed or controlled |
-| Cost | Prepare $T = F(X_o) + T_{\mathrm{read,out}} + b_{k1} + w_x$; unprepare $T = w_x + T_{\mathrm{erase,out}} + F^\dagger(X_o)$, $M = K_1 d_1$ (§9.24). At FeMoco-54: prepare $30 + 156 + 15 + 9 = 210$; unprepare $9 + 36 + 24 = 69$, $M = 96$; `OuterUnprepareFromOutcomes` the same $T$, $M = d_1 = 24$ (the block encoding measures the other $(K_1 - 1) d_1 = 72$). |
+| Cost | Prepare $T = F(X_o) + T_{\mathrm{read,out}} + b_{k1} + w_x$; unprepare $T = w_x + T_{\mathrm{erase,out}} + F^\dagger(X_o)$, $M = K_1 d_1$ (§9.24). At FeMoco-54: prepare $30 + 155 + 15 + 9 = 209$; unprepare $9 + 36 + 24 = 69$, $M = 96$; `OuterUnprepareFromOutcomes` the same $T$, $M = d_1 = 24$ (the block encoding measures the other $(K_1 - 1) d_1 = 72$). |
 
 ### 9.8 `InnerPrepare` (steps 5–8) and `InnerUnprepare` (steps 19–22)
 
@@ -936,11 +942,11 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | --- | --- |
 | Wires | `x_o` (read-only), `b` ($w_b$), `succ_b`, `succ_work_b` ($\lg l_b - 1$), `sigma_0`, `m_b` ($b_{k2}$), `less_than_b`, `cmp_work_b` ($b_{k2} - 1$), `alt_b` ($w_b$), `keep_b` ($b_{k2}$), `sgn`, `d_sgn`, `r` ($w_r$), `junk_b` ($(K_2-1) d_2$), `phase_grad`, `work`. Here $l_b$ is the odd part of $B+1$. The `*_work` registers stay dirty from prepare to unprepare. |
 | Compilable | $N, R, B, C$, the inner tables `alt`, `keep`, `sgn`, `d_sgn` (shape $(RC, B+1)$; the arguments are named `sgn_table` and `d_sgn_table`, because `sgn` and `d_sgn` name wire registers), $b_{k2}$, $k_2$, $k_{e2}$ with $2^{k_{e2} + w_b} \le K_2 d_2$ (no `extra_onehot`; the constructors check it), $s_u$ |
-| Base rule | 1. `FlaggedUniformPrep(L=B+1)` on (`b`, `succ_b`). 2. `H` on `sigma_0` and `m_b`. 3. `QROAMRead` with rows $x_o \in [0, RC)$, block axis $b \in [0, B+1)$ with $k_2$ block bits, and entries (alt, keep, sgn, d_sgn, $\lfloor x_o/C\rfloor$); its `leaf_words` are built in the rule from the compilable inner tables. 4. `LeftQuantumComparator(keep_b, m_b, less_than_b, cmp_work_b, "<=")`. 5. $w_b$ `CSWAP`s for alt and `b`. One-body rows load nothing, and the uniform preparation of $b$ runs unconditionally (as in dfthcbe). |
+| Base rule | 1. `FlaggedUniformPrep(L=B+1)` on (`b`, `succ_b`). 2. `H` on `sigma_0` and `m_b`. 3. `QROAMRead` with rows $x_o \in [0, RC)$, block axis $b \in [0, B+1)$ with $k_2$ block bits, and entries (alt, keep, sgn, d_sgn, $\lfloor x_o/C\rfloor$); its `columns` are built in the rule from the compilable inner tables. 4. `LeftQuantumComparator(keep_b, m_b, less_than_b, cmp_work_b, "<=")`. 5. $w_b$ `CSWAP`s for alt and `b`. One-body rows load nothing, and the uniform preparation of $b$ runs unconditionally (as in dfthcbe). |
 | Post | `x_o` is unchanged. On an SF row $x_o = x < RC$ the $\mathrm{succ}_b = 1$ part is $e^{i\varphi_b}\sqrt{1 - P_{\mathrm{fail}}(B + 1, s_u)}\,\sum_b \sqrt{\tilde q_x(b)}\lvert b\rangle\lvert\mathrm{garb}_{x,b}\rangle \otimes \lvert +\rangle_{\sigma_0}$, with $\tilde q_x$ the $b_{k2}$-bit alias distribution of row $x$, $P_{\mathrm{fail}}(B + 1, s_u)$ = `uniform_failure_probability(B + 1, s_u)` and $e^{i\varphi_b}$ the success phase of `FlaggedUniformPrep` ($\varphi_b = 2.051$ at FeMoco-54); `sgn`, `d_sgn` and $r = \lfloor x/C\rfloor$ hold the drawn entry's columns, and every basis term has the uniform preparation's amplitude for the drawn $b_0$ over $\sqrt{2^{b_{k2}+1}}$. Where the selected target entry is zero (one-body rows, $x_o \ge X_o$, and failed $b_0 > B$, which have $\mathrm{succ}_b = 0$; the junk may hold other entries of a visited block): $\mathrm{less\_than}_b = 1$, the swap leaves $b = 0$ and $b_0$ in `alt_b`, and `sgn` $=$ `d_sgn` $= r = 0$ (§8.5). $x_o \ge X_o$ is an input the walk never presents: `OuterPrepare`'s swap maps a failed draw to $x_o = 0$, an SF row, where the inner signs cancel between the two rounds and $\mathrm{REF}_{T_2}$ gives $-I$. |
 | `InnerUnprepare` (own class, pinned base rule; same wires and compilable arguments as `InnerPrepare`) | `CSWAP`s, adjoint comparator (measured uncompute), `QROAMErase` (one-hot over the low $k_{e2}$ bits of $x_o$ and all bits of $b$), `H`s, adjoint `FlaggedUniformPrep` |
 | `InnerUnprepareFromOutcomes` (own class, pinned base rule; §16, Q-1 variant (b); the walk's inner unprepare) | Wires: `InnerPrepare`'s except `junk_b`, then `extra_onehot` ($\max(2^{k_{e2} + w_b} - d_2, 0)$ wires in $\lvert 0\rangle$, which the block encoding lends from the start of the measured junk wires; 102 at FeMoco-54, whose one-hot needs 128 wires and whose target has 26). Compilable: `InnerPrepare`'s. Dynamic: `junk_outcomes`, the $(K_2 - 1) d_2$ outcomes of the junk measurement right after the prepare, in the junk register's wire order. Base rule: as `OuterUnprepareFromOutcomes`'s on the inner registers (`H` and `qp.measure(q, reset=True)` on `alt_b ‖ keep_b ‖ sgn ‖ d_sgn ‖ r`; one-hot over the low $k_{e2}$ bits of $x_o$ and all bits of $b$). Never adjointed or controlled |
-| Cost | Prepare $T = F(B+1) + T_{\mathrm{read,in}} + b_{k2} + w_b$; unprepare $T = w_b + T_{\mathrm{erase,in}} + F^\dagger(B+1)$, $M = K_2 d_2$ (§9.24). At FeMoco-54: prepare $18 + 933 + 15 + 5 = 971$; unprepare $5 + 196 + 16 = 217$, $M = 416$; `InnerUnprepareFromOutcomes` the same $T$, $M = d_2 = 26$ (the block encoding measures the other $(K_2 - 1) d_2 = 390$). |
+| Cost | Prepare $T = F(B+1) + T_{\mathrm{read,in}} + b_{k2} + w_b$; unprepare $T = w_b + T_{\mathrm{erase,in}} + F^\dagger(B+1)$, $M = K_2 d_2$ (§9.24). At FeMoco-54: prepare $18 + 932 + 15 + 5 = 970$; unprepare $5 + 196 + 16 = 217$, $M = 416$; `InnerUnprepareFromOutcomes` the same $T$, $M = d_2 = 26$ (the block encoding measures the other $(K_2 - 1) d_2 = 390$). |
 
 ### 9.9 `InnerSigns` (step 9)
 
@@ -957,7 +963,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | --- | --- |
 | Wires | `x_o`, `angles` ($(N-1) b_{\mathrm{rot}}$), `G0`, `G1`, `work` |
 | Compilable | `tail_angles` ($N \times (N-1)$, D1 rows first), $N_+$, $RC$, $X_o$, $b_{\mathrm{rot}}$ (it sizes `angles`) |
-| Rule | `QROAMRead` with rows $x_o \in [RC, X_o)$, no swap, and entries (angles, $G_0 = 1$, $G_1 = [x_o - RC \ge N_+]$) |
+| Rule | A table load by exact unary iteration (`dfthc.ops.unary`) over rows $x_o \in [RC, X_o)$, the lower bound `QROM` lacks, with entries (angles, $G_0 = 1$, $G_1 = [x_o - RC \ge N_+]$): at each leaf one `qp.for_loop` of conditional CNOTs from the leaf flag over the target, from a bool row array built in the rule from `tail_angles`. Registered with `exact=False` (one declared CNOT per bit). |
 | Post | Tail branches hold their angles and flags; SF branches are untouched |
 | Cost | $T = U(RC, X_o, w_x, 0)$, $M = 0$ (§9.24). At FeMoco-54: 61. |
 
@@ -967,7 +973,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | --- | --- |
 | Wires | `r` ($w_r$), `b` ($w_b$), `G0` (enable, value 0), `angles`, `b_neq_B`, `work` |
 | Compilable | `sf_angles` ($R \times B \times (N-1)$), $R$, $B$, $b_{\mathrm{rot}}$ (it sizes `angles`) |
-| Rule | `QROAMRead` with address ($r$ outer over $[0, R)$, $b$ inner over $[0, B)$), no swap, enable on $G_0 = 0$, and entries (angles, $[b \ne B] = 1$); for $R = 1$ ($w_r = 0$) the address is $b$ alone, and T3 compiles and executes this case under capture, with $b = B$ and a failed $b$ |
+| Rule | A table load by nested exact unary iteration (`dfthc.ops.unary`; the nesting `QROM` lacks) with address ($r$ outer over $[0, R)$, $b$ inner over $[0, B)$), rooted at the enable $G_0 = 0$, and entries (angles, $[b \ne B] = 1$), loaded per leaf as in §9.10; for $R = 1$ ($w_r = 0$) the address is $b$ alone, and T3 compiles and executes this case under capture, with $b = B$ and a failed $b$ |
 | Cost | $T = U(0, R, w_r, 1) + R\cdot U(0, B, w_b, 1)$, $M = 0$ (§9.24). At FeMoco-54: $11 + 10\cdot 28 = 291$. |
 
 ### 9.12 `SpinMux` (steps 12 and 17)
@@ -1053,7 +1059,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Action | $\langle 0_{\mathrm{anc}}\vert\mathrm{BE}\vert 0_{\mathrm{anc}}\rangle = \tilde H_{\mathrm{SA}}/\tilde\Lambda - I$ |
 | Adjoint | Not provided; not used |
 | Control | The class `ControlledDFTHCBlockEncoding(params, tables, control, outer, inner, select, system, phase_grad, work)`: the same sequence with `ControlledRefT2` in place of `RefT2`. There is no `C(DFTHCBlockEncoding)` rule (§7.4 rule 6) |
-| Cost | $T = T_{\mathrm{out}} + T_{\mathrm{out}}^\dagger + 2\,(T_{\mathrm{in}} + T_{\mathrm{sel}} + T_{\mathrm{in}}^\dagger) + T_{\mathrm{RefT2}}$ (`InnerSigns` costs 0), $M = K_1 d_1 + 2\,(K_2 d_2 + (N-1)b_{\mathrm{rot}} + 3)$; controlled $T + 1$. At FeMoco-54: $T = 279 + 2\cdot 4725 + 20 = 9{,}749$, $M = 2524$ explicit erase measurements, $852 = 72 + 2 \cdot 390$ of them the rule's own junk measurements (`dfthc.costs.junk_measurements`). |
+| Cost | $T = T_{\mathrm{out}} + T_{\mathrm{out}}^\dagger + 2\,(T_{\mathrm{in}} + T_{\mathrm{sel}} + T_{\mathrm{in}}^\dagger) + T_{\mathrm{RefT2}}$ (`InnerSigns` costs 0), $M = K_1 d_1 + 2\,(K_2 d_2 + (N-1)b_{\mathrm{rot}} + 3)$; controlled $T + 1$. At FeMoco-54: $T = 278 + 2\cdot 4724 + 20 = 9{,}746$, $M = 2524$ explicit erase measurements, $852 = 72 + 2 \cdot 390$ of them the rule's own junk measurements (`dfthc.costs.junk_measurements`). |
 
 ### 9.22 `DFTHCWalk` (steps 1–28)
 
@@ -1061,7 +1067,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | --- | --- |
 | Base rule | `DFTHCBlockEncoding`, then `RefAB` |
 | Control | The class `ControlledDFTHCWalk(params, tables, control, outer, inner, select, system, phase_grad, work)`: `ControlledDFTHCBlockEncoding`, then `ControlledRefAB`. There is no `C(DFTHCWalk)` rule, so `qp.ctrl(DFTHCWalk(...))` fails to compile with a `CompileError` (the erases cannot be controlled); a delegating rule would compile but bring back the cascade of distributed candidates (§7.4 rule 6) |
-| Cost | $T = T_{\mathrm{BE}} + T_{\mathrm{RefAB}}$, $M = M_{\mathrm{BE}}$; controlled $T + 2$. At FeMoco-54: $T = 9{,}793$ (controlled 9,795) and $M = 2524$ explicit erase measurements. The walk also has $A = 8{,}675$ measured AND uncomputes (controlled 8,677), so it makes $M + A = 11{,}199$ physical measurements (controlled 11,201; §9.24). |
+| Cost | $T = T_{\mathrm{BE}} + T_{\mathrm{RefAB}}$, $M = M_{\mathrm{BE}}$; controlled $T + 2$. At FeMoco-54: $T = 9{,}790$ (controlled 9,792) and $M = 2524$ explicit erase measurements. The walk also has $A = 8{,}672$ measured AND uncomputes (controlled 8,674), so it makes $M + A = 11{,}196$ physical measurements (controlled 11,198; §9.24). |
 
 ### 9.23 `ControlledWalkPower`
 
@@ -1097,6 +1103,12 @@ $$U(lo, hi, n, c) = \sum_{m=1}^{n}\Big(\big\lfloor (hi - 1)/2^m \big\rfloor - \b
 - *Nested iteration* (outer register over $[lo_1, hi_1)$, inner register iterated under every outer leaf): $U_2 = U(lo_1, hi_1, n_1, c) + (hi_1 - lo_1)\, U(lo_2, hi_2, n_2, c_2)$ with $c_2 = [n_1 \ge 1 \lor c = 1]$: the inner root carries the outer leaf's flag, which exists unless the outer register has zero width and no control.
 - *Truncated iteration*, for comparison only (Qualtran and dfthcbe; §4.4 item 8): $\max(L + c - 2, 0)$ for $[0, L)$ with $L \ge 1$. A single leaf needs no AND: the root control, if any, is its flag.
 
+**QROM select** (`QROAMRead`'s select stage, §9.3: PennyLane's unary `QROM` rule with $c - 1$ work wires over $C$ columns, from its resource function `_qrom_unary_iteration_resources`):
+
+$$N(c, C) = c + C - 2 - s(C - 1) - [C > 2^{c-1}] \ \text{for } c \ge 2, \qquad N(c, C) = 0 \ \text{for } c \le 1,$$
+
+with $s$ the number of ones. Every AND is uncomputed by `Adjoint(TemporaryAND)`. On a range $[0, C)$ it is one fewer than $U(0, C, c, 0)$, because the root's two ANDs merge into CNOTs.
+
 **One-hot register over ob bits** (§9.4): $O(\mathrm{ob}) = 2^{\mathrm{ob}} - 2$ for $\mathrm{ob} \ge 1$, and $O(0) = 0$.
 
 **Operators.** Here $L = 2^\eta l$ with $l$ odd, $n = \lg l$, and $s = s_u$.
@@ -1105,7 +1117,7 @@ $$U(lo, hi, n, c) = \sum_{m=1}^{n}\Big(\big\lfloor (hi - 1)/2^m \big\rfloor - \b
 | --- | --- | --- |
 | `PhaseGradientRotation(k, m)` | $(m-1)[k \ne 0]$ | 0 |
 | `FlaggedUniformPrep(L, s)` / adjoint | $3n + 2s - 5$ / $2n + 2s - 4$ if $l > 1$; else 0 / 0 | 0 |
-| `QROAMRead` | $U$ or $U_2$ over the visited block ranges $+ (2^k - 1)\cdot$`width` | 0 |
+| `QROAMRead` | $N(c, C)$ over the select's columns and control wires $+ (2^k - 1)\cdot$`width` | 0 |
 | `PhaseFixup` | $U$ or $U_2$ over the covered high ranges $+ O(\mathrm{ob})$ | 0 |
 | `QROAMErase` | `PhaseFixup` over the read's loaded set | $2^k\cdot$`width` |
 | `ZeroReflection` ($n_w$ wires) / controlled | $\max(n_w - 2, 0)$ / $n_w - 1$ | 0 |
@@ -1128,9 +1140,9 @@ $$U(lo, hi, n, c) = \sum_{m=1}^{n}\Big(\big\lfloor (hi - 1)/2^m \big\rfloor - \b
 | `QPERound(j)` (§11.1), worst case | $2^j T_{C(W)} + \sum_{l=j+1}^{t-1}(l - j)$ | $2^j M_W$ |
 | Iterative QPE, $t$ bits, worst case | $(2^t - 1)\,T_{C(W)} + (t^3 - t)/6$ | $(2^t - 1)M_W + t$ |
 
-The read and erase ranges are instantiated as in §9.3–9.5:
-- outer read: $[0, \lceil X_o/K_1\rceil)$ on $w_x - k_1$ bits, uncontrolled;
-- inner read: rows $[0, RC)$ on $w_x$ bits, then blocks $[0, \lceil (B+1)/K_2\rceil)$ on $w_b - k_2$ bits;
+The read selects and erase ranges are instantiated as in §9.3–9.5:
+- outer read: $C = \lceil X_o/K_1\rceil$ columns on $c = w_x - k_1$ wires;
+- inner read: $C = (RC - 1)\,2^{w_b - k_2} + \lceil (B+1)/K_2\rceil$ columns of $x_o \Vert b_{\mathrm{top}}$ on $c = w_x + w_b - k_2$ wires ($C = RC \cdot 2^{w_b - k_2}$ when every $b_{\mathrm{top}}$ is visited);
 - outer erase: high part $[0, \lceil\lceil X_o/K_1\rceil K_1/2^{k_{e1}}\rceil)$ on $w_x - k_{e1}$ bits, which covers the outer read's loaded set, dead positions of its last block included (§9.5); it equals $\lceil X_o/2^{k_{e1}}\rceil$ when $k_{e1} \ge k_1$ or $K_1$ divides $X_o$, as at every preset;
 - inner erase: high part $[0, \lceil RC/2^{k_{e2}}\rceil)$ on $w_x - k_{e2}$ bits.
 
@@ -1146,21 +1158,21 @@ The controlled walk has the same $T_{\mathrm{Toffoli}}$, because each of its two
 
 | Quantity | Value |
 | --- | --- |
-| $U$: outer read; inner read ($273 + 270\cdot 1$) | 84; 543 |
+| $N$: outer read $N(7, 81)$; inner read $N(10, 540)$ | 83; 542 |
 | $U$: outer erase high part; inner erase high part | 22; 70 |
 | $U$: tail range $[270, 324)$; SF ($11 + 10\cdot 28$) | 61; 291 |
 | $F(X_o)$, $F^\dagger(X_o)$; $F(B+1)$, $F^\dagger(B+1)$ | 30, 24; 18, 16 |
-| $T_{\mathrm{read,out}}$; $T_{\mathrm{read,in}}$ | 156; 933 |
+| $T_{\mathrm{read,out}}$; $T_{\mathrm{read,in}}$ | 155; 932 |
 | $T_{\mathrm{erase,out}}$; $T_{\mathrm{erase,in}}$ | 36; 196 |
-| `OuterPrepare` / `OuterUnprepare`; `InnerPrepare` / `InnerUnprepare` | 210 / 69; 971 / 217 |
+| `OuterPrepare` / `OuterUnprepare`; `InnerPrepare` / `InnerUnprepare` | 209 / 69; 970 / 217 |
 | `OuterUnprepareFromOutcomes` / `InnerUnprepareFromOutcomes` ($M$); junk measurements per walk | 69 / 217 ($M = 24$ / 26); 852 ($72 + 2 \cdot 390$) |
 | `GivensLadder` and `GivensLadderDagger`; `AngleErase`; `InnerSelect` and `InnerSelectDagger` | 1,484; 102; 3,537 |
 | `RefT2`; `RefAB` | 20; 44 |
-| Block encoding; walk; controlled walk | 9,749; 9,793; 9,795 |
+| Block encoding; walk; controlled walk | 9,746; 9,790; 9,792 |
 | $M$ per walk, explicit erase measurements ($96 + 2\cdot 416 + 2\cdot 798$) | 2,524 |
 | $T_{\mathrm{Toffoli}}$ per walk ($18 + 20 + 72 + 780 + 216 + 12$) | 1,118 |
-| $A$ per walk; controlled walk | 8,675; 8,677 |
-| Physical measurements $M + A$ per walk; controlled walk | 11,199; 11,201 |
+| $A$ per walk; controlled walk | 8,672; 8,674 |
+| Physical measurements $M + A$ per walk; controlled walk | 11,196; 11,198 |
 
 ## 10. Register layout and qubit budget
 
@@ -1383,10 +1395,10 @@ Toffolis per walk at FeMoco-54.
 | Block (calls per walk) | Paper (Table III) | dfthcbe | Ours (§9.24) | Main reason for Ours − dfthcbe |
 | --- | ---: | ---: | ---: | --- |
 | Uniform preparation of $x_o$, prepare and unprepare | 72 | 74 | 54 | measured comparator uncomputes and PennyLane's $(n-1)$-Toffoli classical comparator (`cmp-free`), offset by one Toffoli more per rotation ($s - 1$ against Qualtran's $s - 2$, `rot-add`) |
-| Outer read, keep test and swap | 177 | 175 | 180 | exact range boundaries (+5, `exact-iter`) |
+| Outer read, keep test and swap | 177 | 175 | 179 | exact range boundaries (+4, `exact-iter`: the `QROM` select's root merge saves one of the five) |
 | Outer unprepare and erase | 61 | 57 | 45 | free comparator adjoint (`cmp-free`; the saving the paper notes after its Eq. (127)); exact boundaries (+3) |
 | Uniform preparation of $b$, two prepare/unprepare pairs | 80 | 84 | 68 | `cmp-free` |
-| Inner read, keep test and swap (×2) | 1,720 | 1,784 | 1,906 | $r$ carried through the swap (+60 per read, `flat-r`); exact boundaries +5 per read (`exact-iter`), less dfthcbe's 4 stops on the zero D1/Q1 rows, which ours does not visit (`no-prune`; net +1 per read) |
+| Inner read, keep test and swap (×2) | 1,720 | 1,784 | 1,904 | $r$ carried through the swap (+60 per read, `flat-r`); exact boundaries +4 per read (`exact-iter`), less dfthcbe's 4 stops on the zero D1/Q1 rows, which ours does not visit (`no-prune`; net 0 per read) |
 | Inner unprepare and erase (×2) | 508 ¹ | 398 | 402 | one-hot over 128 positions instead of 112 (`onehot-pad`; the failed $b$ in $[28, 32)$, loaded by the read's last block, is covered); exact boundaries in the fix-up (+4 per erase, `exact-iter`), less dfthcbe's 3 stops on the dead tail rows, which ours does not visit (−3 per erase, `no-prune`); free comparator adjoint |
 | Angle loads (×2) | 648 | 654 | 704 | exact boundaries in the SF loads (+44, `exact-iter`); the tail loads without aligned-block pruning (+10, `no-prune`), less dfthcbe's $s(R) = 2$ stops per SF load for the identity row $b = B$ (−4, `no-prune`) |
 | Angle erase (×2) | 74 ¹ | 180 | 204 | exact boundaries in the fix-up walks (+14: `exact-iter` +4 over $r$, `no-prune` +10 over the tail rows), one-hot over 32 positions instead of 28 (+8, `onehot-pad`), the SF fix-up enabled on $G_0$ (+2, `sf-enable`) |
@@ -1396,18 +1408,18 @@ Toffolis per walk at FeMoco-54.
 | Majorana gate (×2) | 14 | 10 | 10 | none |
 | $\mathrm{REF}_{T_2}$ | 21 | 20 | 20 | none |
 | $\mathrm{REF}_{\mathcal A\cup\mathcal B}$ | 46 | 45 | 44 | constants |
-| **Total** | **9,997** | **9,641** | **9,793** | |
+| **Total** | **9,997** | **9,641** | **9,790** | |
 
 ¹ The paper counts the tail-angle phase fixup ($N$) under the inner erase (its B50). dfthcbe and we count it under the angle erase (step 18). The report shows both attributions.
 
-Ours minus the paper is −204, by cause:
+Ours minus the paper is −207, by cause:
 - **Givens ladders: −424.** Each $R_z$ costs $b_{\mathrm{rot}} - 1$ Toffolis with Qualtran's `ControlledAddOrSubtract`, as in dfthcbe. The paper counts $b_{\mathrm{rot}}$.
-- **Inner reads: +186:** the 26-bit swapped entry against Table III's 20 bits (+180: `flat-r` +120, `sign-bits` +60; our entry $d_2 = 26$ holds alt, keep, sgn, d_sgn and $r$) and exact boundaries (+6: `exact-iter` +10, `iter-const` −4).
+- **Inner reads: +184:** the 26-bit swapped entry against Table III's 20 bits (+180: `flat-r` +120, `sign-bits` +60; our entry $d_2 = 26$ holds alt, keep, sgn, d_sgn and $r$) and exact boundaries (+4: `exact-iter` +8, `iter-const` −4).
 - **Angle loads and erases, and the inner erase: +80**, after moving the paper's tail fixup to step 18. These come from exact boundaries in place of pruned iteration, and from one-hot padding.
 - **Uniform preparations and the outer erase: −46.** Measured comparator uncomputes (free comparator adjoints) and PennyLane's $(n-1)$-Toffoli classical comparator, partly offset by the rotations' $s - 1$ Toffolis each (Qualtran's cost $s - 2$). dfthcbe's AND-ladder uncompute is measured too, so it is not a source of the difference.
-- **Remaining terms: net 0.** Outer read +3 (`exact-iter` +5, `iter-const` −2), spin multiplexer +4 (`mux`; Table III has no row, while App. B.3 and B.7.1 count 2 per select), Majorana gate −4 (`maj-and`), reflections −3 (`ref-unif` −1 on $\mathrm{REF}_{T_2}$; `ref-target` −1 and `qpe-ctrl` −1 on $\mathrm{REF}_{\mathcal A\cup\mathcal B}$).
+- **Remaining terms: net −1.** Outer read +2 (`exact-iter` +4, `iter-const` −2), spin multiplexer +4 (`mux`; Table III has no row, while App. B.3 and B.7.1 count 2 per select), Majorana gate −4 (`maj-and`), reflections −3 (`ref-unif` −1 on $\mathrm{REF}_{T_2}$; `ref-target` −1 and `qpe-ctrl` −1 on $\mathrm{REF}_{\mathcal A\cup\mathcal B}$).
 
-Ours minus dfthcbe is +152: the same inner-read, boundary and padding causes, partly offset by the free comparator adjoints. The Givens ladders equal dfthcbe's (5,936). The controlled walk costs two more Toffolis than the walk. The paper's 9,997 is its QPE step, with the control on $\mathrm{REF}_{\mathcal A\cup\mathcal B}$ only (App. B.7.2, Eq. (128)): against our controlled walk, 9,795, the difference is −202, the block encoding's −202 with +1 for controlling $\mathrm{REF}_{T_2}$ too (`ctrl-ref-t2`, §9.23) and −1 for the controlled $\mathrm{REF}_{\mathcal A\cup\mathcal B}$ against B55 (`ref-target`); both carry the QPE control, so `qpe-ctrl` does not apply. The deferred refinements (§4.4 item 8; §9.3) would save up to 100 Toffolis, from truncated or pruned iteration.
+Ours minus dfthcbe is +149: the same inner-read, boundary and padding causes, partly offset by the free comparator adjoints. The Givens ladders equal dfthcbe's (5,936). The controlled walk costs two more Toffolis than the walk. The paper's 9,997 is its QPE step, with the control on $\mathrm{REF}_{\mathcal A\cup\mathcal B}$ only (App. B.7.2, Eq. (128)): against our controlled walk, 9,792, the difference is −205, the block encoding's −205 with +1 for controlling $\mathrm{REF}_{T_2}$ too (`ctrl-ref-t2`, §9.23) and −1 for the controlled $\mathrm{REF}_{\mathcal A\cup\mathcal B}$ against B55 (`ref-target`); both carry the QPE control, so `qpe-ctrl` does not apply. The deferred refinements (§4.4 item 8; §9.3) would save up to 100 Toffolis, from truncated or pruned iteration.
 
 ### 13.2 Qubits
 
