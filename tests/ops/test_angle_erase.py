@@ -31,6 +31,7 @@ from dfthc.ops.angle_data import (
     _erase_body,
 )
 from dfthc.ops.qroam import QROAMEmitter
+from dfthc.ops.select import InnerSelect
 from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE, WalkParams, lg
 from dfthc.testing.resources import chosen_rules, classify_rule_warning, verbose_program
 from dfthc.testing.sparse_sim import ForcedPolicy, SparseSimulator, SparseState
@@ -399,8 +400,35 @@ def test_required_wires():
     AngleErase(**args)
 
 
+DOMAIN_CHANGES = [
+    {"sf_onehot_bits": 3},
+    {"b_rot": 2, "tail_angles": ((1,), (0,)), "sf_angles": (((1,), (0,)), ((0,), (1,)))},
+    {"N": 3}, {"N": 1}, {"C": 0}, {"R": 0}, {"tail_angles": 3}, {"n_plus": 3},
+    {"sf_angles": (((1, 1), (2, 2)), ((3, 3), (0, 0)))},
+    {"sf_angles": (((1,), (4,)), ((3,), (0,)))},
+]
+"""Invalid compilable arguments of ``erase_args``: the one-hot range and capacity, the sizes, the
+table shapes and the angle range."""
+
+
+@pytest.mark.parametrize("change", DOMAIN_CHANGES)
+def test_select_and_erase_reject_the_same_domains_with_the_same_message(change):
+    """Final review m-4: InnerSelect checks its compilable arguments with AngleErase's validator
+    (its fixup_bits is the erase's sf_onehot_bits), so both reject every invalid domain before
+    any wire check, with the same message."""
+    erase = erase_args(**change)
+    select = {name: erase[name] for name in ("tail_angles", "sf_angles", "N", "R", "B", "C",
+                                             "n_plus", "b_rot")}
+    with pytest.raises(ValueError) as erase_error:
+        AngleErase(**erase)
+    with pytest.raises(ValueError) as select_error:
+        InnerSelect(**select, fixup_bits=erase["sf_onehot_bits"],
+                    **{name: [] for name in InnerSelect.wire_argnames})
+    assert str(select_error.value) == str(erase_error.value)
+
+
 @pytest.mark.parametrize(("change", "match"), [
-    ({"sf_onehot_bits": 3}, r"sf_onehot_bits must lie in \[0, 2\]"),
+    ({"sf_onehot_bits": 3}, r"SF one-hot bits must lie in \[0, 2\]"),
     ({"b_rot": 2, "angles": [0, 1], "tail_angles": ((1,), (0,)),
       "sf_angles": (((1,), (0,)), ((0,), (1,)))}, "needs 4 wires, more than the 3 reset angle"),
     ({"N": 3}, "tail_angles must have N = 3 rows"),
