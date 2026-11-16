@@ -380,9 +380,12 @@ def test_untraceable_descendant_holding_the_pipes_ends_the_run(
     start-up under load) the time limit ends the loop and both bounded final reads time out; with
     ``timeout_s=60`` the loop gives up ``_KILL_SECONDS`` after the root exited with nothing left
     to sample. The escaped child sleeps 15 s, longer than either path takes (at most
-    ``min(timeout_s, kill_seconds) + 2 * kill_seconds`` after the start). It publishes its pid to a
-    cleanup file before it leaves the session, so the ``finally`` block kills it even when the run
-    ends before the readiness file appears.
+    ``min(timeout_s, kill_seconds) + 2 * kill_seconds`` after the start). The bound asserts only
+    that property, that the run ends long before the child's sleep, with 3 s for Python's start-up
+    and the readiness handshake under load (final review m-21: 6 s and 13 s, against 3.2 s and
+    10.1 s measured alone). The child publishes its pid to a cleanup file before it leaves the
+    session, so the ``finally`` block kills it even when the run ends before the readiness file
+    appears.
     """
     monkeypatch.setattr(watchdog, "_KILL_SECONDS", kill_seconds)
     cleanup_file, ready_file = tmp_path / "escaped.pid", tmp_path / "escaped.ready"
@@ -398,7 +401,7 @@ def test_untraceable_descendant_holding_the_pipes_ends_the_run(
         with contextlib.suppress(FileNotFoundError, ProcessLookupError, ValueError):
             os.kill(int(cleanup_file.read_text()), signal.SIGKILL)
     assert run.killed == "watchdog error: an untraceable descendant holds the output pipes" + suffix
-    assert elapsed < min(timeout_s, kill_seconds) + 2 * kill_seconds + 1
+    assert elapsed < min(timeout_s, kill_seconds) + 2 * kill_seconds + 3
     assert run.stdout.split() == [cleanup_file.read_text()]
     assert ready_file.exists()
 
