@@ -25,6 +25,7 @@ per walk, 9,795 per controlled walk.
 | Master plan (all tasks, orchestration, gates) | `docs/superpowers/plans/2026-11-11-dfthc-master-plan.md` |
 | Code-level phase plans | `docs/superpowers/plans/2026-11-11-dfthc-phase<N>-*.md` |
 | Ledger (status, spikes, decisions, gates) | `docs/agents/LEDGER.md` |
+| Final review findings (Task 5.1; the fix wave's list) | `docs/agents/final-review.md` |
 | Package | `src/dfthc/` (no editable install) |
 | Tests | `tests/` (`data`, `ops`, `integration`, `sim`, `canary`, `report`) |
 | Spikes | `spikes/` (not collected by pytest), results in `spikes/results/` |

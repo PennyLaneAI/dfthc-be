@@ -9,7 +9,8 @@ context, trust this file and `git log` over memory: a task marked `merged` is ne
 Row format: `Id | Title | Tier | Status | Branch | Merge commit | Test evidence | Reviews (GPT-5.6 / Opus) | Open issues`.
 
 - **Status values:** `not started`, `in progress`, `in review`, `fixes`, `merged`, `blocked`,
-  `cancelled`, `not needed`. A conditional task starts as `not started`; its condition is in
+  `cancelled`, `not needed`, and `done` for Task 5.1 (read-only: its output, `docs/agents/final-review.md`,
+  is committed on `main`). A conditional task starts as `not started`; its condition is in
   "Open issues", and it is set to `not needed` once the condition is ruled out.
 - **Test evidence:** the command and the key output line, for example `scripts/test.sh tests/x.py: 23 passed`.
 - **Reviews:** the verdict and the review file, for example `Approved (review-ab12..cd34)`; Opus is `n/a` for Tier B.
@@ -102,8 +103,8 @@ marked `merged` is never re-dispatched after a loss of context.
 
 | Id | Title | Tier | Status | Branch | Merge commit | Test evidence | Reviews (GPT-5.6 / Opus) | Open issues |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 5.1 | Whole-branch final review | A | not started | none | | | / | read-only: no branch, no merge |
-| 5.2 | Fix wave, release tier, final merge | A | not started | `phase5/5.2` | | | / | the release tier runs once, after the user's go-ahead |
+| 5.1 | Whole-branch final review | A | not started | none | | | / | read-only: no branch, no merge; plan `phase5-final`: four area packages of `993b8fb..main`, Opus and GPT-5.6 on each (one pair at a time); output `docs/agents/final-review.md`, committed on `main` (+ 1 per commit: its link check) |
+| 5.2 | Fix wave, release tier, final merge | A | not started | `phase5/5.2` | | | / | the release tier runs once, after the user's go-ahead; plan `phase5-final`: per commit 1,272 + N_pc, nightly 86 + N_n, release-only 35 + N_r, release tier 1,393 + N_pc + N_n + N_r (the tests the fix wave adds to each tier); the user is asked once, after the re-review (the Q-1 confirmation and the release go-ahead); a fix of a hashed file makes the orchestrator regenerate the small-system report and recompile the FeMoco-54 pair (the contingency pair), with `fe2s2` and `fe4s4` pending |
 
 ## Spike results
 
@@ -194,6 +195,7 @@ FeMoco-scale compiles against the budget of about six; more need the user's appr
 | 2026-11-15 | Task Q1b.2 Step 14: `scripts/resource_report.py --large fe4s4` from lane-a, after `fe2s2`, same limits, alone | orchestrator | 310.4 s (44 compiled, none refused, killed or failed; largest `DFTHCWalk` 1,082 MB, longest `ControlledWalkPower(p=2)` 21.1 s; walk 6,534 / 1,534 / 5,945 on 792 qubits) | 1,252 MB (projected at most 2.53 GB) | no | 0 |
 | 2026-11-15 | Task 4.5 Step 4: `scripts/resource_report.py --large femoco54` from lane-a (`16d0704`, code hash `5e3eed1e7a95...`) under the watchdog (`--timeout-min 150`, 8 GB cap), alone; first program `femoco54/DFTHCWalk` | orchestrator | 36.5 s compile (whole invocation 85.8 s for both programs) | 1,692 MB (invocation peak 1,911 MB; plan projection about 1.6 to 1.9 GB) | no | 1 (Task 4.5 pair 1 of 2; 2 of about 6 overall) |
 | 2026-11-15 | Task 4.5 Step 4, same invocation: `femoco54/ControlledDFTHCWalk` after the walk; no `CHECK FAILED` (the partition cross-check ran), exit 0 | orchestrator | 38.0 s compile | 1,675 MB | no | 1 (Task 4.5 pair 2 of 2; 3 of about 6 overall) |
+| 2026-11-15 | G4 gate run (`PYTHONPATH=src python -m dfthc.testing.watchdog --timeout-min 60 -- scripts/test.sh -m "not release" -q -p no:cacheprovider`) on `1c15419`, alone (a plan writer and a plan reviewer did text-only work meanwhile) | orchestrator | 1,029.3 s (1,357 passed in 1,027 s; L-21 compile-time canary included, passed) | 2,175 MB | no | 0 |
 
 ## Gate log
 
@@ -205,6 +207,21 @@ FeMoco-scale compiles against the budget of about six; more need the user's appr
 | G3 | 2026-11-14 | yes: Phase 3 tasks 3.1 to 3.5 merged and reviewed; per-commit tier 1,055 (the Task 3.5 merge check) and the gate run `-m "not release"` 1,116 passed on `main` (`18b3b8e`, 681 s, 2.5 GB, alone; no warnings), so D-2 holds under the nightly schedules: the spec 12.5 certificates (per commit) and E-1 to E-4 (10 nightly checks, the longest E-3 at 50 s); walk and controlled-walk counts equal the closed forms at the test presets and `MID_NAPHTHALENE` (`tests/integration/test_walk_counts.py`), and the closed forms give 9,793 and 9,795 at FeMoco-54 with M 2,524 and A 8,675 / 8,677 (`tests/test_costs.py`); release run projected at about 16 to 45 min against 8 h (Task 3.5's reviews); no order-dependent compile (L-10) seen; Phase 4 plan `phase4-qpe` (Tasks 4.1, 4.2) approved (revision 3); `phase4-report` (Tasks 4.3 to 4.5) in revision 2 after its GPT-5.6 review (`phase4r-plan-review-1.md`, Needs fixes 0C/4I/2M) | none | Phase 4 QPE plan approved; per-commit base 1,055 (4.1 + 54 -> 1,109, 4.2 + 1 -> 1,110) | yes (2026-11-14) |
 | G4 (Q-1 decision) | | | | | |
 | G5 | | | | | |
+| G4 | 2026-11-15 | yes: Phase 4 tasks 4.1 to 4.5 and Q1b (Q1b.1, Q1b.2) merged and reviewed; per-commit tier 1,271 (the Task 4.5 merge check) and the gate run `-m "not release"` 1,357 passed on `main` (`1c15419`, 1,029 s, 2.2 GB, alone; no warnings). D-3: the FeMoco-54 walk and controlled walk compiled once each as single programs on code hash `5e3eed1e7a95...` (9,793 / 2,524 / 8,675 and 9,795 / 2,524 / 8,677, equal to spec 9.24; 36.5 s / 1,692 MB and 38.0 s / 1,675 MB; FeMoco budget 3 of about 6), cached in `docs/resources.json` with environment and peak, checked without compiling by `test_femoco_cache` (release, `1 passed`), and shown in `docs/resources.md` next to the paper (-204 / -202) and dfthcbe (+152 / +153) with every delta explained by reason codes. D-4: the toy QPE recovers the exact phases (`tests/integration/test_qpe_toy.py`, per commit) and QPE t = 1 to 3 is compiled and counted at the three H2 instances on the current hash. D-6: the nine documents of spec 5.2 exist and `tests/test_docstrings.py` passes (34 audited classes); `docs/verification.md` brought to the present tense (`1c15419`); one stale generated sentence (Task 4.5 review M-2) waits for the next hashed change. Q-1: variant (b) is the working choice, built and merged; its explicit confirmation is asked in Task 5.2 together with the release go-ahead (plan `phase5-final`) | none | Phase 5 plan `phase5-final` (Tasks 5.1, 5.2) approved (revision 2) after GPT-5.6 review (`phase5-plan-review-1.md` Needs fixes 0C/5I/4M, `-2.md` Approved 0/0/0); writer e23159cf (inherit), reviewer 4b7ea337 (GPT-5.6); per-commit base 1,271 (+ 1 with `docs/agents/final-review.md` -> 1,272) | yes (2026-11-15) |
+
+## Definition of done (spec 2.3; Task 5.2)
+
+Filled in Task 5.2 (plan `phase5-final`, Step 11), each criterion with its evidence command and key output.
+
+| D | Criterion | Evidence (command and key output) | Checked |
+| --- | --- | --- | --- |
+| D-1 | every spec 9 operator documented per spec 9.0; T2 to T6 green | | not checked |
+| D-2 | the spec 12.5 certificates; E-1 to E-4 under the release schedules | | not checked |
+| D-3 | FeMoco-54 walk and controlled walk compiled once, counts equal to the closed forms, cached with the code hash, every delta explained | | not checked |
+| D-4 | QPE: the toy walk's exact phases; compiled and resource-counted for a DFTHC instance | | not checked |
+| D-5 | the canary suite runs and records every limitation | | not checked |
+| D-6 | the documentation set exists and matches the code | | not checked |
+| D-7 | merged into local `main` after review gates; every Phase 5 prompt forbade push, fetch and remote changes; the local remote configuration and remote-tracking refs are unchanged (a process-control assertion: without contacting the remote it is no forensic proof that no push occurred) | | not checked |
 
 ## Canary state changes
 
