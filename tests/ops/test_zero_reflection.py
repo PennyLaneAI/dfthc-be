@@ -169,6 +169,18 @@ def test_controlled_rule_needs_one_more_work_wire():
                                             check_matrix=False)
 
 
+@pytest.mark.parametrize(("control", "values"), [([10, 11], [1, 1]), ([10], [0])],
+                         ids=["two-controls", "control-value-0"])
+def test_controlled_rule_refuses_other_controls(control, values):
+    """The pinned C(ZeroReflection) rule builds one control wire with control value 1 only; two
+    controls or a control value 0 would compile silently to another operation (final review
+    I-1), so the rule raises."""
+    op = ZeroReflection([0, 1, 2], [3], [4, 5])
+    with pytest.raises(ValueError, match="exactly one control wire with control value 1"):
+        qp.testing.assert_valid_decomp_rule(qp.ctrl(op, control=control, control_values=values),
+                                            _c_zero_reflection, check_matrix=False)
+
+
 def test_required_wires_and_validation():
     assert ZeroReflection.required_wires(46, 0) == {"zero_wires": 46, "one_wires": 0, "work": 43}
     assert ZeroReflection.required_wires(5, 1, controlled=True)["work"] == 4

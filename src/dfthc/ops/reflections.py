@@ -44,7 +44,11 @@ class ZeroReflection(Operator2):
     one-wire ``MultiControlledX``.
 
     **Adjoint and control.** ``Adjoint(ZeroReflection)`` is pinned: the operator is
-    self-inverse. ``C(ZeroReflection)`` is pinned, for one control wire with control value 1: the
+    self-inverse. ``C(ZeroReflection)`` is pinned, for one control wire with control value 1 only:
+    the rule raises ``ValueError`` for more control wires, and for control value 0 where the value
+    is concrete (tape mode); under capture ``control_values`` is a dynamic argument of PennyLane's
+    controlled operator, which the rule cannot read, so control value 0 is unchecked there and
+    outside the domain. The rule applies the
     multi-controlled Z over the control and the pattern, then ``Z`` on the control, which is
     exactly :math:`|0\rangle\langle 0| \otimes I + |1\rangle\langle 1| \otimes (2\Pi - I)`; for
     :math:`n_w = 1` a ``CZ``. The controlled rule uses :math:`\max(n_w - 2, 0)` of ``work``
@@ -160,6 +164,12 @@ def _c_zero_reflection_resources(base, control_wires, control_values, work_wires
 
 @qp.register_resources(_c_zero_reflection_resources)
 def _c_zero_reflection(base, control_wires, control_values, work_wires, work_wire_type):
+    # Under capture control_values is a dynamic argument of ControlledOp2: a tracer, unreadable.
+    concrete = not qp.math.is_tracer(control_values)
+    if len(control_wires) != 1 or (concrete and not bool(control_values[0])):
+        values = f" with values {[bool(v) for v in control_values]}" if concrete else ""
+        raise ValueError("C(ZeroReflection) supports exactly one control wire with control value "
+                         f"1; got {len(control_wires)} control wires{values}")
     controls, values, target, last = _pattern(base.zero_wires, base.one_wires)
     control = control_wires[0]
     needed = ZeroReflection.required_wires(len(base.zero_wires), len(base.one_wires), True)
