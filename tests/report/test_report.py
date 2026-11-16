@@ -13,6 +13,7 @@ import dataclasses
 import functools
 import importlib.util
 import json
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -181,6 +182,37 @@ def test_report_fails_on_mismatch(tmp_path, monkeypatch, capsys):
                         str(tmp_path / "codes")]) == 1
     assert "SpinMux: delta -1 against dfthcbe != its reason codes {} (sum 0)" in (
         capsys.readouterr().err)
+
+
+def test_report_fails_on_a_partition_that_misses_the_walk(tmp_path, monkeypatch, capsys):
+    """Spec 13.3 step 4, the cross-check (final review m-14; no compile): a partition row whose
+    closed form is one Toffoli off makes the partition sum differ from the walk's closed form,
+    and the script exits 1."""
+    closed_form = report.closed_form
+
+    def shifted(name, op, p):
+        cost, uncomputes = closed_form(name, op, p)
+        if name == "SpinSwap":
+            cost = costs.Cost(cost.toffoli + 1, cost.measurements)
+        return cost, uncomputes
+
+    monkeypatch.setattr(report, "closed_form", shifted)
+    assert report.main(["--systems", "H2_STO3G_TEST", "--rows", "--out", str(tmp_path)]) == 1
+    err = capsys.readouterr().err
+    assert re.search(r"CHECK FAILED: H2_STO3G_TEST: partition \{[^}]*\} != closed DFTHCWalk",
+                     err), err
+
+
+@pytest.mark.compiled
+@pytest.mark.subprocess
+def test_report_fails_on_a_measurement_mismatch(tmp_path, monkeypatch, capsys):
+    """Spec 13.3 step 4, the M arm (final review m-14): a closed form whose M differs from the
+    compiled count, with T unchanged, makes the script exit 1 (one SpinSwap compile)."""
+    monkeypatch.setattr(costs, "spin_swap", lambda p: costs.Cost(p.N, 1))
+    assert report.main(["--systems", "H2_STO3G_TEST", "--rows", "SpinSwap", "--out",
+                        str(tmp_path)]) == 1
+    err = capsys.readouterr().err
+    assert "H2_STO3G_TEST/SpinSwap: measured {'toffoli': 2, 'measurements': 0," in err, err
 
 
 @pytest.mark.subprocess
