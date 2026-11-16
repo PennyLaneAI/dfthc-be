@@ -22,7 +22,8 @@ run as a watchdog failure, and the tree is killed; if libproc fails or a signal 
 the kill, the process group and every tracked pid get SIGKILL without verification. Processes are
 tracked by pid and start time, so a descendant that leaves the tree (its parent exited) or the
 process group (``setsid``) is still measured and killed; the start-time check confines the risk
-of signalling a reused pid to the few milliseconds between a scan and a signal. The one gap: a
+of signalling a reused pid to the few milliseconds between a scan and a signal, and the root's pid
+is retired once the root is reaped, so a process that reuses it is never adopted. The one gap: a
 descendant that leaves both the tree and the process group within one polling interval of being
 created cannot be traced. If such a descendant keeps the output pipes open, the run ends as a
 watchdog error 5 s after nothing traceable is left, and every final read of the output is bounded,
@@ -153,10 +154,13 @@ class _Tree:
     def __init__(self, root: int):
         self.root = root
         self.known: dict[int, int] = {}
+        self.root_retired = False
 
     def scan(self) -> dict[int, float]:
-        """Running processes of the tree and their footprints in MB; tracks new descendants."""
-        running, stack, seen = {}, [self.root, *self.known], set()
+        """Running processes of the tree and their footprints in MB; tracks new descendants. The
+        root's pid is retired once the root is gone, so a process that reuses it is not adopted."""
+        running, seen = {}, set()
+        stack = [*([] if self.root_retired else [self.root]), *self.known]
         while stack:
             pid = stack.pop()
             if pid in seen:
@@ -166,6 +170,7 @@ class _Tree:
             if info is None or self.known.setdefault(pid, info.proc_start_abstime) != (
                     info.proc_start_abstime):
                 self.known.pop(pid, None)  # gone, or the pid now belongs to another process
+                self.root_retired |= pid == self.root
                 continue
             if info.proc_exit_abstime:
                 continue

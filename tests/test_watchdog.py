@@ -127,6 +127,26 @@ def test_tree_memory_includes_grandchildren():
         proc.wait()
 
 
+def _record(start, footprint_mb=10.0):
+    """A libproc rusage record of a running process."""
+    info = watchdog._RusageInfoV2()
+    info.proc_start_abstime, info.phys_footprint = start, int(footprint_mb * 2**20)
+    return info
+
+
+def test_a_reaped_root_is_not_adopted_again(monkeypatch):
+    """Final review m-18: once the root has been reaped, a process that reuses its pid (another
+    start time) is not adopted, measured or killed: every scan starts from the root's pid."""
+    root = 424242
+    records = iter([_record(start=1), None, _record(start=2, footprint_mb=50.0)])
+    monkeypatch.setattr(watchdog, "_rusage", lambda pid: next(records) if pid == root else None)
+    monkeypatch.setattr(watchdog, "child_pids", lambda pid: [])
+    tree = watchdog._Tree(root)
+    assert tree.scan() == {root: 10.0}
+    assert tree.scan() == {}
+    assert tree.scan() == {}
+
+
 def test_kills_the_whole_tree_at_the_memory_cap():
     run = run_watched(tree_command(steps=8), cap_mb=200, timeout_s=60)
     assert run.killed == "memory"
