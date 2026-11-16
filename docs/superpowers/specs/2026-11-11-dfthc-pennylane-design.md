@@ -1402,7 +1402,7 @@ Toffolis per walk at FeMoco-54.
 
 Ours minus the paper is −204, by cause:
 - **Givens ladders: −424.** Each $R_z$ costs $b_{\mathrm{rot}} - 1$ Toffolis with Qualtran's `ControlledAddOrSubtract`, as in dfthcbe. The paper counts $b_{\mathrm{rot}}$.
-- **Inner reads: +186.** Our swapped inner entry has $d_2 = 26$ bits (alt, keep, sgn, d_sgn and $r$), against the 20-bit entries of the paper's Table III.
+- **Inner reads: +186:** the 26-bit swapped entry against Table III's 20 bits (+180: `flat-r` +120, `sign-bits` +60; our entry $d_2 = 26$ holds alt, keep, sgn, d_sgn and $r$) and exact boundaries (+6: `exact-iter` +10, `iter-const` −4).
 - **Angle loads and erases, and the inner erase: +80**, after moving the paper's tail fixup to step 18. These come from exact boundaries in place of pruned iteration, and from one-hot padding.
 - **Uniform preparations and the outer erase: −46.** Measured comparator uncomputes (free comparator adjoints) and PennyLane's $(n-1)$-Toffoli classical comparator, partly offset by the rotations' $s - 1$ Toffolis each (Qualtran's cost $s - 2$). dfthcbe's AND-ladder uncompute is measured too, so it is not a source of the difference.
 - **Remaining terms: net 0.** Outer read +3 (`exact-iter` +5, `iter-const` −2), spin multiplexer +4 (`mux`; Table III has no row, while App. B.3 and B.7.1 count 2 per select), Majorana gate −4 (`maj-and`), reflections −3 (`ref-unif` −1 on $\mathrm{REF}_{T_2}$; `ref-target` −1 and `qpe-ctrl` −1 on $\mathrm{REF}_{\mathcal A\cup\mathcal B}$).
