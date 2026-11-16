@@ -1,12 +1,15 @@
 """WalkLayout: named wires, groups, the junk aliases, the work pool and the split helpers (spec
 section 10)."""
 
+from itertools import pairwise
+
 import jax.numpy as jnp
 import pytest
 from pennylane.wires import Wires
 
-from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE
+from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE, WalkParams
 from dfthc.registers import GROUPS, JUNK, WalkLayout
+from dfthc.testing.walk_sim import FAILS_C3
 
 PRESETS = [FEMOCO54, H2_STO3G_TEST, H2_631G_TEST, MID_NAPHTHALENE]
 
@@ -38,6 +41,43 @@ def test_h2_sto3g_layout():
     assert len(layout.work) == 8 == WalkLayout.work_size(H2_STO3G_TEST)
     assert len(layout.succ_work_x_o) == 0  # X_o = 4 has odd part 1: a zero-width register
     assert (len(layout.angles), len(layout.junk_overflow)) == (4, 3)
+
+
+R_1 = WalkParams(N=2, R=1, B=2, C=2, n_plus=2, b_rot=3, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1,
+                 ke1=1, ke2=1)
+"""``R = 1``: ``r`` has no wires, so ``inner`` ends with a zero-width register."""
+
+PINNED = {
+    "H2_STO3G_TEST": (H2_STO3G_TEST, [0, 2, 4, 6, 7, 7, 8, 10, 11, 12, 14, 16, 18, 19, 20, 21, 23,
+                                      24, 25, 27, 29, 30, 31, 32, 36, 39, 40, 41, 42, 43, 47, 55],
+                      {"junk_x_o": (32, 36), "junk_b": (32, 39)}),
+    "FAILS_C3": (FAILS_C3, [0, 2, 4, 8, 9, 12, 13, 14, 15, 15, 19, 20, 22, 23, 24, 25, 27, 28, 29,
+                            31, 33, 34, 35, 37, 41, 41, 42, 43, 44, 45, 49, 58],
+                 {"junk_x_o": (37, 37), "junk_b": (37, 37)}),
+    "R_1": (R_1, [0, 2, 4, 6, 7, 7, 8, 10, 11, 12, 14, 16, 18, 19, 20, 21, 23, 24, 25, 27, 29, 30,
+                  31, 31, 34, 37, 38, 39, 40, 41, 44, 52],
+            {"junk_x_o": (31, 35), "junk_b": (31, 37)}),
+}
+"""Per layout: the first wire of every register of :data:`GROUPS` in layout order, then the total;
+and the junk aliases. ``H2_STO3G_TEST`` and ``R_1`` have 3 ``junk_overflow`` wires."""
+
+
+@pytest.mark.parametrize("name", PINNED)
+def test_wire_numbers_are_pinned(name):
+    params, starts, junk = PINNED[name]
+    layout = WalkLayout.from_params(params)
+    names = [register for group in GROUPS.values() for register in group]
+    bounds = dict(zip(names, pairwise(starts), strict=True))
+    for register, (start, stop) in bounds.items():
+        wires = getattr(layout, register)
+        assert isinstance(wires, Wires) and wires == Wires(range(start, stop)), register
+    for group, registers in GROUPS.items():
+        wires = getattr(layout, group)
+        expected = range(bounds[registers[0]][0], bounds[registers[-1]][1])
+        assert isinstance(wires, Wires) and wires == Wires(expected), group
+    for register, (start, stop) in junk.items():
+        assert getattr(layout, register) == Wires(range(start, stop)), register
+    assert layout.num_wires == starts[-1]
 
 
 def test_work_size_formula():

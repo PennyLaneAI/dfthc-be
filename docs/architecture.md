@@ -70,7 +70,8 @@ walk does not call it as an operator. The toy walk of spec 11.4 (`ToyWalk`, `Con
 ## Registers
 
 `dfthc.registers.WalkLayout.from_params(params, qpe_bits=0)` gives every register named wires in
-the groups `system`, `outer`, `inner`, `select`, `phase_grad` and `work` (spec 10.1). The reads'
+the groups `system`, `outer`, `inner`, `select`, `phase_grad` and `work` (spec 10.1), numbered by
+one `qp.registers` call over `dfthc.registers.GROUPS`. The reads'
 junk registers `junk_x_o` and `junk_b` have no wires of their own: each is the first wires of
 `angles` (and of `junk_overflow` where a junk register is longer than the angles), because the
 block encoding measures the junk right after each prepare, before any angle is loaded
