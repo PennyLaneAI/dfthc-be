@@ -33,9 +33,12 @@ beyond its target as ``extra_onehot``).
 
 **Inner read.** Its address is ``x_o ‖ b``, rows ``[0, R C)`` and ``b`` in ``[0, B + 1)`` with the
 block bits on ``b``, and its entry ``alt ‖ keep ‖ sgn ‖ d_sgn ‖ r`` with ``r = x_o // C``
-(:meth:`InnerPrepare.read_table`). At one-body rows, failed ``x_o`` and failed ``b`` the selected
-target entry is zero (spec 8.5; the junk may hold other entries of a visited block): ``keep = 0``,
-so ``less_than = 1``, the swap moves ``alt = 0`` into ``b``, and ``sgn = d_sgn = r = 0``.
+(:meth:`InnerPrepare.read_table`). At one-body rows, at ``x_o >= X_o`` and at failed ``b`` the
+selected target entry is zero (spec 8.5; the junk may hold other entries of a visited block):
+``keep = 0``, so ``less_than = 1``, the swap moves ``alt = 0`` into ``b``, and
+``sgn = d_sgn = r = 0``. ``x_o >= X_o`` is an input the walk never presents: ``OuterPrepare``'s
+swap maps a failed draw to ``x_o = 0``, an SF row, where the inner signs cancel between the two
+rounds and ``REF_T2`` gives ``-I``.
 
 **Signs** (spec 6.1). :class:`InnerSigns` applies ``Z(sgn) CZ(less_than_b, d_sgn)`` after
 ``InnerPrepare``: with ``sgn = [w_b < 0]`` and ``d_sgn = sgn XOR sgn[alt]`` loaded for the drawn
@@ -821,10 +824,13 @@ class InnerPrepare(Operator2):
     \rangle \otimes |+\rangle_{\sigma_0}` with :math:`\tilde q_x` =
     ``alias_probabilities(alt[x], keep[x], b_k2)``, and ``sgn``, ``d_sgn`` and ``r = x // C``
     hold the drawn entry's columns. Where the selected target entry is zero (one-body rows
-    :math:`R C \le x < N + R C`, failed ``x_o``, and failed :math:`b_0 > B`, which have
+    :math:`R C \le x < N + R C`, :math:`x \ge X_o`, and failed :math:`b_0 > B`, which have
     ``succ_b = 0``; the junk may hold other entries of a visited block): ``keep = 0``, so
     ``less_than_b = 1``, the swap leaves ``b = 0`` and :math:`b_0` in ``alt_b``, and
     ``sgn = d_sgn = r = 0`` (spec 8.5). :class:`InnerSigns` then applies the signs.
+    :math:`x \ge X_o` is an input the walk never presents: ``OuterPrepare``'s swap maps a failed
+    draw to ``x_o = 0``, an SF row, where the inner signs cancel between the two rounds and
+    ``REF_T2`` gives ``-I``.
 
     **Registers.** ``w_x = lg(N + R C)``, ``w_b = lg(B + 1)``, ``w_r = lg(R)``, ``l_b`` the odd
     part of ``B + 1``, ``K2 = 2**k2``, ``d2 = w_b + b_k2 + 2 + w_r``.
@@ -1300,7 +1306,9 @@ class InnerSigns(Operator2):
     basis state. After :class:`InnerPrepare`, ``sgn = [w_{b_0} < 0]`` and
     ``d_sgn = sgn XOR sgn[alt[b_0]]`` of the drawn :math:`b_0`, so the phase is the sign of the
     weight of the ``b`` that survives the swap (spec 6.1); branches whose selected entry is zero
-    (failed ``b``, one-body and failed rows) get +1 (spec 8.5).
+    (failed ``b``, one-body rows and ``x_o >= X_o``) get +1 (spec 8.5). ``x_o >= X_o`` is an input
+    the walk never presents: ``OuterPrepare``'s swap maps a failed draw to ``x_o = 0``, an SF
+    row, where the inner signs cancel between the two rounds and ``REF_T2`` gives ``-I``.
 
     **Registers.**
 
