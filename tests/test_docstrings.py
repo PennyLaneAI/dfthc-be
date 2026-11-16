@@ -22,6 +22,7 @@ import dfthc.ops
 from dfthc import costs
 from dfthc.params import FEMOCO54, H2_STO3G_TEST
 from dfthc.registers import WalkLayout
+from dfthc.testing.toy_walk import ToyControlledWalkPower
 
 REPO = Path(__file__).resolve().parents[1]
 DOCS = REPO / "docs"
@@ -162,6 +163,28 @@ def test_limitations_match_the_canaries_and_spec_14():
         canaries |= set(re.findall(r"^def (test_\w+)", path.read_text(), re.M))
     named = set(re.findall(r"`(test_\w+)`", text))
     assert named and named <= canaries, sorted(named - canaries)
+
+
+def test_every_l6_mitigation_names_the_three_looped_operators():
+    """Spec 7.4 rule 4's looped operators, never adjointed or controlled, are the ones that spec
+    14's L-6, HANDOFF 7's L-6 row and docs/limitations.md's L-6 entry name, each with "never
+    adjointed or controlled" (final review m-23)."""
+    classes = {cls.__name__ for cls in CLASSES.values()} | {ToyControlledWalkPower.__name__}
+    rule_4 = re.search(r"`qp\.for_loop` appears in three operators.*",
+                       spec_section("### 7.4", "### 7.5")).group(0)
+    looped = set(re.findall(r"`(\w+)`", rule_4)) & classes
+    assert looped == {"QROAMRead", "ControlledWalkPower", "ToyControlledWalkPower"}
+    entries = {
+        "spec 14": re.search(r"\*\*L-6:.*?(?=\n7\. \*\*L-7)", spec_section("## 14.", "## 15."),
+                             re.S).group(0),
+        "HANDOFF 7": re.search(r"^\| L-6 \|.*$", (DOCS / "agents" / "HANDOFF.md").read_text(),
+                               re.M).group(0),
+        "limitations.md": re.search(r"\*\*L-6,.*?(?=\n- \*\*L-7)",
+                                    (DOCS / "limitations.md").read_text(), re.S).group(0),
+    }
+    for where, entry in entries.items():
+        assert set(re.findall(r"`(\w+)`", entry)) & classes == looped, where
+        assert "never adjointed or controlled" in " ".join(entry.split()), where
 
 
 def test_spec_11_3_gives_the_qpe_wire_totals_of_the_layout():
