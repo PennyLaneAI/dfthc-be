@@ -149,6 +149,25 @@ def test_setup_env_targets_main_checkout_from_a_worktree(tmp_path):
 
 
 @pytest.mark.subprocess
+@pytest.mark.parametrize(("workers", "expected"), [(None, "2"), ("", "2"), ("0", "0"), ("3", "3")],
+                         ids=["unset", "empty", "zero", "three"])
+def test_runner_passes_the_requested_worker_count(tmp_path, workers, expected):
+    """test.sh hands pytest ``-n 2`` with DFTHC_TEST_WORKERS unset or empty, and its value
+    otherwise (final review m-17): a fake DFTHC_VENV python prints its arguments, so a test.sh
+    that hard-codes the default fails here."""
+    (tmp_path / "env/bin").mkdir(parents=True)
+    _fake_executable(tmp_path / "env/bin/python", 'echo "ARGS $*"')
+    env = {key: value for key, value in os.environ.items() if key != "DFTHC_TEST_WORKERS"}
+    env["DFTHC_VENV"] = str(tmp_path / "env")
+    if workers is not None:
+        env["DFTHC_TEST_WORKERS"] = workers
+    result = subprocess.run([str(REPO / "scripts/test.sh"), "-q"], cwd=REPO, capture_output=True,
+                            text=True, env=env, check=False)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.stdout.strip() == f"ARGS -m pytest -n {expected} -q", result.stdout
+
+
+@pytest.mark.subprocess
 def test_runner_fails_closed_without_lowered_priority(tmp_path):
     """Without a working nice or taskpolicy, test.sh exits 2 before pytest starts (plan 12.9)."""
     marker = tmp_path / "pytest.started"
