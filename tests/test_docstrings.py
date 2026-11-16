@@ -20,9 +20,12 @@ from pennylane.core import Operator2
 
 import dfthc.ops
 from dfthc import costs
+from dfthc.params import FEMOCO54, H2_STO3G_TEST
+from dfthc.registers import WalkLayout
 
 REPO = Path(__file__).resolve().parents[1]
 DOCS = REPO / "docs"
+SPEC = DOCS / "superpowers" / "specs" / "2026-11-11-dfthc-pennylane-design.md"
 SECTIONS = (
     ("purpose and mathematical action", r"\*\*Action\b"),
     ("register table", r"\*\*Registers\.\*\*"),
@@ -56,6 +59,14 @@ def operator_classes() -> dict[str, type]:
 
 
 CLASSES = operator_classes()
+
+
+def spec_section(heading: str, next_heading: str) -> str:
+    """The spec's text from the line starting with ``heading`` to the one starting with
+    ``next_heading``."""
+    text = SPEC.read_text()
+    start = re.search(rf"^{re.escape(heading)}", text, re.M).start()
+    return text[start:re.search(rf"^{re.escape(next_heading)}", text[start:], re.M).start() + start]
 
 
 def test_every_operator_is_audited():
@@ -151,6 +162,21 @@ def test_limitations_match_the_canaries_and_spec_14():
         canaries |= set(re.findall(r"^def (test_\w+)", path.read_text(), re.M))
     named = set(re.findall(r"`(test_\w+)`", text))
     assert named and named <= canaries, sorted(named - canaries)
+
+
+def test_spec_11_3_gives_the_qpe_wire_totals_of_the_layout():
+    """Spec 11.3's wire totals of the QPE program (final review I-4) are the walk's wires plus
+    the QPE control, read from WalkLayout (no compile), plus t gradient wires: 56 + t at
+    H2_STO3G_TEST and 1,103 + t at FeMoco-54."""
+    text = spec_section("### 11.3", "### 11.4")
+
+    def total(where: str) -> int:
+        match = re.search(rf"\$(\d[\d{{}},]*) \+ t\$ at {where}", text)
+        assert match, where
+        return int(re.sub(r"\D", "", match.group(1)))
+
+    assert total("`H2_STO3G_TEST`") == WalkLayout.from_params(H2_STO3G_TEST).num_wires + 1
+    assert total("FeMoco-54") == WalkLayout.from_params(FEMOCO54).num_wires + 1
 
 
 def test_architecture_names_every_operator():

@@ -1232,7 +1232,7 @@ All gates are in the gate set:
 
 ### 11.3 Resources
 
-The QPE program compiles at the `H2_STO3G_TEST` and `H2_631G_TEST` presets for $t \in \{1, 2, 3\}$; it is not compiled at FeMoco-54 shape (§15). Its worst-case cost is $T = (2^t - 1)\,T_{C(W)} + (t^3 - t)/6$ and $M = (2^t - 1)\,M_W + t$ (§9.24), with every correction conditional counted at its maximum branch. The compiled counts at the test presets must equal this closed form exactly. At FeMoco-54 the report evaluates it with $T_{C(W)}$ and $M_W$ from the single compile of the walk and controlled walk (§13.3), for $t \le 3$ and for larger $t$. The program's wires are `WalkLayout`'s with `qpe_bits` $= t$, the corrections in the `work` pool (§11.1): $64 + t$ at `H2_STO3G_TEST` for $t \le 4$, $1{,}565 + t$ at FeMoco-54 for $t \le 22$; beyond, the $2t - 45$ spare wires of §11.1 follow at FeMoco-54.
+The QPE program compiles at the `H2_STO3G_TEST` and `H2_631G_TEST` presets for $t \in \{1, 2, 3\}$; it is not compiled at FeMoco-54 shape (§15). Its worst-case cost is $T = (2^t - 1)\,T_{C(W)} + (t^3 - t)/6$ and $M = (2^t - 1)\,M_W + t$ (§9.24), with every correction conditional counted at its maximum branch. The compiled counts at the test presets must equal this closed form exactly. At FeMoco-54 the report evaluates it with $T_{C(W)}$ and $M_W$ from the single compile of the walk and controlled walk (§13.3), for $t \le 3$ and for larger $t$. The program's wires are `WalkLayout`'s with `qpe_bits` $= t$, the corrections in the `work` pool (§11.1): $56 + t$ at `H2_STO3G_TEST` for $t \le 4$, $1{,}103 + t$ at FeMoco-54 for $t \le 22$; beyond, the $2t - 45$ spare wires of §11.1 follow at FeMoco-54.
 
 ### 11.4 Toy-size validation
 
