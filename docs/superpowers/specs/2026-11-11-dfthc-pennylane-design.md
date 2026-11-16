@@ -3,8 +3,8 @@
 | | |
 | --- | --- |
 | Date | 2026-11-11 |
-| Status | Written for user review; the implementation plan is written after approval |
-| Branch | `docs/design-spec` (local only) |
+| Status | Implemented; source of truth for the code on `main` |
+| Branch | `main` |
 | Paper | G. H. Low et al., "Fast quantum simulation of electronic structure by spectral amplification", Phys. Rev. X 15, 041016 (2025), arXiv:2502.15882. Called "the paper" below. |
 | Reference implementation | [Covestro-HPQC/dfthcbe](https://github.com/Covestro-HPQC/dfthcbe) at commit `930255020cec30172e0a7d17c0071d9476a687d1` (Qualtran). Called "dfthcbe" below. |
 | Toolchain snapshot | PennyLane `0.46.0.dev151`, Catalyst `0.16.0.dev140`, Lightning `0.46.0.dev34` (nightlies of 2026-11-11) |
@@ -318,7 +318,7 @@ The system is layered. Each layer depends only on the layers below it.
 | --- | --- | --- |
 | L0, classical data | Factors, parameters, alias and angle tables, the encoded-Hamiltonian model, fermion matrices. NumPy and SciPy only. | none |
 | L1, primitives | `PhaseGradientRotation`, `FlaggedUniformPrep`, `QROAMRead`, `PhaseFixup`, `QROAMErase`, `ZeroReflection`, and the unary-iteration helper | L0 table formats; PennyLane primitives |
-| L2, paper blocks | `OuterPrepare`, `OuterUnprepare`, `InnerPrepare`, `InnerUnprepare`, `InnerSigns`, `TailAngleLoad`, `SFAngleLoad`, `SpinMux`, `SpinSwap`, `GivensRotation`, `GivensLadder`, `GivensLadderDagger`, `MajoranaGate`, `AngleErase`, `InnerSelect`, `InnerSelectDagger`, `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB` | L1 |
+| L2, paper blocks | `OuterPrepare`, `OuterUnprepare`, `OuterUnprepareFromOutcomes`, `InnerPrepare`, `InnerUnprepare`, `InnerUnprepareFromOutcomes`, `InnerSigns`, `TailAngleLoad`, `SFAngleLoad`, `SpinMux`, `SpinSwap`, `GivensRotation`, `GivensLadder`, `GivensLadderDagger`, `MajoranaGate`, `AngleErase`, `InnerSelect`, `InnerSelectDagger`, `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB` | L1 |
 | L3, assembly | `DFTHCBlockEncoding`, `DFTHCWalk` and their controlled classes `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk`; `WalkLayout` | L2 |
 | L4, application | `ControlledWalkPower`, `QPERound`, the iterative QPE driver (a quantum function, §11.1), phase-to-energy conversion | L3 |
 | Tooling | `dfthc.compile` (gate set, pins, compile and analyze helpers), `dfthc.costs` (closed forms), `dfthc.testing` (sparse simulator, fixtures, toy walk), resource report | all layers, read-only |
@@ -352,11 +352,12 @@ dfthc-be/
       encoded.py              the Hamiltonian and normalization the circuit encodes (§8.5)
     ops/
       unary.py                unary-iteration helper (Python function used inside rules)
+      _validate.py            constructor checks shared by every operator (§9.0)
       phase_gradient.py       PhaseGradientRotation
       uniform.py              FlaggedUniformPrep
       qroam.py                QROAMRead, PhaseFixup, QROAMErase
       reflections.py          ZeroReflection, RefT2, RefAB, ControlledRefT2, ControlledRefAB
-      prepare.py              OuterPrepare, OuterUnprepare, InnerPrepare, InnerUnprepare, InnerSigns
+      prepare.py              OuterPrepare, OuterUnprepare, OuterUnprepareFromOutcomes, InnerPrepare, InnerUnprepare, InnerUnprepareFromOutcomes, InnerSigns
       angle_data.py           TailAngleLoad, SFAngleLoad, AngleErase
       spin.py                 SpinMux, SpinSwap
       givens.py               GivensRotation, GivensLadder, GivensLadderDagger
@@ -373,12 +374,14 @@ dfthc-be/
       resources.py            assertions on compiled resources, warning filters
       watchdog.py             memory and time watchdog for heavy runs (§15)
       provenance.py           code hash and environment record of cached compiles (§13.3)
+      canary.py               run_snippet(): canary snippets in a fresh Python process (§14)
   tests/
     conftest.py  data/  ops/  integration/  sim/  canary/  report/  fixtures/
   docs/
     architecture.md  conventions.md  environment.md  limitations.md  verification.md
     resources.md, resources.json (generated; the json also caches large compiles, §13.3)
     agents/HANDOFF.md  agents/LEDGER.md
+    upstream/ (drafts of upstream issues with their reproducers; agents never file them)
     superpowers/specs/ (this file)  superpowers/plans/ (the implementation plan)
 ```
 
@@ -1632,7 +1635,7 @@ The implementation plan specifies tasks, prompts and acceptance checks. This sec
    - *Fallback:* our own comparator operator with an explicit adjoint rule.
 8. **K-8: Nightly churn.**
    - *Resolution:* the lock file, the canaries and the bump procedure (§7.1); continuous.
-9. **K-9: Qubits above the paper's count** (§10.3).
+9. **K-9: Qubits per group above the paper's (total below it with Q-1 variant (b))** (§10.3).
    - *Resolution:* documented in the Phase 4 report.
 10. **K-10: Measurement-valued arrays as dynamic arguments.**
     - *Resolution, Phase 0 probe:* in tape mode and under capture, pass these measurement-valued arrays as dynamic `Operator2` arguments:
