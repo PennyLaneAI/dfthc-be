@@ -121,9 +121,12 @@ def test_prepared_state_is_the_alias_distribution(name):
     (1 - P_fail) alias_probabilities, and against the encoded model (spec 8.5) its total is
     Lambda / Lambda~ and its one-body part (1 - P_fail) w~_pm / Lambda. At x-o-5 ``phase_grad``
     has two wires more than ``s_u``, as Phase 3 passes it, so the amplitudes pin which wires the
-    rotations add into. Then OuterUnprepare under the all-ones outcome schedule (every fix-up
-    applied) returns every register to |0> with amplitude 1 (the certificates prove every
-    outcome)."""
+    rotations add into. Then OuterUnprepare returns every register to |0> with amplitude 1
+    under the all-ones outcome schedule (every fix-up applied), the alternating one and a seeded
+    one: the all-ones parity sees only each mask's weight, the alternating one also a permutation
+    of the erase entries' bits that moves a bit to a position of the other parity, and the seeded
+    one the permutations that keep each bit's position parity, such as a bit reversal of an
+    odd-width entry (final review m-7). The certificates prove every outcome (nightly)."""
     p, factors, tables = case(name)
     wires, num_wires = layout(p, extra_grad=2 if name == "x-o-5" else 0)
 
@@ -172,12 +175,14 @@ def test_prepared_state_is_the_alias_distribution(name):
         qfunc()
         OuterUnprepare(*outer_args(p, tables), **wires)
 
-    policy = ForcedPolicy([1] * (p.K1 * p.d1))
-    final = SparseSimulator(num_wires, policy=policy, strict=True).run(
-        decompose_for_simulation(round_trip).operations)
-    _, restored = terms_without_gradient(final, wires)
-    zero = (0,) * len(names)
-    assert list(restored) == [zero] and abs(restored[zero] - 1) < 1e-12
+    operations = decompose_for_simulation(round_trip).operations
+    measured, zero = p.K1 * p.d1, (0,) * len(names)
+    for schedule in ([1] * measured, [i % 2 for i in range(measured)],
+                     np.random.default_rng(3).integers(0, 2, measured).tolist()):
+        final = SparseSimulator(num_wires, policy=ForcedPolicy(schedule), strict=True).run(
+            operations)
+        _, restored = terms_without_gradient(final, wires)
+        assert list(restored) == [zero] and abs(restored[zero] - 1) < 1e-12, schedule
 
 
 def _lightning(num_wires, body, returns, seed=None):

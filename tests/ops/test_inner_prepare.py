@@ -146,11 +146,12 @@ def test_every_basis_input_gets_the_sign_of_its_selected_weight(name):
     encoded model's inner amplitudes (spec 8.5), the failure signs equal ours (+1), and they
     equal dfthcbe's exactly when 2**w_b <= ceil((B + 1) / K2) K2, else differ as documented. At
     5-1 ``phase_grad`` has two wires more than ``s_u``, as Phase 3 passes it, so the amplitudes
-    pin which wires the rotations add into. Then InnerPrepare and InnerUnprepare under the
-    all-ones outcome schedule (every fix-up applied) and the alternating one (which also sees a
-    permutation of the erase masks' bits, to which the all-ones parity is blind) leave ``x_o`` in
-    its uniform superposition and every other register in |0> (the certificates prove every
-    outcome)."""
+    pin which wires the rotations add into. Then InnerPrepare and InnerUnprepare leave ``x_o``
+    in its uniform superposition and every other register in |0> under the all-ones outcome
+    schedule (every fix-up applied), the alternating one, which also sees a permutation of the
+    erase entries' bits that moves a bit to a position of the other parity, and a seeded one,
+    which also sees the permutations that keep each bit's position parity, such as exchanging
+    bits 0 and 2 (final review m-7). The certificates prove every outcome (nightly)."""
     p, factors, tables = case(name)
     sizes = InnerPrepare.required_wires(*structure(p))
     sizes["phase_grad"] += 2 if name == "5-1" else 0
@@ -219,7 +220,8 @@ def test_every_basis_input_gets_the_sign_of_its_selected_weight(name):
 
     operations = decompose_for_simulation(round_trip).operations
     measured, rest = p.K2 * p.d2, (0,) * (len(names) - 1)
-    for schedule in ([1] * measured, [i % 2 for i in range(measured)]):
+    for schedule in ([1] * measured, [i % 2 for i in range(measured)],
+                     np.random.default_rng(3).integers(0, 2, measured).tolist()):
         final = SparseSimulator(num_wires, policy=ForcedPolicy(schedule), strict=True).run(
             operations)
         _, restored = terms_without_gradient(final, wires)
