@@ -198,6 +198,17 @@ def test_spec_14_l23_names_every_operator_with_a_dynamic_argument():
     assert set(re.findall(r"`(\w+)`", entry)) & {c.__name__ for c in CLASSES.values()} == dynamic
 
 
+def test_architecture_assigns_each_module_to_one_layer():
+    """docs/architecture.md's layer table lists every module in one layer only (final review
+    m-28), so the page's claim that each layer depends only on lower ones can hold."""
+    text = (DOCS / "architecture.md").read_text()
+    table = text.split("## Layers", 1)[1].split("\n## ", 1)[0]
+    layers = Counter()
+    for row in re.findall(r"^\| (?:L\d|Tooling)[^|]*\|[^|]*\|([^|]*)\|$", table, re.M):
+        layers.update(re.findall(r"`(dfthc[\w.]*)`", row))
+    assert layers and [module for module, count in layers.items() if count > 1] == []
+
+
 def test_spec_11_3_gives_the_qpe_wire_totals_of_the_layout():
     """Spec 11.3's wire totals of the QPE program (final review I-4) are the walk's wires plus
     the QPE control, read from WalkLayout (no compile), plus t gradient wires: 56 + t at
