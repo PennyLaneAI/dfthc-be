@@ -358,7 +358,7 @@ def run_watched(command: list[str], *, cap_mb: float = MEMORY_CAP_MB, timeout_s:
             survivors = tree.kill_without_libproc()
             killed = killed or f"watchdog error: {exc}"
         if out is None:
-            out, err, pipes_held = _final_output(proc)
+            out, err, pipes_held = _final_output(proc, held=killed == _PIPES_HELD)
             if pipes_held and killed != _PIPES_HELD:
                 killed = _PIPES_HELD + (f" (after {killed})" if killed else "")
     return WatchedRun(command=list(command), pid=proc.pid, returncode=proc.returncode,
@@ -367,22 +367,22 @@ def run_watched(command: list[str], *, cap_mb: float = MEMORY_CAP_MB, timeout_s:
                       priority=" ".join(prefix), stdout=out or "", stderr=err or "")
 
 
-def _final_output(proc: subprocess.Popen) -> tuple[str, str, bool]:
+def _final_output(proc: subprocess.Popen, *, held: bool = False) -> tuple[str, str, bool]:
     """The rest of the output, read with bounded waits, and whether the pipes stayed open.
 
-    If the pipes are still open after two waits of ``_KILL_SECONDS``, they are closed, and the
-    output read so far is returned.
+    If the pipes are still open after two waits of ``_KILL_SECONDS`` (the command is killed after
+    the first), they are closed, and the output read so far is returned. If the run already found
+    them ``held``, they are closed after one read of ``POLL_SECONDS``.
     """
-    try:
-        out, err = proc.communicate(timeout=_KILL_SECONDS)
-        return out, err, False
-    except subprocess.TimeoutExpired:
-        proc.kill()
-    try:
-        out, err = proc.communicate(timeout=_KILL_SECONDS)
-        return out, err, False
-    except subprocess.TimeoutExpired as exc:
-        partial = exc
+    waits = [POLL_SECONDS] if held else [_KILL_SECONDS, _KILL_SECONDS]
+    for attempt, wait in enumerate(waits):
+        try:
+            out, err = proc.communicate(timeout=wait)
+            return out, err, False
+        except subprocess.TimeoutExpired as exc:
+            partial = exc
+        if attempt == 0 and not held:
+            proc.kill()
     pipes = [stream for stream in (proc.stdout, proc.stderr) if stream is not None]
     for stream in pipes:
         stream.close()

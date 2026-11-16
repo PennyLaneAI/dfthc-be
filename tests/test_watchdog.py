@@ -402,6 +402,35 @@ def test_untraceable_descendant_holding_the_pipes_ends_the_run(
     assert ready_file.exists()
 
 
+def test_held_pipes_found_by_the_loop_are_closed_at_once(monkeypatch, tmp_path):
+    """Final review m-19: once the loop has given up on the held pipes (``_KILL_SECONDS`` after
+    nothing traceable was left), the final read closes them after one short read instead of two
+    more bounded waits, so the run ends ``_KILL_SECONDS`` after the root, as the module docstring
+    says. Only the final read is timed, so start-up and load do not enter."""
+    monkeypatch.setattr(watchdog, "_KILL_SECONDS", 2.0)
+    final_output, spent = watchdog._final_output, []
+
+    def timed(*args, **kwargs):
+        begin = time.monotonic()
+        try:
+            return final_output(*args, **kwargs)
+        finally:
+            spent.append(time.monotonic() - begin)
+
+    monkeypatch.setattr(watchdog, "_final_output", timed)
+    cleanup_file, ready_file = tmp_path / "escaped.pid", tmp_path / "escaped.ready"
+    command = [sys.executable, "-c", ESCAPE.format(sleep=15, cleanup_file=str(cleanup_file),
+                                                   ready_file=str(ready_file))]
+    try:
+        run = run_watched(command, timeout_s=60)
+    finally:
+        with contextlib.suppress(FileNotFoundError, ProcessLookupError, ValueError):
+            os.kill(int(cleanup_file.read_text()), signal.SIGKILL)
+    assert run.killed == "watchdog error: an untraceable descendant holds the output pipes"
+    assert run.stdout.split() == [cleanup_file.read_text()]
+    assert len(spent) == 1 and spent[0] < 1.0, spent
+
+
 def test_command_runs_at_lowered_priority():
     code = ("import ctypes, os; print(os.getpriority(os.PRIO_PROCESS, 0), "
             "ctypes.CDLL('/usr/lib/libSystem.dylib').qos_class_self())")
