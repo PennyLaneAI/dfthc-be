@@ -1491,7 +1491,7 @@ A row's reason codes are the causes with a nonzero contribution to its delta, ea
    - *Mitigation:* the explicit controlled classes `ControlledDFTHCWalk` and `ControlledDFTHCBlockEncoding` (§7.4 rule 6).
    - *Canary:* `test_controlled_change_op_basis_controls_everything`.
 8. **L-8: Generic controlled wrapping adds Xs.** It counts one `PauliX` per control wire ([pennylane#10080](https://github.com/PennyLaneAI/pennylane/issues/10080)).
-   - *Mitigation:* explicit controlled classes with control value 1 (§7.4 rule 6); `C(ZeroReflection)`, the one `C(...)` rule left, also has control value 1.
+   - *Mitigation:* explicit controlled classes with control value 1 (§7.4 rule 6); `C(ZeroReflection)`, the one `C(...)` rule left, takes one control wire of either value (§9.6), and its multi-controlled Z flips a control of value 0 with a conditional `PauliX` (PennyLane's MCX rules, counted at the maximum branch), so both values give the same counts; no walk or QPE program requests it.
    - *Canary:* `test_generic_ctrl_adds_paulix_per_control`.
 9. **L-9: Function calls inside control regions are not decomposed.** On 2026-11-11 a controlled `qp.capture.subroutine` leaves `C(PauliX)` undecomposed at `level="user"`, and compiling for execution fails ([catalyst#3330](https://github.com/PennyLaneAI/catalyst/pull/3330), [catalyst#3384](https://github.com/PennyLaneAI/catalyst/issues/3384)).
    - *Mitigation:* no `Subroutine`; explicit controlled classes (§7.4 rule 6).
