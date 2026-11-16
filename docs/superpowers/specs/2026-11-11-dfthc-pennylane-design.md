@@ -471,7 +471,7 @@ These conventions follow dfthcbe unless stated otherwise, so blocks can be compa
 
 ### 6.6 Reflections and global phases
 
-- $\mathrm{REF}_X = 2\lvert 0\rangle\langle 0\rvert_X - I$ and $\mathrm{REF}_{T_2} = 2\Pi_{T_2} - I$ are implemented exactly, including the global sign: uncontrolled with `GlobalPhase`, controlled with a `Z` on the control (§9.6).
+- $\mathrm{REF}_X = 2\lvert 0\rangle\langle 0\rvert_X - I$ and $\mathrm{REF}_{T_2} = 2\Pi_{T_2} - I$ are implemented exactly, including the global sign: uncontrolled with `GlobalPhase`, controlled with a `Z` on the control, and, for `C(ZeroReflection)` with control value 0, also an uncontrolled `GlobalPhase(π)`, because the multi-controlled Z then acts on the control's $\lvert 0\rangle$ and $XZX = -Z$ (§9.6).
 - Generic `C(GlobalPhase)` is never used, because its rule produces a phase shift, which is outside the gate set.
 
 ### 6.7 Wires and registers
@@ -915,7 +915,7 @@ Steps 21 and 26: the measured erase of a `QROAMRead`.
 | Wires | `zero_wires`, `one_wires` (either may be empty, but their total size $n_w$ must be at least 1; the constructor raises `ValueError` for $n_w = 0$), `work` (for the multi-controlled Z) |
 | Rule | Multi-controlled Z with control values 0 on `zero_wires` and 1 on `one_wires`, giving $I - 2\Pi$, then `GlobalPhase(π)`. For $n_w \ge 2$, the multi-controlled Z is a `MultiControlledX` with $n_w - 1$ controls and $\max(n_w - 3, 0)$ zeroed `work` wires, with its target conjugated by `H` (and by `X` if the target's pattern value is 0). PennyLane decomposes it into one `Toffoli` and a `TemporaryAND` ladder with measured uncompute (probed, §9.24). For $n_w = 1$ PennyLane rejects a one-wire `MultiControlledX` ("acts on at least 2 wires"), so the multi-controlled Z is a `Z` on the single pattern wire, conjugated by `X` if its pattern value is 0. |
 | Adjoint | Self-adjoint (pinned) |
-| Control | Explicit `C(ZeroReflection)` (pinned): multi-controlled Z over control ∪ pattern, then `Z` on the control. This gives exactly $\lvert 0\rangle\langle 0\rvert \otimes I + \lvert 1\rangle\langle 1\rvert \otimes (2\Pi - I)$, because $Z_c\cdot C(I - 2\Pi)$ equals that operator. For $n_w = 1$ the multi-controlled Z is a `CZ` between the control and the pattern wire, conjugated by `X` on the pattern wire if its pattern value is 0. |
+| Control | Explicit `C(ZeroReflection)` (pinned), one control wire of control value $v$ (`ValueError` for more): multi-controlled Z over control ∪ pattern with $v$ as the control's control value (under capture a dynamic argument, used rather than read), then `Z` on the control and `GlobalPhase(π(1 − v))`. This gives exactly $\lvert v\rangle\langle v\rvert \otimes (2\Pi - I) + \lvert \bar v\rangle\langle \bar v\rvert \otimes I$: for $v = 1$, $Z_c\cdot C(I - 2\Pi)$ equals it; for $v = 0$ the `Z` gives $-1$ on the wrong branch, and the phase $-1$ corrects it. For $n_w = 1$ the multi-controlled Z has the control as its only control. |
 | Cost | For $n_w$ wires in total: $T = \max(n_w - 2, 0)$, a `MultiControlledX` with $n_w - 1$ controls; controlled $T = n_w - 1$. $M = 0$. Unit tests cover $n_w = 1, 2, 3$ and a case with $n_w \ge 4$, each for both pattern values of the target wire, uncontrolled and controlled. |
 
 ### 9.7 `OuterPrepare` (steps 1–4) and `OuterUnprepare` (steps 24–27)

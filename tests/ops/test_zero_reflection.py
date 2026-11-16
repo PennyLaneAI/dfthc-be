@@ -100,6 +100,27 @@ def test_exact_controlled_matrix(n_w, zero, one):
 
 
 @pytest.mark.compiled
+@pytest.mark.parametrize(("n_w", "zero", "one"), [
+    pytest.param(1, [0], [], id="1-zeros"), pytest.param(1, [], [0], id="1-last-one"),
+    pytest.param(3, [0], [1, 2], id="3-mixed-011"), pytest.param(6, [0, 1, 2, 3, 4], [5],
+                                                                 id="6-last-one")])
+def test_exact_controlled_matrix_for_control_value_0(n_w, zero, one):
+    """T3 (final review I-1): C(ZeroReflection) with control value 0 equals
+    |0><0| (x) (2 Pi - I) + |1><1| (x) I, global sign included, on the compiled path, where the
+    rule sees the control value only as a dynamic argument; control value 1 is the test above."""
+    work = ZeroReflection.required_wires(len(zero), len(one), controlled=True)["work"]
+
+    def apply(system, work_wires):
+        control, pattern = system[0], system[1:]
+        qp.ctrl(ZeroReflection([pattern[w] for w in zero], [pattern[w] for w in one],
+                               work_wires), control=control, control_values=[0])
+
+    matrix = choi_matrix(n_w + 1, apply, work)
+    expected = np.concatenate([reflection_diagonal(n_w, one), np.ones(2**n_w)])
+    assert np.allclose(matrix, np.diag(expected), rtol=0, atol=1e-10)
+
+
+@pytest.mark.compiled
 def test_adjoint_is_the_reflection_itself():
     zero, one = [0], [1, 2]  # the mixed pattern 011
 
@@ -141,6 +162,25 @@ def test_toffoli_count_matches_the_closed_form(n_w, controlled):
 
 
 @pytest.mark.compiled
+@pytest.mark.parametrize("n_w", [1, 2, 3, 6])
+def test_toffoli_count_for_control_value_0(n_w):
+    """T4 (final review I-1): control value 0 costs what control value 1 costs, T = n_w - 1 and
+    M = 0, for both pattern values of the target wire; it adds only Clifford and phase gates."""
+    work = list(range(n_w, n_w + ZeroReflection.required_wires(n_w, 0, True)["work"]))
+    control = n_w + len(work)
+
+    def program():
+        for target_value in (0, 1):
+            zero, one = split(n_w, target_value)
+            qp.ctrl(ZeroReflection(zero, one, work), control=control, control_values=[0])
+
+    resources = compiled_resources(program, num_wires=control + 1)
+    expected = 2 * costs.zero_reflection(n_w, True)
+    assert (resources.toffoli, resources.measurements) == (expected.toffoli, 0)
+    assert resources.measured_and_uncomputes == expected.toffoli - 2 * int(n_w >= 2)
+
+
+@pytest.mark.compiled
 @pytest.mark.parametrize("controlled", [False, True], ids=["plain", "controlled"])
 def test_no_dfthc_operator_survives_at_device_level(controlled):
     def program():
@@ -153,13 +193,15 @@ def test_no_dfthc_operator_survives_at_device_level(controlled):
 
 @pytest.mark.parametrize(("zero", "one", "work"), [([0], [], []), ([0, 1, 2], [3], [4])])
 def test_rules_are_valid(zero, one, work):
-    """T2 for the base, the adjoint and the controlled rule (tape mode)."""
+    """T2 for the base, the adjoint and the controlled rule, for both control values (tape
+    mode)."""
     op = ZeroReflection(zero, one, work + [9])
     qp.testing.assert_valid_decomp_rule(op, _zero_reflection, check_matrix=False)
     qp.testing.assert_valid_decomp_rule(qp.adjoint(op), _adjoint_zero_reflection,
                                         check_matrix=False)
-    qp.testing.assert_valid_decomp_rule(qp.ctrl(op, control=10), _c_zero_reflection,
-                                        check_matrix=False)
+    for value in (1, 0):
+        qp.testing.assert_valid_decomp_rule(qp.ctrl(op, control=10, control_values=[value]),
+                                            _c_zero_reflection, check_matrix=False)
 
 
 def test_controlled_rule_needs_one_more_work_wire():
@@ -169,16 +211,13 @@ def test_controlled_rule_needs_one_more_work_wire():
                                             check_matrix=False)
 
 
-@pytest.mark.parametrize(("control", "values"), [([10, 11], [1, 1]), ([10], [0])],
-                         ids=["two-controls", "control-value-0"])
-def test_controlled_rule_refuses_other_controls(control, values):
-    """The pinned C(ZeroReflection) rule builds one control wire with control value 1 only; two
-    controls or a control value 0 would compile silently to another operation (final review
-    I-1), so the rule raises."""
+def test_controlled_rule_refuses_two_controls():
+    """The pinned C(ZeroReflection) rule builds one control wire, of either control value; two
+    controls would compile silently to another operation (final review I-1), so it raises."""
     op = ZeroReflection([0, 1, 2], [3], [4, 5])
-    with pytest.raises(ValueError, match="exactly one control wire with control value 1"):
-        qp.testing.assert_valid_decomp_rule(qp.ctrl(op, control=control, control_values=values),
-                                            _c_zero_reflection, check_matrix=False)
+    with pytest.raises(ValueError, match="exactly one control wire; got 2"):
+        qp.testing.assert_valid_decomp_rule(qp.ctrl(op, control=[10, 11]), _c_zero_reflection,
+                                            check_matrix=False)
 
 
 def test_required_wires_and_validation():
