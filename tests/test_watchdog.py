@@ -3,6 +3,7 @@
 import contextlib
 import ctypes
 import errno
+import io
 import json
 import os
 import signal
@@ -429,6 +430,46 @@ def test_held_pipes_found_by_the_loop_are_closed_at_once(monkeypatch, tmp_path):
     assert run.killed == "watchdog error: an untraceable descendant holds the output pipes"
     assert run.stdout.split() == [cleanup_file.read_text()]
     assert len(spent) == 1 and spent[0] < 1.0, spent
+
+
+class _RefusingProcess:
+    """A command whose output pipes stay open and which refuses SIGKILL."""
+
+    def __init__(self):
+        self.stdout, self.stderr = io.StringIO(), io.StringIO()
+
+    def communicate(self, timeout):
+        raise subprocess.TimeoutExpired("cmd", timeout, output=b"partial", stderr=b"")
+
+    def kill(self):
+        raise PermissionError(errno.EPERM, "Operation not permitted")
+
+    def poll(self):
+        return None
+
+
+def test_a_refused_kill_of_the_command_does_not_escape():
+    """Final review m-20 (ledger row L235): a command that refuses SIGKILL during the bounded
+    final reads still lets them end, with the output read so far and the pipes closed, instead
+    of a PermissionError out of run_watched's finally block that loses the record."""
+    proc = _RefusingProcess()
+    assert watchdog._final_output(proc) == ("partial", "", True)
+    assert proc.stdout.closed and proc.stderr.closed
+
+
+def test_command_line_reports_any_other_error(monkeypatch, capsys):
+    """Final review m-20 (ledger row L236): an exception other than WatchdogError, such as an
+    OSError from Popen, ends main with a WATCHDOG line that names it and status 3, not with a
+    traceback."""
+    def broken(*args, **kwargs):
+        raise OSError(errno.ENOEXEC, "Exec format error")
+
+    monkeypatch.setattr(watchdog, "run_watched", broken)
+    assert watchdog.main(["--", "true"]) == KILLED_EXIT_STATUS
+    line = capsys.readouterr().out.strip().splitlines()[-1]
+    assert line.startswith("WATCHDOG ")
+    assert json.loads(line.removeprefix("WATCHDOG "))["killed"] == (
+        "watchdog error: OSError: [Errno 8] Exec format error")
 
 
 def test_command_runs_at_lowered_priority():

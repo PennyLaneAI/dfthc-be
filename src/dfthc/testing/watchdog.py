@@ -34,7 +34,8 @@ Command line, for heavy runs whose peak and wall time go into the ledger::
     PYTHONPATH=src python -m dfthc.testing.watchdog [--cap-mb 8192] [--timeout-min 60] -- CMD ...
 
 It passes the command's output through, then prints one line ``WATCHDOG {json}``, and exits with
-the command's status, or with 3 if the watchdog killed it or could not clean up after it.
+the command's status, or with 3 if the watchdog killed it, could not clean up after it or failed
+itself (the line then names the exception).
 """
 
 from __future__ import annotations
@@ -382,7 +383,8 @@ def _final_output(proc: subprocess.Popen, *, held: bool = False) -> tuple[str, s
         except subprocess.TimeoutExpired as exc:
             partial = exc
         if attempt == 0 and not held:
-            proc.kill()
+            with contextlib.suppress(PermissionError, ProcessLookupError):
+                proc.kill()
     pipes = [stream for stream in (proc.stdout, proc.stderr) if stream is not None]
     for stream in pipes:
         stream.close()
@@ -408,9 +410,10 @@ def main(argv: list[str] | None = None) -> int:
     timeout_s = args.timeout_min * 60
     try:
         run = run_watched(command, cap_mb=args.cap_mb, timeout_s=timeout_s, capture=False)
-    except WatchdogError as exc:
-        record = {"command": command, "killed": f"watchdog error: {exc}", "cap_mb": args.cap_mb,
-                  "timeout_s": timeout_s}
+    except Exception as exc:  # every failure of the watchdog ends as a WATCHDOG line, status 3
+        reason = str(exc) if isinstance(exc, WatchdogError) else f"{type(exc).__name__}: {exc}"
+        record = {"command": command, "killed": f"watchdog error: {reason}",
+                  "cap_mb": args.cap_mb, "timeout_s": timeout_s}
         print("WATCHDOG", json.dumps(record), flush=True)
         return KILLED_EXIT_STATUS
     print("WATCHDOG", json.dumps(run.summary()), flush=True)
