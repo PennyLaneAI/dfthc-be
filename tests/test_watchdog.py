@@ -137,6 +137,33 @@ def test_kills_the_whole_tree_at_the_memory_cap():
     assert wait_until_gone(int(run.stdout.split()[0])), "the grandchild survived the kill"
 
 
+HOLDER = ("import os, time; chunk = os.urandom(130 * 2**20); print('ready', flush=True); "
+          "time.sleep({sleep})")
+"""A process that holds 130 MB of random bytes, then sleeps."""
+
+
+def test_kills_on_the_summed_memory_of_the_tree():
+    """Final review m-12: the kill decision samples the tree's summed footprint, not its largest
+    process. One 130 MB process stays below the kill point of cap_mb = 200 (187.5 MB); two such
+    siblings under one root exceed it together and are killed for memory."""
+    alone = run_watched([sys.executable, "-c", HOLDER.format(sleep=2)], cap_mb=200, timeout_s=30)
+    assert (alone.killed, alone.returncode) == (None, 0)
+    assert alone.peak_mb < watchdog.SAFETY_FRACTION * 200
+    siblings = textwrap.dedent(
+        f"""
+        import subprocess, sys
+        holder = {HOLDER.format(sleep=10)!r}
+        procs = [subprocess.Popen([sys.executable, "-c", holder]) for _ in range(2)]
+        for proc in procs:
+            proc.wait()
+        """
+    )
+    run = run_watched([sys.executable, "-c", siblings], cap_mb=200, timeout_s=30)
+    assert run.killed == "memory"
+    assert run.peak_mb > watchdog.SAFETY_FRACTION * 200
+    assert run.survivors == []
+
+
 def test_kills_at_the_safety_fraction_of_the_cap(monkeypatch):
     assert watchdog.SAFETY_FRACTION * watchdog.MEMORY_CAP_MB == 7680
     monkeypatch.setattr(watchdog, "SAFETY_FRACTION", 0.5)
