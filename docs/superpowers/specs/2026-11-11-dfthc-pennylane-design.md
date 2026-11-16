@@ -1470,7 +1470,7 @@ A row's reason codes are the causes with a nonzero contribution to its delta, ea
    - *Canary:* `test_allocating_rule_is_excluded`.
 2. **L-2: Measurement rules are skipped inside adjoint or control regions.** Rules that declare measurements are skipped when they would be wrapped in such a region, on both the Catalyst side and the PennyLane side ([pennylane#9629](https://github.com/PennyLaneAI/pennylane/pull/9629)). Explicit `Adjoint(Op)` rules taking `base`, and plain explicit `C(Op)` rules, are kept. `C(Adjoint(Op))` skips the measuring adjoint rule; the solver then controls the unitary inverse of `Op`'s base rule if one exists, and has no path otherwise (observed 2026-11-11).
    - *Mitigation:* §7.4, rules 5 and 6. Since G0 it is structural: no program wraps a dfthc composite in an adjoint or a control (rule 6), so no measuring rule is wrapped, and the expected "Skipped ..." warning appears only in tests that wrap an erase on purpose.
-   - *Canary:* `test_measuring_adjoint_rule_has_no_controlled_path`.
+   - *Canaries:* `test_measuring_adjoint_rule_has_no_controlled_path` (the controlled unitary inverse) and `test_measuring_adjoint_without_unitary_inverse_has_no_path` (subprocess; no path).
 3. **L-3: Rule selection is cost-based.** With unweighted counts, the solver preferred an auto-derived unitary inverse over an explicit measured adjoint rule. A Toffoli-weighted gate set or `fixed_decomps` fixed it.
    - *Mitigation:* §7.3, §7.5, T6.
    - *Canary:* `test_unweighted_solver_prefers_unitary_inverse`.
@@ -1531,10 +1531,10 @@ A row's reason codes are the causes with a nonzero contribution to its delta, ea
     - *Canaries:*
       - `test_warnings_silenced_without_env` (subprocess, variable unset);
       - `test_warnings_visible_with_env` (subprocess, variable exported before start);
-      - `test_unreachable_op_reports_missing_rule` (subprocess).
+      - `test_unreachable_op_reports_missing_rule` (subprocess; the misleading text next to the named operator).
 19. **L-19: `UniformPrep` and `AliasSampling` need arbitrary rotations.** For a non-power-of-two size neither has a path to the Toffoli-level gate set; for a power-of-two size `AliasSampling` compiles (observed 2026-11-11).
     - *Mitigation:* `FlaggedUniformPrep`.
-    - *Canary:* `test_template_has_no_toffoli_level_path` (subprocess; parameterized for `UniformPrep` and `AliasSampling`).
+    - *Canaries:* `test_template_has_no_toffoli_level_path` (subprocess; parameterized for `UniformPrep` and `AliasSampling`) and `test_power_of_two_alias_sampling_compiles` (subprocess).
 20. **L-20: An undecomposed `Operator2` is decomposed by the device pass or rejected.** On 2026-11-11 such an `Operator2` is decomposed by the device pass if it has a rule, and fails to compile for execution if it has none; it no longer reaches runtime as a bare named gate ([catalyst#3430](https://github.com/PennyLaneAI/catalyst/pull/3430)).
     - *Mitigation:* the `level="device"` closure test of every composite operator (T5) asserts that no `OperatorOp` survives.
     - *Canary:* `test_undecomposed_operator_op_reaches_runtime`: at `level="user"` an `Operator2` listed in the gate set remains named; with a rule the device pass decomposes it, and without a rule compiling for execution fails.

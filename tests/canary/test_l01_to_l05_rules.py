@@ -61,8 +61,9 @@ def test_measuring_adjoint_rule_has_no_controlled_path():
     """L-2: inside a control region the measuring Adjoint(Op) rule is skipped, even when pinned.
 
     On 2026-11-11 the solver then silently controls the unitary inverse of Op's base rule (one
-    Toffoli, no measurement) instead of failing; it fails only if no unitary path exists. Hence
-    spec 7.4 rule 5: an operator that contains a measurement is never placed under qp.ctrl.
+    Toffoli, no measurement) instead of failing; it fails only if no unitary path exists
+    (``test_measuring_adjoint_without_unitary_inverse_has_no_path``). Hence spec 7.4 rule 5: an
+    operator that contains a measurement is never placed under qp.ctrl.
     """
     result = run_snippet(
         """
@@ -99,6 +100,57 @@ def test_measuring_adjoint_rule_has_no_controlled_path():
         """
     )
     assert outcome(result, "CTRL_ADJOINT") == 'OK {"PauliX": "4", "Toffoli": "1"}'
+
+
+@pytest.mark.subprocess
+def test_measuring_adjoint_without_unitary_inverse_has_no_path():
+    """L-2: when Op's base rule measures too, no unitary inverse exists, so with the measuring
+    Adjoint(Op) rule skipped inside the control region C(Adjoint(Op)) has no path: the compile
+    fails and names it."""
+    result = run_snippet(
+        """
+        class L02Measured(Operator2):
+            wire_argnames = ("ctrl", "target")
+
+            def __init__(self, ctrl, target):
+                super().__init__(ctrl, target)
+
+        def _l02_measured_resources(ctrl, target):
+            return {qp.H: 1, qp.ops.MidMeasure(Wire[1], reset=True): 1, qp.Z: 1}
+
+        @qp.register_resources(_l02_measured_resources)
+        def _l02_measured(ctrl, target):
+            qp.H(target[0])
+            outcome = qp.measure(target[0], reset=True)
+            qp.cond(outcome, qp.Z)(ctrl[0])
+
+        def _l02_measured_adjoint_resources(base):
+            return {qp.H: 1, qp.ops.MidMeasure(Wire[1], reset=True): 1, qp.Z: 1}
+
+        @qp.register_resources(_l02_measured_adjoint_resources)
+        def _l02_measured_adjoint(base):
+            qp.H(base.target[0])
+            outcome = qp.measure(base.target[0], reset=True)
+            qp.cond(outcome, qp.Z)(base.ctrl[0])
+
+        qp.add_decomps(L02Measured, _l02_measured)
+        qp.add_decomps("Adjoint(L02Measured)", _l02_measured_adjoint)
+
+        @qp.qjit(capture=True, enable_aot_compilation=False)
+        @qp.decompose(gate_set=GATE_SET,
+                      fixed_decomps={"L02Measured": _l02_measured,
+                                     "Adjoint(L02Measured)": _l02_measured_adjoint})
+        @qp.qnode(qp.device("null.qubit", wires=3))
+        def circuit():
+            qp.ctrl(qp.adjoint(L02Measured([0], [1])), control=2)
+            return qp.probs(wires=[0])
+
+        report("NO_INVERSE", lambda: counts(circuit))
+        """
+    )
+    no_inverse = outcome(result, "NO_INVERSE")
+    assert no_inverse.startswith("ERROR CompileError")
+    assert "Decomposition rule not found for operator 'C(Adjoint(L02Measured))" in no_inverse
 
 
 class L03Load(Operator2):

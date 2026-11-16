@@ -16,10 +16,11 @@ limitation has an entry and that every canary named here exists.
 - **L-2, measuring adjoint rules under control** (pennylane#9629), **changed**. Inside a control
   region the measuring `Adjoint(Op)` rule is skipped even when pinned, and the solver silently
   controls the unitary inverse of `Op`'s base rule instead (one Toffoli and four PauliX for a
-  one-CNOT base rule, no measurement). It fails only when no unitary path exists. Canary:
-  `test_measuring_adjoint_rule_has_no_controlled_path`. Mitigation: spec 7.4 rules 5 and 6; never
-  place a measuring operator under `qp.ctrl`. Since G0 no program wraps a dfthc composite in an
-  adjoint or a control (spec 7.4 rule 6), so no measuring rule is wrapped by design.
+  one-CNOT base rule, no measurement). It fails only when no unitary path exists. Canaries:
+  `test_measuring_adjoint_rule_has_no_controlled_path` and
+  `test_measuring_adjoint_without_unitary_inverse_has_no_path`. Mitigation: spec 7.4 rules 5 and
+  6; never place a measuring operator under `qp.ctrl`. Since G0 no program wraps a dfthc composite
+  in an adjoint or a control (spec 7.4 rule 6), so no measuring rule is wrapped by design.
 - **L-3, rule selection is cost-based.** With unweighted counts the solver picks the auto-derived
   inverse (two CNOTs) over the measured adjoint rule. Canary:
   `test_unweighted_solver_prefers_unitary_inverse`. Mitigation: weighted gate set, pins, T6.
@@ -70,8 +71,9 @@ limitation has an entry and that every canary named here exists.
   `test_mcx_without_work_wires_has_no_path`. Mitigation: explicit work wires.
 - **L-19, `UniformPrep` and `AliasSampling` need arbitrary rotations**, **changed**. For a
   non-power-of-two size (L = 5) neither has a path to the gate set. For a power-of-two size
-  `AliasSampling` compiles, because its uniform preparation is then Hadamards only. Canary:
-  `test_template_has_no_toffoli_level_path` (two cases). Mitigation: `FlaggedUniformPrep`.
+  `AliasSampling` compiles, because its uniform preparation is then Hadamards only. Canaries:
+  `test_template_has_no_toffoli_level_path` (two cases) and
+  `test_power_of_two_alias_sampling_compiles`. Mitigation: `FlaggedUniformPrep`.
 
 ## Operator arguments
 
