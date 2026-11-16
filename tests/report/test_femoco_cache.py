@@ -20,7 +20,7 @@ import pytest
 from dfthc import costs
 from dfthc.compile import ANALYZE_NAMES
 from dfthc.params import FEMOCO54
-from dfthc.testing.provenance import code_hash
+from dfthc.testing.provenance import code_hash, environment
 
 REPO = Path(__file__).resolve().parents[2]
 EXPECTED = {"DFTHCWalk": (9793, 2524, 8675), "ControlledDFTHCWalk": (9795, 2524, 8677)}
@@ -88,6 +88,49 @@ def test_stale_femoco_entry_names_the_recompile():
     assert problems[0].startswith("femoco54/DFTHCWalk: no compile for code hash 111111111111 "
                                   "(cached: ['000000000000']); recompile with")
     assert "--large femoco54" in problems[1]
+
+
+def valid_entry(program: str) -> dict:
+    """A current entry of ``program`` that passes every arm of the check: spec 9.24's counts, a
+    gate dictionary that gives them, the expected wires and full provenance."""
+    toffoli, measurements, uncomputes = EXPECTED[program]
+    return {"code_hash": "1" * 64, "status": "compiled", "toffoli": toffoli,
+            "measurements": measurements, "measured_and_uncomputes": uncomputes,
+            "counts": {"Toffoli": toffoli - uncomputes, "TemporaryAND": uncomputes,
+                       "Adjoint(TemporaryAND)": uncomputes, "MidCircuitMeasure": measurements,
+                       "CNOT": 1},
+            "num_wires": EXPECTED_WIRES[program], "environment": environment(),
+            "seconds": 36.5, "watchdog": {"peak_mb": 1692.1}}
+
+
+def _more_toffolis(entry):
+    entry["toffoli"] += 1
+    entry["counts"]["Toffoli"] += 1
+
+
+DEFECTS = {
+    "counts": (_more_toffolis, "cached T, M, A (9794, 2524, 8675) != (9793, 2524, 8675)"),
+    "gate-set": (lambda e: e["counts"].update(RX=1), "gates outside the gate set {'RX'}"),
+    "dictionary": (lambda e: e["counts"].update(TemporaryAND=e["counts"]["TemporaryAND"] + 1),
+                   "gate dictionary gives T, M, A (9794, 2524, 8675) != (9793, 2524, 8675)"),
+    "wires": (lambda e: e.update(num_wires=1103), "cached wires 1103 != 1102"),
+    "environment": (lambda e: e.pop("environment"), "no environment"),
+    "seconds": (lambda e: e.pop("seconds"), "no seconds"),
+    "peak": (lambda e: e.update(watchdog={}), "no peak memory"),
+}
+"""One defect per arm of ``femoco_cache_problems`` and the one problem it must report."""
+
+
+@pytest.mark.parametrize("defect", DEFECTS)
+def test_each_arm_of_the_cache_check_reports_its_defect(defect):
+    """Final review m-11: a valid record has no problem; one defect injected into a copy of the
+    walk's valid entry gives exactly the one problem of its arm (per commit; nothing is
+    compiled)."""
+    record = {"compiled": {f"femoco54/{program}": [valid_entry(program)] for program in EXPECTED}}
+    assert femoco_cache_problems(record, "1" * 64) == []
+    inject, problem = DEFECTS[defect]
+    inject(record["compiled"]["femoco54/DFTHCWalk"][0])
+    assert femoco_cache_problems(record, "1" * 64) == [f"femoco54/DFTHCWalk: {problem}"]
 
 
 @pytest.mark.release
