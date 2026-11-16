@@ -20,6 +20,8 @@ range, and zeros elsewhere (``b = B``, failed ``b``, unvisited ``r``). :class:`A
 
 from __future__ import annotations
 
+import itertools
+
 import jax.numpy as jnp
 import numpy as np
 import pennylane as qp
@@ -27,14 +29,7 @@ from pennylane.core import Operator2
 
 from dfthc.compile import register_rule
 from dfthc.ops._validate import canonical_ints, check_int, check_wires
-from dfthc.ops.qroam import (
-    PhaseFixup,
-    QROAMEmitter,
-    _high_specs,
-    _registers,
-    dummy_wires,
-    emit_phase_fixup,
-)
+from dfthc.ops.qroam import PhaseFixup, QROAMEmitter, dummy_wires, emit_phase_fixup
 from dfthc.ops.unary import as_resources, iterate_nested, work_required
 from dfthc.params import lg
 
@@ -101,8 +96,10 @@ def _load_body(emit, entries, shape, address, target, work, control=None, contro
     def leaf(flag, values):
         emit.load(flag, rows, next(leaves), register)
 
-    specs = _high_specs(shape["address_widths"], shape["live_ranges"], 0)
-    iterate_nested(_registers(address, specs), work, leaf, control, control_value, emit=emit)
+    widths, address = shape["address_widths"], list(address)
+    registers = [(address[start:start + n], lo, hi) for start, n, (lo, hi) in zip(
+        itertools.accumulate((0, *widths)), widths, shape["live_ranges"], strict=False) if n]
+    iterate_nested(registers, work, leaf, control, control_value, emit=emit)
 
 
 # --------------------------------------------------------------------------- TailAngleLoad
