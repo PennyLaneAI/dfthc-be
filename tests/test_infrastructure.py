@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 import warnings
-from importlib.metadata import version
+from importlib.metadata import distributions
 from pathlib import Path
 
 import pytest
@@ -51,12 +51,49 @@ def test_rule_lowering_warnings_are_recorded():
     assert [str(r.message) for r in records] == ["probe"]
 
 
-@pytest.mark.parametrize("name", ["pennylane", "pennylane_catalyst", "pennylane_lightning"])
-def test_lock_file_pins_installed_versions(name):
-    lock = (REPO / "requirements-nightly.lock").read_text()
-    pinned = re.search(rf"^{name.replace('_', '[-_]')}==(\S+)$", lock, re.MULTILINE | re.IGNORECASE)
-    assert pinned is not None, f"{name} missing from requirements-nightly.lock"
-    assert pinned.group(1) == version(name)
+def normalized(name: str) -> str:
+    """A distribution name in PEP 503's normal form."""
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def lock_differences(lock: str, installed: dict[str, str]) -> list[str]:
+    """How the ``name==version`` lines of ``lock`` differ from the ``installed`` distributions,
+    names normalized: a pin missing from the environment or at another version, and an installed
+    distribution without a pin, except pip, which ``pip freeze`` omits on Python 3.12."""
+    pins = dict(line.split("==", 1) for line in lock.split() if not line.startswith("#"))
+    pinned = {normalized(name): pin for name, pin in pins.items()}
+    current = {normalized(name): ver for name, ver in installed.items()
+               if normalized(name) != "pip"}
+    differences = []
+    for name, pin in sorted(pinned.items()):
+        if name not in current:
+            differences.append(f"{name}=={pin} is pinned but not installed")
+        elif current[name] != pin:
+            differences.append(f"{name}=={pin} is pinned but {current[name]} is installed")
+    return differences + [f"{name}=={current[name]} is installed but not pinned"
+                          for name in sorted(current.keys() - pinned.keys())]
+
+
+def test_lock_file_pins_exactly_the_installed_distributions():
+    """requirements-nightly.lock is the running environment's pip freeze: every installed
+    distribution at its version and nothing else (final review m-13), so a toolchain change
+    without a refreshed lock, and hence a new code hash, fails here."""
+    installed = {dist.metadata["Name"]: dist.version for dist in distributions()}
+    assert lock_differences((REPO / "requirements-nightly.lock").read_text(), installed) == []
+    assert installed and {"pennylane", "pennylane-catalyst", "pennylane-lightning"} <= {
+        normalized(name) for name in installed}
+
+
+def test_lock_differences_sees_a_missing_and_an_extra_distribution():
+    """The whole-lock check fails on a pin the environment lacks and on a distribution the lock
+    lacks, which a check of three named packages would pass."""
+    lock = "pennylane==1.0\nnumpy==2.0\nPennyLane_Lightning==1.1\n"
+    installed = {"PennyLane": "1.0", "pennylane-lightning": "1.1", "pip": "26.3"}
+    assert lock_differences(lock, installed | {"numpy": "2.0"}) == []
+    assert lock_differences(lock, installed | {"jax": "0.7"}) == [
+        "numpy==2.0 is pinned but not installed", "jax==0.7 is installed but not pinned"]
+    assert lock_differences(lock, installed | {"numpy": "2.1"}) == [
+        "numpy==2.0 is pinned but 2.1 is installed"]
 
 
 @pytest.mark.parametrize("script", ["scripts/test.sh", "scripts/setup_env.sh"])

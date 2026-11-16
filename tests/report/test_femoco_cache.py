@@ -43,8 +43,9 @@ report = _load_script()
 
 def femoco_cache_problems(record: dict, hash_: str) -> list[str]:
     """What is wrong with the cached FeMoco-54 compiles of ``record`` under code hash ``hash_``:
-    a missing entry (naming the recompile), counts other than spec 9.24's, or an entry without
-    its provenance."""
+    a missing entry (naming the recompile), counts other than spec 9.24's, an entry without its
+    provenance, or one recorded in an environment other than the running one (every field of
+    ``provenance.environment()`` but the platform: Python, the toolchain and the lock's digest)."""
     problems, cache = [], record.get("compiled", {})
     for program, expected in EXPECTED.items():
         key = f"femoco54/{program}"
@@ -72,6 +73,12 @@ def femoco_cache_problems(record: dict, hash_: str) -> list[str]:
         for field in ("environment", "seconds"):
             if not entry.get(field):
                 problems.append(f"{key}: no {field}")
+        if entry.get("environment"):
+            recorded, running = entry["environment"], environment()
+            differs = sorted(field for field in (recorded.keys() | running.keys()) - {"platform"}
+                             if recorded.get(field) != running.get(field))
+            if differs:
+                problems.append(f"{key}: environment differs from the running one in {differs}")
         if not entry.get("watchdog", {}).get("peak_mb"):
             problems.append(f"{key}: no peak memory")
     return problems
@@ -115,6 +122,8 @@ DEFECTS = {
                    "gate dictionary gives T, M, A (9794, 2524, 8675) != (9793, 2524, 8675)"),
     "wires": (lambda e: e.update(num_wires=1103), "cached wires 1103 != 1102"),
     "environment": (lambda e: e.pop("environment"), "no environment"),
+    "toolchain": (lambda e: e["environment"].update(pennylane="0.0"),
+                  "environment differs from the running one in ['pennylane']"),
     "seconds": (lambda e: e.pop("seconds"), "no seconds"),
     "peak": (lambda e: e.update(watchdog={}), "no peak memory"),
 }
@@ -123,10 +132,11 @@ DEFECTS = {
 
 @pytest.mark.parametrize("defect", DEFECTS)
 def test_each_arm_of_the_cache_check_reports_its_defect(defect):
-    """Final review m-11: a valid record has no problem; one defect injected into a copy of the
-    walk's valid entry gives exactly the one problem of its arm (per commit; nothing is
-    compiled)."""
+    """Final review m-11: a valid record has no problem, a platform other than the running one
+    included (m-13); one defect injected into a copy of the walk's valid entry gives exactly the
+    one problem of its arm (per commit; nothing is compiled)."""
     record = {"compiled": {f"femoco54/{program}": [valid_entry(program)] for program in EXPECTED}}
+    record["compiled"]["femoco54/ControlledDFTHCWalk"][0]["environment"]["platform"] = "other"
     assert femoco_cache_problems(record, "1" * 64) == []
     inject, problem = DEFECTS[defect]
     inject(record["compiled"]["femoco54/DFTHCWalk"][0])

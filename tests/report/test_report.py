@@ -368,7 +368,8 @@ def _copy_package(root: Path) -> Path:
 
 def test_cache_needs_matching_code_hash(tmp_path, monkeypatch):
     """code_hash() ignores docstrings, comments and dfthc/testing/ and sees the package's code,
-    the report script's code (its program builders) and the lock file; a cached entry of another
+    the report script's code (its program builders) and the lock file (one changed byte, final
+    review m-13); a cached entry of another
     code hash is kept as history and never shown as a current measurement, while an entry of the
     current hash is reused without compiling."""
     root = _copy_package(tmp_path / "copy")
@@ -392,6 +393,11 @@ def test_cache_needs_matching_code_hash(tmp_path, monkeypatch):
                                      "return qfunc, s.layout.num_wires + 1"))
     assert provenance.code_hash(root) != base
     script.write_text(source)
+    lock = root / provenance.LOCK_FILE
+    pinned = lock.read_bytes()
+    lock.write_bytes(bytes([pinned[0] ^ 1]) + pinned[1:])
+    assert provenance.code_hash(root) != base
+    lock.write_bytes(pinned)
     path.write_text(text.replace("return 2**ob - 2 if ob >= 1 else 0",
                                  "return 2**ob - 3 if ob >= 1 else 0"))
     assert provenance.code_hash(root) != base
