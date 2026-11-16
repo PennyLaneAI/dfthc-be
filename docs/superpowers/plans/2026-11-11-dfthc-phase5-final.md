@@ -25,6 +25,8 @@ This file holds Tasks 5.1 and 5.2 of the master plan (`docs/superpowers/plans/20
 
 Revision 2 ran no pytest and no Python that imports `dfthc`, PennyLane, Catalyst or JAX (the orchestrator's G4 gate tier was running): only text edits, standard-library scripts and git reads. The staged documentation test of revision 1 (`49 passed` with the edited HANDOFF and ledger and a `final-review.md`) was not rerun; revision 2 changes no HANDOFF text and only the D-7 wording and the Task 5.2 row in the ledger, and its edits add no Markdown link (the edit script checks that); the orchestrator runs the documentation tests at approval (mirroring step 4).
 
+**Revision 3** (2026-11-16, by the orchestrator, at Task 5.1, Step 10). Step 9's check counted the rows of the T2 to T6 table with `[A-Za-z]+`, which misses the two audited classes whose names hold a digit (`RefT2`, `ControlledRefT2`; found by the area-2 Opus review) and prints 32 for a complete table. The check now uses `[A-Za-z0-9]+` and prints 34. No other change.
+
 **Code provenance.** Phase 5 adds no code before the final review, so this plan has no code to dry-run. Everything it does contain was executed on 2026-11-15, in a scratch replica of the tree of `c443c51` (`.scratch/plan-check/repo-phase5`, from `git -C .worktrees/lane-a archive c443c51`; not a git repository) through a capped, locked pytest wrapper (`.scratch/plan-check/p5test.sh`: one xdist worker, every session under the watchdog with a 3,000 MB cap and a 10-minute limit, lock `tmp/p5test.lock`), or read-only against the main checkout's git:
 - the collection count of every tier (`--collect-only`; `stages/P5/collect-*.log`);
 - the documentation tests, on the replica (`doc-tests.log`) and on a staged copy that holds the edited HANDOFF and ledger and a `docs/agents/final-review.md` in this plan's format (`repo-phase5-stage`; `stage-doc-tests.log`, `stage-collect-per-commit.log`, `stage-collect-all.log`);
@@ -1253,7 +1255,7 @@ Check it:
 cd /Users/david.wierichs/repos/dfthc-be
 grep -c '](' docs/agents/final-review.md
 grep -c -E '^\| L[0-9]+ \|' docs/agents/final-review.md
-grep -c -E '^\| `[A-Za-z]+` \| `tests/' docs/agents/final-review.md
+grep -c -E '^\| `[A-Za-z0-9]+` \| `tests/' docs/agents/final-review.md
 grep -c -E '^- \*\*Decision:\*\* ' docs/agents/final-review.md
 grep -c -E '^### (C|I|m)-[0-9]+: ' docs/agents/final-review.md
 ```
