@@ -219,7 +219,7 @@ not run heavy processes throughout." The full policy is master plan section 12.9
 | One file or test | `scripts/test.sh tests/ops/test_x.py::test_name -q` |
 | Serial run (debugging) | `DFTHC_TEST_WORKERS=0 scripts/test.sh ... -x` |
 | Lint | `"$VENV/bin/ruff" check .` |
-| Canaries only | `scripts/test.sh tests/canary -q` |
+| Canaries only (the L-21 benchmark has its own row) | `scripts/test.sh tests/canary -m "not slow and not release" -q` |
 | Refresh the compile baseline (nightly bump only) | `DFTHC_UPDATE_COMPILE_BASELINE=1 DFTHC_TEST_WORKERS=0 scripts/test.sh tests/canary/test_l21_compile_time.py` |
 | Spike | `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 PYTHONPATH=src "$VENV/bin/python" spikes/<script>.py` |
 | Resource report (H2 systems and `naphthalene`; reuses current compiles) | `PYTHONPATH=src "$VENV/bin/python" scripts/resource_report.py` |
