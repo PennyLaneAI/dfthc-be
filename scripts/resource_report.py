@@ -62,6 +62,7 @@ from dfthc import costs, costs_reference  # noqa: E402
 from dfthc.compile import (  # noqa: E402
     FIXED_DECOMPS,
     GATE_SET,
+    PENNYLANE_PINS,
     compiled_resources,
     surviving_dfthc_operators,
 )
@@ -103,9 +104,10 @@ REASON_CODES = {
     "no-prune": "no aligned-block pruning of unary-iteration boundaries: dfthcbe stops once on "
                 "each aligned block of a dead interval, and a walk over a sub-range [lo, hi) can "
                 "be truncated only that way (costs_reference.iteration_counts)",
-    "exact-iter": "exact unary iteration: out-of-range addresses raise no flag, which costs at "
-                  "most one Toffoli per address bit at each range end; dfthcbe's truncated "
-                  "iteration is cheaper (costs_reference.iteration_counts)",
+    "exact-iter": "exact unary iteration (our iteration, or QROM's in the reads' select): "
+                  "out-of-range addresses raise no flag, which costs at most one Toffoli per "
+                  "address bit at each range end; dfthcbe's truncated iteration is cheaper "
+                  "(costs_reference.iteration_counts)",
     "iter-const": "truncated iteration over L leaves costs L + c - 2 Toffolis with c controls; the "
                   "paper counts L, one per leaf",
     "prefix-stops": "dfthcbe's walks over the tail rows [RC, X_o) (the tail load and the angle "
@@ -147,7 +149,7 @@ the codes whose contribution to its delta is nonzero (``costs_reference.delta_ca
 
 LEAVES = frozenset({"QROAMRead", "QROAMErase", "PhaseFixup", "AngleErase", "ZeroReflection",
                     "SpinMux", "SpinSwap", "MajoranaGate", "InnerSigns", "PhaseGradientRotation",
-                    "GivensRotation"})
+                    "GivensRotation", "TailAngleLoad", "SFAngleLoad"})
 """Operators whose rules call no dfthc operator; their rules are not run to find rows."""
 COMPOSITES = frozenset({"DFTHCWalk", "ControlledDFTHCWalk", "DFTHCBlockEncoding",
                         "ControlledDFTHCBlockEncoding", "InnerSelect", "InnerSelectDagger"})
@@ -187,8 +189,6 @@ PARENT_KEYS = {
     ("Adjoint(FlaggedUniformPrep)", "InnerUnprepareFromOutcomes"): "uniform_b_adjoint",
     ("PhaseGradientRotation", "FlaggedUniformPrep"): "rotation",
     ("QROAMRead", "OuterPrepare"): "outer_read", ("QROAMRead", "InnerPrepare"): "inner_read",
-    ("QROAMRead", "TailAngleLoad"): "tail_angle_load",
-    ("QROAMRead", "SFAngleLoad"): "sf_angle_load",
     ("PhaseFixup", "OuterUnprepareFromOutcomes"): "outer_erase",
     ("PhaseFixup", "InnerUnprepareFromOutcomes"): "inner_erase",
     ("ZeroReflection", "RefT2"): "ref_t2", ("ZeroReflection", "RefAB"): "ref_ab",
@@ -212,7 +212,6 @@ PARENT_STEPS = {("FlaggedUniformPrep", "OuterPrepare"): "1",
                 ("Adjoint(FlaggedUniformPrep)", "InnerUnprepareFromOutcomes"): "22",
                 ("PhaseGradientRotation", "FlaggedUniformPrep"): "1, 5",
                 ("QROAMRead", "OuterPrepare"): "2", ("QROAMRead", "InnerPrepare"): "6",
-                ("QROAMRead", "TailAngleLoad"): "10", ("QROAMRead", "SFAngleLoad"): "11",
                 ("PhaseFixup", "OuterUnprepareFromOutcomes"): "26",
                 ("PhaseFixup", "InnerUnprepareFromOutcomes"): "21",
                 ("ZeroReflection", "RefT2"): "23", ("ZeroReflection", "RefAB"): "28",
@@ -427,9 +426,9 @@ def closed_form(name: str, op, p: WalkParams) -> tuple[costs.Cost, int]:
         cost = costs.flagged_uniform_unprep(a["L"], a["s"])
         return cost, cost.toffoli + _dirty(a["L"])
     if name == "QROAMRead":
-        ranges = QROAMRead.visited_ranges(a["address_widths"], a["live_ranges"], a["block_bits"])
-        cost = costs.qroam_read(ranges, a["block_bits"], a["width"],
-                                a["control_value"] is not None)
+        select = QROAMRead.select_size(a["address_widths"], a["live_ranges"], a["block_bits"],
+                                       a["control_value"])
+        cost = costs.qroam_read(*select, a["block_bits"], a["width"])
         return cost, cost.toffoli - (2**a["block_bits"] - 1) * a["width"]
     if name == "PhaseFixup":
         ranges = QROAMErase.fixup_high_ranges(a["address_widths"], a["live_ranges"],
@@ -593,7 +592,8 @@ def clifford_kind(row: Row) -> str:
     conditionals, counted at their maximum branch; erase fix-ups are hinted, counted at their
     expectation."""
     names = row.descendants
-    unhinted = names & ({"QROAMRead", "QROAMErase", "AngleErase", "QPERound"} | FROM_OUTCOMES)
+    unhinted = names & ({"QROAMRead", "TailAngleLoad", "SFAngleLoad", "QROAMErase", "AngleErase",
+                         "QPERound"} | FROM_OUTCOMES)
     hinted = names & ({"QROAMErase", "AngleErase", "PhaseFixup"} | FROM_OUTCOMES)
     parts = (["upper bound (CNOT, PauliX)"] if unhinted else []) + (
         ["expected, hinted (CZ, PauliZ)"] if hinted else [])
@@ -607,7 +607,7 @@ def gates(rows: list[Row]) -> dict[str, int]:
     with qp.capture.pause(), qp.queuing.AnnotatedQueue():
         ops = {row.id: row.size_op() for row in rows if row.size_op is not None}
     solution = DecompositionGraph(operations=list(ops.values()), gate_set=GATE_SET,
-                                  fixed_decomps=FIXED_DECOMPS).solve()
+                                  fixed_decomps={**FIXED_DECOMPS, **PENNYLANE_PINS}).solve()
     return {row_id: int(solution.resource_estimate(op).num_gates) for row_id, op in ops.items()}
 
 

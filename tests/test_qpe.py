@@ -142,11 +142,11 @@ def test_controlled_walk_power_validates():
 
 
 def test_closed_forms_at_femoco():
-    """Spec 9.23 and 9.24 at FeMoco-54, without compiling: C(W)^2 is 19,590 Toffolis and 5,048
+    """Spec 9.23 and 9.24 at FeMoco-54, without compiling: C(W)^2 is 19,584 Toffolis and 5,048
     measurements; round 0 of a 3-bit estimation adds 1 + 2 correction Toffolis to one step."""
-    assert costs.controlled_walk_power(FEMOCO54, 2) == costs.Cost(2 * 9795, 2 * 2524)
-    assert costs.qpe_round(FEMOCO54, 0, 3) == costs.Cost(9795 + 1 + 2, 2524)
-    assert costs.qpe_round(FEMOCO54, 2, 3) == costs.Cost(4 * 9795, 4 * 2524)
+    assert costs.controlled_walk_power(FEMOCO54, 2) == costs.Cost(2 * 9792, 2 * 2524)
+    assert costs.qpe_round(FEMOCO54, 0, 3) == costs.Cost(9792 + 1 + 2, 2524)
+    assert costs.qpe_round(FEMOCO54, 2, 3) == costs.Cost(4 * 9792, 4 * 2524)
 
 
 # --------------------------------------------------------------------------- QPERound

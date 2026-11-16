@@ -6,7 +6,7 @@ import pennylane as qp
 import pytest
 
 from dfthc import costs
-from dfthc.compile import FIXED_DECOMPS, GATE_SET, compiled_resources
+from dfthc.compile import FIXED_DECOMPS, GATE_SET, PENNYLANE_PINS, compiled_resources
 from dfthc.data.alias import alias_probabilities
 from dfthc.data.encoded import (
     dfthcbe_failure_signs,
@@ -232,7 +232,7 @@ def test_every_basis_input_gets_the_sign_of_its_selected_weight(name):
 def expected_and_uncomputes(p, unprepare):
     """A: every TemporaryAND of the pair is uncomputed by measurement inside it (spec 9.24). The
     prepare uncomputes the uniform preparation's 2(n - 1) + 2(s_u - 1) ANDs and the read's
-    iteration ANDs U; the unprepare the comparator's b_k2, the erase fix-up's T and the adjoint
+    select ANDs N; the unprepare the comparator's b_k2, the erase fix-up's T and the adjoint
     uniform preparation's 3(n - 1) + 2(s_u - 1) (n = lg(l_b); none of the uniform terms if
     l_b = 1)."""
     n, s = lg(odd_part(p.B + 1)), p.s_u
@@ -242,7 +242,7 @@ def expected_and_uncomputes(p, unprepare):
         erase = costs.qroam_erase(QROAMErase.fixup_high_ranges(widths, live, k, ob), k, width,
                                   ob, False)
         return p.b_k2 + erase.toffoli + (3 * (n - 1) + 2 * (s - 1) if n else 0)
-    read = costs.qroam_read(QROAMRead.visited_ranges(widths, live, k), k, width, False)
+    read = costs.qroam_read(*QROAMRead.select_size(widths, live, k, None), k, width)
     return (2 * (n - 1) + 2 * (s - 1) if n else 0) + read.toffoli - (2**k - 1) * width
 
 
@@ -278,8 +278,8 @@ def test_counts_at_mid_naphthalene(unprepare):
 
 
 def test_femoco_counts_on_the_closed_forms():
-    """FeMoco-54 on the closed forms, nothing compiled: prepare 18 + 933 + 15 + 5 = 971 with
-    A = 16 + 543 = 559, unprepare 5 + 196 + 16 = 217 with M = 416 and A = 15 + 196 + 18 = 229;
+    """FeMoco-54 on the closed forms, nothing compiled: prepare 18 + 932 + 15 + 5 = 970 with
+    A = 16 + 542 = 558, unprepare 5 + 196 + 16 = 217 with M = 416 and A = 15 + 196 + 18 = 229;
     the pair's A is its T less its Toffoli-only part 2 w_b + (K2 - 1) d2, as
     dfthc.costs.measured_and_uncomputes counts it. InnerSigns costs 0 (its A = 0 is the compiled
     count of test_inner_signs_counts_rules_and_device_level: it has three wires at every size).
@@ -287,22 +287,22 @@ def test_femoco_counts_on_the_closed_forms():
     spec 10.3's 65-wire inner group and the 390 junk wires, which the walk's layout puts on the
     angle wires (spec 10.2)."""
     p = FEMOCO54
-    assert costs.inner_prepare(p) == costs.Cost(971)
+    assert costs.inner_prepare(p) == costs.Cost(970)
     assert costs.inner_unprepare(p) == costs.Cost(217, 416)
     assert costs.inner_signs() == costs.Cost(0)
     uncomputes = expected_and_uncomputes(p, False), expected_and_uncomputes(p, True)
-    assert uncomputes == (559, 229)
-    assert sum(uncomputes) == 971 + 217 - (2 * p.w_b + (p.K2 - 1) * p.d2)
+    assert uncomputes == (558, 229)
+    assert sum(uncomputes) == 970 + 217 - (2 * p.w_b + (p.K2 - 1) * p.d2)
     widths, live, width, k = InnerPrepare.read_shape(p.N, p.R, p.B, p.C, p.b_k2, p.k2).values()
     ob = p.ke2 + p.w_b
-    read = costs.qroam_read(QROAMRead.visited_ranges(widths, live, k), k, width, False)
+    read = costs.qroam_read(*QROAMRead.select_size(widths, live, k, None), k, width)
     erase = costs.qroam_erase(QROAMErase.fixup_high_ranges(widths, live, k, ob), k, width, ob,
                               False)
-    assert (read, erase) == (costs.Cost(933), costs.Cost(196, 416))
+    assert (read, erase) == (costs.Cost(932), costs.Cost(196, 416))
     uniform = costs.flagged_uniform_prep(p.B + 1, p.s_u), costs.flagged_uniform_unprep(p.B + 1,
                                                                                        p.s_u)
     assert uniform == (costs.Cost(18), costs.Cost(16)) and (p.b_k2, p.w_b) == (15, 5)
-    assert uniform[0].toffoli + read.toffoli + p.b_k2 + p.w_b == 971
+    assert uniform[0].toffoli + read.toffoli + p.b_k2 + p.w_b == 970
     assert p.w_b + erase.toffoli + uniform[1].toffoli == 217
     sizes = InnerPrepare.required_wires(*structure(p))
     assert sizes == {"x_o": 9, "b": 5, "succ_b": 1, "succ_work_b": 2, "sigma_0": 1, "m_b": 15,
@@ -379,7 +379,7 @@ def test_inner_signs_phase_on_every_basis_input(adjoint):
     (-1)**(sgn XOR (less_than_b AND d_sgn)) on every basis input; the adjoint is the same."""
 
     @qp.qjit(capture=True)
-    @qp.decompose(gate_set=GATE_SET, fixed_decomps=dict(FIXED_DECOMPS))
+    @qp.decompose(gate_set=GATE_SET, fixed_decomps={**FIXED_DECOMPS, **PENNYLANE_PINS})
     @qp.qnode(qp.device("lightning.qubit", wires=3))
     def circuit():
         for wire in range(3):

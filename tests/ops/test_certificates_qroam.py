@@ -89,11 +89,11 @@ def test_read_erase_round_trip_certificate(shape, control_value, zero):
     widths, live, width, k, ob = shape
     table = random_table(widths, live, width, zero=zero)
     wires, num_wires, read_work, erase_work = layout(shape, control_value)
-    words = QROAMRead.leaf_words_from_table(table, address_widths=widths, live_ranges=live,
-                                            width=width, block_bits=k)
+    columns = QROAMRead.columns_from_table(table, address_widths=widths, live_ranges=live,
+                                           width=width, block_bits=k)
 
     def round_trip():
-        QROAMRead(words, widths, live, width, k, control_value, wires["address"],
+        QROAMRead(columns, widths, live, width, k, control_value, wires["address"],
                   wires["target"], wires["junk"], wires["work"][:read_work], wires["control"])
         QROAMErase(table, widths, live, width, k, control_value, ob, wires["address"],
                    wires["target"], wires["junk"], wires["work"][:erase_work], wires["control"],

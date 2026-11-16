@@ -95,8 +95,8 @@ def watched(name: str, program: str) -> dict:
 def test_qpe_counts(name, t):
     """Worst case, every unhinted correction at its maximum branch (spec 9.24 and 11.3).
     H2_STO3G_TEST (T_C(W) = 160, M_W = 50, A_C(W) = 110): T = 160, 481, 1,124; M = 51, 152,
-    353; A = 110, 331, 774. H2_631G_TEST (242, 68, 181): T = 242, 727, 1,698; M = 69, 206, 479;
-    A = 181, 544, 1,271. The program has exactly WalkLayout's wires with qpe_bits = t: the
+    353; A = 110, 331, 774. H2_631G_TEST (241, 68, 180): T = 241, 724, 1,691; M = 69, 206, 479;
+    A = 180, 541, 1,264. The program has exactly WalkLayout's wires with qpe_bits = t: the
     corrections' 2t - 1 wires are the work pool's (8 and 9 wires)."""
     p = PRESETS[name]
     walk, qpe = watched(name, "walk"), watched(name, f"qpe{t}")
@@ -132,11 +132,11 @@ def test_inventory_of_the_qpe_program():
 
 
 def test_qpe_closed_forms_at_femoco():
-    """Spec 11.3: no compile at FeMoco-54 shape; the closed form with T_C(W) = 9,795 and
-    M_W = 2,524 (Task 4.5 compiles those two) gives T = 9,795, 29,386, 68,569 and
+    """Spec 11.3: no compile at FeMoco-54 shape; the closed form with T_C(W) = 9,792 and
+    M_W = 2,524 (Task 4.5 compiles those two) gives T = 9,792, 29,377, 68,548 and
     M = 2,525, 7,574, 17,671 for t = 1, 2, 3."""
     assert [costs.iterative_qpe(FEMOCO54, t) for t in (1, 2, 3)] == [
-        costs.Cost(9795, 2525), costs.Cost(29386, 7574), costs.Cost(68569, 17671)]
+        costs.Cost(9792, 2525), costs.Cost(29377, 7574), costs.Cost(68548, 17671)]
 
 
 if __name__ == "__main__":

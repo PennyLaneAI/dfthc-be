@@ -313,7 +313,7 @@ class DFTHCBlockEncoding(Operator2):
     one). Of ``M``, :math:`(K_1 - 1) d_1 + 2 (K_2 - 1) d_2` are this rule's own junk
     measurements (:func:`dfthc.costs.junk_measurements`) and the unprepares from outcomes
     measure the targets, :math:`d_1 + 2 d_2`. At FeMoco-54:
-    :math:`279 + 2 \cdot 4725 + 20 = 9749`, ``M = 2524`` (852 of them junk), ``A = 8632``.
+    :math:`278 + 2 \cdot 4724 + 20 = 9746`, ``M = 2524`` (852 of them junk), ``A = 8629``.
     ``CNOT`` and ``PauliX`` counts are upper bounds (spec 7.6).
 
     **Paper and dfthcbe.** Steps 1 to 27 of spec 3.5: the sum-of-squares block encoding
@@ -427,7 +427,7 @@ class ControlledDFTHCBlockEncoding(Operator2):
 
     **Cost.** :func:`dfthc.costs.block_encoding` (controlled): :class:`DFTHCBlockEncoding`'s
     ``T + 1`` (the controlled reflection's extra ``TemporaryAND``), the same ``M``,
-    ``A = T - (T_Toffoli - 1)``. At FeMoco-54: ``T = 9750``, ``M = 2524``, ``A = 8633``.
+    ``A = T - (T_Toffoli - 1)``. At FeMoco-54: ``T = 9747``, ``M = 2524``, ``A = 8630``.
 
     **Paper and dfthcbe.** The controlled block encoding inside the controlled walk
     :math:`C(W) = C(\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}})\,U^\dagger\,
@@ -545,8 +545,8 @@ class DFTHCWalk(Operator2):
 
     **Cost.** :func:`dfthc.costs.walk` (uncontrolled): :math:`T = T_{BE} + T_{RefAB}`,
     :math:`M = M_{BE}`; ``A`` = :func:`dfthc.costs.measured_and_uncomputes` (uncontrolled),
-    ``T - T_Toffoli``. At FeMoco-54: :math:`9749 + 44 = 9793`, ``M = 2524``, ``A = 8675``, so
-    ``M + A = 11199`` physical measurements (spec 9.24). ``CNOT`` and ``PauliX`` counts are
+    ``T - T_Toffoli``. At FeMoco-54: :math:`9746 + 44 = 9790`, ``M = 2524``, ``A = 8672``, so
+    ``M + A = 11196`` physical measurements (spec 9.24). ``CNOT`` and ``PauliX`` counts are
     upper bounds (spec 7.6).
 
     **Paper and dfthcbe.** Steps 1 to 28 of spec 3.5: the walk
@@ -661,7 +661,7 @@ class ControlledDFTHCWalk(Operator2):
 
     **Cost.** :func:`dfthc.costs.walk` (controlled): :class:`DFTHCWalk`'s ``T + 2``, the same
     ``M``; ``A`` = :func:`dfthc.costs.measured_and_uncomputes` (controlled). At FeMoco-54:
-    ``T = 9795``, ``M = 2524``, ``A = 8677``, ``M + A = 11201``.
+    ``T = 9792``, ``M = 2524``, ``A = 8674``, ``M + A = 11198``.
 
     **Paper and dfthcbe.** The controlled walk of spec 3.3, the unit of the paper's phase
     estimation (arXiv:2502.15882v1 Sec. II, after Eq. (11)). The paper counts the phase-estimation

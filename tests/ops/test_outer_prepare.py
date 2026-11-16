@@ -5,7 +5,7 @@ import pennylane as qp
 import pytest
 
 from dfthc import costs
-from dfthc.compile import FIXED_DECOMPS, GATE_SET, compiled_resources
+from dfthc.compile import FIXED_DECOMPS, GATE_SET, PENNYLANE_PINS, compiled_resources
 from dfthc.data.alias import alias_probabilities
 from dfthc.data.encoded import encoded_block, encoded_factors, uniform_failure_probability
 from dfthc.data.factors import load_factors, random_factors
@@ -187,7 +187,7 @@ def test_prepared_state_is_the_alias_distribution(name):
 
 def _lightning(num_wires, body, returns, seed=None):
     @qp.qjit(capture=True, seed=seed)
-    @qp.decompose(gate_set=GATE_SET, fixed_decomps=dict(FIXED_DECOMPS))
+    @qp.decompose(gate_set=GATE_SET, fixed_decomps={**FIXED_DECOMPS, **PENNYLANE_PINS})
     @qp.qnode(qp.device("lightning.qubit", wires=num_wires))
     def circuit():
         body()
@@ -240,7 +240,7 @@ def test_lightning_round_trip_with_two_seeds():
 def expected_and_uncomputes(p, unprepare):
     """A: every TemporaryAND of the pair is uncomputed by measurement inside it (spec 9.24). The
     prepare uncomputes the uniform preparation's 2(n - 1) + 2(s_u - 1) ANDs and the read's
-    iteration ANDs U; the unprepare the comparator's b_k1, the erase fix-up's T and the adjoint
+    select ANDs N; the unprepare the comparator's b_k1, the erase fix-up's T and the adjoint
     uniform preparation's 3(n - 1) + 2(s_u - 1) (n = lg(l_x); none of the uniform terms if
     l_x = 1)."""
     n, s = lg(odd_part(p.X_o)), p.s_u
@@ -250,7 +250,7 @@ def expected_and_uncomputes(p, unprepare):
         erase = costs.qroam_erase(QROAMErase.fixup_high_ranges(widths, live, k, p.ke1), k, width,
                                   p.ke1, False)
         return p.b_k1 + erase.toffoli + (3 * (n - 1) + 2 * (s - 1) if n else 0)
-    read = costs.qroam_read(QROAMRead.visited_ranges(widths, live, k), k, width, False)
+    read = costs.qroam_read(*QROAMRead.select_size(widths, live, k, None), k, width)
     return (2 * (n - 1) + 2 * (s - 1) if n else 0) + read.toffoli - (2**k - 1) * width
 
 
@@ -286,26 +286,26 @@ def test_counts_at_mid_naphthalene(unprepare):
 
 
 def test_femoco_counts_on_the_closed_forms():
-    """FeMoco-54 on the closed forms, nothing compiled: prepare 30 + 156 + 15 + 9 = 210 with
-    A = 24 + 84 = 108, unprepare 9 + 36 + 24 = 69 with M = 96 and A = 15 + 36 + 30 = 81; the pair
+    """FeMoco-54 on the closed forms, nothing compiled: prepare 30 + 155 + 15 + 9 = 209 with
+    A = 24 + 83 = 107, unprepare 9 + 36 + 24 = 69 with M = 96 and A = 15 + 36 + 30 = 81; the pair
     uncomputes all it computes, so its A is its T less its Toffoli-only part 2 w_x + (K1 - 1) d1,
     as dfthc.costs.measured_and_uncomputes counts it. The operator's own read and erase shapes
     give the same pieces, and its registers are spec 10.3's 71-wire outer group and the 72 junk
     wires, which the walk's layout puts on the angle wires (spec 10.2)."""
     p = FEMOCO54
-    assert costs.outer_prepare(p) == costs.Cost(210)
+    assert costs.outer_prepare(p) == costs.Cost(209)
     assert costs.outer_unprepare(p) == costs.Cost(69, 96)
     uncomputes = expected_and_uncomputes(p, False), expected_and_uncomputes(p, True)
-    assert uncomputes == (108, 81)
-    assert sum(uncomputes) == 210 + 69 - (2 * p.w_x + (p.K1 - 1) * p.d1)
+    assert uncomputes == (107, 81)
+    assert sum(uncomputes) == 209 + 69 - (2 * p.w_x + (p.K1 - 1) * p.d1)
     widths, live, width, k = OuterPrepare.read_shape(p.X_o, p.b_k1, p.k1).values()
-    read = costs.qroam_read(QROAMRead.visited_ranges(widths, live, k), k, width, False)
+    read = costs.qroam_read(*QROAMRead.select_size(widths, live, k, None), k, width)
     erase = costs.qroam_erase(QROAMErase.fixup_high_ranges(widths, live, k, p.ke1), k, width,
                               p.ke1, False)
-    assert (read, erase) == (costs.Cost(156), costs.Cost(36, 96))
+    assert (read, erase) == (costs.Cost(155), costs.Cost(36, 96))
     uniform = costs.flagged_uniform_prep(p.X_o, p.s_u), costs.flagged_uniform_unprep(p.X_o, p.s_u)
     assert uniform == (costs.Cost(30), costs.Cost(24)) and (p.b_k1, p.w_x) == (15, 9)
-    assert uniform[0].toffoli + read.toffoli + p.b_k1 + p.w_x == 210
+    assert uniform[0].toffoli + read.toffoli + p.b_k1 + p.w_x == 209
     assert p.w_x + erase.toffoli + uniform[1].toffoli == 69
     sizes = OuterPrepare.required_wires(p.X_o, p.b_k1, p.k1, p.ke1, p.s_u)
     assert sizes == {"x_o": 9, "succ_x_o": 1, "succ_work_x_o": 6, "sigma_1": 1, "m_x_o": 15,
