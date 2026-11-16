@@ -518,19 +518,20 @@ def test_reason_codes_at_femoco(femoco_report):
 
 
 def test_qpe_summary_and_wire_boundaries(femoco_report):
-    """The FeMoco-54 QPE summary gives T, M and A from the controlled walk, A = (2^t - 1) A_C(W)
-    + (t^3 - t)/6 (the phase4-qpe plan's interface), in its record, its basis sentence and its
-    table; and the QPE wires step by two where the phase register grows a spare wire:
-    `H2_STO3G_TEST` 59, 60, 62 at t = 3, 4, 5 and FeMoco-54 1,124, 1,125, 1,127 at t = 21, 22,
-    23 (nothing is compiled)."""
+    """The FeMoco-54 QPE summary gives T and A from the controlled walk and M from the walk,
+    A = (2^t - 1) A_C(W) + (t^3 - t)/6 (the phase4-qpe plan's interface), in its record, its
+    basis sentence and its table; and the QPE wires step by two where the phase register grows a
+    spare wire: `H2_STO3G_TEST` 59, 60, 62 at t = 3, 4, 5 and FeMoco-54 1,124, 1,125, 1,127 at
+    t = 21, 22, 23 (nothing is compiled)."""
     record, markdown = femoco_report
     cwalk = next(r for r in record["rows"] if r["id"] == "ControlledDFTHCWalk")["closed"]
+    walk = next(r for r in record["rows"] if r["id"] == "DFTHCWalk")["closed"]
     assert cwalk["measured_and_uncomputes"] == 8677
     for bits in (1, 2, 3, 10, 20, 23):
         qpe = record["qpe"][str(bits)]
         assert (qpe["toffoli"], qpe["measurements"], qpe["measured_and_uncomputes"]) == (
             (2**bits - 1) * cwalk["toffoli"] + (bits**3 - bits) // 6,
-            (2**bits - 1) * cwalk["measurements"] + bits,
+            (2**bits - 1) * walk["measurements"] + bits,
             (2**bits - 1) * cwalk["measured_and_uncomputes"] + (bits**3 - bits) // 6)
     assert [record["qpe"][str(bits)]["measured_and_uncomputes"] for bits in (1, 2, 3)] == [
         8677, 26032, 60743]
@@ -540,6 +541,29 @@ def test_qpe_summary_and_wire_boundaries(femoco_report):
     h2, femoco = report.build_system("H2_STO3G_TEST"), report.build_system("femoco54")
     assert [report.qpe_wires(h2, bits) for bits in (3, 4, 5)] == [59, 60, 62]
     assert [report.qpe_wires(femoco, bits) for bits in (21, 22, 23)] == [1124, 1125, 1127]
+
+
+def test_qpe_summary_takes_m_from_the_walk(tmp_path):
+    """Final review m-15: the FeMoco-54 QPE summary's M is (2^t - 1) M_W + t with the walk's M
+    (spec 9.24 and 11.3), T and A from the controlled walk. A cached controlled walk whose M
+    differs from the walk's (2,525 against the closed 2,524) leaves the summary's M on the walk's,
+    and its basis sentence says so (nothing is compiled; the cached M fails the check, exit 1)."""
+    entry = {"code_hash": provenance.code_hash(), "status": "compiled", "toffoli": 9795,
+             "measurements": 2525, "measured_and_uncomputes": 8677, "num_wires": 1103,
+             "counts": {"Toffoli": 9795 - 8677, "TemporaryAND": 8677,
+                        "Adjoint(TemporaryAND)": 8677, "MidCircuitMeasure": 2525},
+             "seconds": 1.0, "watchdog": {"peak_mb": 1.0}}
+    (tmp_path / "resources.json").write_text(json.dumps(
+        {"compiled": {"femoco54/ControlledDFTHCWalk": [entry]}}))
+    assert report.main(["--systems", "femoco54", "--rows", "--out", str(tmp_path)]) == 1
+    record = json.loads((tmp_path / "resources.json").read_text())["systems"]["femoco54"]
+    for bits in (1, 2, 3, 23):
+        qpe = record["qpe"][str(bits)]
+        assert (qpe["toffoli"], qpe["measurements"], qpe["measured_and_uncomputes"]) == (
+            (2**bits - 1) * 9795 + (bits**3 - bits) // 6, (2**bits - 1) * 2524 + bits,
+            (2**bits - 1) * 8677 + (bits**3 - bits) // 6), bits
+    assert record["qpe_basis"].startswith("T and A from the compiled controlled walk, M from the "
+                                          "walk")
 
 
 def test_qubit_summary_at_femoco(femoco_report):

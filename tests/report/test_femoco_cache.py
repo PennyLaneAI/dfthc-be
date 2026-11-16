@@ -149,8 +149,8 @@ def test_femoco_cache(monkeypatch):
     """D-3 from the cache: the current entries hold spec 9.24's counts with their provenance,
     and the sum over the partition rows of calls per walk times the closed form, plus in M the
     block encodings' junk measurements, equals the cached walk and controlled-walk totals of T, M
-    and A; the report's FeMoco-54 QPE summary gives T, M and A from the cached controlled walk
-    (spec 11.3; A = (2^t - 1) A_C(W) + (t^3 - t)/6). Nothing is compiled."""
+    and A; the report's FeMoco-54 QPE summary gives T and A from the cached controlled walk and M
+    from the cached walk (spec 11.3; A = (2^t - 1) A_C(W) + (t^3 - t)/6). Nothing is compiled."""
     monkeypatch.setattr(report, "compile_counts", lambda *args: pytest.fail("no compile"))
     monkeypatch.setattr(report, "measure", lambda *args: pytest.fail("no compile"))
     record = json.loads((REPO / "docs" / "resources.json").read_text())
@@ -171,7 +171,8 @@ def test_femoco_cache(monkeypatch):
     walk = report.current(cache, "femoco54/DFTHCWalk", hash_)
     cwalk = report.current(cache, "femoco54/ControlledDFTHCWalk", hash_)
     summary = record["systems"]["femoco54"]
-    assert summary["qpe_basis"].startswith("T, M and A from the compiled controlled walk")
+    assert summary["qpe_basis"].startswith("T and A from the compiled controlled walk, M from "
+                                           "the walk")
     for bits in (1, 2, 3, 10, 20, 23):
         expected = {"toffoli": (2**bits - 1) * cwalk["toffoli"] + (bits**3 - bits) // 6,
                     "measurements": (2**bits - 1) * walk["measurements"] + bits,
