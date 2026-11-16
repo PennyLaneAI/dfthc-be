@@ -38,7 +38,8 @@ class WalkParams:
     - ``ke1``, ``ke2``: one-hot bits of the outer and inner erase fixups.
 
     Construction raises ``ValueError`` naming the violated constraint. The constraints are those
-    of spec 8.3 plus ``0 <= n_plus <= N``. Composite operators take the 13 fields as one compilable
+    of spec 8.3, the select's one-hot fit ``2**w_b <= (N - 1) b_rot + 1`` included, plus
+    ``0 <= n_plus <= N``. Composite operators take the 13 fields as one compilable
     tuple (``as_compilable``) and rebuild the object with ``from_compilable``.
     """
 
@@ -72,6 +73,7 @@ class WalkParams:
         self._check(0 <= self.k2 <= self.w_b, "0 <= k2 <= w_b")
         self._check(0 <= self.ke1 <= self.w_x, "0 <= ke1 <= w_x")
         self._check(0 <= self.ke2 <= lg(self.RC), "0 <= ke2 <= lg(RC)")
+        self._check(2**self.w_b <= (self.N - 1) * self.b_rot + 1, "2**w_b <= (N - 1) b_rot + 1")
 
     def _check(self, holds: bool, constraint: str) -> None:
         if not holds:

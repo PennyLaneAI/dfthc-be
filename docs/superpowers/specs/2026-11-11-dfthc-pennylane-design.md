@@ -700,8 +700,9 @@ Validation covers four things:
   - $N \ge 2$ and $R, B, C \ge 1$;
   - $b_{\mathrm{rot}} \ge 3$, $b_{k1}, b_{k2} \ge 1$, and $3 \le s_u \le b_{\mathrm{grad}}$;
   - $0 \le k_1 \le w_x$ and $0 \le k_2 \le w_b$;
-  - $0 \le k_{e1} \le w_x$ and $0 \le k_{e2} \le \lg(RC)$.
-- **Block-bit defaults** come from `dfthc.costs.cheapest_block_bits`, which minimizes our closed-form Toffoli count, as dfthcbe does. The resource report gives every vendored system Table III's precisions ($b_{\mathrm{rot}} = b_{k1} = b_{k2} = 15$, $s_u = 7$) with these block bits (`dfthc.costs_reference.default_params`), its "default precisions" (§13.3).
+  - $0 \le k_{e1} \le w_x$ and $0 \le k_{e2} \le \lg(RC)$;
+  - $2^{w_b} \le (N - 1)\,b_{\mathrm{rot}} + 1$: the select's SF fix-up one-hot over the $w_b$ bits of `b` fits the reset angle and `b_neq_B` wires (§9.17), which no block-bit choice can change.
+- **Block-bit defaults** come from `dfthc.costs.cheapest_block_bits`, which minimizes our closed-form Toffoli count, as dfthcbe does, among the block bits whose erase one-hots fit their measured target and junk wires: $2^{k_{e1}} \le K_1 d_1$ and $2^{k_{e2} + w_b} \le K_2 d_2$ (§9.7, §9.8). The resource report gives every vendored system Table III's precisions ($b_{\mathrm{rot}} = b_{k1} = b_{k2} = 15$, $s_u = 7$) with these block bits (`dfthc.costs_reference.default_params`), its "default precisions" (§13.3).
 
 Presets:
 

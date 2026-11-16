@@ -8,9 +8,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from dfthc import costs
+from dfthc import costs, costs_reference
 from dfthc.costs import Cost
-from dfthc.params import FEMOCO54, H2_STO3G_TEST, MID_NAPHTHALENE, WalkParams, lg
+from dfthc.data.factors import load_factors
+from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE, WalkParams, lg
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "spikes"))
 from prototypes import unary_toffolis  # noqa: E402
@@ -181,11 +182,14 @@ def test_application_rows():
 
 
 def test_cheapest_block_bits_is_a_brute_force_minimizer():
-    """Over every (k1, k2, ke1, ke2), also at shapes whose X_o is not a multiple of K1."""
+    """Over every (k1, k2, ke1, ke2) whose erase one-hots fit (2**ke1 <= K1 d1 and
+    2**(ke2 + w_b) <= K2 d2), also at shapes whose X_o is not a multiple of K1."""
     for params in (P, H2_STO3G_TEST, MID_NAPHTHALENE, X_O_5):
         best = costs.cheapest_block_bits(params)
-        grid = itertools.product(range(params.w_x + 1), range(params.w_b + 1),
-                                 range(params.w_x + 1), range(lg(params.RC) + 1))
+        grid = [(a, b, c, d) for a, b, c, d in itertools.product(
+                    range(params.w_x + 1), range(params.w_b + 1), range(params.w_x + 1),
+                    range(lg(params.RC) + 1))
+                if 2**c <= 2**a * params.d1 and 2 ** (d + params.w_b) <= 2**b * params.d2]
         brute = min(costs.walk(dataclasses.replace(params, k1=a, k2=b, ke1=c, ke2=d), False).toffoli
                     for a, b, c, d in grid)
         chosen = dataclasses.replace(params, k1=best[0], k2=best[1], ke1=best[2], ke2=best[3])
@@ -194,6 +198,32 @@ def test_cheapest_block_bits_is_a_brute_force_minimizer():
     assert costs.cheapest_block_bits(MID_NAPHTHALENE) == (1, 2, 3, 1)  # the preset's, dfthcbe's
     # X_O_5 ties (0, 0, 1, 0) with (0, 0, 2, 0) at T = 7 for the outer read and erase: smallest wins
     assert costs.cheapest_block_bits(X_O_5) == (0, 0, 1, 0)
+
+
+REPORTED_BLOCK_BITS = {
+    "h2_sto3g_R2_B2_C1": (0, 0, 1, 0), "h2_631g_R2_B2_C2": (0, 0, 1, 0),
+    "h2_631g_R2_B3_C3": (0, 0, 2, 0), "naphthalene": (1, 2, 3, 1), "fe2s2": (1, 3, 3, 1),
+    "fe4s4": (1, 3, 4, 1),
+}
+"""``(k1, k2, ke1, ke2)`` of ``costs_reference.default_params`` for every vendored system, as
+recorded before final review m-1 (the report's and the dfthcbe fixture's parameters)."""
+PRESET_BLOCK_BITS = [(FEMOCO54, (2, 4, 4, 2)), (H2_STO3G_TEST, (0, 0, 1, 0)),
+                     (H2_631G_TEST, (0, 1, 1, 0)), (MID_NAPHTHALENE, (1, 2, 3, 1))]
+
+
+def test_cheapest_block_bits_fit_the_erases_and_keep_every_reported_default():
+    """Final review m-1: the minimizer keeps the erases' one-hots inside their registers,
+    2**ke1 <= K1 d1 and 2**(ke2 + w_b) <= K2 d2; at (N, R, B, C) = (10, 1, 16, 1) the free
+    choice (0, 0, 2, 0) needed 32 > K2 d2 = 22 wires. The block bits of every vendored system
+    and the minimizer's result at every preset are unchanged."""
+    p = costs_reference.default_params(10, 1, 16, 1, 5)
+    assert 2**p.ke1 <= p.K1 * p.d1 and 2 ** (p.ke2 + p.w_b) <= p.K2 * p.d2
+    for system, bits in REPORTED_BLOCK_BITS.items():
+        f = load_factors(system)
+        p = costs_reference.default_params(f.N, f.R, f.B, f.C, f.n_plus)
+        assert (p.k1, p.k2, p.ke1, p.ke2) == bits, system
+    for preset, bits in PRESET_BLOCK_BITS:
+        assert costs.cheapest_block_bits(preset) == bits, preset
 
 
 def test_cost_values_are_python_ints():

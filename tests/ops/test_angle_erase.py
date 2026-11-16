@@ -31,7 +31,7 @@ from dfthc.ops.angle_data import (
     _erase_body,
 )
 from dfthc.ops.qroam import QROAMEmitter
-from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE, WalkParams
+from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE, WalkParams, lg
 from dfthc.testing.resources import chosen_rules, classify_rule_warning, verbose_program
 from dfthc.testing.sparse_sim import ForcedPolicy, SparseSimulator, SparseState
 from dfthc.testing.tape import decompose_for_simulation
@@ -151,12 +151,14 @@ def test_counts_with_other_one_hot_widths(name, ob):
 def test_fixup_high_ranges_agree_with_the_cost_model():
     """The erase's fix-up ranges are the oracle of dfthc.costs.angle_erase: at ob = w_b it equals
     the two fix-ups' closed forms at the presets, FeMoco-54 included, and on a grid of shapes with
-    R from 1 to 6, B from 1 to 8, N from 2 to 5, C from 1 to 3."""
+    R from 1 to 6, B from 1 to 8, N from 2 to 5, C from 1 to 3 whose select one-hot fits,
+    2**w_b <= (N - 1) b_rot + 1 (spec 8.3)."""
     assert AngleErase.sf_fixup_high_ranges(10, 27, 5) == [(0, 10, 4)]
     assert AngleErase.tail_fixup_high_ranges(54, 10, 27) == [(270, 324, 9)]
     grid = [WalkParams(N=n, R=r, B=b, C=c, n_plus=1, b_rot=4, b_k1=2, b_k2=2, s_u=3, k1=0, k2=0,
                        ke1=0, ke2=0)
-            for n, r, b, c in itertools.product(range(2, 6), range(1, 7), range(1, 9), (1, 2, 3))]
+            for n, r, b, c in itertools.product(range(2, 6), range(1, 7), range(1, 9), (1, 2, 3))
+            if 2 ** lg(b + 1) <= (n - 1) * 4 + 1]
     for p in [FEMOCO54, H2_STO3G_TEST, H2_631G_TEST, MID_NAPHTHALENE, *grid]:
         assert costs.angle_erase(p) == expected_cost(p, p.w_b), p
 

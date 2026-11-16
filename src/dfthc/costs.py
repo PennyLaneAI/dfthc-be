@@ -322,19 +322,24 @@ def measured_and_uncomputes(p: WalkParams, controlled: bool) -> int:
 
 
 def cheapest_block_bits(p: WalkParams) -> tuple[int, int, int, int]:
-    """``(k1, k2, ke1, ke2)`` minimizing ``walk(p).toffoli`` (spec 8.3), smallest on ties.
+    """``(k1, k2, ke1, ke2)`` minimizing ``walk(p).toffoli`` (spec 8.3) among the block bits
+    whose erase one-hots fit, smallest on ties.
 
     The walk cost is a sum of separate terms: the outer read and erase depend on ``(k1, ke1)``
-    (the erase covers the read's loaded set), the inner reads on ``k2`` and the inner erases on
-    ``ke2``. So ``(k1, ke1)`` is minimized jointly, in lexicographic order, and ``k2`` and ``ke2``
-    each on their own.
+    (the erase covers the read's loaded set), the inner reads and erases on ``(k2, ke2)``. So
+    each pair is minimized jointly, in lexicographic order, subject to its erase's fit: the outer
+    one-hot over ``ke1`` bits needs ``2**ke1 <= K1 d1`` wires and the inner one over
+    ``ke2 + w_b`` bits ``2**(ke2 + w_b) <= K2 d2``, the measured target and junk wires each
+    erase reuses. ``ke1 = 0`` and ``k2 = w_b`` always fit.
     """
 
     def cost(**changes) -> int:
         return walk(dataclasses.replace(p, **changes), False).toffoli
 
-    k1, ke1 = min(itertools.product(range(p.w_x + 1), repeat=2),
-                  key=lambda pair: cost(k1=pair[0], ke1=pair[1]))
-    k2 = min(range(p.w_b + 1), key=lambda k: cost(k2=k))
-    ke2 = min(range(lg(p.RC) + 1), key=lambda k: cost(ke2=k))
+    outer = [(k1, ke1) for k1, ke1 in itertools.product(range(p.w_x + 1), repeat=2)
+             if 2**ke1 <= 2**k1 * p.d1]
+    inner = [(k2, ke2) for k2, ke2 in itertools.product(range(p.w_b + 1), range(lg(p.RC) + 1))
+             if 2 ** (ke2 + p.w_b) <= 2**k2 * p.d2]
+    k1, ke1 = min(outer, key=lambda pair: cost(k1=pair[0], ke1=pair[1]))
+    k2, ke2 = min(inner, key=lambda pair: cost(k2=pair[0], ke2=pair[1]))
     return k1, k2, ke1, ke2

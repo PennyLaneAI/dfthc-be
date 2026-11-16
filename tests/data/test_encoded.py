@@ -18,7 +18,7 @@ from dfthc.data.factors import load_factors, random_factors
 from dfthc.data.fermion import annihilation
 from dfthc.data.sos import h_sa_dense, normalization
 from dfthc.data.tables import WalkTables
-from dfthc.params import H2_631G_TEST, H2_STO3G_TEST, WalkParams
+from dfthc.params import H2_631G_TEST, H2_STO3G_TEST, WalkParams, lg
 
 TEST_PRESETS = [(H2_STO3G_TEST, "h2_sto3g_R2_B2_C1"), (H2_631G_TEST, "h2_631g_R2_B2_C2")]
 X_O_FAILS = WalkParams(N=2, R=3, B=1, C=1, n_plus=1, b_rot=6, b_k1=3, b_k2=2, s_u=3, k1=1, k2=1,
@@ -134,8 +134,11 @@ def test_uniform_failure_probability_reproduces_dfthcbe():
 
 
 def _signs_case(B, k2, seed):
-    params = WalkParams(N=2, R=2, B=B, C=1, n_plus=1, b_rot=4, b_k1=2, b_k2=2, s_u=3, k1=1, k2=k2,
-                        ke1=1, ke2=1)
+    """N = 2 with the smallest b_rot from 4 up whose select one-hot fits, 2**w_b <= b_rot + 1
+    (spec 8.3); the signs read only the inner tables."""
+    b_rot = max(4, 2 ** lg(B + 1) - 1)
+    params = WalkParams(N=2, R=2, B=B, C=1, n_plus=1, b_rot=b_rot, b_k1=2, b_k2=2, s_u=3, k1=1,
+                        k2=k2, ke1=1, ke2=1)
     factors = random_factors(2, 2, B, 1, n_plus=1, seed=seed)
     return params, WalkTables.from_factors(factors, params), factors
 
