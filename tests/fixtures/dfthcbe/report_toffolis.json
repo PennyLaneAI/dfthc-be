@@ -1,5 +1,8 @@
 {
   "dfthcbe_commit": "930255020cec30172e0a7d17c0071d9476a687d1",
+  "dfthcbe_source_url": "https://codeload.github.com/Covestro-HPQC/dfthcbe/tar.gz/930255020cec30172e0a7d17c0071d9476a687d1",
+  "dfthcbe_source_sha256": "802221370175be502cde773d1c369f02c77a0d167d72ddffc1fb2d5df7df3c27",
+  "dfthcbe_installed_sha256": "3ff3d05ed381dc23d02eb0672aa659dc1b0bf659308a0c87ff8875fefb08c430",
   "versions": {
     "dfthcbe": "1.0",
     "qualtran": "0.7.0",

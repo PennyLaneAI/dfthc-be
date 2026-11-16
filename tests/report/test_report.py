@@ -591,8 +591,14 @@ def test_dfthcbe_blocks_equal_the_call_graph():
     scripts/make_report_fixture.py) at every parameter set of the report, and the 12 FeMoco-54
     block counts of Task 1A.6's fixture. The call graph's tail walk is its N leaves and its s(RC)
     stops on the dead SF prefix, truncated (-2), which is how iteration_causes takes the tail to
-    the paper; and the iteration intermediate is dfthcbe's walk where it is a valid circuit."""
+    the paper; and the iteration intermediate is dfthcbe's walk where it is a valid circuit. The
+    fixture records the dfthcbe tree it was evaluated on: the source URL and digest and the
+    installed package's digest of Task 1A.6's provenance, which tests/data/test_dfthcbe_fixtures.py
+    pins to SOURCE_SHA256 and INSTALLED_SHA256 (final review m-16)."""
     fixture = load_dfthcbe_fixture("report_toffolis.json")
+    provenance_ = load_dfthcbe_fixture("provenance.json")
+    digests = ("dfthcbe_source_url", "dfthcbe_source_sha256", "dfthcbe_installed_sha256")
+    assert {key: fixture.get(key) for key in digests} == {key: provenance_[key] for key in digests}
     for name, values in fixture["toffolis"].items():
         params = WalkParams(**fixture["parameters"][name])
         assert params == (FEMOCO54 if name == "femoco54" else report.build_system(name).params)
