@@ -100,14 +100,12 @@ def test_exact_controlled_matrix(n_w, zero, one):
 
 
 @pytest.mark.compiled
-@pytest.mark.parametrize(("n_w", "zero", "one"), [
-    pytest.param(1, [0], [], id="1-zeros"), pytest.param(1, [], [0], id="1-last-one"),
-    pytest.param(3, [0], [1, 2], id="3-mixed-011"), pytest.param(6, [0, 1, 2, 3, 4], [5],
-                                                                 id="6-last-one")])
+@pytest.mark.parametrize(("n_w", "zero", "one"), PATTERN_CASES)
 def test_exact_controlled_matrix_for_control_value_0(n_w, zero, one):
     """T3 (final review I-1): C(ZeroReflection) with control value 0 equals
     |0><0| (x) (2 Pi - I) + |1><1| (x) I, global sign included, on the compiled path, where the
-    rule sees the control value only as a dynamic argument; control value 1 is the test above."""
+    rule sees the control value only as a dynamic argument, for every pattern of the test above
+    (control value 1)."""
     work = ZeroReflection.required_wires(len(zero), len(one), controlled=True)["work"]
 
     def apply(system, work_wires):
