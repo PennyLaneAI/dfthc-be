@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pennylane as qp
 from pennylane.wires import Wires
 
 from dfthc.params import WalkParams, lg, odd_part
@@ -28,8 +29,9 @@ loaded, so the junk and the angles never hold data at the same time."""
 class WalkLayout:
     """Named wires for every register of the walk (spec 10.1 and 10.2).
 
-    Build it with :meth:`from_params`. Every register of :data:`GROUPS` is an attribute holding
-    its ``Wires``; a register of width 0 is an empty ``Wires``. With ``qpe_bits > 0`` the layout
+    Build it with :meth:`from_params`, which numbers the wires with ``qp.registers``. Every group
+    and register of :data:`GROUPS` is an attribute holding its ``Wires``; a register of width 0
+    is an empty ``Wires``. With ``qpe_bits > 0`` the layout
     also has ``qpe_control`` (1 wire) and ``qpe_grad`` (``qpe_bits`` wires) after ``work``.
     Wires are consecutive integers from 0 in group order: ``system``, ``outer``, ``inner``,
     ``select``, ``phase_grad``, ``work``. The registers of :data:`GROUPS` never overlap; the
@@ -47,7 +49,7 @@ class WalkLayout:
     def __init__(self, params: WalkParams, qpe_bits: int, registers: dict[str, Wires]):
         self.params = params
         self.qpe_bits = qpe_bits
-        self._registers = dict(registers)
+        self.num_wires = len(Wires.all_wires(list(registers.values())))
         for name, wires in registers.items():
             setattr(self, name, wires)
         for name, wires in self.split_junk(params, self.select).items():
@@ -58,13 +60,13 @@ class WalkLayout:
         if qpe_bits < 0:
             raise ValueError(f"qpe_bits must be >= 0; got {qpe_bits}")
         sizes = cls.register_sizes(params)
+        # qp.registers fails on a group that ends with a zero-width register (r at R = 1).
+        nested = {group: {name: sizes[name] for name in names if sizes[name]}
+                  for group, names in GROUPS.items()}
         if qpe_bits:
-            sizes |= {"qpe_control": 1, "qpe_grad": qpe_bits}
-        registers, start = {}, 0
-        for name, size in sizes.items():
-            registers[name] = Wires(range(start, start + size))
-            start += size
-        return cls(params, qpe_bits, registers)
+            nested |= {"qpe_control": 1, "qpe_grad": qpe_bits}
+        empty = {name: Wires([]) for name, size in sizes.items() if not size}
+        return cls(params, qpe_bits, empty | qp.registers(nested))
 
     @staticmethod
     def register_sizes(params: WalkParams) -> dict[str, int]:
@@ -132,29 +134,6 @@ class WalkLayout:
             parts[name] = wires[start:start + sizes[name]]
             start += sizes[name]
         return parts
-
-    def _group(self, group: str) -> Wires:
-        return Wires.all_wires([self._registers[name] for name in GROUPS[group]])
-
-    @property
-    def system(self) -> Wires:
-        return self._group("system")
-
-    @property
-    def outer(self) -> Wires:
-        return self._group("outer")
-
-    @property
-    def inner(self) -> Wires:
-        return self._group("inner")
-
-    @property
-    def select(self) -> Wires:
-        return self._group("select")
-
-    @property
-    def num_wires(self) -> int:
-        return sum(len(wires) for wires in self._registers.values())
 
     def angle_register(self, k: int) -> Wires:
         """The ``b_rot`` wires of angle register ``k``, which drives rung ``k`` (spec 6.7)."""
