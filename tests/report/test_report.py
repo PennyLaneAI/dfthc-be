@@ -537,6 +537,9 @@ def test_qpe_summary_and_wire_boundaries(femoco_report):
         8677, 26032, 60743]
     assert [record["qpe"][str(bits)]["wires"] for bits in (20, 23)] == [1123, 1127]
     assert "A = (2^t - 1) A_C(W) + (t^3 - t)/6" in record["qpe_basis"]
+    assert record["qpe_basis"].endswith("a compile with `--large femoco54` replaces them by the "
+                                        "compiled T_C(W), M_W and A_C(W).")
+    assert "Task" not in record["qpe_basis"]
     assert "| t | T | M | A | Qubits |" in markdown
     h2, femoco = report.build_system("H2_STO3G_TEST"), report.build_system("femoco54")
     assert [report.qpe_wires(h2, bits) for bits in (3, 4, 5)] == [59, 60, 62]
@@ -547,7 +550,8 @@ def test_qpe_summary_takes_m_from_the_walk(tmp_path):
     """Final review m-15: the FeMoco-54 QPE summary's M is (2^t - 1) M_W + t with the walk's M
     (spec 9.24 and 11.3), T and A from the controlled walk. A cached controlled walk whose M
     differs from the walk's (2,525 against the closed 2,524) leaves the summary's M on the walk's,
-    and its basis sentence says so (nothing is compiled; the cached M fails the check, exit 1)."""
+    and its basis sentence says so, naming no task: the pair is recompiled per code hash (nothing
+    is compiled; the cached M fails the check, exit 1)."""
     entry = {"code_hash": provenance.code_hash(), "status": "compiled", "toffoli": 9795,
              "measurements": 2525, "measured_and_uncomputes": 8677, "num_wires": 1103,
              "counts": {"Toffoli": 9795 - 8677, "TemporaryAND": 8677,
@@ -563,7 +567,8 @@ def test_qpe_summary_takes_m_from_the_walk(tmp_path):
             (2**bits - 1) * 9795 + (bits**3 - bits) // 6, (2**bits - 1) * 2524 + bits,
             (2**bits - 1) * 8677 + (bits**3 - bits) // 6), bits
     assert record["qpe_basis"].startswith("T and A from the compiled controlled walk, M from the "
-                                          "walk")
+                                          "walk (`--large femoco54`, once each per code hash): ")
+    assert "Task" not in record["qpe_basis"]
 
 
 def test_femoco_summary_says_how_the_walks_are_compiled(femoco_report, tmp_path):

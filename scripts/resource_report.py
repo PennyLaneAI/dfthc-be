@@ -823,10 +823,12 @@ def report_system(s: System, rows: list[Row], cache: dict, hash_: str) -> tuple[
         formulas = ("T = (2^t - 1) T_C(W) + (t^3 - t)/6, M = (2^t - 1) M_W + t and "
                     "A = (2^t - 1) A_C(W) + (t^3 - t)/6, every correction at its maximum branch")
         record["qpe_basis"] = (
-            f"T and A from the compiled controlled walk, M from the walk (Task 4.5): {formulas}."
+            "T and A from the compiled controlled walk, M from the walk (`--large femoco54`, once "
+            f"each per code hash): {formulas}."
             if cwalk["measured"] else
             f"T and A from the closed form of the controlled walk, M from the walk: {formulas}; "
-            "Task 4.5 replaces them by the compiled T_C(W), M_W and A_C(W).")
+            "a compile with `--large femoco54` replaces them by the compiled T_C(W), M_W and "
+            "A_C(W).")
         record["qpe"] = {str(bits): {
             "toffoli": (2**bits - 1) * basis["toffoli"] + (bits**3 - bits) // 6,
             "measurements": (2**bits - 1) * m_walk + bits,
