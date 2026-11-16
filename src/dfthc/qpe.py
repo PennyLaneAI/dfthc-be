@@ -52,7 +52,7 @@ from dfthc.compile import register_rule, resource_key
 from dfthc.data.tables import WalkTables
 from dfthc.ops._validate import canonical_ints, check_int, check_wires
 from dfthc.ops.phase_gradient import PhaseGradientRotation
-from dfthc.ops.walk import ControlledDFTHCWalk, _validate
+from dfthc.ops.walk import ControlledDFTHCWalk, _check, _validate
 from dfthc.params import WalkParams
 from dfthc.registers import WalkLayout
 
@@ -65,13 +65,17 @@ def register_walk_power(cls: type[Operator2]) -> type[Operator2]:
     its compilable arguments, then a one-wire ``control`` and its wire groups. Its class
     attribute ``scratch_argname`` names its last wire group if it takes that group in ``|0>`` and
     returns it in ``|0>`` (:class:`QPERound`'s corrections borrow it), and is ``None``
-    otherwise."""
+    otherwise. Its static ``validate_compilable(power, *compilable)`` checks ``power`` and the
+    compilable arguments as the constructor does, without side effects (``ValueError``):
+    :class:`QPERound` calls it at construction."""
     if cls.__name__ in WALK_POWERS:
         raise ValueError(f"{cls.__name__} is already a registered walk power")
     scratch = getattr(cls, "scratch_argname", "")
     if scratch not in (None, cls.wire_argnames[-1]):
         raise ValueError(f"{cls.__name__}.scratch_argname must be None or its last wire group "
                          f"{cls.wire_argnames[-1]!r}; got {scratch!r}")
+    if not callable(getattr(cls, "validate_compilable", None)):
+        raise ValueError(f"{cls.__name__} needs a static validate_compilable(power, *compilable)")
     WALK_POWERS[cls.__name__] = cls
     return cls
 
@@ -204,6 +208,13 @@ class ControlledWalkPower(Operator2):
         """Those of :class:`~dfthc.ops.walk.ControlledDFTHCWalk`; ``power`` changes none."""
         return ControlledDFTHCWalk.required_wires(params, tables)
 
+    @staticmethod
+    def validate_compilable(power, params, tables) -> None:
+        """The constructor's checks of ``power``, ``params`` and ``tables``, without wires
+        (``ValueError``); :class:`QPERound` calls it."""
+        check_int("power", power, low=1)
+        _check(params, tables)
+
 
 def _controlled_walk_power_resources(power, params, tables, control, outer, inner, select,
                                      system, phase_grad, work):
@@ -287,8 +298,8 @@ class QPERound(Operator2):
 
     **Compilable arguments.** ``j`` (int, ``0 <= j < num_bits``), ``num_bits`` (int, at least
     1), ``walk_op`` (a name in :data:`WALK_POWERS`), ``walk_compilable`` (the walk power's
-    compilable arguments after ``power``, a tuple) and ``walk_wire_sizes`` (the walk power's
-    ``required_wires`` after ``control``, in order).
+    compilable arguments after ``power``, a tuple, checked by its ``validate_compilable``) and
+    ``walk_wire_sizes`` (the walk power's ``required_wires`` after ``control``, in order).
     **Dynamic:** ``earlier_bits``, shape ``(num_bits,)``: ``m_l`` at every ``l > j``, ``False``
     elsewhere; the rule reads only ``l > j``.
 
@@ -349,6 +360,10 @@ class QPERound(Operator2):
         cls = _walk_power(walk_op)
         if not isinstance(walk_compilable, tuple):
             raise ValueError(f"walk_compilable must be a tuple; got {walk_compilable!r}")
+        if len(walk_compilable) != len(cls.compilable_argnames) - 1:
+            raise ValueError(f"walk_compilable must hold {walk_op}'s compilable arguments after "
+                             f"power, {cls.compilable_argnames[1:]}; got {len(walk_compilable)}")
+        cls.validate_compilable(2**j, *walk_compilable)
         walk_wire_sizes = canonical_ints("walk_wire_sizes", tuple(walk_wire_sizes))
         required = cls.required_wires(2**j, *walk_compilable)
         groups = tuple(size for name, size in required.items() if name != "control")

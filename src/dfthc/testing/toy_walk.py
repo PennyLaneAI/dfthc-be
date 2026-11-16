@@ -288,6 +288,12 @@ class ToyControlledWalkPower(Operator2):
     def required_wires(power) -> dict[str, int]:
         return {"control": 1, "system": 1, "ancilla": 1}
 
+    @staticmethod
+    def validate_compilable(power) -> None:
+        """The constructor's check of ``power`` (``ValueError``); ``dfthc.qpe.QPERound`` calls
+        it."""
+        check_int("power", power, low=1)
+
 
 def _toy_controlled_walk_power_resources(power, control, system, ancilla):
     step = resource_key(lambda: ControlledToyWalk(Wire[1], Wire[1], Wire[1]))
