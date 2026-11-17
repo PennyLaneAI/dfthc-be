@@ -47,17 +47,16 @@ H2_ROWS = [
     "TailAngleLoad", "QROAMRead@TailAngleLoad", "SFAngleLoad", "QROAMRead@SFAngleLoad", "SpinMux",
     "SpinSwap", "GivensLadder", "GivensRotation", "MajoranaGate", "GivensLadderDagger",
     "Adjoint(GivensRotation)", "AngleErase", "InnerUnprepareFromOutcomes",
-    "Adjoint(FlaggedUniformPrep)@InnerUnprepareFromOutcomes", "RefT2", "ZeroReflection@RefT2",
-    "InnerSelectDagger", "Adjoint(MajoranaGate)", "OuterUnprepareFromOutcomes",
-    "Adjoint(FlaggedUniformPrep)@OuterUnprepareFromOutcomes", "RefAB", "ZeroReflection@RefAB",
-    "ControlledDFTHCWalk", "ControlledDFTHCBlockEncoding", "ControlledRefT2", "ControlledRefAB",
-    "PhaseFixup@InnerUnprepareFromOutcomes", "C(ZeroReflection)@RefT2",
-    "PhaseFixup@OuterUnprepareFromOutcomes", "C(ZeroReflection)@RefAB",
+    "Adjoint(FlaggedUniformPrep)@InnerUnprepareFromOutcomes", "RefT2", "InnerSelectDagger",
+    "Adjoint(MajoranaGate)", "OuterUnprepareFromOutcomes",
+    "Adjoint(FlaggedUniformPrep)@OuterUnprepareFromOutcomes", "RefAB", "ControlledDFTHCWalk",
+    "ControlledDFTHCBlockEncoding", "ControlledRefT2", "ControlledRefAB",
+    "PhaseFixup@InnerUnprepareFromOutcomes", "PhaseFixup@OuterUnprepareFromOutcomes",
     "ControlledWalkPower(p=1)", "ControlledWalkPower(p=2)", "QPE(t=1)", "QPE(t=2)", "QPE(t=3)",
 ]
 """Every program of the report at H2_STO3G_TEST, in report order: the walk calls no QROAMErase
 (the unprepares from outcomes erase themselves, spec 16, Q-1 variant (b)), so the fix-up rows
-take their arguments."""
+take their arguments; the four reflection rows compile the helpers ref_t2 and ref_ab."""
 PARTITION = {"OuterPrepare": (1, 1), "InnerPrepare": (2, 2), "InnerSigns": (2, 2),
              "TailAngleLoad": (2, 2), "SFAngleLoad": (2, 2), "SpinMux": (4, 4),
              "SpinSwap": (4, 4), "GivensLadder": (2, 2), "MajoranaGate": (1, 1),
@@ -335,7 +334,7 @@ def test_every_large_row_projects():
     methods = set()
     for name in ("fe2s2", "fe4s4"):
         rows, sizes = _compiled_rows(name)
-        assert len(rows) == len(sizes) == 44, name
+        assert len(rows) == len(sizes) == 40, name
         for row in rows:
             estimate = report.projection(cache, row, hash_, sizes[row.id])
             assert estimate["allowed"], (name, row.id, estimate["reason"])

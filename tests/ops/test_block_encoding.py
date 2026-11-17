@@ -52,7 +52,7 @@ def test_block_against_the_encoded_model(name):
     and a seeded schedule of the erases. fails-c3 has the failed uniform preparation of x_o (so
     Lambda~ != Lambda) and the dfthcbe failure-sign difference; sto3g is the H2 test preset.
     Outside the block, only the six index registers of A u B are nonzero (the postcondition that
-    makes RefAB the walk's reflection). The output's norm is not asserted: the simulator
+    makes ref_ab the walk's reflection). The output's norm is not asserted: the simulator
     renormalizes the kept branch of every measurement to norm 1."""
     c = case(name)
     ops = walk_sim.program(c, DFTHCBlockEncoding)
@@ -137,7 +137,8 @@ def queued(rule, c, controlled):
 
 
 def children(rule, c, controlled):
-    """The rule's operators in tape mode."""
+    """The rule's operators in tape mode, with the reflection's MultiControlledX and its sign
+    gate."""
     return [op for op in queued(rule, c, controlled) if op.name not in ("Hadamard", "MidMeasure")]
 
 
@@ -147,9 +148,12 @@ def registers(op):
 
 
 NAMES = ["OuterPrepare", "InnerPrepare", "InnerSigns", "InnerSelect", "InnerUnprepareFromOutcomes",
-         "RefT2", "InnerPrepare", "InnerSelectDagger", "InnerSigns", "InnerUnprepareFromOutcomes",
-         "OuterUnprepareFromOutcomes"]
-"""The block encoding's children in time order (spec 9.21; spec 16, Q-1 variant (b))."""
+         "MultiControlledX", "GlobalPhase", "InnerPrepare", "InnerSelectDagger", "InnerSigns",
+         "InnerUnprepareFromOutcomes", "OuterUnprepareFromOutcomes"]
+"""The block encoding's children in time order (spec 9.21; spec 16, Q-1 variant (b)); ref_t2 is
+H, MultiControlledX, H and GlobalPhase (the H left out), controlled PauliZ for GlobalPhase."""
+REFLECTION = (5, 6)
+"""The positions of ref_t2's two gates in :data:`NAMES`."""
 JUNK_OF = {"OuterPrepare": "junk_x_o", "InnerPrepare": "junk_b",
            "OuterUnprepareFromOutcomes": "junk_x_o", "InnerUnprepareFromOutcomes": "junk_b"}
 
@@ -160,16 +164,30 @@ def test_children_order_and_registers(name):
     the work pool's prefix, the whole phase_grad, the junk registers on the start of the angle
     wires, an unprepare's extra_onehot on the start of its junk register; InnerSigns after
     InnerPrepare in the first round and after InnerSelectDagger in the second; the two rules
-    differ only in the reflection, ControlledRefT2 on the control; the two InnerPrepare and
-    InnerUnprepareFromOutcomes calls are equal, and the selects have equal arguments with
-    fixup_bits = w_b, so each shares one target."""
+    differ only in the reflection ref_t2: a MultiControlledX on b, m_b, sigma_0 (control values
+    0) and the target succ_x_o with the pool's first n_w - 3 wires, then GlobalPhase(pi);
+    controlled, the control first (value 1) and one more work wire, then Z on the control; the
+    two InnerPrepare and InnerUnprepareFromOutcomes calls are equal, and the selects have equal
+    arguments with fixup_bits = w_b, so each shares one target."""
     c = case(name)
     p, layout = c.params, c.layout
     plain, controlled = children(_block_encoding, c, False), children(
         _controlled_block_encoding, c, True)
     assert [op.name for op in plain] == NAMES
     assert [op.name for op in controlled] == [
-        "ControlledRefT2" if n == "RefT2" else n for n in NAMES]
+        "PauliZ" if n == "GlobalPhase" else n for n in NAMES]
+    mcx, phase = (plain[i] for i in REFLECTION)
+    controlled_mcx, z = (controlled[i] for i in REFLECTION)
+    pattern = [*layout.b, *layout.m_b, *layout.sigma_0, *layout.succ_x_o]
+    assert (list(mcx.wires), list(mcx.control_values)) == (pattern, [False] * (len(pattern) - 1))
+    assert list(mcx.work_wires) == list(layout.work)[:len(pattern) - 3]
+    assert np.isclose(phase.data[0], np.pi, rtol=0, atol=1e-12)
+    assert (list(controlled_mcx.wires), list(controlled_mcx.control_values)) == (
+        c.control + pattern, [True, *mcx.control_values])
+    assert list(controlled_mcx.work_wires) == list(layout.work)[:len(pattern) - 2]
+    assert list(z.wires) == c.control
+    plain = [op for i, op in enumerate(plain) if i not in REFLECTION]
+    controlled = [op for i, op in enumerate(controlled) if i not in REFLECTION]
     for op in plain + controlled:
         for register, wires in registers(op).items():
             if register == "work":
@@ -181,17 +199,12 @@ def test_children_order_and_registers(name):
             else:
                 assert wires == list(getattr(layout, register)), (op.name, register)
     for a, b in zip(plain, controlled, strict=True):
-        if a.name != "RefT2":
-            assert (a.hyperparameters, registers(a)) == (b.hyperparameters, registers(b))
-    reflection, controlled_reflection = registers(plain[5]), registers(controlled[5])
-    assert controlled_reflection.pop("control") == c.control
-    assert len(controlled_reflection.pop("work")) == len(reflection.pop("work")) + 1
-    assert controlled_reflection == reflection
-    assert plain[1].hyperparameters == plain[6].hyperparameters
-    assert plain[4].hyperparameters == plain[9].hyperparameters
-    assert plain[3].hyperparameters == plain[7].hyperparameters
+        assert (a.hyperparameters, registers(a)) == (b.hyperparameters, registers(b))
+    assert plain[1].hyperparameters == plain[5].hyperparameters
+    assert plain[4].hyperparameters == plain[8].hyperparameters
+    assert plain[3].hyperparameters == plain[6].hyperparameters
     assert plain[3].hyperparameters["fixup_bits"] == p.w_b
-    assert plain[0].hyperparameters == plain[10].hyperparameters == {
+    assert plain[0].hyperparameters == plain[9].hyperparameters == {
         "X_o": p.X_o, "alt": c.tables.outer_alt, "keep": c.tables.outer_keep, "b_k1": p.b_k1,
         "k1": p.k1, "ke1": p.ke1, "s_u": p.s_u}
 
@@ -236,7 +249,7 @@ def test_junk_is_measured_right_after_each_prepare(name):
 
 def assert_counts(resources, p, controlled):
     """T4 and the T6 signature: T and M from costs.block_encoding; the plain Toffolis are the
-    walk's T_Toffoli less RefAB's one, so A = T - (T_Toffoli - 1) (spec 9.24)."""
+    walk's T_Toffoli less ref_ab's one, so A = T - (T_Toffoli - 1) (spec 9.24)."""
     expected = costs.block_encoding(p, controlled)
     assert (resources.toffoli, resources.measurements) == (expected.toffoli,
                                                            expected.measurements)
@@ -314,14 +327,12 @@ def both_classes():
 @pytest.mark.compiled
 def test_pinned_rules_are_chosen(capfd):
     """T6 at H2_STO3G_TEST: the verbose listing of a program holding both classes names both
-    pinned rules and the two reflections', and not C(ZeroReflection)'s."""
+    pinned rules."""
     program, num_wires = both_classes()
     qp.analyze(verbose_program(program, num_wires), level="user")()
     captured = capfd.readouterr()
     rules = set(chosen_rules(captured.out + captured.err))
-    assert {"_block_encoding", "_controlled_block_encoding", "_ref_t2",
-            "_controlled_ref_t2"} <= rules
-    assert "_c_zero_reflection" not in rules
+    assert {"_block_encoding", "_controlled_block_encoding"} <= rules
 
 
 @pytest.mark.compiled
@@ -369,7 +380,7 @@ def test_rules_are_valid(name):
 
 def test_required_wires():
     """By hand at H2_STO3G_TEST: the layout's groups (select: 4 angle wires and 3 overflow wires
-    for the 7 inner junk wires, and 4 flags; work: RefAB's controlled need, 8)."""
+    for the 7 inner junk wires, and 4 flags; work: ref_ab's controlled need, 8)."""
     p = H2_STO3G_TEST
     sizes = {"outer": 12, "inner": 16, "select": 11, "system": 4, "phase_grad": 4, "work": 8}
     assert DFTHCBlockEncoding.required_wires(p.as_compilable(), ()) == sizes
@@ -428,8 +439,8 @@ def test_controlled_constructor_checks_the_control_width():
 
 def test_constructor_checks_the_work_pool(monkeypatch):
     """The layout's pool must cover every child of the walk: with WalkLayout.work_size shrunk to
-    7 at H2_STO3G_TEST, ControlledRefAB's 8 wires do not fit (spec 10.1)."""
+    7 at H2_STO3G_TEST, the controlled ref_ab's 8 wires do not fit (spec 10.1)."""
     c = case("sto3g")
     monkeypatch.setattr(WalkLayout, "work_size", staticmethod(lambda params: 7))
-    with pytest.raises(ValueError, match=r"too small for \{'ControlledRefAB': 8\}"):
+    with pytest.raises(ValueError, match=r"too small for \{'ref_ab': 8\}"):
         DFTHCBlockEncoding(*c.compilable, **c.groups())

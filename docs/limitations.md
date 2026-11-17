@@ -5,8 +5,8 @@ pins today. A flipped canary is a signal to revisit the mitigation, not a failur
 observations are from 2026-11-11 (PennyLane 0.46.0.dev151, Catalyst 0.16.0.dev140) unless an entry
 gives its own date. Entries marked **changed** differ from the spec's original wording. As of Task
 4.4 (2026-11-15), this file consolidates L-1 to L-27, including L-26 (Task 0.4b), L-27 (Task
-0.2c) and the ledger's later canary-state updates; `tests/test_docstrings.py` checks that every
-limitation has an entry and that every canary named here exists.
+0.2c) and the ledger's later canary-state updates; Task 6.2 added L-29. `tests/test_docstrings.py`
+checks that every limitation has an entry and that every canary named here exists.
 
 ## Decomposition rules, pins, control and templates
 
@@ -68,12 +68,25 @@ limitation has an entry and that every canary named here exists.
   operands must refer to distinct qubits`). Canary: `test_select_with_shared_target_crashes`.
   Mitigation: our own unary-iteration helper.
 - **L-14, `MultiControlledX` without work wires has no path.** Canary:
-  `test_mcx_without_work_wires_has_no_path`. Mitigation: explicit work wires.
+  `test_mcx_without_work_wires_has_no_path`. Mitigation: explicit work wires; the reflections'
+  `MultiControlledX` (`dfthc.ops.reflections`) gets `max(c - 2, 0)` zeroed work wires for `c`
+  controls.
 - **L-19, `UniformPrep` and `AliasSampling` need arbitrary rotations**, **changed**. For a
   non-power-of-two size (L = 5) neither has a path to the gate set. For a power-of-two size
   `AliasSampling` compiles, because its uniform preparation is then Hadamards only. Canaries:
   `test_template_has_no_toffoli_level_path` (two cases) and
   `test_power_of_two_alias_sampling_compiles`. Mitigation: `FlaggedUniformPrep`.
+- **L-29, `FlipSign` does not scale to the walk's reflections** (new, found by Task 6.2 on
+  2026-11-17). `FlipSign` declares its multi-controlled `Z` with traced control values, and its
+  compile time and memory grow exponentially with the number of pattern wires: 20 s at 6 wires,
+  63 s at 12, over 6 min and 2.8 GB at 14 (`FlipSign` with `GlobalPhase(pi)`, `n - 3` work
+  wires; an all-ones pattern behaves the same). The walk needs 20 and 41 pattern wires at
+  MID_NAPHTHALENE and 22 and 46 at FeMoco-54. Generic `qp.ctrl` of `FlipSign` and
+  `GlobalPhase(pi)` also fails: `qp.ctrl(GlobalPhase)` has no Toffoli-level path
+  (`CompileError`). No canary: the scaling is too heavy to pin. Mitigation: the helpers of
+  `dfthc.ops.reflections` build the multi-controlled `Z` from `MultiControlledX` with static
+  control values (1.7 s at 8 wires, 1.3 s at 46), and the controlled form takes the control as
+  one more control of value 1, then `Z` on the control.
 
 ## Operator arguments
 

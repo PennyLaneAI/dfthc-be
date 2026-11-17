@@ -36,9 +36,9 @@ _WRAPPERS = frozenset({"Adjoint", "C"})
 def register_rule(op: type | str, rule: Callable) -> None:
     """Register ``rule`` as the only rule for a dfthc operator key and pin it.
 
-    ``op`` is a dfthc ``Operator2`` subclass or a symbolic key such as ``"Adjoint(OuterPrepare)"``
-    or ``"C(RefT2)"``. Each key gets exactly one rule (spec section 7.4, rule 7). Never call this
-    for a PennyLane operator: a pin also applies to nested instances of the same name (L-4).
+    ``op`` is a dfthc ``Operator2`` subclass or a symbolic key such as ``"Adjoint(SpinSwap)"``.
+    Each key gets exactly one rule (spec section 7.4, rule 7). Never call this for a PennyLane
+    operator: a pin also applies to nested instances of the same name (L-4).
     """
     key = op if isinstance(op, str) else op.__name__
     if key in FIXED_DECOMPS:

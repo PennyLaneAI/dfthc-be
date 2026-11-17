@@ -9,7 +9,9 @@ with :math:`U` = ``OuterPrepare``, ``InnerPrepare``, ``InnerSigns``, ``InnerSele
 :math:`\tilde H_{SA}/\tilde\Lambda - I` (spec 8.5). Every adjoint in it is an explicit class
 (``InnerUnprepareFromOutcomes``, ``InnerSelectDagger``, ``OuterUnprepareFromOutcomes``; spec 7.4
 rule 6). The walk is :math:`W = \mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}\,\mathrm{BE}`: the block
-encoding, then ``RefAB``. The controlled classes control only the reflections: on states whose
+encoding, then ``ref_ab``. The two reflections are the helpers ``ref_t2`` and ``ref_ab`` of
+:mod:`dfthc.ops.reflections` (a multi-controlled Z from PennyLane's ``MultiControlledX``),
+called in the rules. The controlled classes control only the reflections: on states whose
 ancillas start in :math:`|0\rangle`, :math:`U^\dagger U = I`, so
 :math:`C(W) = C(\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}})\,U^\dagger\,C(\mathrm{REF}_{T_2})\,U`
 (spec 3.3). There is no ``C(...)`` rule of any of these operators.
@@ -63,7 +65,13 @@ from dfthc.ops.prepare import (
     _check_outer,
     abstract_junk_outcomes,
 )
-from dfthc.ops.reflections import ControlledRefAB, ControlledRefT2, RefAB, RefT2
+from dfthc.ops.reflections import (
+    ref_ab,
+    ref_ab_resources,
+    ref_t2,
+    ref_t2_resources,
+    reflection_work,
+)
 from dfthc.ops.select import InnerSelect, InnerSelectDagger
 from dfthc.ops.select import _check as _check_select
 from dfthc.params import WalkParams
@@ -79,11 +87,16 @@ FROM_OUTCOMES = {OuterUnprepareFromOutcomes: "junk_x_o", InnerUnprepareFromOutco
 """Each unprepare from outcomes and the junk register whose outcomes it takes and whose first
 wires it borrows as ``extra_onehot``."""
 
+REFLECTIONS = {ref_t2: (ref_t2_resources, ("succ_x_o", "b", "m_b", "sigma_0")),
+               ref_ab: (ref_ab_resources, ("x_o", "m_x_o", "sigma_1", "b", "m_b", "sigma_0"))}
+"""Each reflection helper, its resource helper and the registers it takes before ``work``."""
+
 
 class Step(NamedTuple):
     """One step of an assembly rule: a child with its compilable arguments, the prefix of the
-    ``work`` pool it takes and its ``extra_onehot`` wires (for an unprepare from outcomes), or,
-    with ``op`` = :data:`JUNK_MEASUREMENT`, the X measurement of the junk register ``args``."""
+    ``work`` pool it takes and its ``extra_onehot`` wires (for an unprepare from outcomes); with
+    ``op`` a reflection helper of :data:`REFLECTIONS`, ``args`` is ``(controlled,)``; with
+    ``op`` = :data:`JUNK_MEASUREMENT`, the X measurement of the junk register ``args``."""
 
     op: type | str
     args: tuple | str
@@ -95,21 +108,27 @@ def _rebuild(params, tables) -> tuple[WalkParams, WalkTables]:
     return WalkParams.from_compilable(params), WalkTables.from_compilable(tables)
 
 
+def _reflection_step(helper, p: WalkParams, controlled: bool) -> Step:
+    """The step of a reflection helper on the layout's registers, with its work need."""
+    sizes = WalkLayout.register_sizes(p)
+    n_w = sum(sizes[name] for name in REFLECTIONS[helper][1])
+    return Step(helper, (controlled,), reflection_work(n_w, controlled))
+
+
 def _children(p: WalkParams, t: WalkTables, controlled: bool) -> list[Step]:
     """The block encoding's steps in time order (spec 9.21; spec 16, Q-1 variant (b)): the
     children, each junk register's X measurement right after its prepare, and the unprepares from
-    those outcomes; the reflection is ``ControlledRefT2`` if ``controlled``."""
+    those outcomes; the reflection :func:`~dfthc.ops.reflections.ref_t2` is controlled if
+    ``controlled``."""
     outer = (p.X_o, t.outer_alt, t.outer_keep, p.b_k1, p.k1, p.ke1, p.s_u)
     inner = (p.N, p.R, p.B, p.C, t.inner_alt, t.inner_keep, t.inner_sgn, t.inner_d_sgn, p.b_k2,
              p.k2, p.ke2, p.s_u)
     select = (t.tail_angles, t.sf_angles, p.N, p.R, p.B, p.C, p.n_plus, p.b_rot, p.w_b)
-    reflection = ControlledRefT2 if controlled else RefT2
     outer_sizes = OuterUnprepareFromOutcomes.required_wires(p.X_o, p.b_k1, p.k1, p.ke1, p.s_u)
     inner_sizes = InnerUnprepareFromOutcomes.required_wires(p.N, p.R, p.B, p.C, p.b_k2, p.k2,
                                                             p.ke2, p.s_u)
     outer_work, inner_work = outer_sizes["work"], inner_sizes["work"]
     select_work = InnerSelect.required_wires(*select)["work"]
-    reflection_work = reflection.required_wires(p.w_b, p.b_k2)["work"]
     return [
         Step(OuterPrepare, outer, outer_work),
         Step(JUNK_MEASUREMENT, "junk_x_o", 0),
@@ -118,7 +137,7 @@ def _children(p: WalkParams, t: WalkTables, controlled: bool) -> list[Step]:
         Step(InnerSigns, (), 0),
         Step(InnerSelect, select, select_work),
         Step(InnerUnprepareFromOutcomes, inner, inner_work, inner_sizes["extra_onehot"]),
-        Step(reflection, (), reflection_work),
+        _reflection_step(ref_t2, p, controlled),
         Step(InnerPrepare, inner, inner_work),
         Step(JUNK_MEASUREMENT, "junk_b", 0),
         Step(InnerSelectDagger, select, select_work),
@@ -157,8 +176,7 @@ def _check(params, tables) -> tuple[WalkParams, WalkTables]:
     _check_select(t.tail_angles, t.sf_angles, p.N, p.R, p.B, p.C, p.n_plus, p.b_rot, p.w_b)
     needs = {step.op.__name__: step.work for step in _children(p, t, controlled=True)
              if step.op != JUNK_MEASUREMENT}
-    needs["ControlledRefAB"] = ControlledRefAB.required_wires(p.w_x, p.b_k1, p.w_b,
-                                                              p.b_k2)["work"]
+    needs["ref_ab"] = _reflection_step(ref_ab, p, controlled=True).work
     pool = WalkLayout.work_size(p)
     over = {name: need for name, need in needs.items() if need > pool}
     if over:
@@ -193,13 +211,20 @@ def _measure_x(wire):
 
 def _emit(steps: list, registers: dict, work) -> None:
     """Apply ``steps`` in order: each child on the registers its ``wire_argnames`` name and on
-    the prefix of ``work`` of exactly its need; each junk measurement on every wire of its
-    register, keeping the outcomes; an unprepare from outcomes with the latest outcomes of its
-    junk register and that register's first ``extra_onehot`` wires (reset by the measurement)."""
+    the prefix of ``work`` of exactly its need; a reflection helper likewise, on the registers
+    :data:`REFLECTIONS` names, controlled by ``registers["control"]`` if its step says so; each
+    junk measurement on every wire of its register, keeping the outcomes; an unprepare from
+    outcomes with the latest outcomes of its junk register and that register's first
+    ``extra_onehot`` wires (reset by the measurement)."""
     work, outcomes = list(work), {}
     for step in steps:
         if step.op == JUNK_MEASUREMENT:
             outcomes[step.args] = [_measure_x(wire) for wire in registers[step.args]]
+            continue
+        if step.op in REFLECTIONS:
+            (controlled,) = step.args
+            step.op(*(registers[name] for name in REFLECTIONS[step.op][1]), work[:step.work],
+                    control=registers["control"][0] if controlled else None)
             continue
         wires = {name: work[:step.work] if name == "work" else registers[name]
                  for name in step.op.wire_argnames if name != "extra_onehot"}
@@ -213,8 +238,9 @@ def _emit(steps: list, registers: dict, work) -> None:
 
 def _resources(steps: list, p: WalkParams) -> dict:
     """The declaration of ``steps``: each distinct child once, with its count, its compilable
-    arguments and exactly the register sizes :func:`_emit` passes, and the junk measurements'
-    ``Hadamard`` and ``MidMeasure`` gates (spec 7.4 rule 2)."""
+    arguments and exactly the register sizes :func:`_emit` passes, a reflection helper's gates
+    from its resource helper, and the junk measurements' ``Hadamard`` and ``MidMeasure`` gates
+    (spec 7.4 rule 2)."""
     sizes = _sizes(p)
     measure = resource_key(lambda: qp.ops.MidMeasure(Wire[1], reset=True))
     resources = Counter()
@@ -222,6 +248,11 @@ def _resources(steps: list, p: WalkParams) -> dict:
         if step.op == JUNK_MEASUREMENT:
             resources[qp.H] += count * sizes[step.args]
             resources[measure] += count * sizes[step.args]
+            continue
+        if step.op in REFLECTIONS:
+            gates, names = REFLECTIONS[step.op]
+            for gate, number in gates(*(sizes[name] for name in names), *step.args).items():
+                resources[gate] += count * number
             continue
         dynamic = ((abstract_junk_outcomes(sizes[FROM_OUTCOMES[step.op]]),)
                    if step.op in FROM_OUTCOMES else ())
@@ -282,17 +313,19 @@ class DFTHCBlockEncoding(Operator2):
     index registers of :math:`\mathcal{A}\cup\mathcal{B}` (``x_o``, ``m_x_o``, ``sigma_1``,
     ``b``, ``m_b``, ``sigma_0``) is back in ``|0>``: the junk and target measurements and the
     angle erase reset the loaded data, the measured uncomputes clean the comparators, and the
-    adjoint uniform preparations clear the success flags. So ``RefAB``'s reflection about those
+    adjoint uniform preparations clear the success flags. So ``ref_ab``'s reflection about those
     six is the walk's reflection about every ancilla.
 
     **Decomposition** (spec 9.21; spec 16, Q-1 variant (b)). The groups are split with
     ``WalkLayout.split_group`` and ``WalkLayout.split_junk``; each child gets its registers by
     name and the prefix of ``work`` of its need: ``OuterPrepare``, the X measurement of
     ``junk_x_o``; ``InnerPrepare``, the X measurement of ``junk_b``, ``InnerSigns``,
-    ``InnerSelect``, ``InnerUnprepareFromOutcomes``; ``RefT2``; ``InnerPrepare``, the X
-    measurement of ``junk_b``, ``InnerSelectDagger``, ``InnerSigns``,
-    ``InnerUnprepareFromOutcomes``; ``OuterUnprepareFromOutcomes``. An X measurement is ``H`` and
-    ``qp.measure(q, reset=True)`` on every junk wire; each unprepare from outcomes gets the
+    ``InnerSelect``, ``InnerUnprepareFromOutcomes``; ``ref_t2(succ_x_o, b, m_b, sigma_0,
+    work[:n_w - 3])`` (the multi-controlled Z and ``GlobalPhase(pi)``,
+    :math:`n_w = w_b + b_{k2} + 2`); ``InnerPrepare``, the X measurement of ``junk_b``,
+    ``InnerSelectDagger``, ``InnerSigns``, ``InnerUnprepareFromOutcomes``;
+    ``OuterUnprepareFromOutcomes``. An X measurement is ``H`` and ``qp.measure(q, reset=True)``
+    on every junk wire; each unprepare from outcomes gets the
     outcomes of the latest measurement of its junk register and that register's first
     ``extra_onehot`` wires, reset by then (the select loads and erases the angles on the same
     wires in between). The prepare classes take the whole ``phase_grad`` (they use its top
@@ -302,14 +335,14 @@ class DFTHCBlockEncoding(Operator2):
 
     **Adjoint and control.** Never adjointed: its rule measures (spec 7.4 rule 5), and the
     operator is its own inverse anyway. Never controlled: the controlled form is the class
-    :class:`ControlledDFTHCBlockEncoding`, which controls only ``RefT2``; there is no
+    :class:`ControlledDFTHCBlockEncoding`, which controls only ``ref_t2``; there is no
     ``C(DFTHCBlockEncoding)`` rule, so ``qp.ctrl`` of this operator does not compile (spec 7.4
     rule 6).
 
     **Cost.** :func:`dfthc.costs.block_encoding` (uncontrolled):
-    :math:`T = T_{out} + T_{out}^\dagger + 2(T_{in} + T_{sel} + T_{in}^\dagger) + T_{RefT2}`,
+    :math:`T = T_{out} + T_{out}^\dagger + 2(T_{in} + T_{sel} + T_{in}^\dagger) + T_{ref\_t2}`,
     :math:`M = K_1 d_1 + 2(K_2 d_2 + (N - 1) b_{rot} + 3)`; ``A = T - (T_Toffoli - 1)`` with
-    ``T_Toffoli`` = :func:`dfthc.costs.toffoli_only` (the walk's plain Toffolis less ``RefAB``'s
+    ``T_Toffoli`` = :func:`dfthc.costs.toffoli_only` (the walk's plain Toffolis less ``ref_ab``'s
     one). Of ``M``, :math:`(K_1 - 1) d_1 + 2 (K_2 - 1) d_2` are this rule's own junk
     measurements (:func:`dfthc.costs.junk_measurements`) and the unprepares from outcomes
     measure the targets, :math:`d_1 + 2 d_2`. At FeMoco-54:
@@ -418,10 +451,11 @@ class ControlledDFTHCBlockEncoding(Operator2):
     branches; ``control`` is disjoint from the groups (unchecked).
 
     **Decomposition** (spec 9.21). :class:`DFTHCBlockEncoding`'s eleven children and three junk
-    measurements with ``ControlledRefT2(control, succ_x_o, b, m_b, sigma_0, work)`` in place of
-    ``RefT2``: every other step is uncontrolled, the same operator with the same compilable
-    arguments and register sizes as in :class:`DFTHCBlockEncoding`, so the measurements and the
-    measured unprepares are never controlled (spec 7.4 rule 5).
+    measurements with ``ref_t2(succ_x_o, b, m_b, sigma_0, work[:n_w - 2], control=control)``
+    (the multi-controlled Z over the control and the pattern, then ``Z`` on the control) in place
+    of the uncontrolled ``ref_t2``: every other step is uncontrolled, the same operator with the
+    same compilable arguments and register sizes as in :class:`DFTHCBlockEncoding`, so the
+    measurements and the measured unprepares are never controlled (spec 7.4 rule 5).
 
     **Adjoint and control.** Never adjointed or controlled itself (spec 9.0).
 
@@ -493,11 +527,10 @@ register_rule(ControlledDFTHCBlockEncoding, _controlled_block_encoding)
 
 def _walk_children(p: WalkParams, t: WalkTables, controlled: bool) -> list[Step]:
     """The walk's children (spec 9.22): the block encoding on the whole groups and pool, then
-    ``RefAB``; both controlled if ``controlled``."""
+    :func:`~dfthc.ops.reflections.ref_ab`; both controlled if ``controlled``."""
     block_encoding = ControlledDFTHCBlockEncoding if controlled else DFTHCBlockEncoding
-    reflection = ControlledRefAB if controlled else RefAB
     return [Step(block_encoding, (p.as_compilable(), t.as_compilable()), WalkLayout.work_size(p)),
-            Step(reflection, (), reflection.required_wires(p.w_x, p.b_k1, p.w_b, p.b_k2)["work"])]
+            _reflection_step(ref_ab, p, controlled)]
 
 
 class DFTHCWalk(Operator2):
@@ -534,8 +567,9 @@ class DFTHCWalk(Operator2):
     they carry the walk's state to the next step.
 
     **Decomposition** (spec 9.22). ``DFTHCBlockEncoding(params, tables, outer, inner, select,
-    system, phase_grad, work)`` on the whole groups, then ``RefAB(x_o, m_x_o, sigma_1, b, m_b,
-    sigma_0, work[:n_w - 3])`` on the registers ``WalkLayout.split_group`` names.
+    system, phase_grad, work)`` on the whole groups, then ``ref_ab(x_o, m_x_o, sigma_1, b, m_b,
+    sigma_0, work[:n_w - 3])`` (the multi-controlled Z and ``GlobalPhase(pi)``) on the registers
+    ``WalkLayout.split_group`` names.
 
     **Adjoint and control.** Never adjointed: its rule measures. Never controlled: the
     controlled walk is the class :class:`ControlledDFTHCWalk`. There is no ``C(DFTHCWalk)``
@@ -543,7 +577,7 @@ class DFTHCWalk(Operator2):
     cannot be controlled); a delegating rule would compile but bring back the cascade of
     distributed candidates (spec 7.4 rule 6, Task G0.1).
 
-    **Cost.** :func:`dfthc.costs.walk` (uncontrolled): :math:`T = T_{BE} + T_{RefAB}`,
+    **Cost.** :func:`dfthc.costs.walk` (uncontrolled): :math:`T = T_{BE} + T_{ref\_ab}`,
     :math:`M = M_{BE}`; ``A`` = :func:`dfthc.costs.measured_and_uncomputes` (uncontrolled),
     ``T - T_Toffoli``. At FeMoco-54: :math:`9749 + 44 = 9793`, ``M = 2524``, ``A = 8675``, so
     ``M + A = 11199`` physical measurements (spec 9.24). ``CNOT`` and ``PauliX`` counts are
@@ -557,10 +591,10 @@ class DFTHCWalk(Operator2):
     qubitization signal (App. B); its Table 3 (PRX Table III) gives 9,997 Toffolis at FeMoco-54,
     46 of them for :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}` with the phase-estimation
     control (App. B.7, Eqs. (96) and (128)). Ours is -204: the block encoding's -202 and
-    ``RefAB``'s 44 against 46 (spec 13.1). dfthcbe: ``DFTHCWalk``
+    ``ref_ab``'s 44 against 46 (spec 13.1). dfthcbe: ``DFTHCWalk``
     (``dfthcbe/block_encoding.py``), the same two children with the same sign (Qualtran's
     ``reflection_around_zero`` with ``global_phase=-1``), :math:`9596 + 45 = 9641` by its call
-    graph; ours is +152: the block encoding's +153 and ``RefAB``'s 44 against 45 (dfthcbe's
+    graph; ours is +152: the block encoding's +153 and ``ref_ab``'s 44 against 45 (dfthcbe's
     uncontrolled reflection adds a phase target).
 
     **Example.**
@@ -652,8 +686,8 @@ class ControlledDFTHCWalk(Operator2):
     ``control`` is disjoint from the groups (unchecked).
 
     **Decomposition** (spec 9.22). ``ControlledDFTHCBlockEncoding(params, tables, control, outer,
-    inner, select, system, phase_grad, work)``, then ``ControlledRefAB(control, x_o, m_x_o,
-    sigma_1, b, m_b, sigma_0, work[:n_w - 2])``: only the two reflections are controlled; the
+    inner, select, system, phase_grad, work)``, then ``ref_ab(x_o, m_x_o, sigma_1, b, m_b,
+    sigma_0, work[:n_w - 2], control=control)``: only the two reflections are controlled; the
     prepares, selects and measured unprepares run uncontrolled (spec 7.4 rule 5).
 
     **Adjoint and control.** Never adjointed or controlled itself (spec 9.0);

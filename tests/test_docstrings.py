@@ -71,9 +71,10 @@ def spec_section(heading: str, next_heading: str) -> str:
 
 
 def test_every_operator_is_audited():
-    """The 32 operators of dfthc.ops (spec 9.1 to 9.22, the two unprepares from outcomes of
-    spec 16, Q-1 variant (b), included) and the two of dfthc.qpe (9.23, 11.1)."""
-    assert len(CLASSES) == 34
+    """The 27 operators of dfthc.ops (spec 9.1 to 9.22, the two unprepares from outcomes of
+    spec 16, Q-1 variant (b), included; the reflections of 9.6, 9.19 and 9.20 are helpers on
+    PennyLane's MultiControlledX, not operators) and the two of dfthc.qpe (9.23, 11.1)."""
+    assert len(CLASSES) == 29
     names = {cls.__name__ for cls in CLASSES.values()}
     assert {"PhaseGradientRotation", "QROAMRead", "DFTHCWalk", "ControlledDFTHCWalk",
             "OuterUnprepareFromOutcomes", "InnerUnprepareFromOutcomes", "ControlledWalkPower",
@@ -153,14 +154,14 @@ def test_documentation_links_resolve(document):
 
 
 def test_limitations_match_the_canaries_and_spec_14():
-    """docs/limitations.md has an entry for every limitation L-1 to L-27 of spec 14, and every
-    canary it names is a test function in tests/canary; spec 14 has the same entries and names
-    the same canaries (final review m-31)."""
+    """docs/limitations.md has an entry for every limitation L-1 to L-27 and L-29 of spec 14, and
+    every canary it names is a test function in tests/canary; spec 14 has the same entries and
+    names the same canaries (final review m-31)."""
     text = (DOCS / "limitations.md").read_text()
     spec = spec_section("## 14.", "## 15.")
     for where, document in (("limitations.md", text), ("spec 14", spec)):
         numbers = [int(n) for n in re.findall(r"\*\*L-(\d+)\b", document)]
-        assert Counter(numbers) == Counter(range(1, 28)), where
+        assert Counter(numbers) == Counter([*range(1, 28), 29]), where
     canaries = set()
     for path in (REPO / "tests" / "canary").glob("test_*.py"):
         canaries |= set(re.findall(r"^def (test_\w+)", path.read_text(), re.M))

@@ -34,7 +34,7 @@ import pennylane as qp
 from dfthc.data.encoded import encoded_block
 from dfthc.data.factors import DFTHCFactors, load_factors, random_factors
 from dfthc.data.tables import WalkTables
-from dfthc.ops.reflections import RefT2
+from dfthc.ops.reflections import ref_t2
 from dfthc.ops.walk import _children, _emit, _registers
 from dfthc.params import H2_631G_TEST, H2_STO3G_TEST, WalkParams
 from dfthc.registers import GROUPS, WalkLayout
@@ -45,7 +45,7 @@ ATOL = 1e-12
 """Absolute tolerance of the state comparisons (HANDOFF section 6)."""
 
 AB_REGISTERS = ("x_o", "m_x_o", "sigma_1", "b", "m_b", "sigma_0")
-r"""The registers of :math:`\mathcal{A} \cup \mathcal{B}` that ``RefAB`` reflects (spec 3.3)."""
+r"""The registers of :math:`\mathcal{A} \cup \mathcal{B}` that ``ref_ab`` reflects (spec 3.3)."""
 
 
 @dataclass(frozen=True)
@@ -138,9 +138,9 @@ def program(case: WalkCase, cls: type, controlled: bool = False, repeat: int = 1
 
 def prepare_unprepare(case: WalkCase) -> list:
     r"""The decomposed :math:`U^\dagger U`: the block encoding's children (``dfthc.ops.walk``'s
-    own list, in its order and on its registers) without ``RefT2`` (spec 12.4, E-4)."""
+    own list, in its order and on its registers) without ``ref_t2`` (spec 12.4, E-4)."""
     children = [child for child in _children(case.params, case.tables, controlled=False)
-                if child[0] is not RefT2]
+                if child.op is not ref_t2]
     g = case.groups()
     registers = _registers(case.params, g["outer"], g["inner"], g["select"], g["system"],
                            g["phase_grad"])
@@ -249,7 +249,7 @@ def nonzero_registers(case: WalkCase, state: SparseState) -> set[str]:
 
 
 def reflect_ab(case: WalkCase, state: SparseState) -> SparseState:
-    """``RefAB``'s exact action on ``state``: -1 on every term with a nonzero
+    """``ref_ab``'s exact action on ``state``: -1 on every term with a nonzero
     :data:`AB_REGISTERS` wire (spec 3.3)."""
     nonzero = np.zeros(len(state.amps), dtype=bool)
     for name in AB_REGISTERS:

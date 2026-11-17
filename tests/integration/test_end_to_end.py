@@ -95,7 +95,7 @@ def test_e3_controlled_walk(kind, inputs):
     each, which detects a global-phase error of either controlled reflection; and, after one
     uncontrolled DFTHCWalk step (index registers of A u B no longer |0>, as between the rounds of
     iterative QPE), the control in |+> gives (|0> W|psi> + |1> W^2|psi>)/sqrt 2, which also
-    needs RefAB controlled (nightly: the 4 fixed inputs under S0; release: all 16 under S1 and
+    needs ref_ab controlled (nightly: the 4 fixed inputs under S0; release: all 16 under S1 and
     the 4 fixed under a seeded schedule)."""
     c = walk_sim.case("sto3g")
     once = walk_sim.program(c, DFTHCWalk)
@@ -129,7 +129,7 @@ def test_e3_controlled_walk(kind, inputs):
 @nightly
 @pytest.mark.parametrize("kind", ["alternating", "seeded"])
 def test_e4_prepare_then_unprepare(kind):
-    """E-4 at H2_STO3G_TEST: U then U-dagger (the block encoding's children without RefT2)
+    """E-4 at H2_STO3G_TEST: U then U-dagger (the block encoding's children without ref_t2)
     returns every ancilla to |0> and the system unchanged, on all 16 inputs, under the
     alternating and a seeded schedule of the five erases (an all-ones or all-zeros schedule sees
     less of the erases' masks; ledger row 2D.2)."""

@@ -43,7 +43,7 @@ SUPPORT = {"sto3g": (5, 10), "fails-c3": (5, 12)}
 @pytest.mark.parametrize("name", ["sto3g", "fails-c3"])
 def test_walk_is_ref_ab_after_the_block_encoding(name):
     """T3 on the tape path (strict sparse simulator): the walk's whole output equals
-    DFTHCBlockEncoding's whole output with RefAB's exact action applied (-1 on every term with a
+    DFTHCBlockEncoding's whole output with ref_ab's exact action applied (-1 on every term with a
     nonzero x_o, m_x_o, sigma_1, b, m_b or sigma_0; spec 3.3), so its block is
     H~_SA / Lambda~ - I (spec 12.4, E-2 at k = 1), under a seeded schedule."""
     c = walk_sim.case(name)
@@ -80,7 +80,7 @@ def test_controlled_walk_after_a_walk_step():
     """T3 of the controlled class on the walk's own states, as iterative QPE uses it (spec 11.1):
     after one DFTHCWalk step the index registers of A u B are not |0>, and the controlled walk
     with the control in |+> gives (|0> W|psi> + |1> W^2|psi>)/sqrt 2. From ancillas in |0> an
-    uncontrolled RefAB would act as the identity on the control-0 branch; here it would not."""
+    uncontrolled ref_ab would act as the identity on the control-0 branch; here it would not."""
     c = walk_sim.case("sto3g")
     psi = walk_sim.basis(c, 10)
     once = walk_sim.program(c, DFTHCWalk)
@@ -106,24 +106,32 @@ def registers(op):
 
 @pytest.mark.parametrize("kind", CLASSES)
 def test_children(kind):
-    """Spec 9.22: the (controlled) block encoding on the whole groups and pool, then the
-    (controlled) RefAB on x_o, m_x_o, sigma_1, b, m_b, sigma_0 and the pool's prefix of exactly
-    its need; the control goes to both children and nowhere else."""
+    """Spec 9.22: the (controlled) block encoding on the whole groups and pool, then ref_ab:
+    the multi-controlled Z on x_o, m_x_o, sigma_1, b, m_b, sigma_0 with the all-zero pattern
+    (X and H around a MultiControlledX on the last sigma_0 wire, with the pool's prefix of
+    exactly its need), then GlobalPhase(pi); controlled, the control as the first control (value
+    1), then Z on the control. The control goes nowhere else."""
     c = walk_sim.case("sto3g")
     controlled = kind == "controlled"
     _, rule = CLASSES[kind]
     with qp.capture.pause(), qp.queuing.AnnotatedQueue() as queue:
         rule(*c.compilable, **c.groups(controlled))
-    be, ref = queue.queue
+    be, *reflection = queue.queue
     layout = c.layout
-    assert (be.name, ref.name) == (("ControlledDFTHCBlockEncoding", "ControlledRefAB")
-                                   if controlled else ("DFTHCBlockEncoding", "RefAB"))
+    assert [op.name for op in queue.queue] == [
+        f"{'Controlled' if controlled else ''}DFTHCBlockEncoding", "PauliX", "Hadamard",
+        "MultiControlledX", "Hadamard", "PauliX", "PauliZ" if controlled else "GlobalPhase"]
     assert registers(be) == c.groups(controlled)
     assert be.hyperparameters == {"params": c.compilable[0], "tables": c.compilable[1]}
-    ab = {name: list(getattr(layout, name)) for name in walk_sim.AB_REGISTERS}
+    ab = [wire for name in walk_sim.AB_REGISTERS for wire in getattr(layout, name)]
     work = c.params.w_x + c.params.b_k1 + c.params.w_b + c.params.b_k2 - (0 if controlled else 1)
-    assert registers(ref) == ({"control": c.control} if controlled else {}) | ab | {
-        "work": list(layout.work)[:work]}
+    control = c.control if controlled else []
+    mcx, sign = reflection[2], reflection[-1]
+    assert all(list(op.wires) == ab[-1:] for op in reflection[:2] + reflection[3:5])
+    assert list(mcx.wires) == control + ab
+    assert list(mcx.control_values) == [True] * controlled + [False] * (len(ab) - 1)
+    assert list(mcx.work_wires) == list(layout.work)[:work]
+    assert list(sign.wires) == control
 
 
 # --------------------------------------------------------------------------- rules, inventory
@@ -147,9 +155,8 @@ def chosen_by_operator(listing: str) -> dict[str, set[str]]:
 @pytest.mark.parametrize("kind", CLASSES)
 def test_pinned_rules_are_chosen(kind, capfd):
     """T6 at H2_STO3G_TEST: the listing pairs each assembly operator with its pinned rule, the
-    reflections with theirs (no C(ZeroReflection)), and Adjoint(MajoranaGate), the select
-    dagger's leaf adjoint, with a lowered copy of the base rule _majorana_gate (ledger row
-    2E.5)."""
+    Adjoint(MajoranaGate), the select dagger's leaf adjoint, with a lowered copy of the base rule
+    _majorana_gate (ledger row 2E.5)."""
     c = walk_sim.case("sto3g")
     controlled = kind == "controlled"
     cls, _ = CLASSES[kind]
@@ -165,14 +172,11 @@ def test_pinned_rules_are_chosen(kind, capfd):
     expected = {f"{prefix}DFTHCWalk": "_controlled_walk" if controlled else "_walk",
                 f"{prefix}DFTHCBlockEncoding": ("_controlled_block_encoding" if controlled
                                                 else "_block_encoding"),
-                f"{prefix}RefT2": "_controlled_ref_t2" if controlled else "_ref_t2",
-                f"{prefix}RefAB": "_controlled_ref_ab" if controlled else "_ref_ab",
                 "InnerSelect": "_inner_select", "InnerSelectDagger": "_inner_select_dagger"}
     assert {name: chosen[name] for name in expected} == {
         name: {rule} for name, rule in expected.items()}
     assert all(re.fullmatch(r"_majorana_gate(_\d+)?", rule)
                for rule in chosen["Adjoint(MajoranaGate)"])
-    assert "C(ZeroReflection)" not in chosen
 
 
 @pytest.mark.compiled
@@ -205,7 +209,7 @@ def test_inventory_of_captured_targets(kind):
                                       cls(*c.compilable, **c.groups(controlled))), c.num_wires)
     prefix = "Controlled" if controlled else ""
     assert {f"{prefix}DFTHCWalk", f"{prefix}DFTHCBlockEncoding", "InnerSelect",
-            "InnerSelectDagger", f"{prefix}RefT2", f"{prefix}RefAB"} <= set(names)
+            "InnerSelectDagger"} <= set(names)
     assert names.count(f"{prefix}DFTHCWalk") == 1
     assert inventory(names) == LEAF_ADJOINTS | TEMPLATE_ADJOINTS
 
@@ -275,7 +279,7 @@ def test_rules_are_valid(name):
 
 
 def test_required_wires():
-    """The block encoding's groups: the walk adds no register (RefAB's work is in the pool)."""
+    """The block encoding's groups: the walk adds no register (ref_ab's work is in the pool)."""
     p = H2_STO3G_TEST
     for plain, controlled in ((DFTHCWalk, ControlledDFTHCWalk),
                               (DFTHCBlockEncoding, ControlledDFTHCBlockEncoding)):
