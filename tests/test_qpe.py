@@ -118,15 +118,17 @@ def test_controlled_walk_power_rule_is_valid(name, power):
 @pytest.mark.parametrize(("name", "power"), [("sto3g", 2), ("fails-c3", 1)])
 def test_controlled_walk_power_children(name, power):
     """The rule's loop body binds each group to its own register (tape mode, no compile; final
-    review m-8): it queues ``power`` ControlledDFTHCWalk operators whose registers are exactly
-    the walk power's groups, so a swap of two groups of equal size (system and phase_grad at
-    H2_STO3G_TEST) fails here per commit."""
+    review m-8): it queues ``power`` controlled walks qp.ctrl(DFTHCWalk) on the walk power's
+    control whose walk registers are exactly the walk power's groups, so a swap of two groups of
+    equal size (system and phase_grad at H2_STO3G_TEST) fails here per commit."""
     c = walk_sim.case(name)
     with qp.capture.pause(), qp.queuing.AnnotatedQueue() as queue:
         _controlled_walk_power(power, *c.compilable, **c.groups(controlled=True))
-    assert [op.name for op in queue.queue] == ["ControlledDFTHCWalk"] * power
+    assert [op.name for op in queue.queue] == ["C(DFTHCWalk)"] * power
     for op in queue.queue:
-        assert {group: list(getattr(op, group)) for group in op.wire_argnames} == c.groups(True)
+        assert list(op.control_wires) == c.control
+        assert {group: list(getattr(op.base, group))
+                for group in op.base.wire_argnames} == c.groups()
 
 
 def test_controlled_walk_power_validates():

@@ -24,7 +24,7 @@ import pytest
 
 from dfthc import costs
 from dfthc.compile import compiled_resources
-from dfthc.ops.walk import ControlledDFTHCWalk
+from dfthc.ops.walk import DFTHCWalk
 from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST
 from dfthc.qpe import qpe_program
 from dfthc.registers import WalkLayout
@@ -49,7 +49,7 @@ def build(name: str, program: str):
     if program == "walk":
         def qfunc():
             qp.PhaseGradientStatePrep(c.layout.phase_grad)
-            ControlledDFTHCWalk(*c.compilable, **c.groups(controlled=True))
+            qp.ctrl(DFTHCWalk(*c.compilable, **c.groups()), control=c.control)
 
         return qfunc, c.num_wires
     return qpe_program(c.params, c.tables, int(program.removeprefix("qpe")))
@@ -118,16 +118,18 @@ def test_qpe_counts(name, t):
 def test_inventory_of_the_qpe_program():
     """The inventory test of Task 3.4 (spec 7.4 rule 6, 12.1 T6) for the QPE program at
     H2_STO3G_TEST with t = 2: the frontend converts both rounds, both walk powers, the controlled
-    walk with its explicit controlled children and the correction, no C(...) target at all, and
-    the modified dfthc and template targets are exactly the walk's leaf and template adjoints."""
+    walk C(DFTHCWalk) (its rule pinned) and the correction, and the modified dfthc and template
+    targets are exactly the controlled walk, C(DFTHCBlockEncoding) (where the generic controlled
+    candidate of C(DFTHCWalk) stops: its base rule measures) and the walk's leaf and template
+    adjoints."""
     c = walk_sim.case("sto3g")
     program, num_wires = qpe_program(c.params, c.tables, 2)
     names = captured_targets(program, num_wires)
-    assert {"QPERound", "ControlledWalkPower", "ControlledDFTHCWalk",
-            "ControlledDFTHCBlockEncoding", "PhaseGradientRotation"} <= set(names)
+    assert {"QPERound", "ControlledWalkPower", "C(DFTHCWalk)",
+            "PhaseGradientRotation"} <= set(names)
     assert names.count("QPERound") == 2 and names.count("ControlledWalkPower") == 2
-    assert not [name for name in names if "C(" in name]
-    assert inventory(names) == LEAF_ADJOINTS | TEMPLATE_ADJOINTS
+    assert inventory(names) == LEAF_ADJOINTS | TEMPLATE_ADJOINTS | {"C(DFTHCWalk)",
+                                                                    "C(DFTHCBlockEncoding)"}
 
 
 def test_qpe_closed_forms_at_femoco():

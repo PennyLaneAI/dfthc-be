@@ -20,8 +20,12 @@ entry and that every canary named here exists.
   one-CNOT base rule, no measurement). It fails only when no unitary path exists. Canaries:
   `test_measuring_adjoint_rule_has_no_controlled_path` and
   `test_measuring_adjoint_without_unitary_inverse_has_no_path`. Mitigation: spec 7.4 rules 5 and
-  6; never place a measuring operator under `qp.ctrl`. Since G0 no program wraps a dfthc composite
-  in an adjoint or a control (spec 7.4 rule 6), so no measuring rule is wrapped by design.
+  6; never place a measuring operator under `qp.ctrl`. The only modified composite a program
+  requests is `C(DFTHCWalk)` (the toy's `C(ToyWalk)`), whose rule is pinned and controls only the
+  reflections (spec 7.4 rule 6). Catalyst still builds the generic controlled candidate of
+  `C(DFTHCWalk)` one level deep: it requests `C(DFTHCBlockEncoding)`, whose measuring base rule is
+  skipped with the expected warning, so the cascade stops there and no measuring rule is used
+  under control. The candidate costs +26 % compile memory at naphthalene (584 to 733 MB).
 - **L-3, rule selection is cost-based.** With unweighted counts the solver picks the auto-derived
   inverse (two CNOTs) over the measured adjoint rule. Canary:
   `test_unweighted_solver_prefers_unitary_inverse`. Mitigation: weighted gate set, pins, T6.
@@ -42,16 +46,17 @@ entry and that every canary named here exists.
   adjointed or controlled by construction (spec 7.4 rule 6), which the inventory test checks.
 - **L-7, `C(ChangeOpBasis)` loses its saving under capture** (pennylane#10357). Controlling
   `change_op_basis(CNOT, Z, CNOT)` gives two Toffolis instead of zero. Canary:
-  `test_controlled_change_op_basis_controls_everything`. Mitigation: the explicit controlled
-  classes `ControlledDFTHCWalk` and `ControlledDFTHCBlockEncoding` (spec 7.4 rule 6).
+  `test_controlled_change_op_basis_controls_everything`. Mitigation: the pinned `C(DFTHCWalk)`
+  rule, which controls only the walk's two reflections (spec 7.4 rule 6).
 - **L-8, generic controlled wrapping adds PauliX** (pennylane#10080). Generic control of a one-CNOT
   rule compiles to one Toffoli plus four PauliX. Canary: `test_generic_ctrl_adds_paulix_per_control`.
-  Mitigation: explicit controlled classes (spec 7.4 rule 6).
+  Mitigation: the pinned `C(DFTHCWalk)` and `C(ToyWalk)` rules (spec 7.4 rule 6), which control
+  only the reflections and add `X` on the control only for control value 0.
 - **L-9, function calls inside control regions** (catalyst#3330, catalyst#3384), **changed**.
   Controlling a `qp.capture.subroutine` leaves `C(PauliX)` undecomposed at `level="user"` (outside
   the gate set), and compiling for execution fails. Canary:
-  `test_function_call_in_ctrl_region_raises`. Mitigation: no `Subroutine`; explicit controlled
-  classes (spec 7.4 rule 6).
+  `test_function_call_in_ctrl_region_raises`. Mitigation: no `Subroutine`; the pinned
+  `C(DFTHCWalk)` rule, which opens no control region around the walk (spec 7.4 rule 6).
 - **L-10, compilation can depend on gate order** (catalyst#3431). Canary:
   `test_order_dependent_compile`, built from the issue's reproducer in
   `tests/canary/reproducers/catalyst_3431.py`, with the observed outcome per order recorded in

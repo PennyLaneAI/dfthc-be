@@ -9,9 +9,10 @@ reset. The estimated phase is :math:`\varphi = \sum_j m_j 2^{-(j+1)}`: the bits 
 eigenvalue :math:`e^{2\pi i\varphi}` of the walk (an exact :math:`t`-bit phase is returned with
 certainty).
 
-**The walk power.** :class:`ControlledWalkPower` repeats ``ControlledDFTHCWalk`` with a
-``qp.for_loop`` of static bound ``power`` (spec 9.23); ``dfthc.testing.toy_walk``'s
-``ToyControlledWalkPower`` does the same for the toy walk (spec 11.4). :class:`QPERound` cannot
+**The walk power.** :class:`ControlledWalkPower` repeats the controlled walk
+``qp.ctrl(DFTHCWalk(...), control)`` with a ``qp.for_loop`` of static bound ``power`` (spec
+9.23); ``dfthc.testing.toy_walk``'s ``ToyControlledWalkPower`` does the same for the toy walk
+(spec 11.4). :class:`QPERound` cannot
 take the class (an ``Operator2`` takes no Python callable) or nested wire groups (it cannot mix
 compilable with hybrid arguments), so it takes the class's name, its compilable arguments after
 ``power``, its wire groups after ``control`` as one flat register and their sizes: a
@@ -52,7 +53,7 @@ from dfthc.compile import register_rule, resource_key
 from dfthc.data.tables import WalkTables
 from dfthc.ops._validate import canonical_ints, check_int, check_wires
 from dfthc.ops.phase_gradient import PhaseGradientRotation
-from dfthc.ops.walk import ControlledDFTHCWalk, _check, _validate
+from dfthc.ops.walk import DFTHCWalk, _check, _validate
 from dfthc.params import WalkParams
 from dfthc.registers import WalkLayout
 
@@ -112,7 +113,7 @@ class WalkPowerSpec(NamedTuple):
 
 class ControlledWalkPower(Operator2):
     r"""The controlled walk to a power, :math:`C(W)^p = C(W^p)` (spec 9.23): ``power`` steps of
-    :class:`~dfthc.ops.walk.ControlledDFTHCWalk`.
+    the controlled walk ``qp.ctrl(DFTHCWalk(...), control)``.
 
     **Action.** :math:`|0\rangle\langle 0|_{control} \otimes I + |1\rangle\langle 1|_{control}
     \otimes W^p` on inputs whose ancilla groups are in :math:`|0\rangle` or in a state the walk
@@ -121,7 +122,7 @@ class ControlledWalkPower(Operator2):
     controlled walk, which is correct on the walk's own states (spec 12.4, E-3), so the steps
     compose. The output is the same for every outcome of the erase measurements.
 
-    **Registers.** Those of :class:`~dfthc.ops.walk.ControlledDFTHCWalk`.
+    **Registers.** A one-wire ``control``, then those of :class:`~dfthc.ops.walk.DFTHCWalk`.
 
     ============== ============================== ===================== ======================
     name           width (FeMoco-54)              input                 output
@@ -142,14 +143,15 @@ class ControlledWalkPower(Operator2):
     (``scratch_argname``): :class:`QPERound`'s corrections borrow it between walk powers.
 
     **Compilable arguments.** ``power`` (int, at least 1), then ``params`` and ``tables`` as in
-    :class:`~dfthc.ops.walk.ControlledDFTHCWalk`, with the same checks (``ValueError``).
+    :class:`~dfthc.ops.walk.DFTHCWalk`, with the same checks (``ValueError``).
 
-    **Pre- and postconditions.** Those of :class:`~dfthc.ops.walk.ControlledDFTHCWalk`, on both
-    control branches.
+    **Pre- and postconditions.** Those of :class:`~dfthc.ops.walk.DFTHCWalk`, on both control
+    branches; ``control`` is disjoint from the groups (unchecked).
 
     **Decomposition** (spec 9.23). One ``qp.for_loop`` with the static bound ``power`` whose body
-    is ``ControlledDFTHCWalk(params, tables, control, outer, inner, select, system, phase_grad,
-    work)``, the groups unpacked into lists once before the loop (spec 9.0).
+    is ``qp.ctrl(DFTHCWalk(params, tables, outer, inner, select, system, phase_grad, work),
+    control)``, decomposed by the pinned ``C(DFTHCWalk)`` rule; the groups are unpacked into lists
+    once before the loop (spec 9.0).
 
     **Adjoint and control.** Never adjointed or controlled (spec 7.4 rules 4 and 6): its body
     holds a loop and measured erases. :class:`QPERound` calls it.
@@ -193,7 +195,7 @@ class ControlledWalkPower(Operator2):
     """
 
     compilable_argnames = ("power", "params", "tables")
-    wire_argnames = ControlledDFTHCWalk.wire_argnames
+    wire_argnames = ("control", *DFTHCWalk.wire_argnames)
     scratch_argname = "work"
 
     def __init__(self, power, params, tables, control, outer, inner, select, system, phase_grad,
@@ -205,8 +207,9 @@ class ControlledWalkPower(Operator2):
 
     @staticmethod
     def required_wires(power, params, tables) -> dict[str, int]:
-        """Those of :class:`~dfthc.ops.walk.ControlledDFTHCWalk`; ``power`` changes none."""
-        return ControlledDFTHCWalk.required_wires(params, tables)
+        """``control`` (1 wire), then those of :class:`~dfthc.ops.walk.DFTHCWalk`; ``power``
+        changes none."""
+        return {"control": 1} | DFTHCWalk.required_wires(params, tables)
 
     @staticmethod
     def validate_compilable(power, params, tables) -> None:
@@ -218,20 +221,21 @@ class ControlledWalkPower(Operator2):
 
 def _controlled_walk_power_resources(power, params, tables, control, outer, inner, select,
                                      system, phase_grad, work):
-    sizes = ControlledDFTHCWalk.required_wires(params, tables)
-    step = resource_key(lambda: ControlledDFTHCWalk(params, tables, **{
-        name: Wire[sizes[name]] for name in ControlledDFTHCWalk.wire_argnames}))
+    sizes = DFTHCWalk.required_wires(params, tables)
+    step = resource_key(lambda: qp.ctrl(DFTHCWalk(params, tables, **{
+        name: Wire[sizes[name]] for name in DFTHCWalk.wire_argnames}), control=Wire[1]))
     return {step: power}
 
 
 @qp.register_resources(_controlled_walk_power_resources)
 def _controlled_walk_power(power, params, tables, control, outer, inner, select, system,
                            phase_grad, work):
-    groups = [list(group) for group in (control, outer, inner, select, system, phase_grad, work)]
+    control = list(control)
+    groups = [list(group) for group in (outer, inner, select, system, phase_grad, work)]
 
     @qp.for_loop(power)
     def step(_):
-        ControlledDFTHCWalk(params, tables, *groups)
+        qp.ctrl(DFTHCWalk(params, tables, *groups), control=control)
 
     step()
 

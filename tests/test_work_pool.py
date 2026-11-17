@@ -1,9 +1,9 @@
-"""The walk's shared work pool (spec 10.1 and 10.2): every call of the four assembly rules (the
-walks' and the block encodings') gets exactly its required_wires, its work is a prefix of the
-pool, and neither the pool nor the comparators' dirty work registers appear where they do not
-belong; the junk registers and the unprepares' extra_onehot wires are the start of the angle
-wires; WalkLayout.work_size is the largest need, the controlled ref_ab's. A reflection helper's
-call is the MultiControlledX it emits, whose work_wires are its work."""
+"""The walk's shared work pool (spec 10.1 and 10.2): every call of the three assembly rules (the
+block encoding's, the walk's and the controlled walk's) gets exactly its required_wires, its work is
+a prefix of the pool, and neither the pool nor the comparators' dirty work registers appear where
+they do not belong; the junk registers and the unprepares' extra_onehot wires are the start of the
+angle wires; WalkLayout.work_size is the largest need, the controlled ref_ab's. A reflection
+helper's call is the MultiControlledX it emits, whose work_wires are its work."""
 
 import functools
 import inspect
@@ -19,9 +19,9 @@ from dfthc.ops.walk import (
     FROM_OUTCOMES,
     JUNK_MEASUREMENT,
     REFLECTIONS,
+    DFTHCWalk,
     _block_encoding,
     _children,
-    _controlled_block_encoding,
     _controlled_walk,
     _walk,
     _walk_children,
@@ -52,9 +52,8 @@ AT_LEAST = {"OuterPrepare", "OuterUnprepareFromOutcomes", "InnerPrepare",
 LENDS = {cls.__name__: junk for cls, junk in FROM_OUTCOMES.items()}
 """The unprepares from outcomes and the junk register whose start is their ``extra_onehot``."""
 
-RULES = {"block encoding": (_block_encoding, False, 11),
-         "controlled block encoding": (_controlled_block_encoding, True, 11),
-         "walk": (_walk, False, 2), "controlled walk": (_controlled_walk, True, 2)}
+RULES = {"block encoding": (_block_encoding, False, 11), "walk": (_walk, False, 2),
+         "controlled walk": (_controlled_walk, True, 12)}
 """Each assembly rule, whether it is controlled, and its number of operator calls."""
 
 
@@ -77,14 +76,17 @@ def required(op) -> dict:
 
 def calls(rule, p, t, layout, controlled):
     """The rule's operator calls and reflections' ``MultiControlledX`` in tape mode, on the
-    layout's groups (``qpe_control`` as control); the junk measurements' gates and the
-    reflections' other gates are left out."""
+    layout's groups (the controlled walk's rule on ``qp.ctrl(DFTHCWalk(...))`` with
+    ``qpe_control`` as control); the junk measurements' gates and the reflections' other gates are
+    left out."""
     groups = {name: getattr(layout, name)
               for name in ("outer", "inner", "select", "system", "phase_grad", "work")}
-    if controlled:
-        groups = {"control": layout.qpe_control} | groups
-    with qp.capture.pause(), qp.queuing.AnnotatedQueue() as queue:
-        rule(p.as_compilable(), t.as_compilable(), **groups)
+    arguments = {"params": p.as_compilable(), "tables": t.as_compilable()} | groups
+    with qp.capture.pause():
+        if controlled:
+            arguments = qp.ctrl(DFTHCWalk(**arguments), control=layout.qpe_control).arguments
+        with qp.queuing.AnnotatedQueue() as queue:
+            rule(**arguments)
     return [op for op in queue.queue if op.name in dfthc_operator_names() | {"MultiControlledX"}]
 
 
@@ -119,7 +121,7 @@ def check_call(op, layout) -> int:
 
 @pytest.mark.parametrize("name", PRESETS)
 def test_every_call_gets_exactly_its_required_wires(name):
-    """Spec 10.2 and master plan Tasks 3.3 and 3.4: in the four assembly rules every child
+    """Spec 10.2 and master plan Tasks 3.3 and 3.4: in the three assembly rules every child
     receives exactly required_wires (phase_grad of the prepare classes is a minimum: they get the
     whole register; the walks' block encoding gets the whole groups and pool), its work is the
     pool's prefix of that size and disjoint from its other registers, no other register holds a
@@ -141,7 +143,7 @@ def test_the_pool_is_the_controlled_walks_largest_need(name):
     needs = {}
     for rule_name, (rule, controlled, _) in RULES.items():
         for op in calls(rule, p, t, layout, controlled):
-            if op.name not in ("DFTHCBlockEncoding", "ControlledDFTHCBlockEncoding"):
+            if op.name != "DFTHCBlockEncoding":
                 needs[rule_name, op.name] = check_call(op, layout)
     ref_ab = needs["controlled walk", "MultiControlledX"]
     assert max(needs.values()) == ref_ab == len(layout.work)
@@ -176,13 +178,12 @@ def zero_tables(p) -> WalkTables:
 
 CHILDREN = {"OuterPrepare", "InnerPrepare", "InnerSigns", "InnerSelect",
             "InnerUnprepareFromOutcomes", "ref_t2", "InnerSelectDagger",
-            "OuterUnprepareFromOutcomes", "DFTHCBlockEncoding", "ControlledDFTHCBlockEncoding",
-            "ref_ab"}
-"""Every class and reflection helper the four assembly rules call."""
+            "OuterUnprepareFromOutcomes", "DFTHCBlockEncoding", "ref_ab"}
+"""Every class and reflection helper the three assembly rules call."""
 
 
 def test_work_size_covers_every_child_at_random_shapes():
-    """At 300 random valid shapes, every child of the four assembly rules, taken from the rules'
+    """At 300 random valid shapes, every child of the three assembly rules, taken from the rules'
     own step lists (``_children`` and ``_walk_children``, plain and controlled), is given exactly
     its class's own ``required_wires`` work (and an unprepare from outcomes its own
     ``extra_onehot``, no more than its junk register holds), a reflection helper its spec work,

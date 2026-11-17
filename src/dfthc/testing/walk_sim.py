@@ -1,13 +1,15 @@
 r"""Sparse-simulator harness of the block encoding and the walk (spec 12.3 and 12.4).
 
 A :class:`WalkCase` holds one walk's parameters, tables, factors and wires: the ``WalkLayout`` of
-the parameters plus one more wire, ``control``, for the controlled classes (the uncontrolled
+the parameters plus one more wire, ``control``, for the controlled programs (the uncontrolled
 programs leave it in ``|0>``). A program (:func:`program`, :func:`operations`) prepares the
 phase-gradient state on ``phase_grad`` and then applies the assembly operators; it is decomposed
 once to gate-set operations on the tape path. :func:`prepare_unprepare` is the block encoding
-without its reflection, :math:`U^\dagger U` (spec 12.4, E-4). An input (:func:`input_state`) is a
-vector of amplitudes on the system ``psi_up (x) psi_dn`` (:func:`basis`, :func:`superposition`),
-optionally times a control state, with every other wire in ``|0>``.
+without its reflection, :math:`U^\dagger U` (spec 12.4, E-4), and
+:func:`controlled_block_encoding` the controlled walk's first 27 steps. An input
+(:func:`input_state`) is a vector of amplitudes on the system ``psi_up (x) psi_dn``
+(:func:`basis`, :func:`superposition`), optionally times a control state, with every other wire
+in ``|0>``.
 
 :func:`project` reads the block of an output: for each control value and system basis state, the
 amplitude with every other wire in ``|0>`` and ``phase_grad`` contracted with the gradient state,
@@ -64,7 +66,7 @@ class WalkCase:
 
     @property
     def control(self) -> list[int]:
-        """The control wire of the controlled classes, right after the layout."""
+        """The control wire of the controlled programs, right after the layout."""
         return [self.layout.num_wires]
 
     @property
@@ -82,7 +84,8 @@ class WalkCase:
         return self.params.as_compilable(), self.tables.as_compilable()
 
     def groups(self, controlled: bool = False) -> dict[str, list[int]]:
-        """The wire groups of an assembly operator, ``control`` first if ``controlled``."""
+        """The wire groups of an assembly operator, ``control`` first if ``controlled`` (as
+        ``ControlledWalkPower`` takes them)."""
         groups = {name: list(getattr(self.layout, name)) for name in
                   ("outer", "inner", "select", "system", "phase_grad", "work")}
         return {"control": self.control} | groups if controlled else groups
@@ -127,13 +130,27 @@ def operations(case: WalkCase, *calls: Callable[[], None]) -> list:
     return list(decompose_for_simulation(program).operations)
 
 
-def program(case: WalkCase, cls: type, controlled: bool = False, repeat: int = 1) -> list:
+def program(case: WalkCase, cls: type, controlled: bool = False, repeat: int = 1,
+            control_value: int = 1) -> list:
     """The decomposed program: the phase gradient, then ``cls`` (an assembly class) on the case's
-    groups, ``repeat`` times."""
+    groups, ``repeat`` times; if ``controlled``, ``qp.ctrl`` of it on the case's control with
+    ``control_value``."""
     def call():
-        cls(*case.compilable, **case.groups(controlled))
+        op = cls(*case.compilable, **case.groups())
+        if controlled:
+            qp.ctrl(op, control=case.control, control_values=[control_value])
 
     return operations(case, *[call] * repeat)
+
+
+def controlled_block_encoding(case: WalkCase) -> None:
+    r"""The controlled walk's first 27 steps on the case's groups and control, the controlled
+    block encoding :math:`U^\dagger\,C(\mathrm{REF}_{T_2})\,U` (``dfthc.ops.walk``'s own list, in
+    its order and on its registers); a quantum function for tape mode and capture."""
+    g = case.groups()
+    registers = _registers(case.params, g["outer"], g["inner"], g["select"], g["system"],
+                           g["phase_grad"], case.control)
+    _emit(_children(case.params, case.tables, controlled=True), registers, g["work"])
 
 
 def prepare_unprepare(case: WalkCase) -> list:

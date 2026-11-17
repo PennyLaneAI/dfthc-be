@@ -17,7 +17,7 @@ Each layer depends only on the layers below it (spec 5.1).
 | L0, classical data | factors, parameters, alias and angle tables, the encoded Hamiltonian, fermion matrices; NumPy and SciPy only | `dfthc.params`, `dfthc.data.factors`, `dfthc.data.sos`, `dfthc.data.alias`, `dfthc.data.angles`, `dfthc.data.tables`, `dfthc.data.encoded`, `dfthc.data.fermion` |
 | L1, primitives | `PhaseGradientRotation`, `FlaggedUniformPrep`, `QROAMRead` (its select stage is PennyLane's `QROM`), `PhaseFixup`, `QROAMErase`; the unary-iteration helper (the angle loads and the fix-ups) | `dfthc.ops.phase_gradient`, `dfthc.ops.uniform`, `dfthc.ops.qroam`, `dfthc.ops.unary`, `dfthc.ops._validate` |
 | L2, paper blocks | `OuterPrepare`, `OuterUnprepare`, `OuterUnprepareFromOutcomes`, `InnerPrepare`, `InnerUnprepare`, `InnerUnprepareFromOutcomes`, `InnerSigns`, `TailAngleLoad`, `SFAngleLoad`, `AngleErase`, `SpinMux`, `SpinSwap`, `GivensRotation`, `GivensLadder`, `GivensLadderDagger`, `MajoranaGate`, `InnerSelect`, `InnerSelectDagger`; the reflection helpers `ref_t2` and `ref_ab` on PennyLane's `MultiControlledX` | `dfthc.ops.prepare`, `dfthc.ops.angle_data`, `dfthc.ops.spin`, `dfthc.ops.givens`, `dfthc.ops.majorana`, `dfthc.ops.select`, `dfthc.ops.reflections` |
-| L3, assembly | `DFTHCBlockEncoding`, `ControlledDFTHCBlockEncoding`, `DFTHCWalk`, `ControlledDFTHCWalk`; `WalkLayout` | `dfthc.ops.walk`, `dfthc.registers` |
+| L3, assembly | `DFTHCBlockEncoding`, `DFTHCWalk` and its pinned `C(DFTHCWalk)` rule; `WalkLayout` | `dfthc.ops.walk`, `dfthc.registers` |
 | L4, application | `ControlledWalkPower`, `QPERound`, the driver `iterative_phase_estimation` (a plain quantum function, spec 2.1 R-4), `qpe_program`, the energy helpers | `dfthc.qpe` |
 | Tooling | gate set, pins and the compile helper; closed-form costs; the paper's and dfthcbe's costs; test support | `dfthc.compile`, `dfthc.costs`, `dfthc.costs_reference`, `dfthc.testing.resources`, `dfthc.testing.sparse_sim`, `dfthc.testing.tape`, `dfthc.testing.walk_sim`, `dfthc.testing.toy_walk`, `dfthc.testing.fixtures`, `dfthc.testing.canary`, `dfthc.testing.watchdog`, `dfthc.testing.provenance` |
 
@@ -56,9 +56,10 @@ fixes the phases from both outcome vectors (spec 16, Q-1 variant (b)); the basel
 `OuterUnprepare` and `InnerUnprepare`, which measure target and junk together through
 `QROAMErase`, stay in the package with their tests but are not called by the walk.
 
-The controlled walk `ControlledDFTHCWalk` is `ControlledDFTHCBlockEncoding`, which controls only
-the T2 reflection, followed by the controlled `ref_ab`: on ancillas in `|0>` the rest is
-`U^dag U = I` (spec 3.3). A controlled reflection takes the control as one more control of the
+The controlled walk is `qp.ctrl(DFTHCWalk(...), control)`. Its one rule, registered and pinned for
+`"C(DFTHCWalk)"`, runs the block encoding's steps with only the T2 reflection controlled, then the
+controlled `ref_ab`: on ancillas in `|0>` the rest is `U^dag U = I` (spec 3.3). A control value 0
+is `X` on the control around the rule, conditioned on the (possibly traced) value. A controlled reflection takes the control as one more control of the
 multi-controlled Z, then `Z` on the control (`ref_t2` and `ref_ab` with `control=`); the
 reflections use `MultiControlledX` rather than `qp.FlipSign`, whose compile time grows
 exponentially with the pattern width (L-29). `ControlledWalkPower` repeats it with one
@@ -68,7 +69,7 @@ exponentially with the pattern width (L-29). `ControlledWalkPower` repeats it wi
 (spec 11.1). `PhaseFixup` is the operator form of the erase fix-up that `QROAMErase`,
 `AngleErase` and the unprepares from outcomes (through
 `dfthc.ops.qroam.emit_erase_from_outcomes`) emit through `dfthc.ops.qroam.emit_phase_fixup`; the
-walk does not call it as an operator. The toy walk of spec 11.4 (`ToyWalk`, `ControlledToyWalk`,
+walk does not call it as an operator. The toy walk of spec 11.4 (`ToyWalk` with its `C(ToyWalk)` rule,
 `ToyControlledWalkPower` in `dfthc.testing.toy_walk`) checks the phase estimation exactly.
 
 ## Registers
@@ -120,13 +121,13 @@ are symbolic or an operation outside the gate set remains. Four rules carry the 
   `dfthc.compile.register_rule`;
 - every ancilla is an explicit wire argument, and every operator states
   `required_wires(**compilable_args)`;
-- the adjoint and controlled forms of the composites are explicit classes (`OuterUnprepare`,
-  `InnerUnprepare`, `InnerSelectDagger`, `GivensLadderDagger`,
-  `ControlledDFTHCBlockEncoding`, `ControlledDFTHCWalk`, and the walk's
+- the adjoint forms of the composites are explicit classes (`OuterUnprepare`,
+  `InnerUnprepare`, `InnerSelectDagger`, `GivensLadderDagger`, and the walk's
   unprepares `OuterUnprepareFromOutcomes` and `InnerUnprepareFromOutcomes`, which take the junk
-  outcomes as a dynamic array); no program calls `qp.adjoint` or `qp.ctrl` on a composite,
-  because Catalyst would capture the generic candidate of its whole subtree (the K-1 memory
-  finding), and an inventory test checks it;
+  outcomes as a dynamic array), and the controlled walk is `qp.ctrl(DFTHCWalk)` with its pinned
+  `C(DFTHCWalk)` rule, which controls only the reflections; no program calls `qp.adjoint` or
+  `qp.ctrl` on any other composite, because Catalyst would capture the generic candidate of its
+  whole subtree (the K-1 memory finding), and an inventory test checks it;
 - the table loads keep their IR small: `QROAMRead`'s select is PennyLane's `QROM`, whose unary
   rule runs one `qp.for_loop` over the dynamic bool column array (spec 9.3), and the angle loads
   load each unary leaf with one `qp.for_loop` over a bool row array (spec 9.10, 9.11), so the

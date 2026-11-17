@@ -15,9 +15,10 @@ the failed uniform preparation of x_o, dfthcbe's differing failure signs, or C =
 """
 
 import numpy as np
+import pennylane as qp
 import pytest
 
-from dfthc.ops.walk import ControlledDFTHCWalk, DFTHCBlockEncoding, DFTHCWalk
+from dfthc.ops.walk import DFTHCBlockEncoding, DFTHCWalk
 from dfthc.testing import walk_sim
 
 ALL_INPUTS = tuple(range(16))
@@ -90,7 +91,7 @@ E3 = [pytest.param("S0", FIXED_INPUTS, marks=nightly, id="S0-fixed"),
 
 @pytest.mark.parametrize(("kind", "inputs"), E3)
 def test_e3_controlled_walk(kind, inputs):
-    """E-3 at H2_STO3G_TEST: ControlledDFTHCWalk with the control in |0> returns the whole input,
+    """E-3 at H2_STO3G_TEST: qp.ctrl(DFTHCWalk) with the control in |0> returns the whole input,
     in |1> gives DFTHCWalk's whole output, and in |+> their superposition with weight 1/sqrt 2
     each, which detects a global-phase error of either controlled reflection; and, after one
     uncontrolled DFTHCWalk step (index registers of A u B no longer |0>, as between the rounds of
@@ -100,10 +101,10 @@ def test_e3_controlled_walk(kind, inputs):
     c = walk_sim.case("sto3g")
     once = walk_sim.program(c, DFTHCWalk)
     twice = walk_sim.program(c, DFTHCWalk, repeat=2)
-    controlled = walk_sim.program(c, ControlledDFTHCWalk, controlled=True)
+    controlled = walk_sim.program(c, DFTHCWalk, controlled=True)
     then_controlled = walk_sim.operations(
         c, lambda: DFTHCWalk(*c.compilable, **c.groups()),
-        lambda: ControlledDFTHCWalk(*c.compilable, **c.groups(True)))
+        lambda: qp.ctrl(DFTHCWalk(*c.compilable, **c.groups()), control=c.control))
     m = walk_sim.num_measurements(once)
     outcomes = walk_sim.schedule(kind, 2 * m, seed=13)
     plus = 2**-0.5

@@ -71,12 +71,13 @@ def spec_section(heading: str, next_heading: str) -> str:
 
 
 def test_every_operator_is_audited():
-    """The 27 operators of dfthc.ops (spec 9.1 to 9.22, the two unprepares from outcomes of
+    """The 25 operators of dfthc.ops (spec 9.1 to 9.22, the two unprepares from outcomes of
     spec 16, Q-1 variant (b), included; the reflections of 9.6, 9.19 and 9.20 are helpers on
-    PennyLane's MultiControlledX, not operators) and the two of dfthc.qpe (9.23, 11.1)."""
-    assert len(CLASSES) == 29
+    PennyLane's MultiControlledX, not operators, and the controlled walk is qp.ctrl(DFTHCWalk)
+    with its pinned C(DFTHCWalk) rule) and the two of dfthc.qpe (9.23, 11.1)."""
+    assert len(CLASSES) == 27
     names = {cls.__name__ for cls in CLASSES.values()}
-    assert {"PhaseGradientRotation", "QROAMRead", "DFTHCWalk", "ControlledDFTHCWalk",
+    assert {"PhaseGradientRotation", "QROAMRead", "DFTHCWalk", "DFTHCBlockEncoding",
             "OuterUnprepareFromOutcomes", "InnerUnprepareFromOutcomes", "ControlledWalkPower",
             "QPERound"} <= names
 

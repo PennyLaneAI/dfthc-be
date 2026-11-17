@@ -19,24 +19,25 @@ import pytest
 from dfthc import costs
 from dfthc.compile import compiled_resources
 from dfthc.data.factors import load_factors
-from dfthc.ops.walk import ControlledDFTHCWalk, DFTHCWalk
+from dfthc.ops.walk import DFTHCWalk
 from dfthc.params import FEMOCO54, MID_NAPHTHALENE
 from dfthc.testing import walk_sim
 from dfthc.testing.watchdog import effective_limit_mb, run_watched
 
 REPO = Path(__file__).resolve().parents[2]
-PROGRAMS = {"walk": (DFTHCWalk, False), "controlled_walk": (ControlledDFTHCWalk, True)}
+PROGRAMS = {"walk": False, "controlled_walk": True}
+"""Each program and whether it is the controlled walk, qp.ctrl(DFTHCWalk)."""
 CAP_MB = 4096
 """The MID_NAPHTHALENE compiles' cap: the watchdog kills at 3,840 MB (master plan Task 3.4)."""
 PREFIX = "RESULT "
 
 
-def compile_program(c, program):
-    cls, controlled = PROGRAMS[program]
-
+def compile_program(c, program, control_value=1):
     def qfunc():
         qp.PhaseGradientStatePrep(c.layout.phase_grad)
-        cls(*c.compilable, **c.groups(controlled))
+        walk = DFTHCWalk(*c.compilable, **c.groups())
+        if PROGRAMS[program]:
+            qp.ctrl(walk, control=c.control, control_values=[control_value])
 
     return compiled_resources(qfunc, c.num_wires)
 
@@ -56,9 +57,20 @@ def assert_counts(resources, p, controlled):
 @pytest.mark.parametrize("program", PROGRAMS)
 @pytest.mark.parametrize("name", ["sto3g", "631g"])
 def test_counts_at_the_test_presets(name, program):
-    """T = 158 / 160 and 239 / 241, M = 50 and 68, A = 108 / 110 and 178 / 180."""
+    """T = 158 / 160 and 239 / 241, M = 48 and 62, A = 108 / 110 and 178 / 180."""
     c = walk_sim.case(name)
-    assert_counts(compile_program(c, program), c.params, PROGRAMS[program][1])
+    assert_counts(compile_program(c, program), c.params, PROGRAMS[program])
+
+
+@pytest.mark.compiled
+def test_control_value_0_keeps_the_counts():
+    """qp.ctrl(DFTHCWalk, control_values=[0]) at H2_STO3G_TEST: the same T, M and A and wires as
+    control value 1; its two conditional X gates on the control count as PauliX at their maximum
+    branch."""
+    c = walk_sim.case("sto3g")
+    resources = compile_program(c, "controlled_walk", control_value=0)
+    assert_counts(resources, c.params, True)
+    assert resources.num_wires == c.num_wires
 
 
 def compile_mid(program: str) -> dict:
@@ -78,7 +90,7 @@ def compile_mid(program: str) -> dict:
 @pytest.mark.parametrize("program", PROGRAMS)
 def test_counts_at_mid_naphthalene(program):
     """T4 at MID_NAPHTHALENE (nightly), each program compiled once in a subprocess under
-    run_watched with a 4 GB cap: T = 1,910 / 1,912, M = 502, A = 1,675 / 1,677. The MID_COMPILE
+    run_watched with a 4 GB cap: T = 1,910 / 1,912, M = 484, A = 1,675 / 1,677. The MID_COMPILE
     line records the watched wall time and peak memory, for comparison with the K-1 stand-in at
     the same sizes (spikes/results/k1_mid10.json and k1d_PX_mid10.json)."""
     command = [sys.executable, str(Path(__file__).resolve()), program]
@@ -91,7 +103,7 @@ def test_counts_at_mid_naphthalene(program):
     assert run.killed is None and not run.survivors and run.returncode == 0, run.stderr[-2000:]
     assert run.peak_mb <= effective_limit_mb(CAP_MB)
     assert result is not None, run.stdout[-2000:]
-    controlled = PROGRAMS[program][1]
+    controlled = PROGRAMS[program]
     expected = costs.walk(MID_NAPHTHALENE, controlled)
     assert (result["toffoli"], result["measurements"], result["measured_and_uncomputes"],
             result["plain_toffoli"]) == (
