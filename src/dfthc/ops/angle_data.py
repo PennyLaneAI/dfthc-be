@@ -8,33 +8,29 @@ big-endian integer of the whole register, register 0 most significant.
 **Two exclusive loads.** :class:`TailAngleLoad` writes the one-body rows ``x_o`` in
 ``[RC, X_o)``: their angles, ``G0 = 1`` and ``G1 = [x_o - RC >= N+]``. :class:`SFAngleLoad` then
 writes, where ``G0 = 0``, the angles of ``(r, b)`` in ``[0, R) x [0, B)`` and ``b_neq_B = 1``.
-Each is a :class:`~dfthc.ops.qroam.QROAMRead` without a swap network (``block_bits = 0``) whose
-entry is one big-endian integer over its target (``angles ‖ G0 ‖ G1``, ``angles ‖ b_neq_B``) and
-whose ``leaf_words`` the rule builds from the compilable angle table (spec 9.3). After both
-loads, tail rows hold tail data on ``G0 = 1``; every ``G0 = 0`` branch, failed ``x_o``
-included, holds the SF entry of ``(r, b)`` where it is in range, and zeros elsewhere
-(``b = B``, failed ``b``, unvisited ``r``). :class:`AngleErase` (Task 2E.2) erases what they
-write.
+Each is a table load by exact unary iteration (:mod:`dfthc.ops.unary`) over its live ranges, the
+address ranges and nesting that ``qp.QROM`` does not offer (spec 9.3): at every leaf one
+``qp.for_loop`` over the target loads the leaf's entry, one big-endian integer over the target
+(``angles ‖ G0 ‖ G1``, ``angles ‖ b_neq_B``), from a bool array of rows that the rule builds from
+the compilable angle table. After both loads, tail rows hold tail data on ``G0 = 1``; every
+``G0 = 0`` branch, failed ``x_o`` included, holds the SF entry of ``(r, b)`` where it is in
+range, and zeros elsewhere (``b = B``, failed ``b``, unvisited ``r``). :class:`AngleErase`
+(Task 2E.2) erases what they write.
 """
 
 from __future__ import annotations
 
+import itertools
+
+import jax.numpy as jnp
+import numpy as np
 import pennylane as qp
 from pennylane.core import Operator2
-from pennylane.typing import AbstractArray, Wire
 
-from dfthc.compile import register_rule, resource_key
+from dfthc.compile import register_rule
 from dfthc.ops._validate import canonical_ints, check_int, check_wires
-from dfthc.ops.qroam import (
-    WORD,
-    WORD_DTYPE,
-    PhaseFixup,
-    QROAMEmitter,
-    QROAMRead,
-    dummy_wires,
-    emit_phase_fixup,
-)
-from dfthc.ops.unary import as_resources
+from dfthc.ops.qroam import PhaseFixup, QROAMEmitter, dummy_wires, emit_phase_fixup
+from dfthc.ops.unary import as_resources, iterate_nested, work_required
 from dfthc.params import lg
 
 
@@ -45,11 +41,6 @@ def angle_entry(angles, b_rot: int) -> int:
     for angle in angles:
         value = (value << b_rot) | angle
     return value
-
-
-def _words(value: int, width: int) -> tuple[int, ...]:
-    """``value`` as ``ceil(width / 32)`` words, least significant first (L-24)."""
-    return tuple((value >> (WORD * w)) & (2**WORD - 1) for w in range(-(-width // WORD)))
 
 
 def _check_angle_table(name: str, table, shape: tuple[int, ...], b_rot: int) -> tuple:
@@ -79,12 +70,36 @@ def _join(*registers) -> list:
     return [wire for register in registers for wire in register]
 
 
-def _read_key(read: dict, control_value):
-    """The resource key of the loads' ``QROAMRead`` for the read shape ``read``."""
-    words = AbstractArray(QROAMRead.leaf_words_shape(**read), WORD_DTYPE)
-    sizes = QROAMRead.required_wires(**read, control_value=control_value)
-    return resource_key(lambda: QROAMRead(words, **read, control_value=control_value,
-                                          **{name: Wire[n] for name, n in sizes.items()}))
+def _rows(entries, width: int) -> np.ndarray:
+    """``entries`` as a bool array, one row per entry, big-endian over ``width`` bits (spec
+    6.7: bit ``i`` of a row is entry bit ``width - 1 - i``, the bit for target wire ``i``)."""
+    return np.array([[(entry >> (width - 1 - i)) & 1 for i in range(width)] for entry in entries],
+                    dtype=bool)
+
+
+def _load_work(shape: dict, controlled: bool) -> int:
+    """The work wires of a load over ``shape``'s address: its unary iteration's."""
+    return work_required(shape["address_widths"], controlled)
+
+
+def _load_body(emit, entries, shape, address, target, work, control=None, control_value=1):
+    """A table load (module docstring): exact unary iteration over ``shape``'s live ranges,
+    leaves in increasing address order, rooted at the enable ``control``; at leaf ``l`` the
+    loads of ``entries[l]`` onto ``target`` (:meth:`QROAMEmitter.load`)."""
+    width = shape["width"]
+    rows = _rows(entries, width)
+    if emit.counts is None and qp.capture.enabled():
+        rows = jnp.asarray(rows)
+    register = emit.wire_array(target)
+    leaves = iter(range(len(entries)))
+
+    def leaf(flag, values):
+        emit.load(flag, rows, next(leaves), register)
+
+    widths, address = shape["address_widths"], list(address)
+    registers = [(address[start:start + n], lo, hi) for start, n, (lo, hi) in zip(
+        itertools.accumulate((0, *widths)), widths, shape["live_ranges"], strict=False) if n]
+    iterate_nested(registers, work, leaf, control, control_value, emit=emit)
 
 
 # --------------------------------------------------------------------------- TailAngleLoad
@@ -126,17 +141,21 @@ class TailAngleLoad(Operator2):
     ``work`` ends in ``|0>``. After both loads, :class:`AngleErase` erases the shared
     ``angles``, ``b_neq_B``, ``G0`` and ``G1`` registers.
 
-    **Decomposition.** One :class:`~dfthc.ops.qroam.QROAMRead` of :meth:`table` with address
-    ``x_o`` over ``[RC, X_o)``, no swap network (``block_bits = 0``), no enable, and target
-    ``angles ‖ G0 ‖ G1`` (:meth:`read_shape`). The rule builds the read's ``leaf_words`` from
-    the compilable ``tail_angles`` with ``QROAMRead.leaf_words_from_table`` (spec 9.3).
+    **Decomposition.** A table load (module docstring) with address ``x_o`` over ``[RC, X_o)``,
+    no enable, and target ``angles ‖ G0 ‖ G1`` (:meth:`load_shape`): exact unary iteration
+    (:func:`~dfthc.ops.unary.iterate_nested`), and at the leaf of row ``j`` one ``qp.for_loop``
+    over the target that applies ``qp.cond(bit, CNOT)(leaf flag, target[i])`` for bit ``i`` of
+    the row's entry, from a bool array the rule builds from the compilable ``tail_angles``
+    (spec 9.3).
 
-    **Adjoint and control.** Never adjointed or controlled (its read has loops; spec 7.4 rules
-    4 and 6). :class:`AngleErase` undoes it by measurement.
+    **Adjoint and control.** Never adjointed or controlled (it has loops; spec 7.4 rules 4 and
+    6). :class:`AngleErase` undoes it by measurement.
 
     **Cost.** :func:`dfthc.costs.tail_angle_load`: :math:`T = U(RC, X_o, w_x, 0)` (``A = T``),
-    ``M = 0``. The read's CNOT count is an upper bound (``exact=False`` in ``QROAMRead``). At
-    FeMoco-54: 61, with 54 leaves of 25 words each.
+    ``M = 0``. The rule declares a load CNOT for every bit of every row and is registered with
+    ``exact=False``: the CNOT count is an upper bound, which ``qp.analyze`` reports as well,
+    because it counts every unhinted load conditional. At FeMoco-54: 61, with 54 rows of 797
+    bits.
 
     **Paper and dfthcbe.** Step 10, the D1/Q1 angle load (PRX Eq. (B41)); dfthcbe:
     ``tail_rotation_qrom`` (``dfthcbe/rot_data.py``), which prunes the SF prefix to aligned
@@ -181,38 +200,35 @@ class TailAngleLoad(Operator2):
         return tail_angles, n_plus, RC, X_o, b_rot
 
     @staticmethod
-    def read_shape(N: int, RC: int, X_o: int, b_rot: int) -> dict:
-        """The read's ``address_widths``, ``live_ranges``, ``width`` and ``block_bits``."""
+    def load_shape(N: int, RC: int, X_o: int, b_rot: int) -> dict:
+        """The load's ``address_widths``, ``live_ranges`` and ``width``."""
         return {"address_widths": (lg(X_o),), "live_ranges": ((RC, X_o),),
-                "width": (N - 1) * b_rot + 2, "block_bits": 0}
-
-    @staticmethod
-    def table(tail_angles, n_plus: int, RC: int, b_rot: int) -> tuple:
-        """The read's table: ``(RC + j, words)`` with the entry ``angles ‖ G0 ‖ G1`` of row ``j``
-        in 32-bit words, least significant first."""
-        width = (len(tail_angles) - 1) * b_rot + 2
-        return tuple((RC + j, _words(entry, width))
-                     for j, entry in enumerate(_tail_entries(tail_angles, n_plus, b_rot)))
+                "width": (N - 1) * b_rot + 2}
 
     @staticmethod
     def required_wires(tail_angles, n_plus, RC, X_o, b_rot) -> dict[str, int]:
         """Exact register sizes."""
-        read = TailAngleLoad.read_shape(len(tail_angles), RC, X_o, b_rot)
+        shape = TailAngleLoad.load_shape(len(tail_angles), RC, X_o, b_rot)
         return {"x_o": lg(X_o), "angles": (len(tail_angles) - 1) * b_rot, "G0": 1, "G1": 1,
-                "work": QROAMRead.required_wires(**read, control_value=None)["work"]}
+                "work": _load_work(shape, controlled=False)}
+
+
+def _tail_body(emit, tail_angles, n_plus, RC, X_o, b_rot, x_o, angles, G0, G1, work):
+    _load_body(emit, _tail_entries(tail_angles, n_plus, b_rot),
+               TailAngleLoad.load_shape(len(tail_angles), RC, X_o, b_rot), x_o,
+               _join(angles, G0, G1), work)
 
 
 def _tail_angle_load_resources(tail_angles, n_plus, RC, X_o, b_rot, x_o, angles, G0, G1, work):
-    return {_read_key(TailAngleLoad.read_shape(len(tail_angles), RC, X_o, b_rot), None): 1}
+    counter = QROAMEmitter(counting=True)
+    wires = dummy_wires(TailAngleLoad.required_wires(tail_angles, n_plus, RC, X_o, b_rot))
+    _tail_body(counter, tail_angles, n_plus, RC, X_o, b_rot, **wires)
+    return as_resources(counter.counts)
 
 
-@qp.register_resources(_tail_angle_load_resources)
+@qp.register_resources(_tail_angle_load_resources, exact=False)
 def _tail_angle_load(tail_angles, n_plus, RC, X_o, b_rot, x_o, angles, G0, G1, work):
-    read = TailAngleLoad.read_shape(len(tail_angles), RC, X_o, b_rot)
-    words = QROAMRead.leaf_words_from_table(TailAngleLoad.table(tail_angles, n_plus, RC, b_rot),
-                                            **read)
-    QROAMRead(words, **read, control_value=None, address=x_o, target=_join(angles, G0, G1),
-              junk=[], work=work, control=[])
+    _tail_body(QROAMEmitter(), tail_angles, n_plus, RC, X_o, b_rot, x_o, angles, G0, G1, work)
 
 
 register_rule(TailAngleLoad, _tail_angle_load)
@@ -265,18 +281,20 @@ class SFAngleLoad(Operator2):
     ``|0>`` (they hold the tail load's data only where ``G0 = 1``); ``work`` starts and ends in
     ``|0>``. :class:`AngleErase` erases ``angles`` and ``b_neq_B``.
 
-    **Decomposition.** One :class:`~dfthc.ops.qroam.QROAMRead` of :meth:`table` with address
-    ``r ‖ b`` (``r`` outer over ``[0, R)``, ``b`` inner over ``[0, B)``; ``b`` alone if
-    ``R = 1``), no swap network, the enable ``G0`` with control value 0, and target
-    ``angles ‖ b_neq_B`` (:meth:`read_shape`). The rule builds the read's ``leaf_words`` from
-    the compilable ``sf_angles`` (spec 9.3).
+    **Decomposition.** A table load (module docstring) with address ``r ‖ b`` (``r`` outer over
+    ``[0, R)``, ``b`` inner over ``[0, B)``; ``b`` alone if ``R = 1``), the enable ``G0`` with
+    control value 0 as the iteration's root, and target ``angles ‖ b_neq_B``
+    (:meth:`load_shape`): nested exact unary iteration, and at the leaf of ``(r, b)`` one
+    ``qp.for_loop`` of conditional CNOTs that loads its entry, from a bool array the rule builds
+    from the compilable ``sf_angles`` (spec 9.3).
 
-    **Adjoint and control.** Never adjointed or controlled (spec 7.4 rules 4 and 6).
+    **Adjoint and control.** Never adjointed or controlled (it has loops; spec 7.4 rules 4 and
+    6).
 
     **Cost.** :func:`dfthc.costs.sf_angle_load`:
-    :math:`T = U(0, R, w_r, 1) + R\,U(0, B, w_b, 1)` (``A = T``), ``M = 0``; the read's CNOT
-    count is an upper bound. At FeMoco-54: :math:`11 + 10 \cdot 28 = 291`, with 270 leaves of
-    25 words each.
+    :math:`T = U(0, R, w_r, 1) + R\,U(0, B, w_b, 1)` (``A = T``), ``M = 0``; the CNOT count is an
+    upper bound (``exact=False``, as for :class:`TailAngleLoad`). At FeMoco-54:
+    :math:`11 + 10 \cdot 28 = 291`, with 270 rows of 796 bits.
 
     **Paper and dfthcbe.** Step 11, the SF angle load (PRX Table III, :math:`RB`); dfthcbe:
     ``sf_rotation_qrom`` (``dfthcbe/rot_data.py``), nested ``b`` outer and ``r`` inner with the
@@ -321,40 +339,36 @@ class SFAngleLoad(Operator2):
         return _check_angle_table("sf_angles", planes, (R, B, num_rungs), b_rot), R, B, b_rot
 
     @staticmethod
-    def read_shape(N: int, R: int, B: int, b_rot: int) -> dict:
-        """The read's ``address_widths``, ``live_ranges``, ``width`` and ``block_bits``."""
+    def load_shape(N: int, R: int, B: int, b_rot: int) -> dict:
+        """The load's ``address_widths``, ``live_ranges`` and ``width``."""
         widths, ranges = _sf_address(R, B)
-        return {"address_widths": widths, "live_ranges": ranges, "width": (N - 1) * b_rot + 1,
-                "block_bits": 0}
-
-    @staticmethod
-    def table(sf_angles, B: int, b_rot: int) -> tuple:
-        """The read's table: ``((r << w_b) | b, words)`` with the entry ``angles ‖ b_neq_B`` of
-        ``(r, b)`` in 32-bit words, least significant first."""
-        width = len(sf_angles[0][0]) * b_rot + 1
-        return tuple(((r << lg(B + 1)) | b, _words(entry, width))
-                     for r, plane in enumerate(_sf_entries(sf_angles, b_rot))
-                     for b, entry in enumerate(plane))
+        return {"address_widths": widths, "live_ranges": ranges, "width": (N - 1) * b_rot + 1}
 
     @staticmethod
     def required_wires(sf_angles, R, B, b_rot) -> dict[str, int]:
         """Exact register sizes."""
         num_modes = len(sf_angles[0][0]) + 1
-        read = SFAngleLoad.read_shape(num_modes, R, B, b_rot)
+        shape = SFAngleLoad.load_shape(num_modes, R, B, b_rot)
         return {"r": lg(R), "b": lg(B + 1), "G0": 1, "angles": (num_modes - 1) * b_rot,
-                "b_neq_B": 1, "work": QROAMRead.required_wires(**read, control_value=0)["work"]}
+                "b_neq_B": 1, "work": _load_work(shape, controlled=True)}
+
+
+def _sf_body(emit, sf_angles, R, B, b_rot, r, b, G0, angles, b_neq_B, work):
+    entries = [entry for plane in _sf_entries(sf_angles, b_rot) for entry in plane]
+    _load_body(emit, entries, SFAngleLoad.load_shape(len(sf_angles[0][0]) + 1, R, B, b_rot),
+               _join(r, b), _join(angles, b_neq_B), work, control=G0[0], control_value=0)
 
 
 def _sf_angle_load_resources(sf_angles, R, B, b_rot, r, b, G0, angles, b_neq_B, work):
-    return {_read_key(SFAngleLoad.read_shape(len(sf_angles[0][0]) + 1, R, B, b_rot), 0): 1}
+    counter = QROAMEmitter(counting=True)
+    wires = dummy_wires(SFAngleLoad.required_wires(sf_angles, R, B, b_rot))
+    _sf_body(counter, sf_angles, R, B, b_rot, **wires)
+    return as_resources(counter.counts)
 
 
-@qp.register_resources(_sf_angle_load_resources)
+@qp.register_resources(_sf_angle_load_resources, exact=False)
 def _sf_angle_load(sf_angles, R, B, b_rot, r, b, G0, angles, b_neq_B, work):
-    read = SFAngleLoad.read_shape(len(sf_angles[0][0]) + 1, R, B, b_rot)
-    words = QROAMRead.leaf_words_from_table(SFAngleLoad.table(sf_angles, B, b_rot), **read)
-    QROAMRead(words, **read, control_value=0, address=_join(r, b),
-              target=_join(angles, b_neq_B), junk=[], work=work, control=G0)
+    _sf_body(QROAMEmitter(), sf_angles, R, B, b_rot, r, b, G0, angles, b_neq_B, work)
 
 
 register_rule(SFAngleLoad, _sf_angle_load)
@@ -445,11 +459,10 @@ class AngleErase(Operator2):
     The SF fix-up runs while ``G0`` still separates SF from tail branches: a tail branch's
     ``(r, b)`` may be anything, and its angle phase is paid by the tail fix-up. The parities
     come from :func:`dfthc.compile.mcm_parities` with masks built here from the compilable
-    tables, through the loads' own entries (:meth:`TailAngleLoad.table`,
-    :meth:`SFAngleLoad.table`); bit ``i`` of a big-endian mask belongs to the ``i``-th outcome
-    from the end, so the outcomes are passed reversed. No mask is zero: every SF mask has the
-    ``b_neq_B`` bit and every tail mask the ``G0`` bit. Every conditional is a hinted ``CZ`` (or
-    ``Z`` for ob = 0, and on the tail) on a GF(2)-linear predicate (spec 12.5).
+    tables, through the loads' own entries; bit ``i`` of a big-endian mask belongs to the
+    ``i``-th outcome from the end, so the outcomes are passed reversed. No mask is zero: every SF
+    mask has the ``b_neq_B`` bit and every tail mask the ``G0`` bit. Every conditional is a
+    hinted ``CZ`` (or ``Z`` for ob = 0, and on the tail) on a GF(2)-linear predicate (spec 12.5).
 
     **Adjoint and control.** Never: its rule measures (spec 7.4 rule 5).
 

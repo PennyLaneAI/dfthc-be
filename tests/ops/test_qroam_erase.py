@@ -16,6 +16,7 @@ from dfthc import costs
 from dfthc.compile import (
     FIXED_DECOMPS,
     GATE_SET,
+    PENNYLANE_PINS,
     compiled_resources,
     mcm_parities,
     pack_masks,
@@ -63,9 +64,9 @@ def make_read(table, shape, control_value, wires):
     widths, live, width, k, _ = shape
     work = wires["work"][:QROAMRead.required_wires(widths, live, width, k,
                                                    control_value)["work"]]
-    words = QROAMRead.leaf_words_from_table(table, address_widths=widths, live_ranges=live,
-                                            width=width, block_bits=k)
-    return QROAMRead(words, widths, live, width, k, control_value, wires["address"],
+    columns = QROAMRead.columns_from_table(table, address_widths=widths, live_ranges=live,
+                                           width=width, block_bits=k)
+    return QROAMRead(columns, widths, live, width, k, control_value, wires["address"],
                      wires["target"], wires["junk"], work, wires["control"])
 
 
@@ -159,7 +160,7 @@ def test_erase_is_not_a_second_read_and_its_conditionals_are_hinted(capfd):
     wires, num_wires = layout(shape)
     resources = compiled_resources(lambda: make_erase(table, shape, None, wires),
                                    num_wires=num_wires)
-    read = costs.qroam_read(QROAMRead.visited_ranges(widths, live, k), k, width, False)
+    read = costs.qroam_read(*QROAMRead.select_size(widths, live, k, None), k, width)
     assert resources.toffoli != read.toffoli
     masks = QROAMRead.loaded_contents(table, QROAMRead.loaded_set(widths, live, k),
                                       address_widths=widths, live_ranges=live, width=width,
@@ -233,7 +234,7 @@ def test_lightning_smoke_runs_with_five_seeds():
         _phased_prepare(address)
 
     @qp.qjit(capture=True)
-    @qp.decompose(gate_set=GATE_SET, fixed_decomps=dict(FIXED_DECOMPS))
+    @qp.decompose(gate_set=GATE_SET, fixed_decomps={**FIXED_DECOMPS, **PENNYLANE_PINS})
     @qp.qnode(qp.device("lightning.qubit", wires=num_wires))
     def reference():
         prepared()
@@ -242,7 +243,7 @@ def test_lightning_smoke_runs_with_five_seeds():
     expected = np.asarray(reference())
     for seed in range(5):
         @qp.qjit(capture=True, seed=seed)
-        @qp.decompose(gate_set=GATE_SET, fixed_decomps=dict(FIXED_DECOMPS))
+        @qp.decompose(gate_set=GATE_SET, fixed_decomps={**FIXED_DECOMPS, **PENNYLANE_PINS})
         @qp.qnode(qp.device("lightning.qubit", wires=num_wires))
         def round_trip():
             prepared()

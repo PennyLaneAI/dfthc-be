@@ -5,8 +5,9 @@ pins today. A flipped canary is a signal to revisit the mitigation, not a failur
 observations are from 2026-11-11 (PennyLane 0.46.0.dev151, Catalyst 0.16.0.dev140) unless an entry
 gives its own date. Entries marked **changed** differ from the spec's original wording. As of Task
 4.4 (2026-11-15), this file consolidates L-1 to L-27, including L-26 (Task 0.4b), L-27 (Task
-0.2c) and the ledger's later canary-state updates; `tests/test_docstrings.py` checks that every
-limitation has an entry and that every canary named here exists.
+0.2c) and the ledger's later canary-state updates; Task 6.4 (2026-11-16) added L-28 and corrected
+L-12 and L-13. `tests/test_docstrings.py` checks that every limitation has an entry and that every
+canary named here exists.
 
 ## Decomposition rules, pins, control and templates
 
@@ -36,9 +37,9 @@ limitation has an entry and that every canary named here exists.
   `for_loop`, `cond` and a nested operator) compiles to `{"PauliX": "4"}`; the IRMapping crash was
   not reproduced. The canary fails if the crash returns; it cannot detect a fix. Canary:
   `test_auto_adjoint_with_nested_control_flow`. Mitigation kept: no control flow in auto-adjointed
-  bodies (spec 7.4 rule 4). Since G0 the looped `QROAMRead`, `ControlledWalkPower` and
-  `ToyControlledWalkPower` are never adjointed or controlled by construction (spec 7.4 rule 6),
-  which the inventory test checks.
+  bodies (spec 7.4 rule 4). Since G0 the looped `QROAMRead` (through its `QROM` select),
+  `TailAngleLoad`, `SFAngleLoad`, `ControlledWalkPower` and `ToyControlledWalkPower` are never
+  adjointed or controlled by construction (spec 7.4 rule 6), which the inventory test checks.
 - **L-7, `C(ChangeOpBasis)` loses its saving under capture** (pennylane#10357). Controlling
   `change_op_basis(CNOT, Z, CNOT)` gives two Toffolis instead of zero. Canary:
   `test_controlled_change_op_basis_controls_everything`. Mitigation: the explicit controlled
@@ -59,14 +60,25 @@ limitation has an entry and that every canary named here exists.
 - **L-11, resource functions run with capture enabled** (pennylane#10162). Canary:
   `test_resource_function_runs_with_capture_enabled`. Mitigation: `dfthc.compile.resource_key`
   builds keys with capture paused.
-- **L-12, select-swap `QROM` is not self-inverse and counts symbolically.** A dirty 16-entry
-  `QROM` (select-swap chosen) applied twice has overlap 0.8125 with the input; its counts are
-  symbolic. Canaries: `test_select_swap_qrom_twice_is_not_identity`,
-  `test_select_swap_qrom_counts_are_symbolic`. Mitigation: `QROAMRead` with exact CSWAPs and a
+- **L-12, select-swap `QROM` is not self-inverse and counts symbolically**, **changed**
+  (2026-11-16, Task 6.4). A dirty 16-entry `QROM` (select-swap chosen) applied twice has overlap
+  0.8125 with the input; its counts are symbolic. Canaries:
+  `test_select_swap_qrom_twice_is_not_identity`, `test_select_swap_qrom_counts_are_symbolic`.
+  Not being self-inverse is the intended behaviour of a dirty read, which leaves junk for a
+  measured erase as `QROAMRead` does. What keeps the select-swap rule out: rule selection is
+  cost-based (L-3), so a dirty `QROM` gets whichever rule the solver prefers (at our sizes the
+  unary rule, which leaves no junk at all); pinning the select-swap rule fails because it nests a
+  `QROM` (L-4); and its counts are symbolic (L-22). Mitigation: `QROAMRead` runs its select stage
+  as a clean `QROM` with `c - 1` work wires (depth 1), pinned to the unary-iteration rule, which
+  nests no `QROM` (`dfthc.compile.PENNYLANE_PINS`), then its own exact CSWAP network; a
   `PhaseFixup` that applies `CZ`/`Z` directly.
 - **L-13, `Select` with shared target wires crashes the compiler** (`'qref.operator' op qubit
-  operands must refer to distinct qubits`). Canary: `test_select_with_shared_target_crashes`.
-  Mitigation: our own unary-iteration helper.
+  operands must refer to distinct qubits`), **changed** (2026-11-16, Task 6.4). Canary:
+  `test_select_with_shared_target_crashes`. Mitigation: no `Select` of operators that share wires.
+  `QROM`'s unary rule loads with `MultiX` and never hits L-13, so `QROAMRead`'s select is a
+  `QROM`. Our own unary-iteration helper remains for what `QROM` does not offer: address ranges
+  with a lower bound (the tail load and the tail fix-up), nested ranges (the SF load and fix-up),
+  an enable on value 1, and leaves that apply phases (the fix-ups).
 - **L-14, `MultiControlledX` without work wires has no path.** Canary:
   `test_mcx_without_work_wires_has_no_path`. Mitigation: explicit work wires.
 - **L-19, `UniformPrep` and `AliasSampling` need arbitrary rotations**, **changed**. For a
@@ -74,6 +86,15 @@ limitation has an entry and that every canary named here exists.
   `AliasSampling` compiles, because its uniform preparation is then Hadamards only. Canaries:
   `test_template_has_no_toffoli_level_path` (two cases) and
   `test_power_of_two_alias_sampling_compiles`. Mitigation: `FlaggedUniformPrep`.
+- **L-28, `QROM` takes no measurement values as data in tape mode** (new, found by Task 6.4 on
+  2026-11-16). `QROM`'s bitstrings, and the row of its leaf operator `MultiX`, must be bool or
+  integer arrays: recording either with `MeasurementValue`s raises `ValueError`. Under capture
+  the same data are traced bools, and the erase fix-up's leaf loop as `H . QROM(parities) . H`
+  on the one-hot register compiles with exact phases and one Toffoli fewer per outer and inner
+  fix-up (the audit's probe 4; three per FeMoco-54 walk). Canary:
+  `test_qrom_rejects_measurement_values_in_tape_mode`. Mitigation: the fix-ups keep their
+  conditional `CZ` leaves (`emit_phase_fixup`, spec 9.4), which work in both modes (K-10), as the
+  sparse simulator, `assert_valid_decomp_rule` and the report's call finder need.
 
 ## Operator arguments
 

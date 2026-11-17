@@ -207,7 +207,9 @@ def iteration_counts(p: WalkParams) -> dict[str, tuple[int, int, int, int]]:
     call: the counts at which :func:`iteration_causes` splits each iteration difference by
     mechanism.
 
-    ``ours`` is exact unary iteration over the live range (spec 9.24). dfthcbe's walk truncates
+    ``ours`` is exact unary iteration over the live range (spec 9.24); for the reads it is the
+    select's, PennyLane's unary ``QROM`` over the columns up to the last visited block
+    (:func:`dfthc.costs.qrom`), also exact, which saves the root's AND. dfthcbe's walk truncates
     and prunes: Qualtran's truncated iteration (``L + c - 2``) over its live leaves and one stop on
     each aligned block of a dead interval that the register can hold (its README, "Zero rows").
     The paper counts one Toffoli per live leaf. The intermediate is an accounting convention, a
@@ -236,11 +238,13 @@ def iteration_counts(p: WalkParams) -> dict[str, tuple[int, int, int, int]]:
     inner_blocks = _ceil(B + 1, p.K2)
     outer_fix, inner_fix = _ceil(p.M1 * p.K1, Ke1), _ceil(p.RC, Ke2)
     tail = costs.unary(p.RC, p.X_o, w_x, False)
+    outer_columns, outer_controls = costs.outer_read_select(p)
+    inner_columns, inner_controls = costs.inner_read_select(p)
     return {
-        "outer_read": (costs.unary(0, p.M1, w_x - p.k1, False), trunc(p.M1, False),
+        "outer_read": (costs.qrom(outer_controls, outer_columns), trunc(p.M1, False),
                        trunc(p.M1, False), p.M1),
         "inner_read": (
-            costs.unary_nested((0, p.RC, w_x), (0, inner_blocks, p.w_b - p.k2), False),
+            costs.qrom(inner_controls, inner_columns),
             trunc(p.RC, False) + p.RC * trunc(inner_blocks, w_x > 0),
             trunc(p.M2 + aligned_blocks(p.RC, p.X_o) * popcount(inner_blocks), False), p.M2),
         "outer_erase": (costs.unary(0, outer_fix, w_x - p.ke1, False), trunc(outer_fix, False),

@@ -15,7 +15,7 @@ Each layer depends only on the layers below it (spec 5.1).
 | Layer | Content | Modules |
 | --- | --- | --- |
 | L0, classical data | factors, parameters, alias and angle tables, the encoded Hamiltonian, fermion matrices; NumPy and SciPy only | `dfthc.params`, `dfthc.data.factors`, `dfthc.data.sos`, `dfthc.data.alias`, `dfthc.data.angles`, `dfthc.data.tables`, `dfthc.data.encoded`, `dfthc.data.fermion` |
-| L1, primitives | `PhaseGradientRotation`, `FlaggedUniformPrep`, `QROAMRead`, `PhaseFixup`, `QROAMErase`, `ZeroReflection` (in `dfthc.ops.reflections`, listed under L2 with the reflections built on it); the unary-iteration helper | `dfthc.ops.phase_gradient`, `dfthc.ops.uniform`, `dfthc.ops.qroam`, `dfthc.ops.unary`, `dfthc.ops._validate` |
+| L1, primitives | `PhaseGradientRotation`, `FlaggedUniformPrep`, `QROAMRead` (its select stage is PennyLane's `QROM`), `PhaseFixup`, `QROAMErase`, `ZeroReflection` (in `dfthc.ops.reflections`, listed under L2 with the reflections built on it); the unary-iteration helper (the angle loads and the fix-ups) | `dfthc.ops.phase_gradient`, `dfthc.ops.uniform`, `dfthc.ops.qroam`, `dfthc.ops.unary`, `dfthc.ops._validate` |
 | L2, paper blocks | `OuterPrepare`, `OuterUnprepare`, `OuterUnprepareFromOutcomes`, `InnerPrepare`, `InnerUnprepare`, `InnerUnprepareFromOutcomes`, `InnerSigns`, `TailAngleLoad`, `SFAngleLoad`, `AngleErase`, `SpinMux`, `SpinSwap`, `GivensRotation`, `GivensLadder`, `GivensLadderDagger`, `MajoranaGate`, `InnerSelect`, `InnerSelectDagger`, `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB` | `dfthc.ops.prepare`, `dfthc.ops.angle_data`, `dfthc.ops.spin`, `dfthc.ops.givens`, `dfthc.ops.majorana`, `dfthc.ops.select`, `dfthc.ops.reflections` |
 | L3, assembly | `DFTHCBlockEncoding`, `ControlledDFTHCBlockEncoding`, `DFTHCWalk`, `ControlledDFTHCWalk`; `WalkLayout` | `dfthc.ops.walk`, `dfthc.registers` |
 | L4, application | `ControlledWalkPower`, `QPERound`, the driver `iterative_phase_estimation` (a plain quantum function, spec 2.1 R-4), `qpe_program`, the energy helpers | `dfthc.qpe` |
@@ -30,13 +30,13 @@ explicit auxiliary and L4 program rows ([`resources.md`](resources.md)).
 ```text
 DFTHCWalk                                steps 1-28
   DFTHCBlockEncoding                     1-27: U^dag REF_T2 U
-    OuterPrepare                         1-4: FlaggedUniformPrep, QROAMRead, keep test, CSWAPs
+    OuterPrepare                         1-4: FlaggedUniformPrep, QROAMRead (QROM, CSWAPs), keep test, CSWAPs
     (X measurement of junk_x_o)          the outer junk, right after the prepare
     InnerPrepare (round 1)               5-8: FlaggedUniformPrep (two PhaseGradientRotations), QROAMRead
     (X measurement of junk_b)            the inner junk, right after the prepare
     InnerSigns                           9
     InnerSelect                          10-18
-      TailAngleLoad, SFAngleLoad         10, 11 (each a QROAMRead)
+      TailAngleLoad, SFAngleLoad         10, 11 (each a unary-iteration table load)
       SpinMux, SpinSwap                  12, 13
       GivensLadder                       14 (GivensRotation per rung)
       MajoranaGate                       15
@@ -102,8 +102,9 @@ to their group, never to `work` (spec 10.2).
 ## Compilation
 
 `dfthc.compile.compiled_resources(qfunc, num_wires)` compiles a program once (spec 7.2):
-`qp.qjit(capture=True)` around `qp.decompose(gate_set=GATE_SET, fixed_decomps=FIXED_DECOMPS)`
-around a `null.qubit` QNode, analyzed by `qp.analyze`. It returns T (Toffoli plus
+`qp.qjit(capture=True)` around `qp.decompose(gate_set=GATE_SET, fixed_decomps=...)` around a
+`null.qubit` QNode, analyzed by `qp.analyze`; the pins are `FIXED_DECOMPS` (every dfthc rule) and
+`PENNYLANE_PINS` (`QROM` to its unary-iteration rule, the select stage of `QROAMRead`; spec 7.5). It returns T (Toffoli plus
 `TemporaryAND`), M (`MidCircuitMeasure`) and A (`Adjoint(TemporaryAND)`), and fails if the counts
 are symbolic or an operation outside the gate set remains. Four rules carry the design
 (spec 7.4):
@@ -119,8 +120,10 @@ are symbolic or an operation outside the gate set remains. Four rules carry the 
   outcomes as a dynamic array); no program calls `qp.adjoint` or `qp.ctrl` on a composite,
   because Catalyst would capture the generic candidate of its whole subtree (the K-1 memory
   finding), and an inventory test checks it;
-- `QROAMRead` loads each unary leaf with one `qp.for_loop` over a dynamic `int64` table array
-  (spec 9.3), so the FeMoco-54 walk compiles in a few GB.
+- the table loads keep their IR small: `QROAMRead`'s select is PennyLane's `QROM`, whose unary
+  rule runs one `qp.for_loop` over the dynamic bool column array (spec 9.3), and the angle loads
+  load each unary leaf with one `qp.for_loop` over a bool row array (spec 9.10, 9.11), so the
+  FeMoco-54 walk compiles in a few GB.
 
 ## Costs and the resource report
 

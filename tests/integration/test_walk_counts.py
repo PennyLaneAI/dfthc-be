@@ -56,7 +56,7 @@ def assert_counts(resources, p, controlled):
 @pytest.mark.parametrize("program", PROGRAMS)
 @pytest.mark.parametrize("name", ["sto3g", "631g"])
 def test_counts_at_the_test_presets(name, program):
-    """T = 158 / 160 and 240 / 242, M = 50 and 68, A = 108 / 110 and 179 / 181."""
+    """T = 158 / 160 and 239 / 241, M = 50 and 68, A = 108 / 110 and 178 / 180."""
     c = walk_sim.case(name)
     assert_counts(compile_program(c, program), c.params, PROGRAMS[program][1])
 
@@ -78,7 +78,7 @@ def compile_mid(program: str) -> dict:
 @pytest.mark.parametrize("program", PROGRAMS)
 def test_counts_at_mid_naphthalene(program):
     """T4 at MID_NAPHTHALENE (nightly), each program compiled once in a subprocess under
-    run_watched with a 4 GB cap: T = 1,913 / 1,915, M = 502, A = 1,678 / 1,680. The MID_COMPILE
+    run_watched with a 4 GB cap: T = 1,910 / 1,912, M = 502, A = 1,675 / 1,677. The MID_COMPILE
     line records the watched wall time and peak memory, for comparison with the K-1 stand-in at
     the same sizes (spikes/results/k1_mid10.json and k1d_PX_mid10.json)."""
     command = [sys.executable, str(Path(__file__).resolve()), program]
@@ -102,19 +102,19 @@ def test_counts_at_mid_naphthalene(program):
 
 def test_femoco_counts_on_the_closed_forms():
     """FeMoco-54 (spec 9.22 and 9.24), without compiling (master plan section 12.9; the FeMoco
-    compile is Task 4.5's): T = 9,749 + 44 = 9,793, controlled 9,750 + 45 = 9,795; M = 2,524;
-    T_Toffoli = 18 + 20 + 72 + 780 + 216 + 12 = 1,118; A = 8,675 and 8,677; M + A = 11,199 and
-    11,201."""
+    compile is Task 4.5's): T = 9,746 + 44 = 9,790, controlled 9,747 + 45 = 9,792; M = 2,524;
+    T_Toffoli = 18 + 20 + 72 + 780 + 216 + 12 = 1,118; A = 8,672 and 8,674; M + A = 11,196 and
+    11,198."""
     p = FEMOCO54
     assert [costs.ref_ab(p, c).toffoli for c in (False, True)] == [44, 45]
-    assert costs.walk(p, False) == costs.Cost(9793, 2524)
-    assert costs.walk(p, True) == costs.Cost(9795, 2524)
+    assert costs.walk(p, False) == costs.Cost(9790, 2524)
+    assert costs.walk(p, True) == costs.Cost(9792, 2524)
     assert [2 * p.w_x, 4 * p.w_b, (p.K1 - 1) * p.d1, 2 * (p.K2 - 1) * p.d2, 4 * p.N, 12] == [
         18, 20, 72, 780, 216, 12]
     assert costs.toffoli_only(p) == 1118
-    assert [costs.measured_and_uncomputes(p, c) for c in (False, True)] == [8675, 8677]
+    assert [costs.measured_and_uncomputes(p, c) for c in (False, True)] == [8672, 8674]
     assert [costs.walk(p, c).measurements + costs.measured_and_uncomputes(p, c)
-            for c in (False, True)] == [11199, 11201]
+            for c in (False, True)] == [11196, 11198]
 
 
 if __name__ == "__main__":

@@ -9,10 +9,10 @@ significant: the integer address is ``(a_1 << w_2) | a_2``. Each register has a 
 **Bit order.** Every register holds an entry big-endian: wire ``i`` of a ``width``-wire register
 holds bit ``width - 1 - i``. ``target ‖ junk`` is read as one big-endian integer of
 ``2**block_bits * width`` bits (``target`` most significant, then the junk slots in order); that
-integer is :meth:`QROAMRead.loaded_bits`. The read's dynamic ``leaf_words`` hold the entries in
-wire order instead: bit ``s`` of word ``w`` of block position ``p`` is the bit for wire
-``32 w + s`` of that position's register, which is entry bit ``width - 1 - (32 w + s)``
-(:meth:`QROAMRead.leaf_words_from_table` converts a table).
+integer is :meth:`QROAMRead.loaded_bits`. The read's dynamic ``columns`` hold each block before the
+swap network in the same wire order: bit ``p width + i`` of a column is the bit for wire ``i`` of
+position ``p``'s register, entry bit ``width - 1 - i`` (:meth:`QROAMRead.columns_from_table`
+converts a table).
 With ``M = 2**block_bits * width``, the qubits of ``target ‖ junk`` whose outcomes the erase
 uses, bit ``i`` of ``loaded_bits`` is the wire ``M - 1 - i`` of ``target ‖ junk``, so the erase
 passes its outcomes to :func:`dfthc.compile.mcm_parities` in reverse wire order.
@@ -29,56 +29,43 @@ import numpy as np
 import pennylane as qp
 from pennylane.core import Operator2
 from pennylane.ops import MeasurementValue
-from pennylane.typing import AbstractArray
+from pennylane.typing import AbstractArray, Bool, Wire
 
-from dfthc.compile import mcm_parities, register_rule
+from dfthc.compile import mcm_parities, register_rule, resource_key
 from dfthc.ops._validate import canonical_ints, check_int, check_wires
 from dfthc.ops.unary import Emitter, as_resources, iterate_nested, work_required
 
 WORD = 32
 """Data bits per table word (spec 8.4, L-24)."""
 
-WORD_DTYPE = np.int64
-"""dtype of ``leaf_words``: signed, because Catalyst builds no rule for an operator with an
-unsigned dynamic argument (L-26); 32 data bits per word keep every word non-negative."""
-
 
 class QROAMEmitter(Emitter):
-    """:class:`~dfthc.ops.unary.Emitter` with the gates of the read, the fixup and the erase."""
+    """:class:`~dfthc.ops.unary.Emitter` with the gates of the angle loads, the fixup and the
+    erase."""
 
-    def cswap(self, control, a, b):
-        self.gate("CSWAP", lambda: qp.CSWAP([control, a, b]))
+    def wire_array(self, register):
+        """``register`` as an array that a traced loop index can address: a JAX array under
+        capture, a list in tape mode and when counting."""
+        if self.counts is None and qp.capture.enabled():
+            return jnp.asarray(register)
+        return list(register)
 
-    def wire_array(self, target, junk):
-        """``target ‖ junk`` as one register that a traced loop index can address: a JAX array
-        under capture, a list in tape mode; ``None`` when counting."""
-        if self.counts is not None:
-            return None
-        if not qp.capture.enabled():
-            return list(target) + list(junk)
-        if len(junk) == 0:
-            return jnp.asarray(target)
-        return jnp.concatenate([jnp.asarray(target), jnp.asarray(junk)])
-
-    def load(self, flag, leaf_words, leaf, register, positions, width):
-        """The loads of unary leaf ``leaf``: one ``qp.for_loop`` over its ``positions * width``
-        bits. Iteration ``t`` takes position ``p = t // width`` and bit ``i = t % width`` and
-        applies, conditioned on that bit of ``leaf_words``, a CNOT from ``flag`` (an ``X`` for a
-        ``None`` flag) onto ``register[p * width + i]``. No conditional surrounds the loop.
-        Counting: ``positions * width`` gates, the upper bound."""
+    def load(self, flag, rows, leaf, register):
+        """The loads of unary leaf ``leaf``: one ``qp.for_loop`` over ``register``
+        (:meth:`wire_array`); iteration ``i`` applies, conditioned on ``rows[leaf, i]``, a CNOT
+        from ``flag`` (an ``X`` for a ``None`` flag) onto ``register[i]``. No conditional
+        surrounds the loop. Counting: ``len(register)`` gates, the upper bound."""
         name = "PauliX" if flag is None else "CNOT"
         if self.counts is not None:
-            self.counts[name] += positions * width
+            self.counts[name] += len(register)
             return
 
-        @qp.for_loop(0, positions * width, 1)
-        def bit_loop(t):
-            p, i = t // width, t % width
-            bit = (leaf_words[leaf, p, i // WORD] >> (i % WORD)) & 1
+        @qp.for_loop(0, len(register), 1)
+        def bit_loop(i):
             if flag is None:
-                qp.cond(bit == 1, qp.X)(register[p * width + i])
+                qp.cond(rows[leaf, i], qp.X)(register[i])
             else:
-                qp.cond(bit == 1, qp.CNOT)([flag, register[p * width + i]])
+                qp.cond(rows[leaf, i], qp.CNOT)([flag, register[i]])
 
         bit_loop()
 
@@ -167,6 +154,11 @@ def _concatenate(values, widths) -> int:
     return result
 
 
+def _join(*registers) -> list:
+    """The wires of ``registers``, concatenated in order."""
+    return [wire for register in registers for wire in register]
+
+
 def dummy_wires(sizes: dict[str, int]) -> dict[str, range]:
     """Consecutive integer wires for every register: what resource functions count on."""
     wires, start = {}, 0
@@ -224,49 +216,32 @@ def _entries(table) -> dict[int, int]:
     return {address: _entry_value(words) for address, words in table}
 
 
-def _wire_order(value, width) -> int:
-    """``value`` with its ``width`` bits reversed: bit ``i`` of the result is the bit for wire
-    ``i`` of a big-endian register (spec 6.7)."""
-    return int(format(value, f"0{width}b")[::-1], 2)
+def _live_bits(widths, live_ranges, width, block_bits) -> np.ndarray:
+    """Booleans of the columns' shape: which bits belong to a live address."""
+    num_columns, _ = QROAMRead.select_size(widths, live_ranges, block_bits, None)
+    live = [[_is_live((column << block_bits) | p, widths, live_ranges)
+             for p in range(2**block_bits)] for column in range(num_columns)]
+    return np.repeat(np.array(live, dtype=bool), width, axis=1)
 
 
-def _live_positions(widths, live_ranges, block_bits) -> np.ndarray:
-    """``(num_leaves, K)`` booleans: which block positions of each leaf hold a live address."""
-    blocks = QROAMRead.leaf_blocks(widths, live_ranges, block_bits)
-    return np.array([[_is_live((block << block_bits) | p, widths, live_ranges)
-                      for p in range(2**block_bits)] for block in blocks], dtype=bool)
+def _column_array(columns, widths, live_ranges, width, block_bits):
+    """Canonicalize the dynamic ``columns`` once (L-23).
 
-
-def _leaf_word_array(leaf_words, widths, live_ranges, width, block_bits):
-    """Canonicalize the dynamic ``leaf_words`` once (L-23).
-
-    Concrete words (Python or NumPy integers, nested sequences or arrays) must be integers in
-    ``[0, 2**32)``, booleans and floats rejected, checked on the Python values before the
-    ``int64`` cast, so that no word can wrap around before the check; every padding and dead
-    position must be zero, and so must every bit beyond ``width`` (wire order). Tracers and
-    abstract arrays (operators rebuilt by Catalyst, resource keys) are checked for their shape
-    and an integer dtype only. Raises ``ValueError``.
+    Concrete columns (nested sequences or arrays) must be a bool array of
+    :meth:`QROAMRead.columns_shape` that is zero at every dead position and unvisited column.
+    Tracers and abstract arrays (operators rebuilt by Catalyst, resource keys) are checked for
+    their shape and dtype only. Raises ``ValueError``.
     """
-    shape = QROAMRead.leaf_words_shape(widths, live_ranges, width, block_bits)
-    if isinstance(leaf_words, AbstractArray) or qp.math.is_tracer(leaf_words):
-        if tuple(leaf_words.shape) != shape or not np.issubdtype(np.dtype(leaf_words.dtype),
-                                                                 np.integer):
-            raise ValueError(f"leaf_words must be an integer array of shape {shape}, got "
-                             f"{tuple(leaf_words.shape)} of {leaf_words.dtype}")
-        return leaf_words
-    values = np.asarray(leaf_words, dtype=object)
-    if values.shape != shape:
-        raise ValueError(f"leaf_words must have shape {shape}, got {values.shape}")
-    for word in values.flat:
-        if isinstance(word, bool) or not isinstance(word, (int, np.integer)) or not (
-                0 <= word < 2**WORD):
-            raise ValueError(f"leaf words must be integers in [0, 2**{WORD}), got {word!r}")
-    array = values.astype(WORD_DTYPE)
-    if np.any(array[~_live_positions(widths, live_ranges, block_bits)]):
-        raise ValueError("a padding or dead position of leaf_words holds a nonzero word")
-    spare = WORD * shape[2] - width
-    if spare and np.any(array[..., -1] >> (WORD - spare)):
-        raise ValueError(f"leaf_words holds bits beyond width {width}")
+    shape = QROAMRead.columns_shape(widths, live_ranges, width, block_bits)
+    abstract = isinstance(columns, AbstractArray) or qp.math.is_tracer(columns)
+    array = columns if abstract else np.asarray(columns)
+    if tuple(array.shape) != shape or np.dtype(array.dtype) != np.bool_:
+        raise ValueError(f"columns must be a bool array of shape {shape}, got "
+                         f"{tuple(array.shape)} of {array.dtype}")
+    if abstract:
+        return columns
+    if np.any(array & ~_live_bits(widths, live_ranges, width, block_bits)):
+        raise ValueError("a dead position or an unvisited column of columns holds a nonzero bit")
     return jnp.asarray(array) if qp.capture.enabled() else array
 
 
@@ -316,10 +291,10 @@ class QROAMRead(Operator2):
     enable not satisfied                           0                0
     ============================================== ================ =========================
 
-    ``T`` is the table that :meth:`leaf_words_from_table` packed into ``leaf_words``; entries
-    missing from it are zero. ``junk`` slot ``r`` holds the block position
-    ``junk_layout(k, a mod K)[r]``. :meth:`loaded_bits` gives ``target ‖ junk`` for every address.
-    The read adds no phase, and the address is unchanged.
+    ``T`` is the table that :meth:`columns_from_table` laid out in ``columns``; entries missing
+    from it are zero. ``junk`` slot ``r`` holds the block position ``junk_layout(k, a mod K)[r]``.
+    :meth:`loaded_bits` gives ``target ‖ junk`` for every address. The read adds no phase, and
+    the address is unchanged.
 
     **Registers.**
 
@@ -329,16 +304,20 @@ class QROAMRead(Operator2):
     ``address`` ``sum(address_widths)``           any      unchanged
     ``target``  ``width``                         ``|0>``  the entry
     ``junk``    ``(K - 1) width``                 ``|0>``  the block's other entries
-    ``work``    unary-iteration ancillas          ``|0>``  ``|0>``
+    ``work``    ``c - 1`` (none for ``c <= 1``)   ``|0>``  ``|0>``
     ``control`` 0 wires, or 1 (the enable)        any      unchanged
     =========== ================================= ======== ===============================
 
-    **Arguments.** Dynamic: ``leaf_words``, an ``int64`` array of shape :meth:`leaf_words_shape`,
-    ``(num_leaves, K, ceil(width / 32))``: row ``l`` belongs to the ``l``-th unary leaf in
-    visiting order (:meth:`leaf_blocks`), position ``p`` to the address
-    ``(leaf_blocks[l] << k) | p``; 32 data bits per word in wire order (module docstring); zero
-    at padding and dead positions. Callers build it from their compilable table with
-    :meth:`leaf_words_from_table`. Compilable: ``address_widths`` (one or two widths);
+    ``c`` is the select's control count (:meth:`select_size`): the address bits above the low
+    ``k``, plus the enable.
+
+    **Arguments.** Dynamic: ``columns``, a bool array of shape :meth:`columns_shape`,
+    ``(num_columns, K width)``: row ``h`` is the block whose address bits above the low ``k``
+    hold ``h``, its ``K`` positions in order, each entry big-endian (spec 6.7; bit ``i`` of
+    position ``p`` is entry bit ``width - 1 - i``, the bit for wire ``p width + i`` of
+    ``target ‖ junk``); zero at dead positions and at the rows of unvisited blocks below the
+    last visited one. Callers build it from their compilable table with
+    :meth:`columns_from_table`. Compilable: ``address_widths`` (one or two widths);
     ``live_ranges`` (one ``(lo, hi)`` per register); ``width`` (int >= 1); ``block_bits``
     (``0 <= k <= address_widths[-1]``); ``control_value`` (``None`` without an enable wire, else
     the enabling value 0 or 1).
@@ -355,38 +334,34 @@ class QROAMRead(Operator2):
     On both paths, operations in between may act on the address only in ways that keep what the
     read loaded for the current address.
 
-    **Decomposition.** (1) Nested exact unary iteration (:mod:`dfthc.ops.unary`) over the visited
-    blocks: the first register over its live range, then the top ``w_p - k`` bits of the last
-    register over the blocks that meet its live range, rooted at the enable. (2) At each block
-    leaf ``l``, one ``qp.for_loop`` over its ``K width`` bits: iteration ``t`` takes position
-    ``p = t // width`` and bit ``i = t % width`` and applies
-    ``qp.cond(bit == 1, CNOT)(leaf flag, (target ‖ junk)[p width + i])`` with
-    ``bit = (leaf_words[l, p, i // 32] >> (i % 32)) & 1`` (an ``X`` instead of the CNOT when the
-    whole address is low and there is no enable, so no flag exists). No conditional surrounds a
-    loop. (3) A swap-with-zero network on the low ``k`` address bits, most significant first:
-    for bit ``b``, ``CSWAP`` register ``r`` with register ``r + 2**b`` for ``r < 2**b``, which
-    moves the selected entry into ``target`` with ``(K - 1) width`` exact ``CSWAP``\s.
+    **Decomposition.** (1) The select: ``qp.QROM(columns, control_wires=control ‖ high,
+    target_wires=target ‖ junk, work_wires=work, clean=True)``, ``high`` the address wires above
+    the low ``k``. With its ``c - 1`` work wires its depth is 1 and only its unary-iteration
+    rule applies, to which :data:`dfthc.compile.PENNYLANE_PINS` pins it. An address beyond the
+    last column loads nothing, and the enable, its most significant control wire, loads only on
+    0 (``X``-conjugated for ``control_value = 1``). (2) A swap-with-zero network on the low ``k``
+    address bits, most significant first: for bit ``b``, ``CSWAP`` register ``r`` with register
+    ``r + 2**b`` for ``r < 2**b``, which moves the selected entry into ``target`` with
+    ``(K - 1) width`` exact ``CSWAP``\s.
 
-    **Adjoint and control.** Never adjointed or controlled: its body has loops and data
+    **Adjoint and control.** Never adjointed or controlled: its select has loops and data
     conditionals (spec 7.4 rule 4; L-6), and no program wraps a composite that contains it in an
     adjoint or a control (spec 7.4 rule 6). Its data is erased by :class:`QROAMErase` (the
-    baseline unprepares), by :func:`emit_erase_from_outcomes` (the unprepares from outcomes,
-    which the walk calls) or by :class:`~dfthc.ops.angle_data.AngleErase` (the angle loads); use
-    the enable instead of a control.
+    baseline unprepares) or by :func:`emit_erase_from_outcomes` (the unprepares from outcomes,
+    which the walk calls); use the enable instead of a control.
 
-    **Cost.** :func:`dfthc.costs.qroam_read` with ``ranges = visited_ranges(...)``:
-    :math:`T = U` (or :math:`U_2`) over the visited block ranges, controlled if there is an
-    enable, plus :math:`(2^k - 1)` ``width``; ``M = 0``; ``A = U``. At FeMoco-54: outer
-    84 + 72 = 156, inner 543 + 390 = 933. The rule declares ``num_leaves K width`` load CNOTs,
-    or X gates for the flagless leaf (every position and bit, padding included), and is
-    registered with ``exact=False``: the CNOT or X count is an upper bound, which ``qp.analyze``
-    reports as well, because it counts every unhinted load conditional; T, M and A do not depend
-    on the data and are exact.
+    **Cost.** :func:`dfthc.costs.qroam_read` with ``select_size(...)``: :math:`T = N(c, C)`,
+    PennyLane's unary QROM over the ``C`` columns, plus :math:`(2^k - 1)` ``width``; ``M = 0``;
+    ``A = N(c, C)``. Where every block from 0 to the last is visited, ``N`` is one fewer than
+    exact unary iteration over the blocks (its root merges the two top ANDs into CNOTs). At
+    FeMoco-54: outer 83 + 72 = 155, inner 542 + 390 = 932 (its 540 columns of ``x_o ‖ b_top``
+    are contiguous). The ``CNOT`` and ``PauliX`` counts are upper bounds: ``QROM`` declares a
+    load gate for every bit.
 
-    **Paper and dfthcbe.** Steps 2 and 6 (and the engine of 10 and 11); the QROAM of Berry et al.
-    (Quantum 3, 208) with a measured erase. The paper X-measures its prepares' junk early, in
-    the prepare (arXiv:2502.15882v1 App. B.7.2, steps 2 and 4); the walk measures it right after
-    each enclosing prepare, before any angle load, which equals measuring right after the read
+    **Paper and dfthcbe.** Steps 2 and 6; the QROAM of Berry et al. (Quantum 3, 208) with a
+    measured erase. The paper X-measures its prepares' junk early, in the prepare
+    (arXiv:2502.15882v1 App. B.7.2, steps 2 and 4); the walk measures it right after each
+    enclosing prepare, before any angle load, which equals measuring right after the read
     because the comparator and the swaps in between do not touch the junk; dfthcbe keeps it
     until the erase. dfthcbe: the reads in ``OuterPrepare``/``InnerPrepare``; its truncated
     iteration and flat ``r`` target are deferred refinements (spec 9.3, "Known deltas").
@@ -400,48 +375,57 @@ class QROAMRead(Operator2):
 
         table = tuple((a, (v,)) for a, v in enumerate([1, 2, 3, 1, 2]))
         shape = {"address_widths": (3,), "live_ranges": ((0, 5),), "width": 2, "block_bits": 1}
-        words = QROAMRead.leaf_words_from_table(table, **shape)  # shape (3, 2, 1)
-        program = lambda: QROAMRead(words, *shape.values(), None, address=[0, 1, 2],
+        columns = QROAMRead.columns_from_table(table, **shape)  # shape (3, 4)
+        program = lambda: QROAMRead(columns, *shape.values(), None, address=[0, 1, 2],
                                     target=[3, 4], junk=[5, 6], work=[7], control=[])
-        compiled_resources(program, num_wires=8).toffoli  # U(0, 3, 2, 0) + 2 = 2 + 2
+        compiled_resources(program, num_wires=8).toffoli  # N(2, 3) + 2 = 1 + 2
     """
 
-    dynamic_argnames = ("leaf_words",)
+    dynamic_argnames = ("columns",)
     compilable_argnames = ("address_widths", "live_ranges", "width", "block_bits",
                            "control_value")
     wire_argnames = ("address", "target", "junk", "work", "control")
 
-    def __init__(self, leaf_words, address_widths, live_ranges, width, block_bits, control_value,
+    def __init__(self, columns, address_widths, live_ranges, width, block_bits, control_value,
                  address, target, junk, work, control):
         address_widths, live_ranges = _check_address(address_widths, live_ranges)
         width = check_int("width", width, low=1)
         block_bits = check_int("block_bits", block_bits, low=0, high=address_widths[-1])
         control_value = _check_control_value(control_value)
-        leaf_words = _leaf_word_array(leaf_words, address_widths, live_ranges, width, block_bits)
+        columns = _column_array(columns, address_widths, live_ranges, width, block_bits)
         check_wires("QROAMRead",
                     {"address": address, "target": target, "junk": junk, "work": work,
                      "control": control},
                     self.required_wires(address_widths, live_ranges, width, block_bits,
                                         control_value))
-        super().__init__(leaf_words, address_widths, live_ranges, width, block_bits,
+        super().__init__(columns, address_widths, live_ranges, width, block_bits,
                          control_value, address, target, junk, work, control)
 
     @staticmethod
     def required_wires(address_widths, live_ranges, width, block_bits,
                        control_value) -> dict[str, int]:
         """Exact register sizes."""
-        ranges = QROAMRead.visited_ranges(address_widths, live_ranges, block_bits)
+        _, num_controls = QROAMRead.select_size(address_widths, live_ranges, block_bits,
+                                                control_value)
         return {"address": sum(address_widths), "target": width,
-                "junk": (2**block_bits - 1) * width,
-                "work": work_required([n for _, _, n in ranges], control_value is not None),
+                "junk": (2**block_bits - 1) * width, "work": max(num_controls - 1, 0),
                 "control": int(control_value is not None)}
 
     @staticmethod
-    def visited_ranges(address_widths, live_ranges, block_bits) -> list[tuple[int, int, int]]:
-        """``(lo, hi, n)`` of each iterated register: the ``ranges`` of
-        :func:`dfthc.costs.qroam_read`."""
+    def select_size(address_widths, live_ranges, block_bits, control_value) -> tuple[int, int]:
+        """``(num_columns, num_controls)`` of the select: every block up to the last visited
+        one, on the address bits above the low ``block_bits`` plus the enable; the first two
+        arguments of :func:`dfthc.costs.qroam_read`."""
         widths, ranges = _check_address(address_widths, live_ranges)
-        return [(lo, hi, n) for _, n, lo, hi in _high_specs(widths, ranges, block_bits)]
+        last = _concatenate([hi - 1 for _, hi in ranges], widths)
+        return ((last >> block_bits) + 1,
+                sum(widths) - block_bits + int(control_value is not None))
+
+    @staticmethod
+    def columns_shape(address_widths, live_ranges, width, block_bits) -> tuple[int, int]:
+        """``(num_columns, 2**block_bits * width)``, the shape of ``columns``."""
+        num_columns, _ = QROAMRead.select_size(address_widths, live_ranges, block_bits, None)
+        return num_columns, 2**block_bits * width
 
     @staticmethod
     def loaded_ranges(address_widths, live_ranges, block_bits) -> tuple[tuple[int, int], ...]:
@@ -466,37 +450,20 @@ class QROAMRead(Operator2):
         return _swap_order(block_bits, low)[1:]
 
     @staticmethod
-    def leaf_blocks(address_widths, live_ranges, block_bits) -> list[int]:
-        """The high part of every unary leaf (its block), in the order the iteration visits the
-        leaves: outermost register first, values increasing. Row ``l`` of ``leaf_words``."""
-        widths, ranges = _check_address(address_widths, live_ranges)
-        specs = _high_specs(widths, ranges, block_bits)
-        return [_concatenate(values, [n for _, n, _, _ in specs])
-                for values in itertools.product(*(range(lo, hi) for _, _, lo, hi in specs))]
-
-    @staticmethod
-    def leaf_words_shape(address_widths, live_ranges, width, block_bits) -> tuple[int, int, int]:
-        """``(num_leaves, K, ceil(width / 32))``, the shape of ``leaf_words``."""
-        return (len(QROAMRead.leaf_blocks(address_widths, live_ranges, block_bits)),
-                2**block_bits, -(-width // WORD))
-
-    @staticmethod
-    def leaf_words_from_table(table, *, address_widths, live_ranges, width,
-                              block_bits) -> np.ndarray:
-        """The ``leaf_words`` of ``table`` (``(address, words)`` pairs, every address live, each
-        entry below ``2**width`` in 32-bit words, least significant first): each entry in wire
-        order at its leaf and position, zero at padding and dead positions. ``ValueError`` for an
-        invalid table."""
+    def columns_from_table(table, *, address_widths, live_ranges, width,
+                           block_bits) -> np.ndarray:
+        """The ``columns`` of ``table`` (``(address, words)`` pairs, every address live, each
+        entry below ``2**width`` in 32-bit words, least significant first): each entry
+        big-endian at its column and position, zero elsewhere. ``ValueError`` for an invalid
+        table."""
         widths, ranges = _check_address(address_widths, live_ranges)
         entries = _entries(_check_table(table, widths, ranges, width))
-        words = np.zeros(QROAMRead.leaf_words_shape(widths, ranges, width, block_bits),
-                         dtype=WORD_DTYPE)
-        for leaf, block in enumerate(QROAMRead.leaf_blocks(widths, ranges, block_bits)):
-            for position in range(2**block_bits):
-                stream = _wire_order(entries.get((block << block_bits) | position, 0), width)
-                for w in range(words.shape[2]):
-                    words[leaf, position, w] = (stream >> (WORD * w)) & (2**WORD - 1)
-        return words
+        columns = np.zeros(QROAMRead.columns_shape(widths, ranges, width, block_bits), dtype=bool)
+        for address, value in entries.items():
+            start = (address % 2**block_bits) * width
+            columns[address >> block_bits, start:start + width] = [
+                (value >> (width - 1 - i)) & 1 for i in range(width)]
+        return columns
 
     @staticmethod
     def loaded_bits(table, address, *, address_widths, live_ranges, width, block_bits) -> int:
@@ -515,39 +482,35 @@ class QROAMRead(Operator2):
         return _loaded_contents(_entries(table), widths, ranges, width, block_bits, addresses)
 
 
-def _read_body(emit, leaf_words, address_widths, live_ranges, width, block_bits, control_value,
-               address, target, junk, work, control):
+def _qroam_read_resources(columns, address_widths, live_ranges, width, block_bits,
+                          control_value, address, target, junk, work, control):
+    num_columns, num_controls = QROAMRead.select_size(address_widths, live_ranges, block_bits,
+                                                      control_value)
+    size = 2**block_bits * width
+    select = resource_key(lambda: qp.QROM(Bool[num_columns, size], Wire[num_controls],
+                                          Wire[size], Wire[max(num_controls - 1, 0)], True))
+    resources = {select: 1, qp.CSWAP: (2**block_bits - 1) * width,
+                 qp.X: 2 * int(control_value == 1)}
+    return {key: count for key, count in resources.items() if count}
+
+
+@qp.register_resources(_qroam_read_resources)
+def _qroam_read(columns, address_widths, live_ranges, width, block_bits, control_value, address,
+                target, junk, work, control):
+    high = address[:len(address) - block_bits]
+    controls = _join(control, high) if control_value is not None else high
+    if control_value == 1:
+        qp.X(control[0])
+    qp.QROM(columns, control_wires=controls, target_wires=_join(target, junk), work_wires=work,
+            clean=True)
+    if control_value == 1:
+        qp.X(control[0])
     registers = [target] + [junk[r * width:(r + 1) * width] for r in range(2**block_bits - 1)]
-    register = emit.wire_array(target, junk)
-    leaves = itertools.count()
-
-    def leaf(flag, values):
-        emit.load(flag, leaf_words, next(leaves), register, 2**block_bits, width)
-
-    iterate_nested(_registers(address, _high_specs(address_widths, live_ranges, block_bits)),
-                   work, leaf, emit=emit, **_control(control, control_value))
     low = address[len(address) - block_bits:]
     for b in reversed(range(block_bits)):
         for r in range(2**b):
             for i in range(width):
-                emit.cswap(low[block_bits - 1 - b], registers[r][i], registers[r + 2**b][i])
-
-
-def _qroam_read_resources(leaf_words, address_widths, live_ranges, width, block_bits,
-                          control_value, address, target, junk, work, control):
-    counter = QROAMEmitter(counting=True)
-    wires = dummy_wires(QROAMRead.required_wires(address_widths, live_ranges, width, block_bits,
-                                                 control_value))
-    _read_body(counter, leaf_words, address_widths, live_ranges, width, block_bits,
-               control_value, **wires)
-    return as_resources(counter.counts)
-
-
-@qp.register_resources(_qroam_read_resources, exact=False)
-def _qroam_read(leaf_words, address_widths, live_ranges, width, block_bits, control_value,
-                address, target, junk, work, control):
-    _read_body(QROAMEmitter(), leaf_words, address_widths, live_ranges, width, block_bits,
-               control_value, address, target, junk, work, control)
+                qp.CSWAP([low[block_bits - 1 - b], registers[r][i], registers[r + 2**b][i]])
 
 
 register_rule(QROAMRead, _qroam_read)

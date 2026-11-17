@@ -11,11 +11,14 @@ from dfthc.data.tables import WalkTables
 from dfthc.ops.angle_data import (
     SFAngleLoad,
     TailAngleLoad,
+    _rows,
     _sf_angle_load,
+    _sf_angle_load_resources,
     _tail_angle_load,
+    _tail_angle_load_resources,
     angle_entry,
 )
-from dfthc.ops.qroam import QROAMEmitter, QROAMRead, _read_body
+from dfthc.ops.qroam import dummy_wires
 from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE, WalkParams
 from dfthc.testing.resources import chosen_rules, verbose_program
 from dfthc.testing.sparse_sim import SparseSimulator
@@ -213,34 +216,31 @@ def test_compiled_loads_on_lightning():
         assert np.allclose(state, expected, rtol=0, atol=1e-10), name
 
 
-def declared_cnots(read, control_value):
-    """The read's declared CNOT upper bound (its counting twin): load CNOTs for every bit of
-    every leaf plus the iteration's CNOTs."""
-    counter = QROAMEmitter(counting=True)
-    sizes = QROAMRead.required_wires(**read, control_value=control_value)
-    wires, start = {}, 0
-    for name, size in sizes.items():
-        wires[name] = range(start, start + size)
-        start += size
-    _read_body(counter, None, **read, control_value=control_value, **wires)
-    return counter.counts["CNOT"]
+def declared_cnots(p, tail, sf, which):
+    """The rule's declared CNOT upper bound (its resource function): load CNOTs for every bit of
+    every row plus the iteration's CNOTs."""
+    if which == "tail":
+        args = (tail, p.n_plus, p.RC, p.X_o, p.b_rot)
+        sizes, resources = TailAngleLoad.required_wires(*args), _tail_angle_load_resources
+    else:
+        args = (sf, p.R, p.B, p.b_rot)
+        sizes, resources = SFAngleLoad.required_wires(*args), _sf_angle_load_resources
+    return resources(*args, **dummy_wires(sizes))[qp.CNOT]
 
 
 def assert_load_counts(p, tail, sf, which):
     """T4: T, M and A exact against dfthc.costs; the CNOT count, an upper bound for the data
-    (QROAMRead has exact=False), equals the declared bound."""
+    (the rules have exact=False), equals the declared bound."""
     wires, num_wires, tail_work, sf_work = layout(p, tail, sf)
     if which == "tail":
         resources = compiled_resources(lambda: tail_load(p, tail, wires, tail_work), num_wires)
         expected = costs.tail_angle_load(p)
-        read, control_value = TailAngleLoad.read_shape(p.N, p.RC, p.X_o, p.b_rot), None
     else:
         resources = compiled_resources(lambda: sf_load(p, sf, wires, sf_work), num_wires)
         expected = costs.sf_angle_load(p)
-        read, control_value = SFAngleLoad.read_shape(p.N, p.R, p.B, p.b_rot), 0
     assert (resources.toffoli, resources.measurements) == (expected.toffoli, 0)
     assert resources.measured_and_uncomputes == expected.toffoli
-    assert resources.counts["CNOT"] == declared_cnots(read, control_value)
+    assert resources.counts["CNOT"] == declared_cnots(p, tail, sf, which)
 
 
 @pytest.mark.compiled
@@ -263,29 +263,22 @@ def test_toffoli_count_at_mid_naphthalene(which):
 
 def test_femoco_counts_on_the_closed_form():
     """FeMoco-54 on the closed forms (no FeMoco table is compiled, master plan 12.9): tail 61 and
-    SF 11 + 10 * 28 = 291; the reads have 54 and 270 leaves of 25 words (797 and 796 bits)."""
+    SF 11 + 10 * 28 = 291; the loads have 54 and 270 rows of 797 and 796 bits."""
     p = FEMOCO54
-    assert costs.tail_angle_load(p) == costs.Cost(61)
+    assert costs.tail_angle_load(p) == costs.Cost(61) == costs.Cost(costs.unary(270, 324, 9, False))
     assert costs.sf_angle_load(p) == costs.Cost(11 + 10 * 28) == costs.Cost(291)
-    tail = TailAngleLoad.read_shape(p.N, p.RC, p.X_o, p.b_rot)
-    sf = SFAngleLoad.read_shape(p.N, p.R, p.B, p.b_rot)
-    assert tail == {"address_widths": (9,), "live_ranges": ((270, 324),), "width": 797,
-                    "block_bits": 0}
-    assert sf == {"address_widths": (4, 5), "live_ranges": ((0, 10), (0, 27)), "width": 796,
-                  "block_bits": 0}
-    assert QROAMRead.leaf_words_shape(**tail) == (54, 1, 25)
-    assert QROAMRead.leaf_words_shape(**sf) == (270, 1, 25)
-    assert costs.qroam_read(QROAMRead.visited_ranges(tail["address_widths"], tail["live_ranges"],
-                                                     0), 0, 797, False) == costs.Cost(61)
-    assert costs.qroam_read(QROAMRead.visited_ranges(sf["address_widths"], sf["live_ranges"], 0),
-                            0, 796, True) == costs.Cost(291)
-    assert QROAMRead.required_wires(**tail, control_value=None)["work"] == 8
-    assert QROAMRead.required_wires(**sf, control_value=0)["work"] == 9
+    tail = TailAngleLoad.load_shape(p.N, p.RC, p.X_o, p.b_rot)
+    sf = SFAngleLoad.load_shape(p.N, p.R, p.B, p.b_rot)
+    assert tail == {"address_widths": (9,), "live_ranges": ((270, 324),), "width": 797}
+    assert sf == {"address_widths": (4, 5), "live_ranges": ((0, 10), (0, 27)), "width": 796}
+    tail_angles, sf_angles = random_tables(p)
+    assert TailAngleLoad.required_wires(tail_angles, p.n_plus, p.RC, p.X_o, p.b_rot)["work"] == 8
+    assert SFAngleLoad.required_wires(sf_angles, p.R, p.B, p.b_rot)["work"] == 9
 
 
 @pytest.mark.compiled
 def test_pinned_rules_are_chosen_and_nothing_survives_at_device_level(capfd):
-    """T6: the verbose listing names both pinned rules and the read's; T5 at level="device"."""
+    """T6: the verbose listing names both pinned rules; T5 at level="device"."""
     p, (tail, sf) = SHAPES["sto3g"]
     wires, num_wires, tail_work, sf_work = layout(p, tail, sf)
 
@@ -295,7 +288,7 @@ def test_pinned_rules_are_chosen_and_nothing_survives_at_device_level(capfd):
 
     qp.analyze(verbose_program(program, num_wires), level="user")()
     captured = capfd.readouterr()
-    assert {"_tail_angle_load", "_sf_angle_load", "_qroam_read"} <= set(
+    assert {"_tail_angle_load", "_sf_angle_load"} <= set(
         chosen_rules(captured.out + captured.err))
     compiled_resources(program, num_wires=num_wires, level="device")
 
@@ -318,24 +311,23 @@ def test_rules_are_valid(name):
         _sf_angle_load, check_matrix=False)
 
 
-def test_entries_and_tables_by_hand():
-    """angle_entry puts register 0 first (spec 6.7); the tail entry is angles ‖ G0 ‖ G1 and the
-    SF entry angles ‖ b_neq_B, in 32-bit words, least significant first."""
+def test_entries_and_rows_by_hand():
+    """angle_entry puts register 0 first (spec 6.7); a load's rows hold its entries big-endian,
+    bit i of a row for target wire i, so wider entries need no word packing."""
     assert angle_entry((1, 2, 3), 3) == 0b001_010_011
-    assert TailAngleLoad.table(((1,), (2,), (3,)), 2, 5, 3) == (
-        (5, (0b001_1_0,)), (6, (0b010_1_0,)), (7, (0b011_1_1,)))
-    assert SFAngleLoad.table((((1,), (2,), (3,)), ((0,), (1,), (2,))), 3, 3) == (
-        (0, (0b001_1,)), (1, (0b010_1,)), (2, (0b011_1,)),
-        (4, (0b000_1,)), (5, (0b001_1,)), (6, (0b010_1,)))
-    # 47 bits in two words: ((16383 << 30) | 1) << 2 | 0b10 = (16383 << 32) | 6.
-    wide = TailAngleLoad.table(((2**14 - 1, 0, 1),) + ((0, 0, 0),) * 3, 4, 1, 15)
-    assert wide[0] == (1, (6, 2**14 - 1))
+    rows = _rows([0b001_1_0, 0b010_1_0, 0b011_1_1], 5)
+    assert rows.dtype == bool
+    assert rows.astype(int).tolist() == [[0, 0, 1, 1, 0], [0, 1, 0, 1, 0], [0, 1, 1, 1, 1]]
+    # 47 bits: ((16383 << 30) | 1) << 2 | 0b10 = (16383 << 32) | 6.
+    wide = _rows([(2**14 - 1 << 32) | 6], 47)[0]
+    assert not wide[0] and wide[1:15].all() and not wide[15:44].any()
+    assert wide[44:].tolist() == [True, True, False]
 
 
-def test_read_shapes_and_required_wires():
+def test_load_shapes_and_required_wires():
     p, (tail, sf) = SHAPES["random-R1"]
-    assert SFAngleLoad.read_shape(p.N, p.R, p.B, p.b_rot) == {
-        "address_widths": (2,), "live_ranges": ((0, 2),), "width": 4, "block_bits": 0}
+    assert SFAngleLoad.load_shape(p.N, p.R, p.B, p.b_rot) == {
+        "address_widths": (2,), "live_ranges": ((0, 2),), "width": 4}
     assert SFAngleLoad.required_wires(sf, p.R, p.B, p.b_rot) == {
         "r": 0, "b": 2, "G0": 1, "angles": 3, "b_neq_B": 1, "work": 2}
     p, (tail, sf) = SHAPES["631g"]

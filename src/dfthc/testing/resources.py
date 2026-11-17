@@ -16,6 +16,7 @@ from catalyst.passes import graph_decomposition
 from dfthc.compile import (
     FIXED_DECOMPS,
     GATE_SET,
+    PENNYLANE_PINS,
     CompiledResources,
     compiled_resources,
     dfthc_operator_names,
@@ -99,7 +100,7 @@ def verbose_program(qfunc: Callable[[], None], num_wires: int):
     """
 
     @qp.qjit(capture=True, verbose=True)
-    @graph_decomposition(gate_set=GATE_SET, fixed_decomps=dict(FIXED_DECOMPS) or None,
+    @graph_decomposition(gate_set=GATE_SET, fixed_decomps={**FIXED_DECOMPS, **PENNYLANE_PINS},
                          verbose=True)
     @qp.qnode(qp.device("null.qubit", wires=num_wires))
     def program():

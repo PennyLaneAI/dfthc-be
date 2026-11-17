@@ -164,8 +164,8 @@ class ControlledWalkPower(Operator2):
     :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}` (App. B.7.2, Eq. (128)), which gives
     :math:`C(W^p)` only for even ``p`` because the block encoding is self-inverse. Each step here
     also controls :math:`\mathrm{REF}_{T_2}` (spec 9.23), so every ``p`` works, round
-    :math:`j = 0` included, at ``p`` Toffolis more than that model: at FeMoco-54 ``9795 p``
-    against ``9794 p``, and the paper's Table III step is 9,997. dfthcbe builds no phase
+    :math:`j = 0` included, at ``p`` Toffolis more than that model: at FeMoco-54 ``9792 p``
+    against ``9791 p``, and the paper's Table III step is 9,997. dfthcbe builds no phase
     estimation; its controlled walk is ``DFTHCWalk(is_controlled=True)``.
 
     **Example.**
