@@ -9,14 +9,14 @@ One system qubit and one LCU ancilla: PREP is a Hadamard on the ancilla, SELECT 
 :math:`\varphi \in \{1/8, 3/8, 5/8, 7/8\}`.
 
 The walk has the DFTHC walk's form :math:`\mathrm{REF}\,U^\dagger R\,U` with :math:`U` = PREP and
-:math:`R` = SELECT, itself a reflection (a Hermitian unitary). So :class:`ControlledToyWalk`
-controls exactly its two reflections, as ``ControlledDFTHCWalk`` controls ``ref_ab`` and ``ref_t2``:
+:math:`R` = SELECT, itself a reflection (a Hermitian unitary). So the ``C(ToyWalk)`` rule
+controls exactly its two reflections, as ``C(DFTHCWalk)`` controls ``ref_ab`` and ``ref_t2``:
 :math:`C(W) = C(\mathrm{REF}_{anc})\,\mathrm{PREP}^\dagger\,C(\mathrm{SEL})\,\mathrm{PREP}`, and
 with the control in :math:`|0\rangle` the rest is :math:`\mathrm{PREP}^\dagger\mathrm{PREP} = I`.
 Controlling the ancilla reflection alone would leave :math:`\mathrm{PREP}^\dagger\,\mathrm{SEL}\,
 \mathrm{PREP} \ne I` on the control's :math:`|0\rangle` (the toy has one reflection outside
 :math:`U`, the DFTHC walk two). :class:`ToyControlledWalkPower` repeats the controlled walk with a
-``qp.for_loop``, as ``ControlledWalkPower`` repeats ``ControlledDFTHCWalk``; it is registered as a
+``qp.for_loop``, as ``ControlledWalkPower`` repeats ``C(DFTHCWalk)``; it is registered as a
 walk power of :class:`dfthc.qpe.QPERound`.
 
 The dense references (:func:`toy_walk_matrix`, :func:`controlled_toy_walk_matrix`) are built from
@@ -60,7 +60,7 @@ def controlled_toy_walk_matrix() -> np.ndarray:
 
 
 def toy_walk_cost(controlled: bool) -> Cost:
-    """``ToyWalk``: no Toffoli; ``ControlledToyWalk``: the two Toffolis of the controlled SELECT.
+    """``ToyWalk``: no Toffoli; ``C(ToyWalk)``: the two Toffolis of the controlled SELECT.
     No measurement either way."""
     return Cost(2 if controlled else 0)
 
@@ -100,10 +100,21 @@ class ToyWalk(Operator2):
     ``X``). PREP†: ``H(ancilla)``. :math:`\mathrm{REF}_{anc}`: ``Z(ancilla)``, exactly
     :math:`2|0\rangle\langle 0| - I`.
 
-    **Adjoint and control.** Never adjointed or controlled: the controlled form is the class
-    :class:`ControlledToyWalk` (spec 7.4 rule 6); there is no ``C(ToyWalk)`` rule.
+    **Adjoint and control.** Never adjointed. Controlled with ``qp.ctrl(ToyWalk(...), control,
+    control_values=...)``, whose one pinned rule, registered for ``"C(ToyWalk)"``, controls only
+    the toy's two reflections, :math:`C(W) = C(\mathrm{REF}_{anc})\,\mathrm{PREP}^\dagger\,
+    C(\mathrm{SEL})\,\mathrm{PREP}`: PREP; the controlled SELECT, two ``Toffoli`` s
+    (``X(ancilla)``, ``H(system)``, ``Toffoli(control, ancilla, system)``, ``H(system)``,
+    ``X(ancilla)``: ``Z`` on the system where the control is 1 and the ancilla 0; then
+    ``Toffoli(control, ancilla, system)``: ``X`` where both are 1); PREP†; ``CZ(control,
+    ancilla)``. Its action is :func:`controlled_toy_walk_matrix` on (``control``, ``system``,
+    ``ancilla``) for control value 1, global phase included; a control value 0 puts ``X`` on the
+    control before and after, conditioned on the value, which may be traced. The rule takes exactly
+    one control wire (``ValueError`` otherwise) and no work wires. :class:`ToyControlledWalkPower`
+    repeats it.
 
-    **Cost.** :func:`toy_walk_cost` (uncontrolled): ``T = 0``, ``M = 0``.
+    **Cost.** :func:`toy_walk_cost`: uncontrolled ``T = 0``, controlled ``T = 2`` (two
+    ``Toffoli``, ``A = 0``); ``M = 0``.
 
     **Paper and dfthcbe.** The qubitization walk of Low and Chuang (Quantum 3, 163 (2019)) for a
     two-term LCU; test scaffolding of spec 11.4 with no counterpart in the paper or dfthcbe.
@@ -147,98 +158,42 @@ def _toy_walk(system, ancilla):
 register_rule(ToyWalk, _toy_walk)
 
 
-class ControlledToyWalk(Operator2):
-    r"""The controlled toy walk, the explicit controlled class of :class:`ToyWalk` (spec 7.4 rule
-    6): :math:`C(W) = C(\mathrm{REF}_{anc})\,\mathrm{PREP}^\dagger\,C(\mathrm{SEL})\,
-    \mathrm{PREP}`, which controls only the toy's two reflections.
-
-    **Action.** :func:`controlled_toy_walk_matrix`, exactly :math:`|0\rangle\langle 0| \otimes I
-    + |1\rangle\langle 1| \otimes W` on every input, global phase included: control ``|0>`` keeps
-    the input (:math:`\mathrm{PREP}^\dagger\mathrm{PREP} = I`), control ``|1>`` gives
-    :class:`ToyWalk`'s output, and control ``|+>`` their superposition.
-
-    **Registers.** Those of :class:`ToyWalk` after a one-wire ``control``.
-
-    ============ ===== ===== ==============
-    name         width input output
-    ============ ===== ===== ==============
-    ``control``  1     any   a control
-    ``system``   1     any   see the action
-    ``ancilla``  1     any   see the action
-    ============ ===== ===== ==============
-
-    **Compilable arguments.** None.
-
-    **Pre- and postconditions.** None: it is unitary on every input.
-
-    **Decomposition.** PREP: ``H(ancilla)``. The controlled SELECT, two ``Toffoli`` s:
-    ``X(ancilla)``, ``H(system)``, ``Toffoli(control, ancilla, system)``, ``H(system)``,
-    ``X(ancilla)`` (``Z`` on the system where the control is 1 and the ancilla 0), then
-    ``Toffoli(control, ancilla, system)`` (``X`` where both are 1). PREP†: ``H(ancilla)``. The
-    controlled :math:`\mathrm{REF}_{anc}`: ``CZ(control, ancilla)``. SELECT is the reflection
-    inside :math:`U^\dagger R\,U` (here :math:`U` = PREP), the role ``ref_t2`` plays in the DFTHC
-    walk; controlling only :math:`\mathrm{REF}_{anc}` would apply
-    :math:`\mathrm{PREP}^\dagger\,\mathrm{SEL}\,\mathrm{PREP}` on the control's ``|0>``.
-
-    **Adjoint and control.** Never adjointed or controlled itself (spec 9.0);
-    :class:`ToyControlledWalkPower` repeats it.
-
-    **Cost.** :func:`toy_walk_cost` (controlled): ``T = 2`` (two ``Toffoli``, ``A = 0``),
-    ``M = 0``.
-
-    **Paper and dfthcbe.** The controlled walk of spec 3.3 in toy form (control only the
-    reflections); test scaffolding of spec 11.4.
-
-    **Example.**
-
-    .. code-block:: python
-
-        from dfthc.compile import compiled_resources
-        from dfthc.testing.toy_walk import ControlledToyWalk
-
-        program = lambda: ControlledToyWalk(control=[0], system=[1], ancilla=[2])
-        compiled_resources(program, num_wires=3).toffoli  # 2
-    """
-
-    wire_argnames = ("control", "system", "ancilla")
-
-    def __init__(self, control, system, ancilla):
-        _check("ControlledToyWalk", {"control": control, "system": system, "ancilla": ancilla})
-        super().__init__(control, system, ancilla)
-
-    @staticmethod
-    def required_wires() -> dict[str, int]:
-        return {"control": 1, "system": 1, "ancilla": 1}
-
-
-def _controlled_toy_walk_resources(control, system, ancilla):
-    return {qp.H: 4, qp.X: 2, qp.Toffoli: 2, qp.CZ: 1}
+def _controlled_toy_walk_resources(base, control_wires, control_values, work_wires,
+                                   work_wire_type):
+    return {qp.H: 4, qp.X: 4, qp.Toffoli: 2, qp.CZ: 1}
 
 
 @qp.register_resources(_controlled_toy_walk_resources)
-def _controlled_toy_walk(control, system, ancilla):
+def _controlled_toy_walk(base, control_wires, control_values, work_wires, work_wire_type):
+    if len(control_wires) != 1:
+        raise ValueError(f"C(ToyWalk) takes one control wire; got {len(control_wires)}")
+    control, system, ancilla = control_wires[0], base.system[0], base.ancilla[0]
+    flip = qp.cond(qp.math.logical_not(control_values[0]), qp.X)
+    flip(control)
     qp.H(ancilla)
     qp.X(ancilla)
     qp.H(system)
-    qp.Toffoli([control[0], ancilla[0], system[0]])
+    qp.Toffoli([control, ancilla, system])
     qp.H(system)
     qp.X(ancilla)
-    qp.Toffoli([control[0], ancilla[0], system[0]])
+    qp.Toffoli([control, ancilla, system])
     qp.H(ancilla)
-    qp.CZ([control[0], ancilla[0]])
+    qp.CZ([control, ancilla])
+    flip(control)
 
 
-register_rule(ControlledToyWalk, _controlled_toy_walk)
+register_rule("C(ToyWalk)", _controlled_toy_walk)
 
 
 class ToyControlledWalkPower(Operator2):
     r"""The controlled toy walk to a power, :math:`C(W^p)`: ``power`` steps of
-    :class:`ControlledToyWalk` (the toy twin of ``dfthc.qpe.ControlledWalkPower``, spec 11.4).
+    ``qp.ctrl(ToyWalk(...), control)`` (the toy twin of ``dfthc.qpe.ControlledWalkPower``, spec
+    11.4).
 
     **Action.** :math:`|0\rangle\langle 0| \otimes I + |1\rangle\langle 1| \otimes W^p` on
     (``control``, ``system``, ``ancilla``).
 
-    **Registers.** Those of :class:`ControlledToyWalk`.
+    **Registers.** A one-wire ``control``, then those of :class:`ToyWalk`.
 
     ============ ===== ===== ==============
     name         width input output
@@ -253,7 +208,8 @@ class ToyControlledWalkPower(Operator2):
     **Pre- and postconditions.** None: it is unitary on every input.
 
     **Decomposition.** One ``qp.for_loop`` with the static bound ``power`` whose body is
-    ``ControlledToyWalk(control, system, ancilla)``.
+    ``qp.ctrl(ToyWalk(system, ancilla), control)``, decomposed by the pinned ``C(ToyWalk)``
+    rule.
 
     **Adjoint and control.** Never adjointed or controlled (spec 7.4 rules 4 and 6); registered
     in :data:`dfthc.qpe.WALK_POWERS` for :class:`dfthc.qpe.QPERound`, with no scratch group
@@ -296,7 +252,7 @@ class ToyControlledWalkPower(Operator2):
 
 
 def _toy_controlled_walk_power_resources(power, control, system, ancilla):
-    step = resource_key(lambda: ControlledToyWalk(Wire[1], Wire[1], Wire[1]))
+    step = resource_key(lambda: qp.ctrl(ToyWalk(Wire[1], Wire[1]), control=Wire[1]))
     return {step: power}
 
 
@@ -306,7 +262,7 @@ def _toy_controlled_walk_power(power, control, system, ancilla):
 
     @qp.for_loop(power)
     def step(_):
-        ControlledToyWalk(control, system, ancilla)
+        qp.ctrl(ToyWalk(system, ancilla), control=control)
 
     step()
 

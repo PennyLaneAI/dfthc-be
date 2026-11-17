@@ -1,9 +1,9 @@
-"""The toy walk of spec 11.4 and iterative phase estimation on it (spec 11.1): ToyWalk,
-ControlledToyWalk and ToyControlledWalkPower (T2 to T6, the action against the dense reference
-with the control in |0>, |1> and |+>), the exact t = 3 distribution on the sparse simulator, the
-lightning.qubit smoke test, the compiled feed-forward on one postselected path, earlier_bits of
-shape (t,) in every round in both modes, the toy QPE program's counts and its inventory of
-captured targets."""
+"""The toy walk of spec 11.4 and iterative phase estimation on it (spec 11.1): ToyWalk, its
+controlled form qp.ctrl(ToyWalk) and ToyControlledWalkPower (T2 to T6, the action against the dense
+reference with the control in |0>, |1> and |+>, for both control values), the exact t = 3
+distribution on the sparse simulator, the lightning.qubit smoke test, the compiled feed-forward on
+one postselected path, earlier_bits of shape (t,) in every round in both modes, the toy QPE
+program's counts and its inventory of captured targets."""
 
 import itertools
 
@@ -18,7 +18,6 @@ from dfthc.testing.resources import captured_targets, chosen_rules, inventory, v
 from dfthc.testing.sparse_sim import BranchPolicy, SparseSimulator
 from dfthc.testing.tape import decompose_for_simulation
 from dfthc.testing.toy_walk import (
-    ControlledToyWalk,
     ToyControlledWalkPower,
     ToyWalk,
     _controlled_toy_walk,
@@ -81,15 +80,17 @@ def test_toy_walk_acts_as_the_reference():
 
 
 @pytest.mark.compiled
-@pytest.mark.parametrize("power", [1, 3])
-def test_controlled_toy_walks_in_three_control_states(power):
-    """T3 of the controlled classes: the compiled matrix of ControlledToyWalk (power 1) and of
+@pytest.mark.parametrize(("power", "control_value"), [(1, 1), (1, 0), (3, 1)])
+def test_controlled_toy_walks_in_three_control_states(power, control_value):
+    """T3 of the controlled forms: the compiled matrix of qp.ctrl(ToyWalk) (power 1) and of
     ToyControlledWalkPower(3) is |0><0| (x) I + |1><1| (x) W^p exactly, so control |0> keeps the
     input, control |1> applies W^p and control |+> gives their superposition with the right
-    relative phase (spec 3.3: a wrong global phase of a controlled reflection shows only there)."""
+    relative phase (spec 3.3: a wrong global phase of a controlled reflection shows only there);
+    with control value 0 the two control states swap roles."""
     def build(w):
         if power == 1:
-            ControlledToyWalk(control=w[:1], system=w[1:2], ancilla=w[2:])
+            qp.ctrl(ToyWalk(system=w[1:2], ancilla=w[2:]), control=w[:1],
+                    control_values=[control_value])
         else:
             ToyControlledWalkPower(power, control=w[:1], system=w[1:2], ancilla=w[2:])
 
@@ -101,31 +102,33 @@ def test_controlled_toy_walks_in_three_control_states(power):
     rng = np.random.default_rng(power)
     psi = rng.normal(size=4) + 1j * rng.normal(size=4)
     psi /= np.linalg.norm(psi)
-    expected = {"0": np.kron([1, 0], psi), "1": np.kron([0, 1], walked @ psi),
-                "+": (np.kron([1, 0], psi) + np.kron([0, 1], walked @ psi)) / np.sqrt(2)}
+    zero, one = (psi, walked @ psi) if control_value else (walked @ psi, psi)
+    expected = {"0": np.kron([1, 0], zero), "1": np.kron([0, 1], one),
+                "+": (np.kron([1, 0], zero) + np.kron([0, 1], one)) / np.sqrt(2)}
     for label, control in (("0", [1, 0]), ("1", [0, 1]), ("+", PLUS)):
         out = matrix @ np.kron(control, psi)
         assert np.allclose(out, expected[label], rtol=0, atol=1e-12), label
 
 
-def toy_program(name, power=1):
+def toy_program(name, power=1, control_value=1):
     if name == "ToyWalk":
         return lambda: ToyWalk(system=[0], ancilla=[1])
-    if name == "ControlledToyWalk":
-        return lambda: ControlledToyWalk(control=[0], system=[1], ancilla=[2])
+    if name == "C(ToyWalk)":
+        return lambda: qp.ctrl(ToyWalk(system=[1], ancilla=[2]), control=[0],
+                               control_values=[control_value])
     return lambda: ToyControlledWalkPower(power, control=[0], system=[1], ancilla=[2])
 
 
 @pytest.mark.compiled
-@pytest.mark.parametrize(("name", "power"), [("ToyWalk", None), ("ControlledToyWalk", None),
+@pytest.mark.parametrize(("name", "power"), [("ToyWalk", None), ("C(ToyWalk)", None),
                                              ("ToyControlledWalkPower", 1),
                                              ("ToyControlledWalkPower", 4)])
 def test_counts(name, power):
-    """T4: ToyWalk T = M = A = 0; ControlledToyWalk two plain Toffolis (T = 2, A = 0, M = 0);
+    """T4: ToyWalk T = M = A = 0; qp.ctrl(ToyWalk) two plain Toffolis (T = 2, A = 0, M = 0);
     the power p of it T = 2 p, all against toy_walk_cost and toy_walk_power_cost."""
     resources = compiled_resources(toy_program(name, power), 2 if name == "ToyWalk" else 3)
     expected = (toy_walk_cost(False) if name == "ToyWalk" else toy_walk_cost(True)
-                if name == "ControlledToyWalk" else toy_walk_power_cost(power))
+                if name == "C(ToyWalk)" else toy_walk_power_cost(power))
     assert (resources.toffoli, resources.measurements) == (expected.toffoli,
                                                            expected.measurements)
     assert resources.counts.get("Toffoli", 0) == expected.toffoli
@@ -151,29 +154,36 @@ def test_pinned_rules_are_chosen_and_nothing_survives_at_device_level(capfd):
 
 
 def test_rules_are_valid():
-    """T2 (tape mode) of the three rules, the power at two values; each pinned and the only rule
-    under its class name (spec 7.4 rules 7 and 8)."""
+    """T2 (tape mode) of the three rules, the power at two values, the controlled walk's with
+    control value 0 (its conditional X gates on the control then run, as declared); each pinned
+    and the only rule under its key (spec 7.4 rules 7 and 8)."""
     for name, rule, powers in (("ToyWalk", _toy_walk, [None]),
-                               ("ControlledToyWalk", _controlled_toy_walk, [None]),
+                               ("C(ToyWalk)", _controlled_toy_walk, [None]),
                                ("ToyControlledWalkPower", _toy_controlled_walk_power, [1, 3])):
         assert FIXED_DECOMPS[name] is rule
+        assert list(qp.list_decomps(name)) == [rule]
         for power in powers:
             with qp.queuing.AnnotatedQueue():
-                op = toy_program(name, power)()
-            assert list(qp.list_decomps(type(op))) == [rule]
+                op = toy_program(name, power, control_value=0)()
             qp.testing.assert_valid_decomp_rule(op, rule, check_matrix=False)
 
 
 @pytest.mark.parametrize(("build", "match"), [
     (lambda: ToyWalk(system=[0, 1], ancilla=[2]), "'system' has 2 wires; expected 1"),
-    (lambda: ControlledToyWalk(control=[], system=[1], ancilla=[2]),
-     "'control' has 0 wires; expected 1"),
     (lambda: ToyControlledWalkPower(0, control=[0], system=[1], ancilla=[2]),
      r"power must lie in \[1, None\], got 0"),
-], ids=["system", "control", "power"])
+], ids=["system", "power"])
 def test_constructors_validate(build, match):
     with pytest.raises(ValueError, match=match):
         build()
+
+
+def test_controlled_rule_takes_one_control_wire():
+    """The C(ToyWalk) rule raises for two control wires."""
+    with qp.queuing.AnnotatedQueue():
+        op = qp.ctrl(ToyWalk(system=[2], ancilla=[3]), control=[0, 1])
+    with pytest.raises(ValueError, match=r"C\(ToyWalk\) takes one control wire; got 2"):
+        _controlled_toy_walk(**op.arguments)
 
 
 # --------------------------------------------------------------------------- phase estimation
@@ -319,10 +329,10 @@ def test_toy_qpe_counts(t, toffoli, measurements, uncomputes):
 @pytest.mark.compiled
 def test_inventory_of_the_toy_qpe_program():
     """The inventory (spec 12.1 T6) of the toy QPE program at t = 3: the frontend converts the
-    rounds, the walk powers and the controlled toy walk, no C(...) target at all, and no modified
-    dfthc or template target (the corrections are forward rotations)."""
+    rounds, the walk powers and the controlled toy walk, and no modified dfthc or template target
+    but C(ToyWalk), whose rule is pinned (the corrections are forward rotations; the generic
+    controlled candidate of C(ToyWalk) requests only controlled PennyLane gates)."""
     names = captured_targets(lambda: toy_qpe(T), NUM_WIRES)
-    assert {"QPERound", "ToyControlledWalkPower", "ControlledToyWalk",
+    assert {"QPERound", "ToyControlledWalkPower", "C(ToyWalk)",
             "PhaseGradientRotation"} <= set(names)
-    assert not [name for name in names if "C(" in name]
-    assert inventory(names) == set()
+    assert inventory(names) == {"C(ToyWalk)"}

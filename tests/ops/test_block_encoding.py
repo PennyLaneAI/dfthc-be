@@ -1,6 +1,7 @@
-"""DFTHCBlockEncoding and ControlledDFTHCBlockEncoding (spec 9.21): the block against the encoded
-model on the tape path, the three control states, U then U-dagger, the harness, the children's
-order and registers, counts, rule selection, validation."""
+"""DFTHCBlockEncoding and the controlled block encoding, the first 27 steps of the C(DFTHCWalk)
+rule (spec 9.21): the block against the encoded model on the tape path, the three control states,
+U then U-dagger, the harness, the children's order and registers, counts, rule selection,
+validation."""
 
 import dataclasses
 import re
@@ -15,19 +16,13 @@ from catalyst.utils.exceptions import CompileError
 from dfthc import costs
 from dfthc.compile import FIXED_DECOMPS, compiled_resources
 from dfthc.data.factors import load_factors
-from dfthc.ops.walk import (
-    ControlledDFTHCBlockEncoding,
-    DFTHCBlockEncoding,
-    _block_encoding,
-    _controlled_block_encoding,
-)
+from dfthc.ops.walk import DFTHCBlockEncoding, _block_encoding
 from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE
 from dfthc.registers import WalkLayout
 from dfthc.testing import walk_sim
 from dfthc.testing.resources import chosen_rules, classify_rule_warning, verbose_program
 
-CLASSES = {"plain": (DFTHCBlockEncoding, _block_encoding),
-           "controlled": (ControlledDFTHCBlockEncoding, _controlled_block_encoding)}
+KINDS = ("plain", "controlled")
 case = walk_sim.case
 """The test shapes: ``sto3g``, ``631g`` and ``fails-c3`` (walk_sim.FAILS_C3: the failed uniform
 preparation of x_o, dfthcbe's differing failure signs, C = 3)."""
@@ -67,14 +62,14 @@ def test_block_against_the_encoded_model(name):
 
 
 def test_controlled_block_encoding_in_three_control_states():
-    """T3 of the controlled class at H2_STO3G_TEST: control |0> returns the whole input
+    """T3 of the controlled block encoding at H2_STO3G_TEST: control |0> returns the whole input
     (U-dagger U = I), control |1> gives DFTHCBlockEncoding's whole output, and control |+> their
     superposition with weight 1/sqrt 2 each, which fails if the controlled reflection had a wrong
     global phase (spec 3.3). The controlled reflection is table-free, so one shape suffices."""
     c = case("sto3g")
     psi = walk_sim.basis(c, 10)
     plain = walk_sim.program(c, DFTHCBlockEncoding)
-    controlled = walk_sim.program(c, ControlledDFTHCBlockEncoding, controlled=True)
+    controlled = walk_sim.operations(c, lambda: walk_sim.controlled_block_encoding(c))
     outcomes = walk_sim.schedule("seeded", walk_sim.num_measurements(plain), seed=4)
     identity = walk_sim.simulate(c, walk_sim.operations(c), walk_sim.input_state(c, psi), [])
     applied = walk_sim.set_control(c, walk_sim.simulate(c, plain, walk_sim.input_state(c, psi),
@@ -129,17 +124,20 @@ def test_harness_sees_phases_outcomes_and_ancillas():
     assert walk_sim.nonzero_registers(c, dirty) == {"x_o"}
 
 
-def queued(rule, c, controlled):
-    """Everything the rule queues in tape mode: the children and the junk measurements."""
+def queued(c, controlled):
+    """Everything the rule, or walk_sim.controlled_block_encoding, queues in tape mode: the
+    children and the junk measurements."""
     with qp.capture.pause(), qp.queuing.AnnotatedQueue() as queue:
-        rule(*c.compilable, **c.groups(controlled))
+        if controlled:
+            walk_sim.controlled_block_encoding(c)
+        else:
+            _block_encoding(*c.compilable, **c.groups())
     return list(queue.queue)
 
 
-def children(rule, c, controlled):
-    """The rule's operators in tape mode, with the reflection's MultiControlledX and its sign
-    gate."""
-    return [op for op in queued(rule, c, controlled) if op.name not in ("Hadamard", "MidMeasure")]
+def children(c, controlled):
+    """The operators in tape mode, with the reflection's MultiControlledX and its sign gate."""
+    return [op for op in queued(c, controlled) if op.name not in ("Hadamard", "MidMeasure")]
 
 
 def registers(op):
@@ -160,19 +158,18 @@ JUNK_OF = {"OuterPrepare": "junk_x_o", "InnerPrepare": "junk_b",
 
 @pytest.mark.parametrize("name", ["sto3g", "fails-c3"])
 def test_children_order_and_registers(name):
-    """Spec 9.21's order, every child on the layout's registers of its own names (spec 9.0):
-    the work pool's prefix, the whole phase_grad, the junk registers on the start of the angle
-    wires, an unprepare's extra_onehot on the start of its junk register; InnerSigns after
-    InnerPrepare in the first round and after InnerSelectDagger in the second; the two rules
-    differ only in the reflection ref_t2: a MultiControlledX on b, m_b, sigma_0 (control values
-    0) and the target succ_x_o with the pool's first n_w - 3 wires, then GlobalPhase(pi);
-    controlled, the control first (value 1) and one more work wire, then Z on the control; the
-    two InnerPrepare and InnerUnprepareFromOutcomes calls are equal, and the selects have equal
+    """Spec 9.21's order, every child on the layout's registers of its own names (spec 9.0): the
+    work pool's prefix, the whole phase_grad, the junk registers on the start of the angle wires, an
+    unprepare's extra_onehot on the start of its junk register; InnerSigns after InnerPrepare in the
+    first round and after InnerSelectDagger in the second; the rule and the controlled block
+    encoding differ only in the reflection ref_t2: a MultiControlledX on b, m_b, sigma_0 (control
+    values 0) and the target succ_x_o with the pool's first n_w - 3 wires, then GlobalPhase(pi);
+    controlled, the control first (value 1) and one more work wire, then Z on the control; the two
+    InnerPrepare and InnerUnprepareFromOutcomes calls are equal, and the selects have equal
     arguments with fixup_bits = w_b, so each shares one target."""
     c = case(name)
     p, layout = c.params, c.layout
-    plain, controlled = children(_block_encoding, c, False), children(
-        _controlled_block_encoding, c, True)
+    plain, controlled = children(c, False), children(c, True)
     assert [op.name for op in plain] == NAMES
     assert [op.name for op in controlled] == [
         "PauliZ" if n == "GlobalPhase" else n for n in NAMES]
@@ -217,7 +214,7 @@ def test_junk_is_measured_right_after_each_prepare(name):
     register, in that order (the two inner rounds measure separately). The only other Hadamards
     are ref_t2's on its target succ_x_o."""
     c = case(name)
-    ops = queued(_block_encoding, c, False)
+    ops = queued(c, False)
     measured, latest, seen = {}, {}, []
     i = 0
     while i < len(ops):
@@ -260,21 +257,21 @@ def assert_counts(resources, p, controlled):
 
 
 def compile_class(c, kind):
-    cls, _ = CLASSES[kind]
-    controlled = kind == "controlled"
-
     def program():
         qp.PhaseGradientStatePrep(c.layout.phase_grad)
-        cls(*c.compilable, **c.groups(controlled))
+        if kind == "controlled":
+            walk_sim.controlled_block_encoding(c)
+        else:
+            DFTHCBlockEncoding(*c.compilable, **c.groups())
 
     return compiled_resources(program, c.num_wires)
 
 
 @pytest.mark.compiled
-@pytest.mark.parametrize("kind", CLASSES)
+@pytest.mark.parametrize("kind", KINDS)
 @pytest.mark.parametrize("name", ["sto3g", "631g", "fails-c3"])
 def test_counts(name, kind):
-    """T4 compiled, each class alone: T, M, A at both test presets (T = 150 / 151 and 231 / 232,
+    """T4 compiled, each alone: T, M, A at both test presets (T = 150 / 151 and 231 / 232,
     M = 50 and 68) and at fails-c3."""
     c = case(name)
     assert_counts(compile_class(c, kind), c.params, kind == "controlled")
@@ -282,7 +279,7 @@ def test_counts(name, kind):
 
 @pytest.mark.compiled
 @pytest.mark.slow
-@pytest.mark.parametrize("kind", CLASSES)
+@pytest.mark.parametrize("kind", KINDS)
 def test_counts_at_mid_naphthalene(kind):
     """T4 at MID_NAPHTHALENE (nightly tier): T = 1,871 / 1,872, M = 484, A = 1,637 / 1,638."""
     c = walk_sim.WalkCase.build(MID_NAPHTHALENE, load_factors("naphthalene"))
@@ -315,42 +312,41 @@ def test_femoco_counts_on_the_closed_forms():
     assert sum(sizes.values()) == WalkLayout.from_params(p).num_wires == 1049
 
 
-def both_classes():
+def both_forms():
     c = case("sto3g")
 
     def program():
         qp.PhaseGradientStatePrep(c.layout.phase_grad)
         DFTHCBlockEncoding(*c.compilable, **c.groups())
-        ControlledDFTHCBlockEncoding(*c.compilable, **c.groups(True))
+        walk_sim.controlled_block_encoding(c)
 
     return program, c.num_wires
 
 
 @pytest.mark.compiled
-def test_pinned_rules_are_chosen(capfd):
-    """T6 at H2_STO3G_TEST: the verbose listing of a program holding both classes names both
-    pinned rules."""
-    program, num_wires = both_classes()
+def test_pinned_rule_is_chosen(capfd):
+    """T6 at H2_STO3G_TEST: the verbose listing of a program holding both forms names the
+    pinned rule."""
+    program, num_wires = both_forms()
     qp.analyze(verbose_program(program, num_wires), level="user")()
     captured = capfd.readouterr()
-    rules = set(chosen_rules(captured.out + captured.err))
-    assert {"_block_encoding", "_controlled_block_encoding"} <= rules
+    assert "_block_encoding" in chosen_rules(captured.out + captured.err)
 
 
 @pytest.mark.compiled
 def test_nothing_survives_at_device_level():
     """T5 at level="device" (L-20): no dfthc operator survives in a program holding both
-    classes."""
-    program, num_wires = both_classes()
+    forms."""
+    program, num_wires = both_forms()
     compiled_resources(program, num_wires, level="device")
 
 
 @pytest.mark.compiled
 @pytest.mark.parametrize("wrap", ["adjoint", "control"])
 def test_no_adjoint_or_controlled_path(wrap):
-    """Spec 7.4 rules 5 and 6: nothing adjoints or controls the block encoding (the controlled
-    form is ControlledDFTHCBlockEncoding). Wrapped anyway, Catalyst drops the measuring candidates
-    with the expected warning (rule 12), and the compile fails loudly."""
+    """Spec 7.4 rules 5 and 6: nothing adjoints or controls the block encoding (the C(DFTHCWalk)
+    rule runs its steps with ref_t2 controlled). Wrapped anyway, Catalyst drops the measuring
+    candidates with the expected warning (rule 12), and the compile fails loudly."""
     c = case("sto3g")
     op = DFTHCBlockEncoding(*c.compilable, **c.groups())
     key = "Adjoint(DFTHCBlockEncoding)" if wrap == "adjoint" else "C(DFTHCBlockEncoding)"
@@ -368,16 +364,15 @@ def test_no_adjoint_or_controlled_path(wrap):
 
 
 @pytest.mark.parametrize("name", ["sto3g", "631g", "fails-c3"])
-def test_rules_are_valid(name):
-    """T2 (tape mode) for both rules at three sizes: the declared children equal the emitted ones
-    (compilable arguments and register sizes, the repeated prepares counted twice); each rule is
-    pinned and the only one under its class name (spec 7.4 rules 7 and 8)."""
+def test_rule_is_valid(name):
+    """T2 (tape mode) at three sizes: the declared children equal the emitted ones (compilable
+    arguments and register sizes, the repeated prepares counted twice); the rule is pinned and
+    the only one under its class name (spec 7.4 rules 7 and 8)."""
     c = case(name)
-    for kind, (cls, rule) in CLASSES.items():
-        assert FIXED_DECOMPS[cls.__name__] is rule
-        assert list(qp.list_decomps(cls)) == [rule]
-        op = cls(*c.compilable, **c.groups(kind == "controlled"))
-        qp.testing.assert_valid_decomp_rule(op, rule, check_matrix=False)
+    assert FIXED_DECOMPS["DFTHCBlockEncoding"] is _block_encoding
+    assert list(qp.list_decomps(DFTHCBlockEncoding)) == [_block_encoding]
+    op = DFTHCBlockEncoding(*c.compilable, **c.groups())
+    qp.testing.assert_valid_decomp_rule(op, _block_encoding, check_matrix=False)
 
 
 def test_required_wires():
@@ -386,8 +381,6 @@ def test_required_wires():
     p = H2_STO3G_TEST
     sizes = {"outer": 12, "inner": 16, "select": 11, "system": 4, "phase_grad": 4, "work": 8}
     assert DFTHCBlockEncoding.required_wires(p.as_compilable(), ()) == sizes
-    assert ControlledDFTHCBlockEncoding.required_wires(p.as_compilable(), ()) == {
-        "control": 1} | sizes
 
 
 def bad_outer_keep(c):
@@ -416,27 +409,17 @@ def bad_tail_angle(c):
     ("sto3g", {"system": [0]}, "'system' has 1 wires; expected 4"),
 ], ids=["params-type", "params-shape", "onehot", "tables", "outer-keep", "tail-angle", "work",
         "system"])
-@pytest.mark.parametrize("kind", CLASSES)
-def test_constructor_validates(kind, name, change, match):
+def test_constructor_validates(name, change, match):
     """Spec 9.0: a wrong argument type, tables of another shape, a one-hot register that does
     not fit (ke2 = 3 needs 2**(3 + w_b) = 32 wires of the inner erase's 8), missing tables, an
     outer keep value only the outer prepares check, a tail angle only the selects check, and
     wrong group widths each raise ValueError."""
     c = case(name)
-    cls, _ = CLASSES[kind]
     params, tables = c.compilable
     change = {key: value(c) if callable(value) else value for key, value in change.items()}
-    arguments = {"params": params, "tables": tables} | c.groups(kind == "controlled") | change
+    arguments = {"params": params, "tables": tables} | c.groups() | change
     with pytest.raises(ValueError, match=match):
-        cls(**arguments)
-
-
-def test_controlled_constructor_checks_the_control_width():
-    """The controlled class checks its one-wire control like the groups (spec 9.0)."""
-    c = case("sto3g")
-    with pytest.raises(ValueError, match="'control' has 2 wires; expected 1"):
-        ControlledDFTHCBlockEncoding(*c.compilable,
-                                     **c.groups(True) | {"control": [*c.control, c.num_wires]})
+        DFTHCBlockEncoding(**arguments)
 
 
 def test_constructor_checks_the_work_pool(monkeypatch):

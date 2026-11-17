@@ -170,8 +170,12 @@ def modified_targets(names: Iterable[str], bases: Iterable[str]) -> set[str]:
 def inventory(names: Iterable[str]) -> set[str]:
     """Spec 12.1 T6: the modified targets of ``names`` (from :func:`captured_targets`) whose
     operator is a dfthc operator (every name with a pinned rule: the composites, ``QROAMRead`` and
-    the leaves) or a template of :data:`TEMPLATE_ADJOINTS`. For a walk, controlled-walk or QPE
-    program it must equal ``LEAF_ADJOINTS | TEMPLATE_ADJOINTS``: no modified composite or read."""
+    the leaves) or a template of :data:`TEMPLATE_ADJOINTS`. For a walk program it must equal
+    ``LEAF_ADJOINTS | TEMPLATE_ADJOINTS``, and for a controlled-walk or QPE program that plus
+    its controlled walk's target (``C(DFTHCWalk)``, the toy's ``C(ToyWalk)``), whose rule is
+    pinned, and, for the DFTHC walk, ``C(DFTHCBlockEncoding)``, where Catalyst's generic
+    controlled candidate of ``C(DFTHCWalk)`` stops (its base rule measures): no other modified
+    composite or read."""
     templates = {name[len("Adjoint("):-1] for name in TEMPLATE_ADJOINTS}
     return modified_targets(names, dfthc_operator_names() | templates)
 

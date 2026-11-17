@@ -49,7 +49,7 @@ H2_ROWS = [
     "InnerUnprepareFromOutcomes", "Adjoint(FlaggedUniformPrep)@InnerUnprepareFromOutcomes",
     "RefT2", "InnerSelectDagger", "Adjoint(MajoranaGate)", "OuterUnprepareFromOutcomes",
     "Adjoint(FlaggedUniformPrep)@OuterUnprepareFromOutcomes", "RefAB", "ControlledDFTHCWalk",
-    "ControlledDFTHCBlockEncoding", "ControlledRefT2", "ControlledRefAB",
+    "ControlledRefT2", "ControlledRefAB",
     "PhaseFixup@InnerUnprepareFromOutcomes", "PhaseFixup@OuterUnprepareFromOutcomes",
     "ControlledWalkPower(p=1)", "ControlledWalkPower(p=2)", "QPE(t=1)", "QPE(t=2)", "QPE(t=3)",
 ]
@@ -333,7 +333,7 @@ def test_every_large_row_projects():
     methods = set()
     for name in ("fe2s2", "fe4s4"):
         rows, sizes = _compiled_rows(name)
-        assert len(rows) == len(sizes) == 38, name
+        assert len(rows) == len(sizes) == 37, name
         for row in rows:
             estimate = report.projection(cache, row, hash_, sizes[row.id])
             assert estimate["allowed"], (name, row.id, estimate["reason"])
@@ -501,7 +501,6 @@ def test_reason_codes_at_femoco(femoco_report):
         "RefAB": ({"ref-target": -1}, {"ref-target": -1, "qpe-ctrl": -1}),
         "ControlledRefAB": ({}, {"ref-target": -1}),
         "DFTHCBlockEncoding": (BE_DFTHCBE, BE_PAPER),
-        "ControlledDFTHCBlockEncoding": (BE_DFTHCBE, BE_PAPER | {"ctrl-ref-t2": 1}),
         "DFTHCWalk": (BE_DFTHCBE | {"ref-target": -1}, BE_PAPER | {"ref-target": -1,
                                                                     "qpe-ctrl": -1}),
         "ControlledDFTHCWalk": (BE_DFTHCBE, cwalk),

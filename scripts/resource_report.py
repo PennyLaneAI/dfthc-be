@@ -72,7 +72,7 @@ from dfthc.data.tables import WalkTables  # noqa: E402
 from dfthc.ops.prepare import InnerPrepare, OuterPrepare  # noqa: E402
 from dfthc.ops.qroam import PhaseFixup, QROAMErase, QROAMRead  # noqa: E402
 from dfthc.ops.reflections import ref_ab, ref_t2, reflection_work  # noqa: E402
-from dfthc.ops.walk import REFLECTIONS, ControlledDFTHCWalk, DFTHCWalk  # noqa: E402
+from dfthc.ops.walk import REFLECTIONS, DFTHCWalk  # noqa: E402
 from dfthc.params import FEMOCO54, H2_STO3G_TEST, WalkParams, lg, odd_part  # noqa: E402
 from dfthc.qpe import ControlledWalkPower, qpe_program  # noqa: E402
 from dfthc.registers import WalkLayout  # noqa: E402
@@ -152,19 +152,21 @@ LEAVES = frozenset({"QROAMRead", "QROAMErase", "PhaseFixup", "AngleErase", "Spin
                     "MajoranaGate", "InnerSigns", "PhaseGradientRotation", "GivensRotation",
                     "TailAngleLoad", "SFAngleLoad"})
 """Operators whose rules call no dfthc operator; their rules are not run to find rows."""
-REFLECTION_ROWS = {"DFTHCBlockEncoding": "RefT2", "ControlledDFTHCBlockEncoding": "ControlledRefT2",
-                   "DFTHCWalk": "RefAB", "ControlledDFTHCWalk": "ControlledRefAB"}
-"""The row of the reflection helper each composite's rule calls: the helper is no operator, so the
-row is found by the ``MultiControlledX`` it emits and keeps the name of the operator it replaced."""
-COMPOSITES = frozenset({"DFTHCWalk", "ControlledDFTHCWalk", "DFTHCBlockEncoding",
-                        "ControlledDFTHCBlockEncoding", "InnerSelect", "InnerSelectDagger"})
+REFLECTION_ROWS = {"DFTHCBlockEncoding": ("RefT2",), "DFTHCWalk": ("RefAB",),
+                   "C(DFTHCWalk)": ("ControlledRefT2", "ControlledRefAB")}
+"""The rows of the reflection helpers each rule calls, in call order: a helper is no operator, so
+its row is found by the ``MultiControlledX`` it emits and keeps the name of the operator it
+replaced."""
+ROW_NAMES = {"C(DFTHCWalk)": "ControlledDFTHCWalk"}
+"""The row name of ``qp.ctrl(DFTHCWalk(...))``, the controlled walk."""
+COMPOSITES = frozenset({"DFTHCWalk", "ControlledDFTHCWalk", "DFTHCBlockEncoding", "InnerSelect",
+                        "InnerSelectDagger"})
 """The partition rows are the children of these that are not in :data:`INNER_COMPOSITES`."""
-INNER_COMPOSITES = frozenset({"DFTHCBlockEncoding", "ControlledDFTHCBlockEncoding",
-                              "InnerSelect", "InnerSelectDagger"})
+INNER_COMPOSITES = frozenset({"DFTHCBlockEncoding", "InnerSelect", "InnerSelectDagger"})
 LEVELS = {"L1": {"PhaseGradientRotation", "FlaggedUniformPrep", "Adjoint(FlaggedUniformPrep)",
                  "QROAMRead", "PhaseFixup", "QROAMErase"},
           "L3": {"RefT2", "RefAB", "ControlledRefT2", "ControlledRefAB", "DFTHCBlockEncoding",
-                 "ControlledDFTHCBlockEncoding", "DFTHCWalk", "ControlledDFTHCWalk"},
+                 "DFTHCWalk", "ControlledDFTHCWalk"},
           "L4": {"ControlledWalkPower", "QPE"}}
 FROM_OUTCOMES = frozenset({"OuterUnprepareFromOutcomes", "InnerUnprepareFromOutcomes"})
 """The unprepares the walk calls (spec 16, Q-1 variant (b)): they take the junk outcomes the
@@ -182,8 +184,7 @@ NAME_KEYS = {
     "InnerSelectDagger": "inner_select_dagger", "RefT2": "ref_t2",
     "ControlledRefT2": "controlled_ref_t2", "RefAB": "ref_ab",
     "ControlledRefAB": "controlled_ref_ab",
-    "DFTHCBlockEncoding": "block_encoding",
-    "ControlledDFTHCBlockEncoding": "controlled_block_encoding", "DFTHCWalk": "walk",
+    "DFTHCBlockEncoding": "block_encoding", "DFTHCWalk": "walk",
     "ControlledDFTHCWalk": "controlled_walk",
 }
 """The ``costs_reference`` key of every row whose class appears with one signature."""
@@ -205,9 +206,8 @@ STEPS = {"OuterPrepare": "1-4", "InnerPrepare": "5-8", "InnerSigns": "9", "Inner
          "Adjoint(GivensRotation)": "16", "AngleErase": "18", "InnerSelectDagger": "10-18",
          "InnerUnprepareFromOutcomes": "19-22", "RefT2": "23", "ControlledRefT2": "23",
          "OuterUnprepareFromOutcomes": "24-27", "RefAB": "28", "ControlledRefAB": "28",
-         "DFTHCBlockEncoding": "1-27", "ControlledDFTHCBlockEncoding": "1-27",
-         "DFTHCWalk": "1-28", "ControlledDFTHCWalk": "1-28", "ControlledWalkPower": "QPE",
-         "QPE": "QPE"}
+         "DFTHCBlockEncoding": "1-27", "DFTHCWalk": "1-28", "ControlledDFTHCWalk": "1-28",
+         "ControlledWalkPower": "QPE", "QPE": "QPE"}
 PARENT_STEPS = {("FlaggedUniformPrep", "OuterPrepare"): "1",
                 ("FlaggedUniformPrep", "InnerPrepare"): "5",
                 ("Adjoint(FlaggedUniformPrep)", "OuterUnprepareFromOutcomes"): "27",
@@ -288,9 +288,8 @@ def _groups(s: System) -> dict:
 
 def _walk_op(s: System, controlled: bool):
     p, t = s.params.as_compilable(), s.tables.as_compilable()
-    if controlled:
-        return ControlledDFTHCWalk(p, t, [s.layout.num_wires], **_groups(s))
-    return DFTHCWalk(p, t, **_groups(s))
+    walk = DFTHCWalk(p, t, **_groups(s))
+    return qp.ctrl(walk, control=[s.layout.num_wires]) if controlled else walk
 
 
 def walk_program(s: System, controlled: bool):
@@ -323,13 +322,14 @@ def power_program(s: System, power: int):
 
 
 def _children(op) -> list:
-    """The dfthc operators and the reflection helper's call (:class:`ReflectionCall`) the pinned
+    """The dfthc operators and the reflection helpers' calls (:class:`ReflectionCall`) the pinned
     rule of ``op`` makes, in order (tape mode, nothing compiled)."""
     if op.name in LEAVES or op.name not in FIXED_DECOMPS:
         return []
     with qp.capture.pause(), qp.queuing.AnnotatedQueue() as queue:
         FIXED_DECOMPS[op.name](**op.arguments)
-    return [ReflectionCall(REFLECTION_ROWS[op.name], child) if child.name == "MultiControlledX"
+    reflections = iter(REFLECTION_ROWS.get(op.name, ()))
+    return [ReflectionCall(next(reflections), child) if child.name == "MultiControlledX"
             else child for child in queue.queue
             if child.name == "MultiControlledX" or surviving_dfthc_operators([child.name])]
 
@@ -337,12 +337,16 @@ def _children(op) -> list:
 def _target(op):
     if isinstance(op, ReflectionCall):
         return op.mcx
-    return op.base if op.name.startswith("Adjoint(") else op
+    return op.base if op.name.startswith(("Adjoint(", "C(")) else op
+
+
+def _name(op) -> str:
+    return ROW_NAMES.get(op.name, op.name)
 
 
 def _signature(op) -> tuple:
     target = _target(op)
-    return (op.name, tuple(sorted(target.compilable_args.items())),
+    return (_name(op), tuple(sorted(target.compilable_args.items())),
             tuple((name, len(getattr(target, name))) for name in target.wire_argnames))
 
 
@@ -484,8 +488,6 @@ def closed_form(name: str, op, p: WalkParams) -> tuple[costs.Cost, int]:
         "RefT2": (costs.ref_t2(p, False), -1), "ControlledRefT2": (costs.ref_t2(p, True), -1),
         "RefAB": (costs.ref_ab(p, False), -1), "ControlledRefAB": (costs.ref_ab(p, True), -1),
         "DFTHCBlockEncoding": (costs.block_encoding(p, False), 1 - costs.toffoli_only(p)),
-        "ControlledDFTHCBlockEncoding": (costs.block_encoding(p, True),
-                                         1 - costs.toffoli_only(p)),
         "DFTHCWalk": (costs.walk(p, False), walk_a - costs.walk(p, False).toffoli),
         "ControlledDFTHCWalk": (costs.walk(p, True), costs.measured_and_uncomputes(p, True)
                                 - costs.walk(p, True).toffoli),
@@ -515,7 +517,7 @@ def build_rows(s: System) -> list[Row]:
                 first[sig] = (op, parent)
                 order.append(sig)
             calls[tree][sig] = calls[tree].get(sig, 0) + 1
-            names = {op.name}
+            names = {_name(op)}
             for child in _children(op):
                 names |= visit(child, op)
             below[sig] = frozenset(names)
@@ -531,18 +533,18 @@ def build_rows(s: System) -> list[Row]:
         base = sig[0] if signatures_of[sig[0]] == 1 else f"{sig[0]}@{ids[_signature(parent)]}"
         used[base] = used.get(base, 0) + 1
         ids[sig] = base if used[base] == 1 else f"{base}#{used[base]}"
-        parent_name = parent.name if parent is not None else None
-        closed, uncomputes = closed_form(op.name, op, p)
+        name, parent_name = _name(op), _name(parent) if parent is not None else None
+        closed, uncomputes = closed_form(name, op, p)
         rows.append(Row(
-            id=ids[sig], name=op.name, parent=parent_name, level=_level(op.name),
-            steps=PARENT_STEPS.get((op.name, parent_name), STEPS.get(op.name, "")),
+            id=ids[sig], name=name, parent=parent_name, level=_level(name),
+            steps=PARENT_STEPS.get((name, parent_name), STEPS.get(name, "")),
             calls=calls[0].get(sig, 0), controlled_calls=calls[1].get(sig, 0),
-            partition=parent_name in COMPOSITES and op.name not in INNER_COMPOSITES,
+            partition=parent_name in COMPOSITES and name not in INNER_COMPOSITES,
             closed=closed, uncomputes=uncomputes, wires=len(op.wires),
-            program=(_walk_rows_program(s, op.name) if op.name in FEMOCO_PROGRAMS
-                     else _reflection_program(op.name, p) if isinstance(op, ReflectionCall)
+            program=(_walk_rows_program(s, name) if name in FEMOCO_PROGRAMS
+                     else _reflection_program(name, p) if isinstance(op, ReflectionCall)
                      else _call_program(op)),
-            key=PARENT_KEYS.get((op.name, parent_name), NAME_KEYS.get(op.name)),
+            key=PARENT_KEYS.get((name, parent_name), NAME_KEYS.get(name)),
             descendants=below[sig], op=op,
             size_op=lambda op=op: op.mcx if isinstance(op, ReflectionCall) else op))
     rows += _extra_rows(s, rows)
