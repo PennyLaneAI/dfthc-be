@@ -28,6 +28,15 @@ Each difference from dfthcbe and from the paper is broken down by cause in
 [`docs/resources.md`](docs/resources.md), which reports every block of every system, with
 measurements, Cliffords and qubits. The FeMoco-54 walk compiles in about a minute below 2 GB.
 
+## Circuit
+
+The first half of the block encoding plus REF<sub>T2</sub> (paper steps 1-23), drawn at the same
+granularity as the [dfthcbe figure](https://github.com/Covestro-HPQC/dfthcbe). Red circles mark the
+wires and gates that differ from it; [`docs/figures/dfthcbe_comparison.md`](docs/figures/dfthcbe_comparison.md)
+explains each difference step by step.
+
+![DFTHC block encoding, steps 1-23](docs/figures/walk_circuit.png)
+
 ## Quick start
 
 ```bash

@@ -1,0 +1,69 @@
+\documentclass[border=6pt]{standalone}
+\usepackage{tikz}
+\usetikzlibrary{quantikz2,shapes.geometric}
+\tikzset{
+  red_ring/.style={draw=red, line width=0.5pt, solid, inner sep=0.5pt},
+  band/.style={fill=#1, draw=none, inner xsep=1pt, inner ysep=14pt},
+  num/.style={label position=above, anchor=south, yshift=0.02cm, font=\small},
+  sec/.style={label position=above, anchor=south, yshift=0.05cm, font=\ttfamily\small,
+              align=center},
+}
+\begin{document}
+\newsavebox{\ringsuccworkxo}\sbox{\ringsuccworkxo}{\tikz[baseline=(l.base)]\node[red_ring,ellipse](l){\texttt{succ\_work\_x\_o}};}
+\newsavebox{\ringcmpworkxo}\sbox{\ringcmpworkxo}{\tikz[baseline=(l.base)]\node[red_ring,ellipse](l){\texttt{cmp\_work\_x\_o}};}
+\newsavebox{\ringsuccworkb}\sbox{\ringsuccworkb}{\tikz[baseline=(l.base)]\node[red_ring,ellipse](l){\texttt{succ\_work\_b}};}
+\newsavebox{\ringdsgn}\sbox{\ringdsgn}{\tikz[baseline=(l.base)]\node[red_ring,ellipse](l){\texttt{d\_sgn}};}
+\newsavebox{\ringcmpworkb}\sbox{\ringcmpworkb}{\tikz[baseline=(l.base)]\node[red_ring,ellipse](l){\texttt{cmp\_work\_b}};}
+\newsavebox{\ringangles}\sbox{\ringangles}{\tikz[baseline=(l.base)]\node[red_ring,ellipse](l){\texttt{angles} $\supseteq$ \texttt{junk\_x\_o}, \texttt{junk\_b}};}
+\newsavebox{\ringphasegrad}\sbox{\ringphasegrad}{\tikz[baseline=(l.base)]\node[red_ring,ellipse](l){\texttt{phase\_grad}};}
+\newsavebox{\circbox}
+\sbox{\circbox}{%
+\begin{quantikz}[row sep={0.62cm,between origins}, column sep=0.22cm, wire types={q}]
+\lstick{\texttt{succ\_x\_o}} &  &  & \gate[3,style={fill=green!22}]{\mathrm{Unif}}\gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{1}\gategroup[29,steps=5,style={band=gray!16},background,label style={sec}]{OuterPrepare} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{2} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{3} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{4} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{J} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{5}\gategroup[29,steps=5,style={band=gray!4},background,label style={sec}]{InnerPrepare} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{6} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{7} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{8} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{J} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{9}\gategroup[29,steps=1,style={band=gray!16},background,label style={sec}]{\shortstack{Inner\\Signs}} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{10}\gategroup[29,steps=13,style={band=gray!9},background,label style={sec}]{InnerSelect} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{11} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{12} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{13} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{14} & \ctrl{27}\gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{15} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{16} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{17} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{17} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{18a} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{18b} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{18c} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{18d} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{19}\gategroup[29,steps=5,style={band=gray!4},background,label style={sec}]{\shortstack{InnerUnprepare\\(FromOutcomes)}} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{20} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{21a} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{21b} & \gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{22} & \ctrl{11}\gategroup[1,steps=1,style={draw=none,inner ysep=0pt},label style={num}]{23}\gategroup[29,steps=1,style={band=red!10},background,label style={sec}]{REF} &  \\
+\lstick{\usebox{\ringsuccworkxo}} & \qwbundle{\lg l_x{-}1} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\
+\lstick{\texttt{x\_o}} & \qwbundle{\lg X_o} &  &  & \gate[1,style={fill=gray!35}]{\mathrm{In}}\wire[d][21]{q} &  & \swap{3} &  &  & \gate[1,style={fill=gray!35}]{\mathrm{In}}\wire[d][21]{q} &  &  &  &  & \gate[1,style={fill=gray!35}]{\mathrm{In}_{\geq RC}}\wire[d][21]{q} &  &  &  &  &  &  &  &  &  &  &  & \gate[1,style={fill=gray!35}]{\mathrm{In}_Z}\gategroup[1,steps=1,style={red_ring,ellipse,inner xsep=-1pt,inner ysep=-2pt}]{} &  &  &  & \gate[1,style={fill=gray!35}]{\mathrm{In}_Z}\wire[d][21]{q} &  &  &  \\
+\lstick{\texttt{m\_x\_o}} & \qwbundle{b_{k_1}} &  & \gate[1]{H} &  & \gate[1,style={fill=yellow!60}]{\le}\wire[d][5]{q} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\
+\lstick{\texttt{sigma\_1}} &  &  & \gate[1]{H} &  &  &  &  &  &  &  &  &  &  &  &  & \ctrl{21} &  &  &  &  &  & \ctrl{21} &  &  &  &  &  &  &  &  &  &  &  \\
+\lstick{\texttt{alt\_x\_o}} & \qwbundle{\lg X_o} &  &  & \gate[2,style={fill=cyan!18}]{\mathrm{data}} &  & \targX{} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\
+\lstick{\texttt{keep\_x\_o}} & \qwbundle{b_{k_1}} &  &  &  & \gate[1,style={fill=yellow!60}]{\le} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\
+\lstick{\texttt{less\_than\_x\_o}} &  &  &  &  & \targ{} & \ctrl{-2} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\
+\lstick{\usebox{\ringcmpworkxo}} & \qwbundle{b_{k_1}{-}1} &  &  &  & \gate[1,style={fill=yellow!60}]{\le}\gategroup[1,steps=1,style={red_ring,ellipse,inner xsep=-1pt,inner ysep=-2pt}]{} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\
+\lstick{\texttt{succ\_b}} &  &  &  &  &  &  &  & \gate[3,style={fill=green!22}]{\mathrm{Unif}} &  &  &  &  &  &  &  &  &  &  & \control{} &  &  &  &  &  &  &  &  &  &  &  & \gate[3,style={fill=green!22}]{\mathrm{Unif}^{\dagger}} &  &  \\
+\lstick{\usebox{\ringsuccworkb}} & \qwbundle{\lg l_b{-}1} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  \\
+\lstick{\texttt{b}} & \qwbundle{\lg(B{+}1)} &  &  &  &  &  &  &  & \gate[1,style={fill=gray!35}]{\mathrm{In}} &  & \swap{3} &  &  &  & \gate[1,style={fill=gray!35}]{\mathrm{In}}\wire[d][13]{q} &  &  &  &  &  &  &  &  & \gate[1,style={fill=gray!35}]{\mathrm{In}_Z}\wire[d][12]{q} &  &  & \swap{3} &  &  & \gate[1,style={fill=gray!35}]{\mathrm{In}_Z} &  & \gate[3,style={fill=red!18}]{\mathrm{REF}_{T_2}} &  \\
+\lstick{\texttt{m\_b}} & \qwbundle{b_{k_2}} &  &  &  &  &  &  & \gate[1]{H} &  & \gate[1,style={fill=yellow!60}]{\le}\wire[d][7]{q} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & \gate[1,style={fill=yellow!60}]{\le^{\dagger}}\wire[d][7]{q} &  &  & \gate[1]{H} &  &  \\
+\lstick{\texttt{sigma\_0}} &  &  &  &  &  &  &  & \gate[1]{H} &  &  &  &  &  &  &  & \control{} &  &  & \control{} &  &  & \control{} &  &  &  &  &  &  &  &  & \gate[1]{H} &  &  \\
+\lstick{\texttt{alt\_b}} & \qwbundle{\lg(B{+}1)} &  &  &  &  &  &  &  & \gate[4,style={fill=cyan!18}]{\mathrm{data}} &  & \targX{} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & \targX{} &  & \meter{}\gategroup[4,steps=1,style={red_ring,ellipse,inner xsep=-1pt,inner ysep=-2pt}]{} & \gate[4,style={fill=gray!35}]{\mathcal{E}} &  &  &  \\
+\lstick{\texttt{keep\_b}} & \qwbundle{b_{k_2}} &  &  &  &  &  &  &  &  & \gate[1,style={fill=yellow!60}]{\le} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & \gate[1,style={fill=yellow!60}]{\le^{\dagger}} & \meter{} &  &  &  &  \\
+\lstick{\texttt{sgn}} &  &  &  &  &  &  &  &  &  &  &  &  & \gate[1]{Z}\gategroup[3,steps=1,style={red_ring,ellipse,inner xsep=-1pt,inner ysep=-2pt}]{} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & \meter{} &  &  &  &  \\
+\lstick{\usebox{\ringdsgn}} &  &  &  &  &  &  &  &  &  &  &  &  & \ctrl{1} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & \meter{} &  &  &  &  \\
+\lstick{\texttt{less\_than\_b}} &  &  &  &  &  &  &  &  &  & \targ{} & \ctrl{-4} &  & \control{} &  &  &  &  &  &  &  &  &  &  &  &  &  & \ctrl{-4} & \gate[1,style={fill=yellow!60}]{\le^{\dagger}}\gategroup[2,steps=1,style={red_ring,ellipse,inner xsep=-1pt,inner ysep=-2pt}]{} &  &  &  &  &  \\
+\lstick{\usebox{\ringcmpworkb}} & \qwbundle{b_{k_2}{-}1} &  &  &  &  &  &  &  &  & \gate[1,style={fill=yellow!60}]{\le}\gategroup[1,steps=1,style={red_ring,ellipse,inner xsep=-1pt,inner ysep=-2pt}]{} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & \gate[1,style={fill=yellow!60}]{\le^{\dagger}} &  &  &  &  &  \\
+\lstick{\texttt{r}} & \qwbundle{\lg R} &  &  &  &  &  &  &  & \gate[1,style={fill=cyan!18}]{r} &  &  &  &  &  & \gate[1,style={fill=gray!35}]{\mathrm{In}} &  &  &  &  &  &  &  &  & \gate[1,style={fill=gray!35}]{\mathrm{In}_Z} &  &  &  &  & \meter{}\gategroup[1,steps=1,style={red_ring,ellipse,inner xsep=-1pt,inner ysep=-2pt}]{} & \gate[1,style={fill=gray!35}]{\mathcal{E}} &  &  &  \\
+\lstick{\texttt{G0}} &  &  &  &  &  &  &  &  &  &  &  &  &  & \gate[2,style={fill=cyan!18}]{G} & \ocontrol{} & \control{} &  &  & \control{} &  &  & \control{} &  & \ocontrol{} & \meter{}\gategroup[2,steps=1,style={red_ring,ellipse,inner xsep=-1pt,inner ysep=-2pt}]{} &  &  &  &  &  &  &  &  \\
+\lstick{\texttt{G1}} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & \control{} &  &  &  &  &  & \meter{} &  &  &  &  &  &  &  &  \\
+\lstick{\usebox{\ringangles}} & \qwbundle{(N{-}1)(b_{\mathrm{rot}}{-}1)} &  &  & \gate[1,style={fill=cyan!18}]{\mathrm{junk}_{x_o}}\gategroup[1,steps=1,style={red_ring,ellipse,inner xsep=-1pt,inner ysep=-2pt}]{} &  &  & \meter{}\gategroup[1,steps=1,style={red_ring,ellipse,inner xsep=-1pt,inner ysep=-2pt}]{} &  & \gate[1,style={fill=cyan!18}]{\mathrm{junk}_{b}}\gategroup[1,steps=1,style={red_ring,ellipse,inner xsep=-1pt,inner ysep=-2pt}]{} &  &  & \meter{}\gategroup[1,steps=1,style={red_ring,ellipse,inner xsep=-1pt,inner ysep=-2pt}]{} &  & \gate[1,style={fill=cyan!18}]{\theta_{D_1Q_1}} & \gate[1,style={fill=cyan!18}]{\theta_{SF}} &  &  & \ctrl{4} &  & \ctrl{4} &  &  & \meter{}\gategroup[2,steps=1,style={red_ring,ellipse,inner xsep=-1pt,inner ysep=-2pt}]{} & \gate[1,style={fill=gray!35}]{\mathcal{E}} &  &  &  &  &  & \gate[1,style={fill=gray!35}]{\mathcal{E}}\gategroup[1,steps=1,style={red_ring,ellipse,inner xsep=-1pt,inner ysep=-2pt}]{} &  &  &  \\
+\lstick{\texttt{b\_neq\_B}} &  &  &  &  &  &  &  &  &  &  &  &  &  &  & \gate[1,style={fill=cyan!18}]{b{\neq}B} &  &  &  & \control{} &  &  &  & \meter{} &  &  &  &  &  &  &  &  &  &  \\
+\lstick{\texttt{sg}} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & \gate[1,style={fill=cyan!18}]{\sigma_{G_0}} & \ctrl{1} &  &  &  & \ctrl{1} & \gate[1,style={fill=cyan!18}]{\sigma_{G_0}} &  &  &  &  &  &  &  &  &  &  &  \\
+\lstick{\texttt{psi\_up}} & \qwbundle{N} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & \swap{1} &  &  &  & \swap{1} &  &  &  &  &  &  &  &  &  &  &  &  \\
+\lstick{\texttt{psi\_dn}} & \qwbundle{N} &  &  &  &  &  &  &  &  &  &  &  &  &  &  &  & \targX{} & \gate[1,style={fill=orange!35}]{R} & \gate[1,style={fill=orange!35}]{\mathrm{Maj}} & \gate[1,style={fill=orange!35}]{R^{\dagger}} & \targX{} &  &  &  &  &  &  &  &  &  &  &  &  \\
+\lstick{\usebox{\ringphasegrad}} & \qwbundle{b_{\mathrm{rot}}} &  & \gate[1,style={fill=gray!12}]{\nabla} &  &  &  &  & \gate[1,style={fill=gray!12}]{\nabla} &  &  &  &  &  &  &  &  &  & \gate[1,style={fill=gray!12}]{\nabla} &  & \gate[1,style={fill=gray!12}]{\nabla} &  &  &  &  &  &  &  &  &  &  & \gate[1,style={fill=gray!12}]{\nabla} &  &  \\
+\setwiretype{n} & & \push{\hspace{1.4cm}} & & & & & & & & & & & & & & & & & & & & & & & & & & & & & & &
+\end{quantikz}}
+\begin{tabular}{@{}l@{}}
+\usebox{\circbox}\\[2pt]
+\parbox{\wd\circbox}{\small
+Colours as in the dfthcbe figure: green flagged uniform preparation, blue data loads, yellow
+comparators, grey index/erase boxes, orange rotations and Majorana gate, pink reflection.
+Meters: $H$, measurement and reset (X-basis); the junk registers \texttt{junk\_x\_o}
+($(K_1{-}1)d_1$) and \texttt{junk\_b} ($(K_2{-}1)d_2$) are the first wires of \texttt{angles},
+X-measured in the columns J right after each prepare (Q-1 variant (b)); their outcomes feed
+the fix-ups of the unprepares from outcomes (\texttt{junk\_x\_o}: steps 24--27, not drawn).
+$\mathrm{In}_Z$: phase fix-up over the index from measurement parities; $\mathcal{E}$: its
+one-hot on reset wires (step 21b: target $\|$ the first $2^{k_{e2}+w_b}-d_2$ wires of
+\texttt{angles}). $\le^{\dagger}$: measured comparator uncompute (no Toffoli).
+$\nabla$: \texttt{phase\_grad} used as catalyst. Not drawn: the shared \texttt{work} pool;
+$\mathrm{REF}_{T_2}$ includes $\mathrm{GlobalPhase}(\pi)$. $X_o = N{+}RC$; $l_x$, $l_b$:
+odd parts of $X_o$, $B{+}1$. Red circles: wires and gates that differ from the dfthcbe figure.}
+\end{tabular}
+\end{document}
