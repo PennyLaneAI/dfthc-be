@@ -31,14 +31,16 @@ class WalkParams:
     - ``R``, ``B``, ``C``: DFTHC rank, terms per rank, copies per rank.
     - ``n_plus``: positive eigenvalues of the effective one-body matrix (D1 rows); ``N - n_plus``
       Q1 rows follow.
-    - ``b_rot``: bits per Givens angle; also the phase-gradient width ``b_grad``.
+    - ``b_rot``: Givens angle precision: a rung turns by ``4 pi x / 2**b_rot`` with
+      ``x < 2**(b_rot - 1)``, held in an angle register of ``b_rot - 1`` wires; also the
+      phase-gradient width ``b_grad``.
     - ``b_k1``, ``b_k2``: bits of the outer and inner alias keep values.
     - ``s_u``: bits of the rotations inside a flagged uniform preparation.
     - ``k1``, ``k2``: block bits of the outer and inner QROAM reads.
     - ``ke1``, ``ke2``: one-hot bits of the outer and inner erase fixups.
 
     Construction raises ``ValueError`` naming the violated constraint. The constraints are those
-    of spec 8.3, the select's one-hot fit ``2**w_b <= (N - 1) b_rot + 1`` included, plus
+    of spec 8.3, the select's one-hot fit ``2**w_b <= (N - 1)(b_rot - 1) + 1`` included, plus
     ``0 <= n_plus <= N``. Composite operators take the 13 fields as one compilable
     tuple (``as_compilable``) and rebuild the object with ``from_compilable``.
     """
@@ -73,7 +75,8 @@ class WalkParams:
         self._check(0 <= self.k2 <= self.w_b, "0 <= k2 <= w_b")
         self._check(0 <= self.ke1 <= self.w_x, "0 <= ke1 <= w_x")
         self._check(0 <= self.ke2 <= lg(self.RC), "0 <= ke2 <= lg(RC)")
-        self._check(2**self.w_b <= (self.N - 1) * self.b_rot + 1, "2**w_b <= (N - 1) b_rot + 1")
+        self._check(2**self.w_b <= (self.N - 1) * (self.b_rot - 1) + 1,
+                    "2**w_b <= (N - 1)(b_rot - 1) + 1")
 
     def _check(self, holds: bool, constraint: str) -> None:
         if not holds:

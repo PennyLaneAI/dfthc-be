@@ -145,8 +145,8 @@ def _check(params, tables) -> tuple[WalkParams, WalkTables]:
     """``params`` and ``tables`` rebuilt and checked against the children's domains (spec 9.0):
     the tables have the shapes of ``params`` and lie in the children's ranges, the erases'
     one-hot registers fit (``2**ke1 <= K1 d1``, ``2**(ke2 + w_b) <= K2 d2`` and
-    ``2**w_b <= (N - 1) b_rot + 1``), and the layout's ``work`` pool covers every child of the walk
-    and the controlled walk. ``ValueError`` otherwise."""
+    ``2**w_b <= (N - 1)(b_rot - 1) + 1``), and the layout's ``work`` pool covers every child of
+    the walk and the controlled walk. ``ValueError`` otherwise."""
     if not isinstance(params, (tuple, list)) or not isinstance(tables, (tuple, list)):
         raise ValueError("params and tables must be WalkParams.as_compilable() and "
                          "WalkTables.as_compilable()")
@@ -261,8 +261,8 @@ class DFTHCBlockEncoding(Operator2):
     ============== ============================== ===================== ======================
     ``outer``      the ``outer`` group (71)       ``|0>``               see the action
     ``inner``      the ``inner`` group (65)       ``|0>``               see the action
-    ``select``     ``(N - 1) b_rot`` +            ``|0>``               ``|0>``
-                   ``junk_overflow`` + 4 (799)
+    ``select``     ``(N - 1)(b_rot - 1)`` +       ``|0>``               ``|0>``
+                   ``junk_overflow`` + 4 (746)
     ``system``     ``2N`` (108)                   any                   see the action
     ``phase_grad`` ``b_rot`` (15)                 phase-gradient state  unchanged
     ``work``       ``WalkLayout.work_size`` (44)  ``|0>``               ``|0>``
@@ -270,8 +270,8 @@ class DFTHCBlockEncoding(Operator2):
 
     **Compilable arguments.** ``params``: :meth:`WalkParams.as_compilable`, the 13 fields; the
     erases' one-hot bits must fit their reset registers (:math:`2^{k_{e1}} \le K_1 d_1`,
-    :math:`2^{k_{e2} + w_b} \le K_2 d_2`, :math:`2^{w_b} \le (N - 1) b_{rot} + 1`) and
-    ``WalkLayout.work_size`` must cover every child. ``tables``:
+    :math:`2^{k_{e2} + w_b} \le K_2 d_2`, :math:`2^{w_b} \le (N - 1)(b_{rot} - 1) + 1`)
+    and ``WalkLayout.work_size`` must cover every child. ``tables``:
     :meth:`WalkTables.as_compilable` of tables with the shapes of ``params``, in the ranges the
     prepares and the select accept. The constructor checks both (``ValueError``).
 
@@ -308,12 +308,12 @@ class DFTHCBlockEncoding(Operator2):
 
     **Cost.** :func:`dfthc.costs.block_encoding` (uncontrolled):
     :math:`T = T_{out} + T_{out}^\dagger + 2(T_{in} + T_{sel} + T_{in}^\dagger) + T_{RefT2}`,
-    :math:`M = K_1 d_1 + 2(K_2 d_2 + (N - 1) b_{rot} + 3)`; ``A = T - (T_Toffoli - 1)`` with
+    :math:`M = K_1 d_1 + 2(K_2 d_2 + (N - 1)(b_{rot} - 1) + 3)`; ``A = T - (T_Toffoli - 1)`` with
     ``T_Toffoli`` = :func:`dfthc.costs.toffoli_only` (the walk's plain Toffolis less ``RefAB``'s
     one). Of ``M``, :math:`(K_1 - 1) d_1 + 2 (K_2 - 1) d_2` are this rule's own junk
     measurements (:func:`dfthc.costs.junk_measurements`) and the unprepares from outcomes
     measure the targets, :math:`d_1 + 2 d_2`. At FeMoco-54:
-    :math:`278 + 2 \cdot 4724 + 20 = 9746`, ``M = 2524`` (852 of them junk), ``A = 8629``.
+    :math:`278 + 2 \cdot 4724 + 20 = 9746`, ``M = 2418`` (852 of them junk), ``A = 8629``.
     ``CNOT`` and ``PauliX`` counts are upper bounds (spec 7.6).
 
     **Paper and dfthcbe.** Steps 1 to 27 of spec 3.5: the sum-of-squares block encoding
@@ -405,8 +405,8 @@ class ControlledDFTHCBlockEncoding(Operator2):
     ``control``    1                              any                   a control
     ``outer``      the ``outer`` group (71)       ``|0>``               see the action
     ``inner``      the ``inner`` group (65)       ``|0>``               see the action
-    ``select``     ``(N - 1) b_rot`` +            ``|0>``               ``|0>``
-                   ``junk_overflow`` + 4 (799)
+    ``select``     ``(N - 1)(b_rot - 1)`` +       ``|0>``               ``|0>``
+                   ``junk_overflow`` + 4 (746)
     ``system``     ``2N`` (108)                   any                   see the action
     ``phase_grad`` ``b_rot`` (15)                 phase-gradient state  unchanged
     ``work``       ``WalkLayout.work_size`` (44)  ``|0>``               ``|0>``
@@ -427,7 +427,7 @@ class ControlledDFTHCBlockEncoding(Operator2):
 
     **Cost.** :func:`dfthc.costs.block_encoding` (controlled): :class:`DFTHCBlockEncoding`'s
     ``T + 1`` (the controlled reflection's extra ``TemporaryAND``), the same ``M``,
-    ``A = T - (T_Toffoli - 1)``. At FeMoco-54: ``T = 9747``, ``M = 2524``, ``A = 8630``.
+    ``A = T - (T_Toffoli - 1)``. At FeMoco-54: ``T = 9747``, ``M = 2418``, ``A = 8630``.
 
     **Paper and dfthcbe.** The controlled block encoding inside the controlled walk
     :math:`C(W) = C(\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}})\,U^\dagger\,
@@ -520,8 +520,8 @@ class DFTHCWalk(Operator2):
     ============== ============================== ===================== ======================
     ``outer``      the ``outer`` group (71)       ``|0>``               see the action
     ``inner``      the ``inner`` group (65)       ``|0>``               see the action
-    ``select``     ``(N - 1) b_rot`` +            ``|0>``               ``|0>``
-                   ``junk_overflow`` + 4 (799)
+    ``select``     ``(N - 1)(b_rot - 1)`` +       ``|0>``               ``|0>``
+                   ``junk_overflow`` + 4 (746)
     ``system``     ``2N`` (108)                   any                   see the action
     ``phase_grad`` ``b_rot`` (15)                 phase-gradient state  unchanged
     ``work``       ``WalkLayout.work_size`` (44)  ``|0>``               ``|0>``
@@ -545,8 +545,8 @@ class DFTHCWalk(Operator2):
 
     **Cost.** :func:`dfthc.costs.walk` (uncontrolled): :math:`T = T_{BE} + T_{RefAB}`,
     :math:`M = M_{BE}`; ``A`` = :func:`dfthc.costs.measured_and_uncomputes` (uncontrolled),
-    ``T - T_Toffoli``. At FeMoco-54: :math:`9746 + 44 = 9790`, ``M = 2524``, ``A = 8672``, so
-    ``M + A = 11196`` physical measurements (spec 9.24). ``CNOT`` and ``PauliX`` counts are
+    ``T - T_Toffoli``. At FeMoco-54: :math:`9746 + 44 = 9790`, ``M = 2418``, ``A = 8672``, so
+    ``M + A = 11090`` physical measurements (spec 9.24). ``CNOT`` and ``PauliX`` counts are
     upper bounds (spec 7.6).
 
     **Paper and dfthcbe.** Steps 1 to 28 of spec 3.5: the walk
@@ -639,8 +639,8 @@ class ControlledDFTHCWalk(Operator2):
     ``control``    1                              any                   a control
     ``outer``      the ``outer`` group (71)       ``|0>``               see the action
     ``inner``      the ``inner`` group (65)       ``|0>``               see the action
-    ``select``     ``(N - 1) b_rot`` +            ``|0>``               ``|0>``
-                   ``junk_overflow`` + 4 (799)
+    ``select``     ``(N - 1)(b_rot - 1)`` +       ``|0>``               ``|0>``
+                   ``junk_overflow`` + 4 (746)
     ``system``     ``2N`` (108)                   any                   see the action
     ``phase_grad`` ``b_rot`` (15)                 phase-gradient state  unchanged
     ``work``       ``WalkLayout.work_size`` (44)  ``|0>``               ``|0>``
@@ -661,7 +661,7 @@ class ControlledDFTHCWalk(Operator2):
 
     **Cost.** :func:`dfthc.costs.walk` (controlled): :class:`DFTHCWalk`'s ``T + 2``, the same
     ``M``; ``A`` = :func:`dfthc.costs.measured_and_uncomputes` (controlled). At FeMoco-54:
-    ``T = 9792``, ``M = 2524``, ``A = 8674``, ``M + A = 11198``.
+    ``T = 9792``, ``M = 2418``, ``A = 8674``, ``M + A = 11092``.
 
     **Paper and dfthcbe.** The controlled walk of spec 3.3, the unit of the paper's phase
     estimation (arXiv:2502.15882v1 Sec. II, after Eq. (11)). The paper counts the phase-estimation

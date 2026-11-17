@@ -230,7 +230,7 @@ def test_upstream_drafts_cite_the_paper_in_full(draft):
 def test_spec_11_3_gives_the_qpe_wire_totals_of_the_layout():
     """Spec 11.3's wire totals of the QPE program (final review I-4) are the walk's wires plus
     the QPE control, read from WalkLayout (no compile), plus t gradient wires: 56 + t at
-    H2_STO3G_TEST and 1,103 + t at FeMoco-54."""
+    H2_STO3G_TEST and 1,050 + t at FeMoco-54."""
     text = spec_section("### 11.3", "### 11.4")
 
     def total(where: str) -> int:

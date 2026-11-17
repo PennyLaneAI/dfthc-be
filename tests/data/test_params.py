@@ -67,12 +67,12 @@ def test_derived_values_at_h2_sto3g():
         ({"ke1": 3}, "0 <= ke1 <= w_x"),
         ({"ke2": 2}, "0 <= ke2 <= lg(RC)"),
         ({"ke2": -1}, "0 <= ke2 <= lg(RC)"),
-        ({"B": 4}, "2**w_b <= (N - 1) b_rot + 1"),
+        ({"B": 4}, "2**w_b <= (N - 1)(b_rot - 1) + 1"),
     ],
 )
 def test_constraint_violations_raise(changes, constraint):
     """Spec 8.3; the last case is the select's one-hot (final review m-1): at N = 2, b_rot = 4
-    and B = 4 it needs 2**3 = 8 wires, more than the (N - 1) b_rot + 1 = 5 it resets."""
+    and B = 4 it needs 2**3 = 8 wires, more than the (N - 1)(b_rot - 1) + 1 = 4 it resets."""
     with pytest.raises(ValueError, match=re.escape(constraint)):
         dataclasses.replace(H2_STO3G_TEST, **changes)
 

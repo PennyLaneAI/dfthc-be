@@ -66,8 +66,8 @@ def _child_sizes(tail_angles, sf_angles, N, R, B, C, n_plus, b_rot, fixup_bits) 
 def _required_wires(tail_angles, sf_angles, N, R, B, C, n_plus, b_rot, fixup_bits) -> dict:
     children = _child_sizes(tail_angles, sf_angles, N, R, B, C, n_plus, b_rot, fixup_bits)
     return {"x_o": lg(N + R * C), "succ_x_o": 1, "sigma_1": 1, "b": lg(B + 1), "succ_b": 1,
-            "sigma_0": 1, "r": lg(R), "angles": (N - 1) * b_rot, "G0": 1, "G1": 1, "b_neq_B": 1,
-            "sg": 1, "psi_up": N, "psi_dn": N, "phase_grad": b_rot,
+            "sigma_0": 1, "r": lg(R), "angles": (N - 1) * (b_rot - 1), "G0": 1, "G1": 1,
+            "b_neq_B": 1, "sg": 1, "psi_up": N, "psi_dn": N, "phase_grad": b_rot,
             "work": max(sizes["work"] for sizes in children.values() if "work" in sizes)}
 
 
@@ -118,7 +118,7 @@ class InnerSelect(Operator2):
     ``succ_b``     1                       any (read only)              unchanged
     ``sigma_0``    1                       any                          a control (diagonal)
     ``r``          :math:`w_r` (0 if R=1)  any (read only)              unchanged
-    ``angles``     :math:`(N - 1) b_{rot}` ``|0>``                      ``|0>``
+    ``angles``     ``(N - 1)(b_rot - 1)``  ``|0>``                      ``|0>``
     ``G0``         1                       ``|0>``                      ``|0>``
     ``G1``         1                       ``|0>``                      ``|0>``
     ``b_neq_B``    1                       ``|0>``                      ``|0>``
@@ -134,7 +134,7 @@ class InnerSelect(Operator2):
     (``WalkTables.tail_angles`` and ``sf_angles``); ``N >= 2``; ``R``, ``B``, ``C >= 1``;
     ``n_plus`` (``0 <= N+ <= N``); ``b_rot >= 2``; ``fixup_bits``, the SF fix-up's one-hot bits
     of ``AngleErase`` (``0 <= fixup_bits <= w_b`` with
-    ``2**fixup_bits <= (N - 1) b_rot + 1``; the walk passes ``w_b``).
+    ``2**fixup_bits <= (N - 1)(b_rot - 1) + 1``; the walk passes ``w_b``).
 
     **Pre- and postconditions.** The registers are pairwise disjoint (unchecked); the ancillas
     and ``work`` start in ``|0>`` and end there for every measurement outcome of the erase;
@@ -158,10 +158,10 @@ class InnerSelect(Operator2):
 
     **Cost.** :func:`dfthc.costs.inner_select` for ``fixup_bits = w_b``:
     :math:`T = T_{tail} + T_{SF} + 2 + 2N + 4(b_{rot} - 1)(N - 1) + 5 + T_{angle\,erase}`,
-    :math:`M = (N - 1) b_{rot} + 3`; ``A = T - (2N + 5)``, the plain ``Toffoli`` gates being the
-    two ``SpinMux`` Toffolis, the ``2N`` ``SpinSwap`` CSWAPs and three in the Majorana gate. At
-    FeMoco-54: :math:`61 + 291 + 2 + 108 + 2968 + 5 + 102 = 3537`, ``M = 798``, ``A = 3424``. For
-    another ``fixup_bits`` the erase's SF term is ``costs.phase_fixup`` over
+    :math:`M = (N - 1)(b_{rot} - 1) + 3`; ``A = T - (2N + 5)``, the plain ``Toffoli`` gates
+    being the two ``SpinMux`` Toffolis, the ``2N`` ``SpinSwap`` CSWAPs and three in the Majorana
+    gate. At FeMoco-54: :math:`61 + 291 + 2 + 108 + 2968 + 5 + 102 = 3537`, ``M = 745``,
+    ``A = 3424``. For another ``fixup_bits`` the erase's SF term is ``costs.phase_fixup`` over
     ``AngleErase.sf_fixup_high_ranges``. ``CNOT`` and ``PauliX`` counts are upper bounds (the
     loads' reads, the erase's resets).
 
@@ -321,7 +321,7 @@ class InnerSelectDagger(Operator2):
     ``succ_b``     1                       any (read only)              unchanged
     ``sigma_0``    1                       any                          a control (diagonal)
     ``r``          :math:`w_r` (0 if R=1)  any (read only)              unchanged
-    ``angles``     :math:`(N - 1) b_{rot}` ``|0>``                      ``|0>``
+    ``angles``     ``(N - 1)(b_rot - 1)``  ``|0>``                      ``|0>``
     ``G0``         1                       ``|0>``                      ``|0>``
     ``G1``         1                       ``|0>``                      ``|0>``
     ``b_neq_B``    1                       ``|0>``                      ``|0>``
@@ -347,7 +347,7 @@ class InnerSelectDagger(Operator2):
     never adjointed or controlled itself (its rule measures; spec 7.4 rules 5 and 6).
 
     **Cost.** :func:`dfthc.costs.inner_select`, as for :class:`InnerSelect`: ``T`` and ``M``
-    unchanged, ``A = T - (2N + 5)``. At FeMoco-54: ``T = 3537``, ``M = 798``, ``A = 3424``.
+    unchanged, ``A = T - (2N + 5)``. At FeMoco-54: ``T = 3537``, ``M = 745``, ``A = 3424``.
 
     **Paper and dfthcbe.** :math:`\mathrm{SEL}^\dagger` of the second round of steps 5 to 22
     (spec 3.5); dfthcbe: ``InnerSelect(..., is_adjoint=True)``, ``InnerSelect.adjoint()``, the
@@ -374,7 +374,7 @@ class InnerSelectDagger(Operator2):
             qp.PhaseGradientStatePrep(wires["phase_grad"])
             InnerSelectDagger(*args, **wires)
 
-        compiled_resources(program, num_wires=start).measurements  # (N - 1) b_rot + 3 = 7
+        compiled_resources(program, num_wires=start).measurements  # (N - 1)(b_rot - 1) + 3 = 6
     """
 
     compilable_argnames = ("tail_angles", "sf_angles", "N", "R", "B", "C", "n_plus", "b_rot",

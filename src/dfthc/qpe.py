@@ -129,8 +129,8 @@ class ControlledWalkPower(Operator2):
     ``control``    1                              any                   a control
     ``outer``      the ``outer`` group (71)       walk state            walk state
     ``inner``      the ``inner`` group (65)       walk state            walk state
-    ``select``     ``(N - 1) b_rot`` +            ``|0>``               ``|0>``
-                   ``junk_overflow`` + 4 (799)
+    ``select``     ``(N - 1)(b_rot - 1)`` +       ``|0>``               ``|0>``
+                   ``junk_overflow`` + 4 (746)
     ``system``     ``2N`` (108)                   any                   see the action
     ``phase_grad`` ``b_rot`` (15)                 phase-gradient state  unchanged
     ``work``       ``WalkLayout.work_size`` (44)  ``|0>``               ``|0>``
@@ -156,7 +156,7 @@ class ControlledWalkPower(Operator2):
 
     **Cost.** :func:`dfthc.costs.controlled_walk_power`: :math:`T = p\,T_{C(W)}`,
     :math:`M = p\,M_W`; ``A`` = ``p`` times :func:`dfthc.costs.measured_and_uncomputes`
-    (controlled). At FeMoco-54 and ``p = 1``: 9,795, 2,524 and 8,677.
+    (controlled). At FeMoco-54 and ``p = 1``: 9,795, 2,418 and 8,677.
 
     **Paper and dfthcbe.** The walk powers :math:`W^{2^j}` of phase estimation on the
     controlled walk, whose query count the paper estimates (PRX 15, 041016; arXiv:2502.15882v1

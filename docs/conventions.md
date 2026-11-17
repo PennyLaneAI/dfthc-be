@@ -35,7 +35,8 @@ otherwise, so blocks compare one to one (spec 6). Symbols are those of spec 3.1:
 Rung k acts on qubits `(q_k, q_{k+1})`. An angle is stored as
 `x_k = round(theta_k / (2 pi) * 2^(b_rot - 1)) mod 2^(b_rot - 1)`, and the rung realizes
 `theta = 4 pi x / 2^b_rot` exactly, with the rung matrix `[[cos, -sin], [sin, cos]]` on
-`{|01>, |10>}`. Rung N - 2 comes first in time and rung 0 last.
+`{|01>, |10>}`. Rung N - 2 comes first in time and rung 0 last. Since `x_k < 2^(b_rot - 1)`, each
+angle register has `b_rot - 1` wires; the phase gradient has `b_rot`.
 
 ## Alias sampling (spec 6.4)
 

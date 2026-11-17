@@ -51,8 +51,8 @@ def random_tables(p, seed):
 # N = 3 gives the ladder two rungs (their order and the register order matter), N+ = 2 a Q1 row.
 RANDOM_C3 = WalkParams(N=3, R=2, B=2, C=3, n_plus=2, b_rot=3, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1,
                        ke1=1, ke2=1)
-# R = 1: r has no wires and the SF address is b alone.
-RANDOM_R1 = WalkParams(N=2, R=1, B=2, C=2, n_plus=2, b_rot=3, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1,
+# R = 1: r has no wires and the SF address is b alone; b_rot = 4 so that the one-hot fits.
+RANDOM_R1 = WalkParams(N=2, R=1, B=2, C=2, n_plus=2, b_rot=4, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1,
                        ke1=1, ke2=1)
 SHAPES = {
     "sto3g": (H2_STO3G_TEST, *vendored("h2_sto3g_R2_B2_C1", H2_STO3G_TEST)),
@@ -223,7 +223,7 @@ def test_action_against_the_encoded_model(name, kind):
     expected = with_gradient(wires, keys, outputs[k, f, x], p.b_rot)
 
     operations = decompose_for_simulation(lambda: cls(*args, **wires)).operations
-    for schedule in schedules((p.N - 1) * p.b_rot + 3, rng).values():
+    for schedule in schedules((p.N - 1) * (p.b_rot - 1) + 3, rng).values():
         assert_same_state(simulate(operations, num_wires, *initial, schedule), *expected)
 
 
@@ -253,7 +253,7 @@ def test_dagger_inverts_the_select_on_every_branch(name, num_system):
         InnerSelectDagger(*args, **wires)
 
     operations = decompose_for_simulation(program).operations
-    outcomes = schedules(2 * ((p.N - 1) * p.b_rot + 3), rng)
+    outcomes = schedules(2 * ((p.N - 1) * (p.b_rot - 1) + 3), rng)
     for schedule in (outcomes["alternating"], outcomes["seeded"]):
         assert_same_state(simulate(operations, num_wires, *initial, schedule), *initial)
 
@@ -353,7 +353,7 @@ def assert_counts(resources, p, ob):
                          ids=["sto3g", "631g", "C3-ob0", "R1"])
 def test_counts(name, ob):
     """T4 compiled, each class alone: costs.inner_select at both test presets (T = 33 and 65,
-    M = 7 and 15), the ob = 0 fallback of the erase's SF fix-up at random-C3, and R = 1."""
+    M = 6 and 12), the ob = 0 fallback of the erase's SF fix-up at random-C3, and R = 1."""
     p = SHAPES[name][0]
     args = compilable(name, ob)
     wires, num_wires = layout(args)
@@ -366,7 +366,7 @@ def test_counts(name, ob):
 @pytest.mark.slow
 @pytest.mark.parametrize("kind", CLASSES)
 def test_counts_at_mid_naphthalene(kind):
-    """T4 at MID_NAPHTHALENE (naphthalene tables, nightly tier): T = 625, M = 138, A = 600."""
+    """T4 at MID_NAPHTHALENE (naphthalene tables, nightly tier): T = 625, M = 129, A = 600."""
     p = MID_NAPHTHALENE
     tail, sf, _ = vendored("naphthalene", p)
     args = (tail, sf, p.N, p.R, p.B, p.C, p.n_plus, p.b_rot, p.w_b)
@@ -377,20 +377,20 @@ def test_counts_at_mid_naphthalene(kind):
 
 def test_femoco_counts_on_the_closed_form():
     """FeMoco-54 (spec 9.24): 61 + 291 + 2 + 108 + 2,968 + 5 + 102 = 3,537 Toffolis and
-    M = 798 for each select, A = 3,537 - 113 = 3,424; the select's work is the ladder's 14 wires,
+    M = 745 for each select, A = 3,537 - 113 = 3,424; the select's work is the ladder's 14 wires,
     within the walk's pool of 44."""
     p = FEMOCO54
     parts = [costs.tail_angle_load(p), costs.sf_angle_load(p), 2 * costs.spin_mux(),
              2 * costs.spin_swap(p), 2 * costs.givens_ladder(p), costs.majorana_gate(),
              costs.angle_erase(p)]
     assert [part.toffoli for part in parts] == [61, 291, 2, 108, 2968, 5, 102]
-    assert costs.inner_select(p) == costs.Cost(3537, 798)
+    assert costs.inner_select(p) == costs.Cost(3537, 745)
     assert costs.inner_select(p).toffoli - (2 * p.N + 5) == 3424
     tail = tuple((0,) * 53 for _ in range(54))
     sf = tuple(tuple((0,) * 53 for _ in range(27)) for _ in range(10))
     sizes = InnerSelect.required_wires(tail, sf, 54, 10, 27, 27, 27, 15, 5)
     assert sizes == {"x_o": 9, "succ_x_o": 1, "sigma_1": 1, "b": 5, "succ_b": 1, "sigma_0": 1,
-                     "r": 4, "angles": 795, "G0": 1, "G1": 1, "b_neq_B": 1, "sg": 1,
+                     "r": 4, "angles": 742, "G0": 1, "G1": 1, "b_neq_B": 1, "sg": 1,
                      "psi_up": 54, "psi_dn": 54, "phase_grad": 15, "work": 14}
     assert GivensLadder.required_wires(15, 54)["work"] == 14
 
@@ -456,7 +456,7 @@ def test_required_wires():
     load's w_r + w_b and the ladder's b_rot - 1)."""
     assert InnerSelect.required_wires(*compilable("sto3g")) == {
         "x_o": 2, "succ_x_o": 1, "sigma_1": 1, "b": 2, "succ_b": 1, "sigma_0": 1, "r": 1,
-        "angles": 4, "G0": 1, "G1": 1, "b_neq_B": 1, "sg": 1, "psi_up": 2, "psi_dn": 2,
+        "angles": 3, "G0": 1, "G1": 1, "b_neq_B": 1, "sg": 1, "psi_up": 2, "psi_dn": 2,
         "phase_grad": 4, "work": 3}
     assert InnerSelectDagger.required_wires(*compilable("random-R1"))["r"] == 0
 

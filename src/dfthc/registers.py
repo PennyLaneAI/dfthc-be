@@ -41,8 +41,9 @@ class WalkLayout:
     The register sizes follow spec 9.7 and 9.8: ``succ_work_* = max(lg(l) - 1, 0)`` with ``l``
     the odd part of ``X_o`` or ``B + 1``, ``cmp_work_* = b_k - 1``, ``junk_x_o = (K1 - 1) d1``
     and ``junk_b = (K2 - 1) d2`` (:meth:`junk_sizes`); ``junk_overflow`` holds the junk wires
-    beyond ``angles``, ``max(junk_x_o, junk_b, (N - 1) b_rot) - (N - 1) b_rot`` (0 at FeMoco-54,
-    3 at ``H2_STO3G_TEST``). The work pool size is :meth:`work_size`. That formula is
+    beyond the ``(N - 1)(b_rot - 1)`` wires of ``angles``,
+    ``max(junk_x_o, junk_b, (N - 1)(b_rot - 1)) - (N - 1)(b_rot - 1)`` (0 at FeMoco-54, 4 at
+    ``H2_STO3G_TEST``). The work pool size is :meth:`work_size`. That formula is
     provisional: Task 3.3 asserts that every operator's ``required_wires()["work"]`` fits it.
     """
 
@@ -72,7 +73,7 @@ class WalkLayout:
     def register_sizes(params: WalkParams) -> dict[str, int]:
         """Width of every register of :data:`GROUPS`, in layout order."""
         p = params
-        angles = (p.N - 1) * p.b_rot
+        angles = (p.N - 1) * (p.b_rot - 1)
         return {
             "psi_up": p.N, "psi_dn": p.N,
             "x_o": p.w_x, "succ_x_o": 1, "succ_work_x_o": max(lg(odd_part(p.X_o)) - 1, 0),
@@ -136,8 +137,8 @@ class WalkLayout:
         return parts
 
     def angle_register(self, k: int) -> Wires:
-        """The ``b_rot`` wires of angle register ``k``, which drives rung ``k`` (spec 6.7)."""
+        """The ``b_rot - 1`` wires of angle register ``k``, which drives rung ``k`` (spec 6.7)."""
         if not 0 <= k < self.params.N - 1:
             raise ValueError(f"rung {k} outside [0, {self.params.N - 1})")
-        b_rot = self.params.b_rot
-        return self.angles[k * b_rot:(k + 1) * b_rot]
+        width = self.params.b_rot - 1
+        return self.angles[k * width:(k + 1) * width]

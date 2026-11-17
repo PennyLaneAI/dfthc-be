@@ -142,11 +142,11 @@ def test_controlled_walk_power_validates():
 
 
 def test_closed_forms_at_femoco():
-    """Spec 9.23 and 9.24 at FeMoco-54, without compiling: C(W)^2 is 19,584 Toffolis and 5,048
+    """Spec 9.23 and 9.24 at FeMoco-54, without compiling: C(W)^2 is 19,584 Toffolis and 4,836
     measurements; round 0 of a 3-bit estimation adds 1 + 2 correction Toffolis to one step."""
-    assert costs.controlled_walk_power(FEMOCO54, 2) == costs.Cost(2 * 9792, 2 * 2524)
-    assert costs.qpe_round(FEMOCO54, 0, 3) == costs.Cost(9792 + 1 + 2, 2524)
-    assert costs.qpe_round(FEMOCO54, 2, 3) == costs.Cost(4 * 9792, 4 * 2524)
+    assert costs.controlled_walk_power(FEMOCO54, 2) == costs.Cost(2 * 9792, 2 * 2418)
+    assert costs.qpe_round(FEMOCO54, 0, 3) == costs.Cost(9792 + 1 + 2, 2418)
+    assert costs.qpe_round(FEMOCO54, 2, 3) == costs.Cost(4 * 9792, 4 * 2418)
 
 
 # --------------------------------------------------------------------------- QPERound
@@ -161,7 +161,7 @@ def walk_round(layout, p, t, j, earlier_bits):
 @pytest.mark.compiled
 def test_qpe_round_counts():
     """T4 of round 0 of a 2-bit estimation at H2_STO3G_TEST, worst case (spec 9.24): T =
-    T_C(W) + 1 = 161 (the d = 2 correction, unhinted, at its maximum branch), M = M_W = 50 plus
+    T_C(W) + 1 = 161 (the d = 2 correction, unhinted, at its maximum branch), M = M_W = 48 plus
     the measurement that gives m_1, A = A_C(W) + 1. The correction borrows the work pool."""
     p, t = H2_STO3G_TEST, 2
     layout = WalkLayout.from_params(p, qpe_bits=t)
@@ -178,7 +178,7 @@ def test_qpe_round_counts():
     expected = costs.qpe_round(p, 0, t)
     assert (resources.toffoli, resources.measurements - 1) == (expected.toffoli,
                                                                expected.measurements)
-    assert expected == costs.Cost(161, 50)
+    assert expected == costs.Cost(161, 48)
     assert resources.measured_and_uncomputes == costs.measured_and_uncomputes(p, True) + 1
 
 
@@ -324,7 +324,7 @@ def test_spare_wires_needed():
         "walk_wires"] for t in (4, 5)] == [55, 56]
     femoco = WalkLayout.from_params(FEMOCO54)
     sizes = tuple(len(getattr(femoco, name)) for name in ControlledWalkPower.wire_argnames[1:])
-    assert sizes[-1] == WalkLayout.work_size(FEMOCO54) == 44 and sum(sizes) == 1102
+    assert sizes[-1] == WalkLayout.work_size(FEMOCO54) == 44 and sum(sizes) == 1049
     assert [spare_wires_needed("ControlledWalkPower", sizes, t) for t in (3, 20, 22, 23, 25)] == [
         0, 0, 0, 1, 5]
 

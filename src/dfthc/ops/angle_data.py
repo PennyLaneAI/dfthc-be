@@ -1,9 +1,9 @@
 """The angle registers of the inner select: loads and measured erase (spec 9.10, 9.11, 9.17).
 
 **The shared angle register** (spec 6.7). ``angles`` is the concatenation of ``N - 1`` registers
-of ``b_rot`` wires; register ``k`` drives rung ``k`` of the Givens ladder and holds the angle
-integer ``x_k`` big-endian, with ``x_k < 2**(b_rot - 1)`` (spec 6.3). :func:`angle_entry` is the
-big-endian integer of the whole register, register 0 most significant.
+of ``b_rot - 1`` wires; register ``k`` drives rung ``k`` of the Givens ladder and holds the angle
+integer ``x_k < 2**(b_rot - 1)`` (spec 6.3) big-endian. :func:`angle_entry` is the big-endian
+integer of the whole register, register 0 most significant.
 
 **Two exclusive loads.** :class:`TailAngleLoad` writes the one-body rows ``x_o`` in
 ``[RC, X_o)``: their angles, ``G0 = 1`` and ``G1 = [x_o - RC >= N+]``. :class:`SFAngleLoad` then
@@ -35,11 +35,11 @@ from dfthc.params import lg
 
 
 def angle_entry(angles, b_rot: int) -> int:
-    """The big-endian integer of the angle registers holding ``angles``: register ``k`` holds
-    ``angles[k]``, register 0 most significant (spec 6.7)."""
+    """The big-endian integer of the angle registers holding ``angles``: register ``k``, of
+    ``b_rot - 1`` bits, holds ``angles[k]``, register 0 most significant (spec 6.7)."""
     value = 0
     for angle in angles:
-        value = (value << b_rot) | angle
+        value = (value << (b_rot - 1)) | angle
     return value
 
 
@@ -125,7 +125,7 @@ class TailAngleLoad(Operator2):
     name       width                   input    output
     ========== ======================= ======== =========================================
     ``x_o``    :math:`w_x`             any      unchanged
-    ``angles`` :math:`(N - 1) b_{rot}` ``|0>``  ``tail_angles[x_o - RC]`` on tail rows
+    ``angles`` ``(N - 1)(b_rot - 1)``  ``|0>``  ``tail_angles[x_o - RC]`` on tail rows
     ``G0``     1                       ``|0>``  :math:`[RC \le x_o < X_o]`
     ``G1``     1                       ``|0>``  :math:`[x_o - RC \ge N_+]` on tail rows
     ``work``   :math:`w_x - 1`         ``|0>``  ``|0>``
@@ -154,7 +154,7 @@ class TailAngleLoad(Operator2):
     **Cost.** :func:`dfthc.costs.tail_angle_load`: :math:`T = U(RC, X_o, w_x, 0)` (``A = T``),
     ``M = 0``. The rule declares a load CNOT for every bit of every row and is registered with
     ``exact=False``: the CNOT count is an upper bound, which ``qp.analyze`` reports as well,
-    because it counts every unhinted load conditional. At FeMoco-54: 61, with 54 rows of 797
+    because it counts every unhinted load conditional. At FeMoco-54: 61, with 54 rows of 744
     bits.
 
     **Paper and dfthcbe.** Step 10, the D1/Q1 angle load (PRX Eq. (B41)); dfthcbe:
@@ -168,8 +168,8 @@ class TailAngleLoad(Operator2):
         from dfthc.compile import compiled_resources
         from dfthc.ops.angle_data import TailAngleLoad
 
-        tail = ((1,), (2,))  # N = 2, b_rot = 3
-        program = lambda: TailAngleLoad(tail, 1, 2, 4, 3, x_o=[0, 1], angles=[2, 3, 4], G0=[5],
+        tail = ((1,), (2,))  # N = 2, b_rot = 4
+        program = lambda: TailAngleLoad(tail, 1, 2, 4, 4, x_o=[0, 1], angles=[2, 3, 4], G0=[5],
                                         G1=[6], work=[7])
         compiled_resources(program, num_wires=8).toffoli  # U(2, 4, 2, 0) = 1
     """
@@ -203,13 +203,13 @@ class TailAngleLoad(Operator2):
     def load_shape(N: int, RC: int, X_o: int, b_rot: int) -> dict:
         """The load's ``address_widths``, ``live_ranges`` and ``width``."""
         return {"address_widths": (lg(X_o),), "live_ranges": ((RC, X_o),),
-                "width": (N - 1) * b_rot + 2}
+                "width": (N - 1) * (b_rot - 1) + 2}
 
     @staticmethod
     def required_wires(tail_angles, n_plus, RC, X_o, b_rot) -> dict[str, int]:
         """Exact register sizes."""
         shape = TailAngleLoad.load_shape(len(tail_angles), RC, X_o, b_rot)
-        return {"x_o": lg(X_o), "angles": (len(tail_angles) - 1) * b_rot, "G0": 1, "G1": 1,
+        return {"x_o": lg(X_o), "angles": (len(tail_angles) - 1) * (b_rot - 1), "G0": 1, "G1": 1,
                 "work": _load_work(shape, controlled=False)}
 
 
@@ -267,7 +267,7 @@ class SFAngleLoad(Operator2):
     ``r``       :math:`w_r` (0 if R = 1) any     unchanged
     ``b``       :math:`w_b`             any      unchanged
     ``G0``      1                       any      unchanged (the enable, value 0)
-    ``angles``  :math:`(N - 1) b_{rot}` ``|0>``  ``sf_angles[r][b]`` where enabled and in range
+    ``angles``  ``(N - 1)(b_rot - 1)``  ``|0>``  ``sf_angles[r][b]`` where enabled and in range
     ``b_neq_B`` 1                       ``|0>``  1 where enabled and in range
     ``work``    :math:`w_r + w_b`       ``|0>``  ``|0>``
     =========== ======================= ======== =========================================
@@ -294,7 +294,7 @@ class SFAngleLoad(Operator2):
     **Cost.** :func:`dfthc.costs.sf_angle_load`:
     :math:`T = U(0, R, w_r, 1) + R\,U(0, B, w_b, 1)` (``A = T``), ``M = 0``; the CNOT count is an
     upper bound (``exact=False``, as for :class:`TailAngleLoad`). At FeMoco-54:
-    :math:`11 + 10 \cdot 28 = 291`, with 270 rows of 796 bits.
+    :math:`11 + 10 \cdot 28 = 291`, with 270 rows of 743 bits.
 
     **Paper and dfthcbe.** Step 11, the SF angle load (PRX Table III, :math:`RB`); dfthcbe:
     ``sf_rotation_qrom`` (``dfthcbe/rot_data.py``), nested ``b`` outer and ``r`` inner with the
@@ -307,8 +307,8 @@ class SFAngleLoad(Operator2):
         from dfthc.compile import compiled_resources
         from dfthc.ops.angle_data import SFAngleLoad
 
-        sf = (((1,), (2,)), ((3,), (0,)))  # R = 2, B = 2, N = 2, b_rot = 3
-        program = lambda: SFAngleLoad(sf, 2, 2, 3, r=[0], b=[1, 2], G0=[3], angles=[4, 5, 6],
+        sf = (((1,), (2,)), ((3,), (0,)))  # R = 2, B = 2, N = 2, b_rot = 4
+        program = lambda: SFAngleLoad(sf, 2, 2, 4, r=[0], b=[1, 2], G0=[3], angles=[4, 5, 6],
                                       b_neq_B=[7], work=[8, 9, 10])
         compiled_resources(program, num_wires=11).toffoli  # U(0, 2, 1, 1) + 2 U(0, 2, 2, 1) = 5
     """
@@ -342,14 +342,15 @@ class SFAngleLoad(Operator2):
     def load_shape(N: int, R: int, B: int, b_rot: int) -> dict:
         """The load's ``address_widths``, ``live_ranges`` and ``width``."""
         widths, ranges = _sf_address(R, B)
-        return {"address_widths": widths, "live_ranges": ranges, "width": (N - 1) * b_rot + 1}
+        return {"address_widths": widths, "live_ranges": ranges,
+                "width": (N - 1) * (b_rot - 1) + 1}
 
     @staticmethod
     def required_wires(sf_angles, R, B, b_rot) -> dict[str, int]:
         """Exact register sizes."""
         num_modes = len(sf_angles[0][0]) + 1
         shape = SFAngleLoad.load_shape(num_modes, R, B, b_rot)
-        return {"r": lg(R), "b": lg(B + 1), "G0": 1, "angles": (num_modes - 1) * b_rot,
+        return {"r": lg(R), "b": lg(B + 1), "G0": 1, "angles": (num_modes - 1) * (b_rot - 1),
                 "b_neq_B": 1, "work": _load_work(shape, controlled=True)}
 
 
@@ -404,10 +405,10 @@ def check_erase_arguments(tail_angles, sf_angles, n_plus, N, R, B, C, b_rot,
                          "angles per entry")
     tail_angles, n_plus, _, _, _ = TailAngleLoad._check(rows, n_plus, R * C, N + R * C, b_rot)
     sf_onehot_bits = check_int("the SF one-hot bits", sf_onehot_bits, low=0, high=lg(B + 1))
-    if sf_onehot_bits and 2**sf_onehot_bits > (N - 1) * b_rot + 1:
+    reset = (N - 1) * (b_rot - 1) + 1
+    if sf_onehot_bits and 2**sf_onehot_bits > reset:
         raise ValueError(f"the SF one-hot over {sf_onehot_bits} bits needs {2**sf_onehot_bits} "
-                         f"wires, more than the {(N - 1) * b_rot + 1} reset angle and b_neq_B "
-                         "wires")
+                         f"wires, more than the {reset} reset angle and b_neq_B wires")
     return tail_angles, sf_angles, n_plus, N, R, B, C, b_rot, sf_onehot_bits
 
 
@@ -423,7 +424,7 @@ class AngleErase(Operator2):
     =========== ======================= ============== ==============
     name        width                   input          output
     =========== ======================= ============== ==============
-    ``angles``  :math:`(N - 1) b_{rot}` the loads'     ``|0>``
+    ``angles``  ``(N - 1)(b_rot - 1)``  the loads'     ``|0>``
     ``b_neq_B`` 1                       the SF load's  ``|0>``
     ``G0``      1                       the tail's     ``|0>``
     ``G1``      1                       the tail's     ``|0>``
@@ -436,7 +437,8 @@ class AngleErase(Operator2):
     **Compilable arguments.** The loads' tables ``tail_angles`` (``N x (N - 1)``) and
     ``sf_angles`` (``R x B x (N - 1)``), ``n_plus``, ``N``, ``R``, ``B``, ``C`` (ints >= 1,
     ``N >= 2``), ``b_rot`` (int >= 2) and ``sf_onehot_bits`` (ob, ``0 <= ob <= w_b``; the walk
-    uses :math:`w_b`, spec 9.17), whose one-hot register needs ``2**ob <= (N - 1) b_rot + 1``.
+    uses :math:`w_b`, spec 9.17), whose one-hot register needs
+    ``2**ob <= (N - 1)(b_rot - 1) + 1``.
 
     **Pre- and postconditions.** ``angles``, ``b_neq_B``, ``G0`` and ``G1`` hold exactly what
     the two loads wrote for the current ``x_o``, ``r``, ``b`` (operations in between may act on
@@ -468,9 +470,9 @@ class AngleErase(Operator2):
 
     **Cost.** :func:`dfthc.costs.angle_erase` for ob = :math:`w_b`:
     :math:`T = U(0, R, w_r, 1) + O(w_b) + U(RC, X_o, w_x, 0)` (``A = T``),
-    :math:`M = (N - 1) b_{rot} + 3`. For other ob, the SF term is
+    :math:`M = (N - 1)(b_{rot} - 1) + 3`. For other ob, the SF term is
     ``costs.phase_fixup(sf_fixup_high_ranges(R, B, ob), ob, True)``. At FeMoco-54:
-    :math:`T = (11 + 30) + 61 = 102`, :math:`M = 798`.
+    :math:`T = (11 + 30) + 61 = 102`, :math:`M = 745`.
 
     **Paper and dfthcbe.** Step 18; the fix-ups of the paper's (B47) (the ``(b, r)`` table) and
     the :math:`N` term of (B50) (the D1/Q1 angles), PRX App. B, as dfthcbe's README attributes
@@ -487,10 +489,10 @@ class AngleErase(Operator2):
         from dfthc.ops.angle_data import AngleErase
 
         tail, sf = ((1,), (2,)), (((1,), (2,)), ((3,), (0,)))  # N = 2, R = B = 2, C = 1
-        program = lambda: AngleErase(tail, sf, 1, 2, 2, 2, 1, 3, 2, angles=[0, 1, 2],
+        program = lambda: AngleErase(tail, sf, 1, 2, 2, 2, 1, 4, 2, angles=[0, 1, 2],
                                      b_neq_B=[3], G0=[4], G1=[5], x_o=[6, 7], r=[8], b=[9, 10],
                                      work=[11])
-        compiled_resources(program, num_wires=12).measurements  # (N - 1) b_rot + 3 = 6
+        compiled_resources(program, num_wires=12).measurements  # (N - 1)(b_rot - 1) + 3 = 6
     """
 
     compilable_argnames = ("tail_angles", "sf_angles", "n_plus", "N", "R", "B", "C", "b_rot",
@@ -519,7 +521,7 @@ class AngleErase(Operator2):
         sf, tail = _sf_fixup(R, B, sf_onehot_bits), _tail_fixup(N, R, C)
         work = max(PhaseFixup.required_wires(**sf)["work"],
                    PhaseFixup.required_wires(**tail)["work"])
-        return {"angles": (N - 1) * b_rot, "b_neq_B": 1, "G0": 1, "G1": 1,
+        return {"angles": (N - 1) * (b_rot - 1), "b_neq_B": 1, "G0": 1, "G1": 1,
                 "x_o": lg(N + R * C), "r": lg(R), "b": lg(B + 1), "work": work}
 
     @staticmethod

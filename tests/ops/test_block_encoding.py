@@ -269,35 +269,35 @@ def test_counts(name, kind):
 @pytest.mark.slow
 @pytest.mark.parametrize("kind", CLASSES)
 def test_counts_at_mid_naphthalene(kind):
-    """T4 at MID_NAPHTHALENE (nightly tier): T = 1,871 / 1,872, M = 502, A = 1,637 / 1,638."""
+    """T4 at MID_NAPHTHALENE (nightly tier): T = 1,871 / 1,872, M = 484, A = 1,637 / 1,638."""
     c = walk_sim.WalkCase.build(MID_NAPHTHALENE, load_factors("naphthalene"))
     assert_counts(compile_class(c, kind), c.params, kind == "controlled")
 
 
 def test_femoco_counts_on_the_closed_forms():
     """FeMoco-54 (spec 9.24), without compiling: T = 278 + 2 * 4,724 + 20 = 9,746 (controlled
-    9,747), M = 24 + 2 * (26 + 798) + 852 = 2,524, the 852 junk measurements (72 + 2 * 390) in the
-    rule itself (spec 16, Q-1 variant (b)), as spec 9.24's 96 + 2 * (416 + 798); A = T - (1,118 -
-    1) = 8,629 (8,630); the groups are 71, 65, 799, 108, 15 and 44 wires, 1,102 in all."""
+    9,747), M = 24 + 2 * (26 + 745) + 852 = 2,418, the 852 junk measurements (72 + 2 * 390) in the
+    rule itself (spec 16, Q-1 variant (b)), as spec 9.24's 96 + 2 * (416 + 745); A = T - (1,118 -
+    1) = 8,629 (8,630); the groups are 71, 65, 746, 108, 15 and 44 wires, 1,049 in all."""
     p = FEMOCO54
     outer = costs.outer_prepare(p) + costs.outer_unprepare_from_outcomes(p)
     inner = (costs.inner_prepare(p) + costs.inner_select(p)
              + costs.inner_unprepare_from_outcomes(p))
     junk = costs.junk_measurements(p)
     assert (outer, inner, junk, costs.ref_t2(p, False)) == (
-        costs.Cost(278, 24), costs.Cost(4724, 824), costs.Cost(0, 852), costs.Cost(20))
+        costs.Cost(278, 24), costs.Cost(4724, 771), costs.Cost(0, 852), costs.Cost(20))
     for controlled in (False, True):
         assert costs.block_encoding(p, controlled) == (
             outer + 2 * inner + junk + costs.ref_t2(p, controlled))
-    assert costs.block_encoding(p, False) == costs.Cost(9746, 2524)
-    assert costs.block_encoding(p, True) == costs.Cost(9747, 2524)
+    assert costs.block_encoding(p, False) == costs.Cost(9746, 2418)
+    assert costs.block_encoding(p, True) == costs.Cost(9747, 2418)
     assert costs.toffoli_only(p) == 1118
     assert [costs.block_encoding(p, c).toffoli - (costs.toffoli_only(p) - 1)
             for c in (False, True)] == [8629, 8630]
     sizes = DFTHCBlockEncoding.required_wires(p.as_compilable(), ())
-    assert sizes == {"outer": 71, "inner": 65, "select": 799, "system": 108, "phase_grad": 15,
+    assert sizes == {"outer": 71, "inner": 65, "select": 746, "system": 108, "phase_grad": 15,
                      "work": 44}
-    assert sum(sizes.values()) == WalkLayout.from_params(p).num_wires == 1102
+    assert sum(sizes.values()) == WalkLayout.from_params(p).num_wires == 1049
 
 
 def both_classes():

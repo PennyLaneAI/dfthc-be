@@ -112,7 +112,7 @@ def test_report_h2_rows_and_columns(tmp_path):
             "peak_mb", "gates", "projection"}
     assert all(set(r) == keys for r in records.values())
     w = records["DFTHCWalk"]
-    assert (_counts(w, "closed"), w["dfthcbe"], w["paper"]) == ((158, 50, 108), 167, 205)
+    assert (_counts(w, "closed"), w["dfthcbe"], w["paper"]) == ((158, 48, 108), 167, 205)
     assert (w["delta_dfthcbe"], w["delta_paper"]) == (-9, -47)
     assert w["codes_dfthcbe"]["ref-target"] == -1 and w["codes_paper"]["qpe-ctrl"] == -1
     assert records["SpinMux"]["codes_dfthcbe"] == {"mux": -1}
@@ -520,7 +520,7 @@ def test_qpe_summary_and_wire_boundaries(femoco_report):
     """The FeMoco-54 QPE summary gives T and A from the controlled walk and M from the walk,
     A = (2^t - 1) A_C(W) + (t^3 - t)/6 (the phase4-qpe plan's interface), in its record, its
     basis sentence and its table; and the QPE wires step by two where the phase register grows a
-    spare wire: `H2_STO3G_TEST` 59, 60, 62 at t = 3, 4, 5 and FeMoco-54 1,124, 1,125, 1,127 at
+    spare wire: `H2_STO3G_TEST` 59, 60, 62 at t = 3, 4, 5 and FeMoco-54 1,071, 1,072, 1,074 at
     t = 21, 22, 23 (nothing is compiled)."""
     record, markdown = femoco_report
     cwalk = next(r for r in record["rows"] if r["id"] == "ControlledDFTHCWalk")["closed"]
@@ -534,7 +534,7 @@ def test_qpe_summary_and_wire_boundaries(femoco_report):
             (2**bits - 1) * cwalk["measured_and_uncomputes"] + (bits**3 - bits) // 6)
     assert [record["qpe"][str(bits)]["measured_and_uncomputes"] for bits in (1, 2, 3)] == [
         8674, 26023, 60722]
-    assert [record["qpe"][str(bits)]["wires"] for bits in (20, 23)] == [1123, 1127]
+    assert [record["qpe"][str(bits)]["wires"] for bits in (20, 23)] == [1070, 1074]
     assert "A = (2^t - 1) A_C(W) + (t^3 - t)/6" in record["qpe_basis"]
     assert record["qpe_basis"].endswith("a compile with `--large femoco54` replaces them by the "
                                         "compiled T_C(W), M_W and A_C(W).")
@@ -542,19 +542,19 @@ def test_qpe_summary_and_wire_boundaries(femoco_report):
     assert "| t | T | M | A | Qubits |" in markdown
     h2, femoco = report.build_system("H2_STO3G_TEST"), report.build_system("femoco54")
     assert [report.qpe_wires(h2, bits) for bits in (3, 4, 5)] == [59, 60, 62]
-    assert [report.qpe_wires(femoco, bits) for bits in (21, 22, 23)] == [1124, 1125, 1127]
+    assert [report.qpe_wires(femoco, bits) for bits in (21, 22, 23)] == [1071, 1072, 1074]
 
 
 def test_qpe_summary_takes_m_from_the_walk(tmp_path):
     """Final review m-15: the FeMoco-54 QPE summary's M is (2^t - 1) M_W + t with the walk's M
     (spec 9.24 and 11.3), T and A from the controlled walk. A cached controlled walk whose M
-    differs from the walk's (2,525 against the closed 2,524) leaves the summary's M on the walk's,
+    differs from the walk's (2,419 against the closed 2,418) leaves the summary's M on the walk's,
     and its basis sentence says so, naming no task: the pair is recompiled per code hash (nothing
     is compiled; the cached M fails the check, exit 1)."""
     entry = {"code_hash": provenance.code_hash(), "status": "compiled", "toffoli": 9792,
-             "measurements": 2525, "measured_and_uncomputes": 8674, "num_wires": 1103,
+             "measurements": 2419, "measured_and_uncomputes": 8674, "num_wires": 1050,
              "counts": {"Toffoli": 9792 - 8674, "TemporaryAND": 8674,
-                        "Adjoint(TemporaryAND)": 8674, "MidCircuitMeasure": 2525},
+                        "Adjoint(TemporaryAND)": 8674, "MidCircuitMeasure": 2419},
              "seconds": 1.0, "watchdog": {"peak_mb": 1.0}}
     (tmp_path / "resources.json").write_text(json.dumps(
         {"compiled": {"femoco54/ControlledDFTHCWalk": [entry]}}))
@@ -563,7 +563,7 @@ def test_qpe_summary_takes_m_from_the_walk(tmp_path):
     for bits in (1, 2, 3, 23):
         qpe = record["qpe"][str(bits)]
         assert (qpe["toffoli"], qpe["measurements"], qpe["measured_and_uncomputes"]) == (
-            (2**bits - 1) * 9792 + (bits**3 - bits) // 6, (2**bits - 1) * 2524 + bits,
+            (2**bits - 1) * 9792 + (bits**3 - bits) // 6, (2**bits - 1) * 2418 + bits,
             (2**bits - 1) * 8674 + (bits**3 - bits) // 6), bits
     assert record["qpe_basis"].startswith("T and A from the compiled controlled walk, M from the "
                                           "walk (`--large femoco54`, once each per code hash): ")
@@ -582,8 +582,8 @@ def test_femoco_summary_says_how_the_walks_are_compiled(femoco_report, tmp_path)
         markdown)
     entries = {}
     for program, (toffoli, measurements, uncomputes, wires) in {
-            "DFTHCWalk": (9790, 2524, 8672, 1102),
-            "ControlledDFTHCWalk": (9792, 2524, 8674, 1103)}.items():
+            "DFTHCWalk": (9790, 2418, 8672, 1049),
+            "ControlledDFTHCWalk": (9792, 2418, 8674, 1050)}.items():
         entries[f"femoco54/{program}"] = [{
             "code_hash": provenance.code_hash(), "status": "compiled", "toffoli": toffoli,
             "measurements": measurements, "measured_and_uncomputes": uncomputes,
@@ -599,24 +599,25 @@ def test_femoco_summary_says_how_the_walks_are_compiled(femoco_report, tmp_path)
 
 
 def test_qubit_summary_at_femoco(femoco_report):
-    """The FeMoco-54 qubit section (spec 10.3, 13.2) after Q-1 variant (b): WalkLayout's 1,102
-    wires by group against the paper's Table 3 groups, 1,131 in all (-29: outer +21, inner +12,
-    select +4, work -66); the junk registers, 72 and 390 wires (462 in the record), both alias
-    the start of the angle register, so together they take its first 390 wires (final review
-    m-22), and their 852 measurements per walk are the block encoding's own; the early junk
-    measurement is no longer an open question or a deferred refinement (nothing is compiled)."""
+    """The FeMoco-54 qubit section (spec 10.3, 13.2) after Q-1 variant (b): WalkLayout's 1,049
+    wires by group against the paper's Table 3 groups, 1,131 in all (-82: outer +21, inner +12,
+    select -49 with 14-wire angle registers, work -66); the junk registers, 72 and 390 wires
+    (462 in the record), both alias the start of the angle register, so together they take its
+    first 390 wires (final review m-22), and their 852 measurements per walk are the block
+    encoding's own; the early junk measurement is no longer an open question or a deferred
+    refinement (nothing is compiled)."""
     record, markdown = femoco_report
     assert ("The junk registers (72 and 390 wires, aliased onto the first 390 angle wires) are "
             "X-measured right after each prepare") in markdown
     assert "462 wires" not in markdown
-    assert record["wires"] == 1102 and record["qubit_groups"] == {
-        "system": 108, "outer": 71, "inner": 65, "select": 799, "phase_grad": 15, "work": 44}
+    assert record["wires"] == 1049 and record["qubit_groups"] == {
+        "system": 108, "outer": 71, "inner": 65, "select": 746, "phase_grad": 15, "work": 44}
     assert (record["junk_wires"], record["junk_measurements"]) == (462, 852)
     paper = costs_reference.PAPER_QUBIT_GROUPS_FEMOCO
     assert sum(paper.values()) == costs_reference.PAPER_QUBITS_FEMOCO == 1131
     assert {g: record["qubit_groups"][g] - paper[g] for g in paper} == {
-        "system": 0, "outer": 21, "inner": 12, "select": 4, "phase_grad": 0, "work": -66}
-    assert "| **total** | **1,102** | **1,131** | **-29** |" in markdown
+        "system": 0, "outer": 21, "inner": 12, "select": -49, "phase_grad": 0, "work": -66}
+    assert "| **total** | **1,049** | **1,131** | **-82** |" in markdown
     assert "852 of the M are the block encoding's own junk measurements" in markdown
     assert "Q-1, open" not in markdown and "Early junk measurement" not in markdown
     assert "`junk-qubits`" not in markdown
