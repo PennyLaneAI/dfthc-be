@@ -214,7 +214,8 @@ def test_junk_is_measured_right_after_each_prepare(name):
     """Spec 16, Q-1 variant (b): right after each prepare the rule applies H and a reset
     measurement to every wire of its junk register, in wire order, and nothing else; each
     unprepare from outcomes receives exactly the outcomes of the latest measurement of its junk
-    register, in that order (the two inner rounds measure separately)."""
+    register, in that order (the two inner rounds measure separately). The only other Hadamards
+    are ref_t2's on its target succ_x_o."""
     c = case(name)
     ops = queued(_block_encoding, c, False)
     measured, latest, seen = {}, {}, []
@@ -235,7 +236,8 @@ def test_junk_is_measured_right_after_each_prepare(name):
             outcomes = [mv.measurements[0] for mv in op.junk_outcomes]
             assert outcomes == latest[JUNK_OF[op.name]], op.name
             measured[op.name] = measured.get(op.name, 0) + 1
-        assert op.name not in ("Hadamard", "MidMeasure"), i
+        assert op.name != "MidMeasure", i
+        assert op.name != "Hadamard" or list(op.wires) == list(c.layout.succ_x_o), i
         i += 1
     assert seen == ["OuterPrepare", "InnerPrepare", "InnerPrepare"]
     assert measured == {"InnerUnprepareFromOutcomes": 2, "OuterUnprepareFromOutcomes": 1}
