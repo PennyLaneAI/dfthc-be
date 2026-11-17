@@ -68,6 +68,18 @@ def truncated_unary(L: int, controlled: bool) -> int:
     return max(L + int(controlled) - 2, 0)
 
 
+def qrom(num_controls: int, num_bitstrings: int) -> int:
+    """PennyLane's unary-iteration ``QROM`` rule with ``c - 1`` work wires (spec 9.24, "QROM
+    select"), ``c`` control wires and ``K`` bitstrings: ``N(c, K) = c + K - 2 - s(K - 1) -
+    [K > 2**(c - 1)]`` ANDs for ``c >= 2``, ``s`` the number of ones; none for ``c <= 1``."""
+    c, K = num_controls, num_bitstrings
+    if c < 0 or not 1 <= K <= 2**c:
+        raise ValueError(f"{K} bitstrings do not fit {c} control wires")
+    if c <= 1:
+        return 0
+    return c + K - 2 - bin(K - 1).count("1") - int(K > 2 ** (c - 1))
+
+
 def onehot(ob: int) -> int:
     """One-hot register over ``ob`` bits (spec 9.24): ``O(ob) = 2**ob - 2`` for ob >= 1, else 0."""
     return 2**ob - 2 if ob >= 1 else 0
@@ -107,10 +119,10 @@ def flagged_uniform_unprep(L: int, s: int) -> Cost:
     return Cost(2 * n + 2 * s - 4 if n else 0)
 
 
-def qroam_read(ranges: Sequence[Range], block_bits: int, width: int, controlled: bool) -> Cost:
-    """``QROAMRead`` (spec 9.24 row): ``U`` or ``U_2`` over the visited block ranges ``ranges``
-    plus ``(2**block_bits - 1) width`` swap-network CSWAPs."""
-    return Cost(_iteration(ranges, controlled) + (2**block_bits - 1) * width)
+def qroam_read(num_columns: int, num_controls: int, block_bits: int, width: int) -> Cost:
+    """``QROAMRead`` (spec 9.24 row): the select's ``qrom(num_controls, num_columns)`` plus
+    ``(2**block_bits - 1) width`` swap-network CSWAPs."""
+    return Cost(qrom(num_controls, num_columns) + (2**block_bits - 1) * width)
 
 
 def phase_fixup(high_ranges: Sequence[Range], onehot_bits: int, controlled: bool) -> Cost:
@@ -140,15 +152,18 @@ def reflection(n_w: int, controlled: bool) -> Cost:
 # --- L2 and L3 blocks ----------------------------------------------------------------------------
 
 
-def _outer_read_ranges(p: WalkParams) -> list[Range]:
-    """Outer read: ``[0, ceil(X_o / K1))`` on ``w_x - k1`` bits (spec 9.24)."""
-    return [(0, -(-p.X_o // p.K1), p.w_x - p.k1)]
+def outer_read_select(p: WalkParams) -> tuple[int, int]:
+    """Outer read's select (spec 9.24): ``ceil(X_o / K1)`` columns on ``w_x - k1`` control
+    wires."""
+    return p.M1, p.w_x - p.k1
 
 
-def _inner_read_ranges(p: WalkParams) -> list[Range]:
-    """Inner read: rows ``[0, RC)`` on ``w_x`` bits, then blocks ``[0, ceil((B+1)/K2))`` on
-    ``w_b - k2`` bits (spec 9.24)."""
-    return [(0, p.RC, p.w_x), (0, -(-(p.B + 1) // p.K2), p.w_b - p.k2)]
+def inner_read_select(p: WalkParams) -> tuple[int, int]:
+    """Inner read's select (spec 9.24): the columns of ``x_o ‖ b_top`` up to the last visited
+    block, ``(RC - 1) 2**(w_b - k2) + ceil((B + 1) / K2)`` (``RC 2**(w_b - k2)`` when every
+    ``b_top`` is visited), on ``w_x + w_b - k2`` control wires."""
+    return ((p.RC - 1) * 2 ** (p.w_b - p.k2) + -(-(p.B + 1) // p.K2),
+            p.w_x + p.w_b - p.k2)
 
 
 def _outer_erase_ranges(p: WalkParams) -> list[Range]:
@@ -166,7 +181,7 @@ def _inner_erase_ranges(p: WalkParams) -> list[Range]:
 
 def outer_prepare(p: WalkParams) -> Cost:
     """``OuterPrepare`` (spec 9.24 row): ``F(X_o) + T_read,out + b_k1 + w_x``, ``M = 0``."""
-    read = qroam_read(_outer_read_ranges(p), p.k1, p.d1, controlled=False)
+    read = qroam_read(*outer_read_select(p), p.k1, p.d1)
     return flagged_uniform_prep(p.X_o, p.s_u) + read + Cost(p.b_k1 + p.w_x)
 
 
@@ -179,7 +194,7 @@ def outer_unprepare(p: WalkParams) -> Cost:
 
 def inner_prepare(p: WalkParams) -> Cost:
     """``InnerPrepare`` (spec 9.24 row): ``F(B+1) + T_read,in + b_k2 + w_b``, ``M = 0``."""
-    read = qroam_read(_inner_read_ranges(p), p.k2, p.d2, controlled=False)
+    read = qroam_read(*inner_read_select(p), p.k2, p.d2)
     return flagged_uniform_prep(p.B + 1, p.s_u) + read + Cost(p.b_k2 + p.w_b)
 
 

@@ -22,8 +22,8 @@ before the erase; nothing between a prepare and its unprepare may write ``succ``
 
 **Tables.** A read entry is one big-endian integer (spec 6.7) of ``width`` bits, stored as 32-bit
 words, least significant first (L-24): ``(alt << b_k1) | keep`` for the outer read
-(:meth:`OuterPrepare.read_table`). A prepare packs its compilable tables into the read's dynamic
-``leaf_words`` inside its rule (:meth:`dfthc.ops.qroam.QROAMRead.leaf_words_from_table`); its
+(:meth:`OuterPrepare.read_table`). A prepare lays its compilable tables out as the read's dynamic
+``columns`` inside its rule (:meth:`dfthc.ops.qroam.QROAMRead.columns_from_table`); its
 unprepare passes the same table, in the same entry layout, to
 :class:`~dfthc.ops.qroam.QROAMErase`, whose masks are therefore exactly what the read loaded. The
 erase's one-hot register is the reset ``target ‖ junk``, so ``2**onehot_bits`` must not exceed
@@ -69,13 +69,12 @@ import numpy as np
 import pennylane as qp
 from pennylane.core import Operator2
 from pennylane.ops import MeasurementValue
-from pennylane.typing import AbstractArray, Wire
+from pennylane.typing import AbstractArray, Bool, Wire
 
 from dfthc.compile import register_rule, resource_key
 from dfthc.ops._validate import canonical_ints, check_int, check_wires
 from dfthc.ops.qroam import (
     WORD,
-    WORD_DTYPE,
     QROAMEmitter,
     QROAMErase,
     QROAMRead,
@@ -197,13 +196,13 @@ class _AliasSampling:
 
     def prepare(self, table, *, index, succ, succ_work, hadamards, m, less_than, cmp_work, alt,
                 keep, address, target, junk, phase_grad, work) -> None:
-        """Steps 1 to 5; the read's ``leaf_words`` come from ``table``."""
+        """Steps 1 to 5; the read's ``columns`` come from ``table``."""
         uniform, read, _ = self.work_sizes()
         FlaggedUniformPrep(self.L, self.s_u, index, succ, succ_work, phase_grad[:self.s_u],
                            work[:uniform])
         for wire in hadamards:
             qp.H(wire)
-        QROAMRead(QROAMRead.leaf_words_from_table(table, **self.read), **self.read,
+        QROAMRead(QROAMRead.columns_from_table(table, **self.read), **self.read,
                   control_value=None, address=address, target=target, junk=junk,
                   work=work[:read], control=[])
         qp.LeftQuantumComparator(keep, m, less_than, cmp_work, COMPARATOR)
@@ -262,9 +261,9 @@ class _AliasSampling:
         return resource_key(build)
 
     def prepare_resources(self) -> dict:
-        words = AbstractArray(QROAMRead.leaf_words_shape(**self.read), WORD_DTYPE)
+        columns = Bool[QROAMRead.columns_shape(**self.read)]
         sizes = QROAMRead.required_wires(**self.read, control_value=None)
-        read = resource_key(lambda: QROAMRead(words, **self.read, control_value=None,
+        read = resource_key(lambda: QROAMRead(columns, **self.read, control_value=None,
                                               **{name: Wire[n] for name, n in sizes.items()}))
         return {self._uniform_key(False): 1, qp.H: self.b_k + 1, read: 1,
                 self._comparator_key(False): 1, qp.CSWAP: lg(self.L)}
@@ -388,7 +387,7 @@ class OuterPrepare(Operator2):
     **Decomposition** (spec 9.7). ``FlaggedUniformPrep(X_o, s_u)`` on ``x_o``, ``succ_x_o``,
     ``succ_work_x_o``, ``phase_grad[:s_u]``; ``H`` on ``m_x_o`` and ``sigma_1``; ``QROAMRead`` of
     :meth:`read_table` at ``x_o`` (shape :meth:`read_shape`, no enable) into
-    ``alt_x_o ‖ keep_x_o`` and ``junk_x_o``, its ``leaf_words`` built here from the table;
+    ``alt_x_o ‖ keep_x_o`` and ``junk_x_o``, its ``columns`` built here from the table;
     ``LeftQuantumComparator(keep_x_o, m_x_o, less_than_x_o, cmp_work_x_o, "<=")``; ``w_x``
     ``CSWAP``\s of ``alt_x_o`` and ``x_o`` controlled by ``less_than_x_o``. Each child gets the
     start of ``work`` it needs.
@@ -400,9 +399,9 @@ class OuterPrepare(Operator2):
     **Cost.** :func:`dfthc.costs.outer_prepare`: :math:`T = F(X_o) + T_{read,out} + b_{k1} +
     w_x` (uniform preparation, read, comparator, swaps), ``M = 0``; ``A`` is the uniform
     preparation's :math:`2(n - 1) + 2(s_u - 1)` (0 if ``l_x = 1``; ``n = lg(l_x)``) plus the
-    read's iteration count ``U``. At FeMoco-54: :math:`30 + 156 + 15 + 9 = 210`. The ``CNOT`` and
-    ``PauliX`` counts are upper bounds: the read declares a load gate for every bit
-    (``exact=False``, spec 9.3).
+    read's select ANDs ``N``. At FeMoco-54: :math:`30 + 155 + 15 + 9 = 209`. The ``CNOT`` and
+    ``PauliX`` counts are upper bounds: the read's ``QROM`` declares a load gate for every bit
+    (spec 9.3).
 
     **Paper and dfthcbe.** Steps 1 to 4 of dfthcbe's README circuit, its ``OuterPrepare``
     (``dfthcbe/prepare.py``), with PennyLane's ``LeftQuantumComparator`` in place of
@@ -421,7 +420,7 @@ class OuterPrepare(Operator2):
         for name, size in sizes.items():
             wires[name], start = list(range(start, start + size)), start + size
         program = lambda: OuterPrepare(5, (1, 0, 0, 2, 3), (3, 2, 1, 0, 2), 2, 1, 1, 3, **wires)
-        compiled_resources(program, num_wires=start).toffoli  # F 10 + read 2 + 5, + 2 + 3 = 22
+        compiled_resources(program, num_wires=start).toffoli  # F 10 + read 1 + 5, + 2 + 3 = 21
     """
 
     compilable_argnames = ("X_o", "alt", "keep", "b_k1", "k1", "ke1", "s_u")
@@ -881,7 +880,7 @@ class InnerPrepare(Operator2):
     **Decomposition** (spec 9.8). ``FlaggedUniformPrep(B + 1, s_u)`` on ``b``, ``succ_b``,
     ``succ_work_b``, ``phase_grad[:s_u]`` (unconditionally, as in dfthcbe); ``H`` on ``sigma_0``
     and ``m_b``; ``QROAMRead`` of :meth:`read_table` at ``x_o ‖ b`` (shape :meth:`read_shape`, no
-    enable) into ``alt_b ‖ keep_b ‖ sgn ‖ d_sgn ‖ r`` and ``junk_b``, its ``leaf_words`` built
+    enable) into ``alt_b ‖ keep_b ‖ sgn ‖ d_sgn ‖ r`` and ``junk_b``, its ``columns`` built
     here from the tables; ``LeftQuantumComparator(keep_b, m_b, less_than_b, cmp_work_b, "<=")``;
     ``w_b`` ``CSWAP``\s of ``alt_b`` and ``b`` controlled by ``less_than_b``.
 
@@ -891,10 +890,10 @@ class InnerPrepare(Operator2):
 
     **Cost.** :func:`dfthc.costs.inner_prepare`: :math:`T = F(B + 1) + T_{read,in} + b_{k2} +
     w_b`, ``M = 0``; ``A`` is the uniform preparation's :math:`2(n - 1) + 2(s_u - 1)` (0 if
-    ``l_b = 1``; ``n = lg(l_b)``) plus the read's iteration count ``U``. At FeMoco-54:
-    :math:`18 + 933 + 15 + 5 = 971`, where the read carries ``r`` through its swap network (+60
+    ``l_b = 1``; ``n = lg(l_b)``) plus the read's select ANDs ``N``. At FeMoco-54:
+    :math:`18 + 932 + 15 + 5 = 970`, where the read carries ``r`` through its swap network (+60
     against dfthcbe's flat ``r``, spec 9.3). The ``CNOT`` and ``PauliX`` counts are upper bounds:
-    the read declares a load gate for every bit (``exact=False``).
+    the read's ``QROM`` declares a load gate for every bit.
 
     **Paper and dfthcbe.** Steps 5 to 8 of dfthcbe's README circuit, its ``InnerPrepare``
     (``dfthcbe/prepare.py``), with PennyLane's ``LeftQuantumComparator`` and with ``r`` in every

@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pennylane as qp
 import pytest
 
 from dfthc import costs, costs_reference
@@ -75,9 +76,30 @@ def test_phase_gradient_rotation_row():
     assert costs.phase_gradient_rotation(1, 5) == costs.phase_gradient_rotation(31, 5) == Cost(4)
 
 
+def test_qrom_select_row():
+    """PennyLane's unary QROM rule with c - 1 work wires: N(c, K) ANDs, the formula of its
+    resource function (equal to it on a grid), one fewer than our exact iteration U(0, K, c, 0)
+    on full-root ranges (its root merges the two top ANDs into CNOTs), none for c <= 1."""
+    from pennylane.templates.subroutines.qrom import _qrom_unary_iteration_resources
+    from pennylane.typing import Wire
+
+    assert costs.qrom(7, 81) == 83 == costs.unary(0, 81, 7, False) - 1  # outer read
+    assert costs.qrom(10, 540) == 542  # inner read: x_o ‖ b_top flattened, 270 * 2 columns
+    assert [costs.qrom(c, K) for c, K in [(0, 1), (1, 1), (1, 2), (2, 1), (2, 4), (3, 5)]] == [
+        0, 0, 0, 1, 1, 4]
+    for c, K in itertools.product(range(2, 9), range(1, 257)):
+        if K > 2**c:
+            continue
+        resources = _qrom_unary_iteration_resources([None] * K, Wire[c], Wire[1], Wire[c - 1])
+        assert costs.qrom(c, K) == resources[qp.TemporaryAND], (c, K)
+    for c, K in [(2, 5), (0, 2), (3, 0)]:
+        with pytest.raises(ValueError, match="bitstrings"):
+            costs.qrom(c, K)
+
+
 def test_read_and_erase_rows():
-    assert costs.qroam_read([(0, 81, 7)], 2, 24, controlled=False) == Cost(156)
-    assert costs.qroam_read([(0, 270, 9), (0, 2, 1)], 4, 26, controlled=False) == Cost(933)
+    assert costs.qroam_read(81, 7, 2, 24) == Cost(83 + 72) == Cost(155)
+    assert costs.qroam_read(540, 10, 4, 26) == Cost(542 + 390) == Cost(932)
     assert costs.phase_fixup([(0, 21, 5)], 4, controlled=False) == Cost(22 + 14)
     assert costs.phase_fixup([(0, 68, 7)], 7, controlled=False) == Cost(70 + 126)
     assert costs.qroam_erase([(0, 21, 5)], 2, 24, 4, controlled=False) == Cost(36, 96)
@@ -103,8 +125,8 @@ def test_outer_erase_covers_the_loaded_set():
 
 
 def test_block_rows():
-    assert (costs.outer_prepare(P), costs.outer_unprepare(P)) == (Cost(210), Cost(69, 96))
-    assert (costs.inner_prepare(P), costs.inner_unprepare(P)) == (Cost(971), Cost(217, 416))
+    assert (costs.outer_prepare(P), costs.outer_unprepare(P)) == (Cost(209), Cost(69, 96))
+    assert (costs.inner_prepare(P), costs.inner_unprepare(P)) == (Cost(970), Cost(217, 416))
     assert (costs.tail_angle_load(P), costs.sf_angle_load(P)) == (Cost(61), Cost(291))
     assert (costs.spin_mux(), costs.spin_swap(P)) == (Cost(1), Cost(54))
     assert (costs.givens_rotation(P), costs.givens_ladder(P)) == (Cost(28), Cost(1484))
@@ -119,7 +141,8 @@ def test_block_rows():
         Cost(2), Cost(6), Cost(6))
     assert costs.angle_erase(H2) == Cost(4, 7)
     assert costs.inner_select(H2) == Cost(33, 7)
-    assert (costs.outer_prepare(ODD), costs.outer_unprepare(ODD)) == (Cost(21), Cost(11, 12))
+    # ODD's outer read: QROM N(2, 3) = 1 where exact iteration U(0, 3, 2, 0) needs 2
+    assert (costs.outer_prepare(ODD), costs.outer_unprepare(ODD)) == (Cost(20), Cost(11, 12))
     assert (costs.inner_prepare(ODD), costs.inner_unprepare(ODD)) == (Cost(22), Cost(9, 20))
     assert (costs.tail_angle_load(ODD), costs.sf_angle_load(ODD)) == (Cost(4), Cost(12))
     assert (costs.spin_swap(ODD), costs.givens_rotation(ODD), costs.givens_ladder(ODD)) == (
@@ -143,26 +166,27 @@ def test_reflection_rows():
 
 
 def test_totals():
-    assert costs.block_encoding(P, False) == Cost(9749, 2524)
-    assert costs.block_encoding(P, True) == Cost(9750, 2524)
-    assert costs.walk(P, False) == Cost(9793, 2524)
-    assert costs.walk(P, True) == Cost(9795, 2524)
+    # FeMoco-54: the QROM select saves one AND in the outer read and one in each inner read
+    assert costs.block_encoding(P, False) == Cost(9746, 2524)
+    assert costs.block_encoding(P, True) == Cost(9747, 2524)
+    assert costs.walk(P, False) == Cost(9790, 2524)
+    assert costs.walk(P, True) == Cost(9792, 2524)
     assert costs.toffoli_only(P) == 18 + 20 + 72 + 780 + 216 + 12 == 1118
-    assert costs.measured_and_uncomputes(P, False) == 8675
-    assert costs.measured_and_uncomputes(P, True) == 8677
-    assert costs.walk(P, False).measurements + costs.measured_and_uncomputes(P, False) == 11199
-    assert costs.walk(P, True).measurements + costs.measured_and_uncomputes(P, True) == 11201
+    assert costs.measured_and_uncomputes(P, False) == 8672
+    assert costs.measured_and_uncomputes(P, True) == 8674
+    assert costs.walk(P, False).measurements + costs.measured_and_uncomputes(P, False) == 11196
+    assert costs.walk(P, True).measurements + costs.measured_and_uncomputes(P, True) == 11198
     # H2: T_Toffoli = 4 + 8 + 4 + 14 + 8 + 12; ODD: 6 + 8 + 6 + 20 + 12 + 12 (report)
     assert costs.block_encoding(H2, False) == Cost(150, 50)
     assert costs.block_encoding(H2, True) == Cost(151, 50)
     assert (costs.walk(H2, False), costs.walk(H2, True)) == (Cost(158, 50), Cost(160, 50))
     assert costs.toffoli_only(H2) == 4 + 8 + 4 + 14 + 8 + 12 == 50
     assert [costs.measured_and_uncomputes(H2, c) for c in (False, True)] == [108, 110]
-    assert costs.block_encoding(ODD, False) == Cost(240, 78)
-    assert costs.block_encoding(ODD, True) == Cost(241, 78)
-    assert (costs.walk(ODD, False), costs.walk(ODD, True)) == (Cost(252, 78), Cost(254, 78))
+    assert costs.block_encoding(ODD, False) == Cost(239, 78)
+    assert costs.block_encoding(ODD, True) == Cost(240, 78)
+    assert (costs.walk(ODD, False), costs.walk(ODD, True)) == (Cost(251, 78), Cost(253, 78))
     assert costs.toffoli_only(ODD) == 6 + 8 + 6 + 20 + 12 + 12 == 64
-    assert [costs.measured_and_uncomputes(ODD, c) for c in (False, True)] == [188, 190]
+    assert [costs.measured_and_uncomputes(ODD, c) for c in (False, True)] == [187, 189]
 
 
 def test_application_rows():
@@ -177,8 +201,8 @@ def test_application_rows():
     # literal values at the small shapes: round 1 of 3 bits is 2 T_C(W) + 1 (report)
     assert costs.qpe_round(H2, 1, 3) == Cost(2 * 160 + 1, 2 * 50)
     assert costs.iterative_qpe(H2, 3) == Cost(7 * 160 + 4, 7 * 50 + 3) == Cost(1124, 353)
-    assert costs.qpe_round(ODD, 1, 3) == Cost(2 * 254 + 1, 2 * 78) == Cost(509, 156)
-    assert costs.iterative_qpe(ODD, 2) == Cost(3 * 254 + 1, 3 * 78 + 2) == Cost(763, 236)
+    assert costs.qpe_round(ODD, 1, 3) == Cost(2 * 253 + 1, 2 * 78) == Cost(507, 156)
+    assert costs.iterative_qpe(ODD, 2) == Cost(3 * 253 + 1, 3 * 78 + 2) == Cost(760, 236)
 
 
 def test_cheapest_block_bits_is_a_brute_force_minimizer():
@@ -237,4 +261,4 @@ def test_invalid_ranges_are_rejected():
     with pytest.raises(ValueError, match="range"):
         costs.unary(0, 9, 3, controlled=False)
     with pytest.raises(ValueError, match="one or two"):
-        costs.qroam_read([], 1, 2, controlled=False)
+        costs.phase_fixup([], 1, controlled=False)

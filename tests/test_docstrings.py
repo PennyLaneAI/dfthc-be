@@ -154,14 +154,14 @@ def test_documentation_links_resolve(document):
 
 
 def test_limitations_match_the_canaries_and_spec_14():
-    """docs/limitations.md has an entry for every limitation L-1 to L-27 and L-29 of spec 14, and
-    every canary it names is a test function in tests/canary; spec 14 has the same entries and
-    names the same canaries (final review m-31)."""
+    """docs/limitations.md has an entry for every limitation L-1 to L-29 of spec 14, and every
+    canary it names is a test function in tests/canary; spec 14 has the same entries and names
+    the same canaries (final review m-31)."""
     text = (DOCS / "limitations.md").read_text()
     spec = spec_section("## 14.", "## 15.")
     for where, document in (("limitations.md", text), ("spec 14", spec)):
         numbers = [int(n) for n in re.findall(r"\*\*L-(\d+)\b", document)]
-        assert Counter(numbers) == Counter([*range(1, 28), 29]), where
+        assert Counter(numbers) == Counter(range(1, 30)), where
     canaries = set()
     for path in (REPO / "tests" / "canary").glob("test_*.py"):
         canaries |= set(re.findall(r"^def (test_\w+)", path.read_text(), re.M))
@@ -171,15 +171,16 @@ def test_limitations_match_the_canaries_and_spec_14():
     assert in_spec == named, (sorted(in_spec - named), sorted(named - in_spec))
 
 
-def test_every_l6_mitigation_names_the_three_looped_operators():
+def test_every_l6_mitigation_names_the_five_looped_operators():
     """Spec 7.4 rule 4's looped operators, never adjointed or controlled, are the ones that spec
     14's L-6, HANDOFF 7's L-6 row and docs/limitations.md's L-6 entry name, each with "never
     adjointed or controlled" (final review m-23)."""
     classes = {cls.__name__ for cls in CLASSES.values()} | {ToyControlledWalkPower.__name__}
-    rule_4 = re.search(r"`qp\.for_loop` appears in three operators.*",
+    rule_4 = re.search(r"`qp\.for_loop` appears in five operators.*",
                        spec_section("### 7.4", "### 7.5")).group(0)
     looped = set(re.findall(r"`(\w+)`", rule_4)) & classes
-    assert looped == {"QROAMRead", "ControlledWalkPower", "ToyControlledWalkPower"}
+    assert looped == {"QROAMRead", "TailAngleLoad", "SFAngleLoad", "ControlledWalkPower",
+                      "ToyControlledWalkPower"}
     entries = {
         "spec 14": re.search(r"\*\*L-6:.*?(?=\n7\. \*\*L-7)", spec_section("## 14.", "## 15."),
                              re.S).group(0),

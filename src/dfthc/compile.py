@@ -14,6 +14,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import pennylane as qp
+from pennylane.templates.subroutines.qrom import _qrom_unary_iteration
 
 GATE_SET: dict[str, int] = {
     "PauliX": 1, "PauliY": 1, "PauliZ": 1, "Hadamard": 1, "S": 1, "Adjoint(S)": 1,
@@ -28,6 +29,12 @@ ANALYZE_NAMES: frozenset[str] = frozenset(GATE_SET) - {"MidMeasure"} | {"MidCirc
 
 FIXED_DECOMPS: dict[str, Callable] = {}
 """Pinned rule for every rule key registered through :func:`register_rule` (spec section 7.5)."""
+
+PENNYLANE_PINS: dict[str, Callable] = {"QROM": _qrom_unary_iteration}
+"""Pinned rules of PennyLane operators (spec section 7.5): ``QROM`` (the select stage of
+``QROAMRead``) to its unary-iteration rule, whose resources are concrete; cost-based selection
+could pick the select-swap rule, whose counts are symbolic (L-12). A pin applies to nested
+operators of the same name (L-4), so only rules that nest none are pinned here."""
 
 _IDENTIFIER = re.compile(r"[A-Za-z_]\w*")
 _WRAPPERS = frozenset({"Adjoint", "C"})
@@ -102,8 +109,9 @@ def compiled_resources(
 
     ``qfunc`` takes no arguments and queues operations. The program is compiled once, by
     ``qp.analyze``; the decorator's ahead-of-time binary compile is off (L-27).
-    ``fixed_decomps`` replaces :data:`FIXED_DECOMPS` (pass ``{**FIXED_DECOMPS, ...}`` to add
-    pins); an empty dict disables pinning. Raises ``AssertionError`` if the counts are symbolic
+    ``fixed_decomps`` replaces the default pins, :data:`FIXED_DECOMPS` and
+    :data:`PENNYLANE_PINS` (pass ``{**FIXED_DECOMPS, **PENNYLANE_PINS, ...}`` to add pins); an
+    empty dict disables pinning. Raises ``AssertionError`` if the counts are symbolic
     or, at ``level="user"``, if an operation outside the gate set remains (T5). At
     ``level="device"`` it instead asserts that no dfthc operator survives, bare or under
     ``C(...)`` and ``Adjoint(...)`` (L-20; :func:`surviving_dfthc_operators`), and that every
@@ -111,7 +119,7 @@ def compiled_resources(
     holds only ``counts`` and ``num_wires``, with T, M and A set to ``None``, because the device
     pass rewrites ``TemporaryAND`` and ``Adjoint(TemporaryAND)`` into ``Toffoli``.
     """
-    pins = FIXED_DECOMPS if fixed_decomps is None else fixed_decomps
+    pins = {**FIXED_DECOMPS, **PENNYLANE_PINS} if fixed_decomps is None else fixed_decomps
     dev = qp.device(device, wires=num_wires)
 
     # A function without parameters is vacuously fully annotated, so qjit would compile it to a
@@ -132,7 +140,8 @@ def compiled_resources(
         if outside:
             raise AssertionError(f"operations outside the gate set remain: {outside}")
     else:
-        surviving = surviving_dfthc_operators(counts, set(FIXED_DECOMPS) | set(pins))
+        surviving = surviving_dfthc_operators(
+            counts, (set(FIXED_DECOMPS) | set(pins)) - set(PENNYLANE_PINS))
         if surviving:
             raise AssertionError(f"dfthc operators reached level={level!r}: {surviving}")
         foreign = non_native_operations(counts, dev)

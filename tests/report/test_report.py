@@ -44,11 +44,10 @@ H2_ROWS = [
     "DFTHCWalk", "DFTHCBlockEncoding", "OuterPrepare", "FlaggedUniformPrep@OuterPrepare",
     "QROAMRead@OuterPrepare", "InnerPrepare", "FlaggedUniformPrep@InnerPrepare",
     "PhaseGradientRotation", "QROAMRead@InnerPrepare", "InnerSigns", "InnerSelect",
-    "TailAngleLoad", "QROAMRead@TailAngleLoad", "SFAngleLoad", "QROAMRead@SFAngleLoad", "SpinMux",
-    "SpinSwap", "GivensLadder", "GivensRotation", "MajoranaGate", "GivensLadderDagger",
-    "Adjoint(GivensRotation)", "AngleErase", "InnerUnprepareFromOutcomes",
-    "Adjoint(FlaggedUniformPrep)@InnerUnprepareFromOutcomes", "RefT2", "InnerSelectDagger",
-    "Adjoint(MajoranaGate)", "OuterUnprepareFromOutcomes",
+    "TailAngleLoad", "SFAngleLoad", "SpinMux", "SpinSwap", "GivensLadder", "GivensRotation",
+    "MajoranaGate", "GivensLadderDagger", "Adjoint(GivensRotation)", "AngleErase",
+    "InnerUnprepareFromOutcomes", "Adjoint(FlaggedUniformPrep)@InnerUnprepareFromOutcomes",
+    "RefT2", "InnerSelectDagger", "Adjoint(MajoranaGate)", "OuterUnprepareFromOutcomes",
     "Adjoint(FlaggedUniformPrep)@OuterUnprepareFromOutcomes", "RefAB", "ControlledDFTHCWalk",
     "ControlledDFTHCBlockEncoding", "ControlledRefT2", "ControlledRefAB",
     "PhaseFixup@InnerUnprepareFromOutcomes", "PhaseFixup@OuterUnprepareFromOutcomes",
@@ -154,8 +153,8 @@ def test_report_mid(tmp_path):
                                 "ke2": 1}
     rows = {r["id"]: r for r in record["rows"]}
     assert {r["status"] for r in rows.values()} == {"measured"}
-    assert _counts(rows["DFTHCWalk"], "measured") == (1913, 502, 1678)
-    assert _counts(rows["ControlledDFTHCWalk"], "measured") == (1915, 502, 1680)
+    assert _counts(rows["DFTHCWalk"], "measured") == (1910, 502, 1675)
+    assert _counts(rows["ControlledDFTHCWalk"], "measured") == (1912, 502, 1677)
     assert all(_counts(r, "measured") == _counts(r, "closed") for r in rows.values())
 
 
@@ -334,7 +333,7 @@ def test_every_large_row_projects():
     methods = set()
     for name in ("fe2s2", "fe4s4"):
         rows, sizes = _compiled_rows(name)
-        assert len(rows) == len(sizes) == 40, name
+        assert len(rows) == len(sizes) == 38, name
         for row in rows:
             estimate = report.projection(cache, row, hash_, sizes[row.id])
             assert estimate["allowed"], (name, row.id, estimate["reason"])
@@ -460,9 +459,9 @@ def test_cache_needs_matching_code_hash(tmp_path, monkeypatch):
     assert (row["status"], _counts(row, "measured")) == ("measured", (2, 0, 0))
 
 
-BE_DFTHCBE = {"cmp-free": -93, "rot-add": 12, "exact-iter": 74, "no-prune": 2, "flat-r": 120,
+BE_DFTHCBE = {"cmp-free": -93, "rot-add": 12, "exact-iter": 71, "no-prune": 2, "flat-r": 120,
               "mux": -4, "sf-enable": 2, "onehot-pad": 40}
-BE_PAPER = {"cmp-free": -93, "rot-add": 12, "unif-odd": 6, "exact-iter": 74, "iter-const": -26,
+BE_PAPER = {"cmp-free": -93, "rot-add": 12, "unif-odd": 6, "exact-iter": 71, "iter-const": -26,
             "onehot-const": -8, "flat-r": 120, "sign-bits": 60, "no-prune": 20, "prefix-stops": 16,
             "mux": 4, "rz-addsub": -424, "maj-and": -4, "sf-enable": 2, "onehot-pad": 40,
             "ref-unif": -1}
@@ -513,7 +512,7 @@ def test_reason_codes_at_femoco(femoco_report):
             for row_id in expected} == expected
     assert [rows[row_id]["delta_paper"] for row_id in ("DFTHCWalk", "ControlledDFTHCWalk",
                                                        "ControlledWalkPower(p=2)")] == [
-        -204, -202, -404]
+        -207, -205, -410]
 
 
 def test_qpe_summary_and_wire_boundaries(femoco_report):
@@ -525,7 +524,7 @@ def test_qpe_summary_and_wire_boundaries(femoco_report):
     record, markdown = femoco_report
     cwalk = next(r for r in record["rows"] if r["id"] == "ControlledDFTHCWalk")["closed"]
     walk = next(r for r in record["rows"] if r["id"] == "DFTHCWalk")["closed"]
-    assert cwalk["measured_and_uncomputes"] == 8677
+    assert cwalk["measured_and_uncomputes"] == 8674
     for bits in (1, 2, 3, 10, 20, 23):
         qpe = record["qpe"][str(bits)]
         assert (qpe["toffoli"], qpe["measurements"], qpe["measured_and_uncomputes"]) == (
@@ -533,7 +532,7 @@ def test_qpe_summary_and_wire_boundaries(femoco_report):
             (2**bits - 1) * walk["measurements"] + bits,
             (2**bits - 1) * cwalk["measured_and_uncomputes"] + (bits**3 - bits) // 6)
     assert [record["qpe"][str(bits)]["measured_and_uncomputes"] for bits in (1, 2, 3)] == [
-        8677, 26032, 60743]
+        8674, 26023, 60722]
     assert [record["qpe"][str(bits)]["wires"] for bits in (20, 23)] == [1123, 1127]
     assert "A = (2^t - 1) A_C(W) + (t^3 - t)/6" in record["qpe_basis"]
     assert record["qpe_basis"].endswith("a compile with `--large femoco54` replaces them by the "
@@ -551,10 +550,10 @@ def test_qpe_summary_takes_m_from_the_walk(tmp_path):
     differs from the walk's (2,525 against the closed 2,524) leaves the summary's M on the walk's,
     and its basis sentence says so, naming no task: the pair is recompiled per code hash (nothing
     is compiled; the cached M fails the check, exit 1)."""
-    entry = {"code_hash": provenance.code_hash(), "status": "compiled", "toffoli": 9795,
-             "measurements": 2525, "measured_and_uncomputes": 8677, "num_wires": 1103,
-             "counts": {"Toffoli": 9795 - 8677, "TemporaryAND": 8677,
-                        "Adjoint(TemporaryAND)": 8677, "MidCircuitMeasure": 2525},
+    entry = {"code_hash": provenance.code_hash(), "status": "compiled", "toffoli": 9792,
+             "measurements": 2525, "measured_and_uncomputes": 8674, "num_wires": 1103,
+             "counts": {"Toffoli": 9792 - 8674, "TemporaryAND": 8674,
+                        "Adjoint(TemporaryAND)": 8674, "MidCircuitMeasure": 2525},
              "seconds": 1.0, "watchdog": {"peak_mb": 1.0}}
     (tmp_path / "resources.json").write_text(json.dumps(
         {"compiled": {"femoco54/ControlledDFTHCWalk": [entry]}}))
@@ -563,8 +562,8 @@ def test_qpe_summary_takes_m_from_the_walk(tmp_path):
     for bits in (1, 2, 3, 23):
         qpe = record["qpe"][str(bits)]
         assert (qpe["toffoli"], qpe["measurements"], qpe["measured_and_uncomputes"]) == (
-            (2**bits - 1) * 9795 + (bits**3 - bits) // 6, (2**bits - 1) * 2524 + bits,
-            (2**bits - 1) * 8677 + (bits**3 - bits) // 6), bits
+            (2**bits - 1) * 9792 + (bits**3 - bits) // 6, (2**bits - 1) * 2524 + bits,
+            (2**bits - 1) * 8674 + (bits**3 - bits) // 6), bits
     assert record["qpe_basis"].startswith("T and A from the compiled controlled walk, M from the "
                                           "walk (`--large femoco54`, once each per code hash): ")
     assert "Task" not in record["qpe_basis"]
@@ -582,8 +581,8 @@ def test_femoco_summary_says_how_the_walks_are_compiled(femoco_report, tmp_path)
         markdown)
     entries = {}
     for program, (toffoli, measurements, uncomputes, wires) in {
-            "DFTHCWalk": (9793, 2524, 8675, 1102),
-            "ControlledDFTHCWalk": (9795, 2524, 8677, 1103)}.items():
+            "DFTHCWalk": (9790, 2524, 8672, 1102),
+            "ControlledDFTHCWalk": (9792, 2524, 8674, 1103)}.items():
         entries[f"femoco54/{program}"] = [{
             "code_hash": provenance.code_hash(), "status": "compiled", "toffoli": toffoli,
             "measurements": measurements, "measured_and_uncomputes": uncomputes,

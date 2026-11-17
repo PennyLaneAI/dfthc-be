@@ -356,7 +356,7 @@ differs from the spec's original claim (observed 2026-11-11).
 | L-3 | Unweighted solver prefers the auto inverse over the measured rule | weighted gate set, pins, T6 |
 | L-4 | Pins apply to nested same-name operators | pin dfthc names only |
 | L-5 | Rules see dynamic arguments as tracers | structure in compilable arguments |
-| L-6 | Adjoint lowering can crash on nested control flow; **changed**: not reproduced | no control flow in auto-adjointed bodies; the looped `QROAMRead`, `ControlledWalkPower` and `ToyControlledWalkPower` are never adjointed or controlled (rule 6, inventory test) |
+| L-6 | Adjoint lowering can crash on nested control flow; **changed**: not reproduced | no control flow in auto-adjointed bodies; the looped `QROAMRead` (through its `QROM` select), `TailAngleLoad`, `SFAngleLoad`, `ControlledWalkPower` and `ToyControlledWalkPower` are never adjointed or controlled (rule 6, inventory test) |
 | L-7 | `C(ChangeOpBasis)` controls compute and uncompute under capture | explicit controlled classes (rule 6) |
 | L-8 | Generic control adds PauliX gates | explicit controlled classes (rule 6) |
 | L-9 | Controlled function calls; **changed**: left undecomposed, execution fails | no `Subroutine`; explicit controlled classes |

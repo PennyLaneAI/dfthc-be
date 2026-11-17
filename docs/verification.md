@@ -77,8 +77,8 @@ simulator against the encoded block's exact phase distribution
 Every compiled T, M and A count equals `dfthc.costs`. Table-bearing blocks use the two H2 presets
 per commit and `MID_NAPHTHALENE` nightly; table-free blocks use representative register widths,
 including FeMoco-54 widths where inexpensive. The QPE tests compile the round and full program at
-H2 sizes and `ControlledWalkPower` at `MID_NAPHTHALENE`. The FeMoco-54 values (walk 9,793
-Toffolis, controlled walk 9,795, M = 2,524, A = 8,675 and 8,677) are asserted on the closed forms
+H2 sizes and `ControlledWalkPower` at `MID_NAPHTHALENE`. The FeMoco-54 values (walk 9,790
+Toffolis, controlled walk 9,792, M = 2,524, A = 8,672 and 8,674) are asserted on the closed forms
 per commit. The resource report compiles every program of the walk at the H2 systems and
 `naphthalene` (and `fe2s2`, `fe4s4` as heavy runs), checks each against its closed form, and
 checks that the partition rows times their calls give the compiled walk. Task 4.5 compiled the

@@ -75,14 +75,15 @@ Reflections are exact, global sign included: `2|0><0| - I` is a multi-controlled
 ## Arguments and tables
 
 - Everything that determines the circuit's structure is a compilable argument; dynamic arguments
-  carry runtime data only (`QROAMRead`'s per-leaf table words, `PhaseFixup`'s parities,
+  carry runtime data only (`QROAMRead`'s bool table columns, `PhaseFixup`'s parities,
   `QPERound`'s earlier bits, the junk outcomes of `OuterUnprepareFromOutcomes` and
   `InnerUnprepareFromOutcomes`, one per junk wire in `QROAMRead.junk_layout` order). Measurement
   outcomes are a bool array under capture and an object array of `MeasurementValue`s in tape
   mode, so a resource key that declares them takes its dtype from the mode
   (`dfthc.ops.prepare.abstract_junk_outcomes`).
 - Compilable integers fit in signed 64 bits, so wide table entries are tuples of 32-bit words,
-  least significant first (L-24); dynamic table words are `int64` holding 32 data bits (L-26).
+  least significant first (L-24); table data reach the circuit as bool arrays, `QROAMRead`'s
+  dynamic columns and the angle loads' rows, one bit per target wire.
 - Adjoints use the instance form `qp.adjoint(Op(...))` (L-25).
 
 ## Numbers in tests

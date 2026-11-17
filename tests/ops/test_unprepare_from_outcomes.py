@@ -22,7 +22,14 @@ from pennylane.ops import Conditional
 from pennylane.typing import AbstractArray, Wire
 
 from dfthc import costs
-from dfthc.compile import FIXED_DECOMPS, GATE_SET, compiled_resources, register_rule, resource_key
+from dfthc.compile import (
+    FIXED_DECOMPS,
+    GATE_SET,
+    PENNYLANE_PINS,
+    compiled_resources,
+    register_rule,
+    resource_key,
+)
 from dfthc.data.factors import load_factors
 from dfthc.data.tables import WalkTables
 from dfthc.ops.prepare import (
@@ -239,7 +246,7 @@ def test_round_trip_after_the_junk_measurement(key):
 
 def lightning(num_wires, body, seed):
     @qp.qjit(capture=True, seed=seed)
-    @qp.decompose(gate_set=GATE_SET, fixed_decomps=dict(FIXED_DECOMPS))
+    @qp.decompose(gate_set=GATE_SET, fixed_decomps={**FIXED_DECOMPS, **PENNYLANE_PINS})
     @qp.qnode(qp.device("lightning.qubit", wires=num_wires))
     def circuit():
         body()
