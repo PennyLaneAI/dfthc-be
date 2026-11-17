@@ -16,11 +16,13 @@ in `dfthc.costs`:
 
 | System | Walk qubits | Ours | dfthcbe | Paper |
 | --- | ---: | ---: | ---: | ---: |
-| H2, STO-3G | 178 | 342 | 392 | 400 |
-| naphthalene | 336 | 1,913 | 1,937 | 1,965 |
-| Fe2S2 | 517 | 4,414 | 4,420 | 4,506 |
-| Fe4S4 | 792 | 6,534 | 6,336 | 6,556 |
-| FeMoco-54 | 1,102 (paper: 1,131) | 9,793 | 9,641 | 9,997 |
+| H2, STO-3G | 177 | 341 | 392 | 400 |
+| naphthalene | 327 | 1,910 | 1,937 | 1,965 |
+| Fe2S2 | 498 | 4,411* | 4,420 | 4,506 |
+| Fe4S4 | 757 | 6,533* | 6,336 | 6,556 |
+| FeMoco-54 | 1,049 (paper: 1,131) | 9,790 | 9,641 | 9,997 |
+
+\* Closed form; not recompiled since the 2026-11-17 changes (`--large fe2s2|fe4s4`).
 
 Each difference from dfthcbe and from the paper is broken down by cause in
 [`docs/resources.md`](docs/resources.md), which reports every block of every system, with
@@ -46,7 +48,7 @@ def program():
     DFTHCWalk(*case.compilable, **case.groups())
 
 res = compiled_resources(program, case.num_wires)  # qjit(capture=True), decompose, analyze
-print(res.toffoli, res.measurements, res.measured_and_uncomputes)  # 158 50 108
+print(res.toffoli, res.measurements, res.measured_and_uncomputes)  # 158 48 108
 ```
 
 Run it with `PYTHONPATH=src .venv/bin/python`. `qp.analyze` also warns that it could not determine
@@ -54,7 +56,7 @@ a conditional's branch; it raises that once per program, and the counts are exac
 
 ## Verification
 
-1,462 tests in three tiers ([`docs/verification.md`](docs/verification.md)) cover:
+1,386 tests in three tiers ([`docs/verification.md`](docs/verification.md)) cover:
 
 - per-block semantics on `lightning.qubit` and a sparse simulator;
 - the block encoding and walk end to end on H2, against the encoded Hamiltonian to 1e-10;
