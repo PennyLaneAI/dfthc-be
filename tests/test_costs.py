@@ -154,10 +154,10 @@ def test_block_rows():
 def test_reflection_rows():
     assert (costs.ref_t2(P, False), costs.ref_t2(P, True)) == (Cost(20), Cost(21))
     assert (costs.ref_ab(P, False), costs.ref_ab(P, True)) == (Cost(44), Cost(45))
-    assert [costs.zero_reflection(n, False).toffoli for n in (1, 2, 3, 6, 46)] == [0, 0, 1, 4, 44]
-    assert [costs.zero_reflection(n, True).toffoli for n in (1, 2, 3, 6, 46)] == [0, 1, 2, 5, 45]
+    assert [costs.reflection(n, False).toffoli for n in (1, 2, 3, 6, 46)] == [0, 0, 1, 4, 44]
+    assert [costs.reflection(n, True).toffoli for n in (1, 2, 3, 6, 46)] == [0, 1, 2, 5, 45]
     with pytest.raises(ValueError, match="n_w"):
-        costs.zero_reflection(0, False)
+        costs.reflection(0, False)
     for params, t2, ab in ((H2, 4, 8), (ODD, 6, 12)):  # n_w = 6, 10 and 8, 14
         assert (costs.ref_t2(params, False), costs.ref_t2(params, True)) == (
             Cost(t2), Cost(t2 + 1))

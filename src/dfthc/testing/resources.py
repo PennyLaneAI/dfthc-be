@@ -119,7 +119,7 @@ def chosen_rules(listing: str) -> list[str]:
 def captured_targets(qfunc: Callable[[], None], num_wires: int) -> list[str]:
     """The rule targets the Catalyst frontend converts while :func:`compiled_resources` compiles
     ``qfunc`` once, one name per converted target, in order: the operator name with its modifiers
-    (``Adjoint(MajoranaGate)``, ``C(RefT2)``), without the attribute dump that starts at the first
+    (``Adjoint(MajoranaGate)``, ``C(PauliZ)``), without the attribute dump that starts at the first
     ``{`` (spec 12.1, T6: the inventory test).
 
     A port of Task 0.9d's capture instrument (``spikes/k1_whole_program.capture_instrument``): it

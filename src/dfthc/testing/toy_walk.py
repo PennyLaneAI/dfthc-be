@@ -10,7 +10,7 @@ One system qubit and one LCU ancilla: PREP is a Hadamard on the ancilla, SELECT 
 
 The walk has the DFTHC walk's form :math:`\mathrm{REF}\,U^\dagger R\,U` with :math:`U` = PREP and
 :math:`R` = SELECT, itself a reflection (a Hermitian unitary). So :class:`ControlledToyWalk`
-controls exactly its two reflections, as ``ControlledDFTHCWalk`` controls ``RefAB`` and ``RefT2``:
+controls exactly its two reflections, as ``ControlledDFTHCWalk`` controls ``ref_ab`` and ``ref_t2``:
 :math:`C(W) = C(\mathrm{REF}_{anc})\,\mathrm{PREP}^\dagger\,C(\mathrm{SEL})\,\mathrm{PREP}`, and
 with the control in :math:`|0\rangle` the rest is :math:`\mathrm{PREP}^\dagger\mathrm{PREP} = I`.
 Controlling the ancilla reflection alone would leave :math:`\mathrm{PREP}^\dagger\,\mathrm{SEL}\,
@@ -176,7 +176,7 @@ class ControlledToyWalk(Operator2):
     ``X(ancilla)`` (``Z`` on the system where the control is 1 and the ancilla 0), then
     ``Toffoli(control, ancilla, system)`` (``X`` where both are 1). PREP†: ``H(ancilla)``. The
     controlled :math:`\mathrm{REF}_{anc}`: ``CZ(control, ancilla)``. SELECT is the reflection
-    inside :math:`U^\dagger R\,U` (here :math:`U` = PREP), the role ``RefT2`` plays in the DFTHC
+    inside :math:`U^\dagger R\,U` (here :math:`U` = PREP), the role ``ref_t2`` plays in the DFTHC
     walk; controlling only :math:`\mathrm{REF}_{anc}` would apply
     :math:`\mathrm{PREP}^\dagger\,\mathrm{SEL}\,\mathrm{PREP}` on the control's ``|0>``.
 

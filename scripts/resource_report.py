@@ -11,8 +11,9 @@ show their closed form, marked pending.
 
 Every row is one program, the operator exactly as the walk calls it: the rows are the distinct
 dfthc operator calls in the walk and the controlled walk (found by running each composite's pinned
-rule in tape mode, nothing compiled), two programs the walk does not call (``PhaseFixup`` with each
-erase's fix-up arguments, and ``C(ZeroReflection)`` on each reflection's pattern) and the L4
+rule in tape mode, nothing compiled), the reflection helpers' calls (rows ``RefT2``, ``RefAB``,
+``ControlledRefT2`` and ``ControlledRefAB``, found by the ``MultiControlledX`` each emits), a
+program the walk does not call (``PhaseFixup`` with each erase's fix-up arguments) and the L4
 programs (``ControlledWalkPower`` with p = 1, 2; the QPE program with t = 1, 2, 3 at the H2
 systems).
 Each program is compiled once, in its own subprocess under ``run_watched``, with
@@ -70,8 +71,8 @@ from dfthc.data.factors import load_factors, random_factors  # noqa: E402
 from dfthc.data.tables import WalkTables  # noqa: E402
 from dfthc.ops.prepare import InnerPrepare, OuterPrepare  # noqa: E402
 from dfthc.ops.qroam import PhaseFixup, QROAMErase, QROAMRead  # noqa: E402
-from dfthc.ops.reflections import ZeroReflection  # noqa: E402
-from dfthc.ops.walk import ControlledDFTHCWalk, DFTHCWalk  # noqa: E402
+from dfthc.ops.reflections import ref_ab, ref_t2, reflection_work  # noqa: E402
+from dfthc.ops.walk import REFLECTIONS, ControlledDFTHCWalk, DFTHCWalk  # noqa: E402
 from dfthc.params import FEMOCO54, H2_STO3G_TEST, WalkParams, lg, odd_part  # noqa: E402
 from dfthc.qpe import ControlledWalkPower, qpe_program  # noqa: E402
 from dfthc.registers import WalkLayout  # noqa: E402
@@ -147,17 +148,21 @@ REASON_CODES = {
 """Spec 13.3's reason codes, with the twelve this task adds (master plan Task 4.3). A row lists
 the codes whose contribution to its delta is nonzero (``costs_reference.delta_causes``)."""
 
-LEAVES = frozenset({"QROAMRead", "QROAMErase", "PhaseFixup", "AngleErase", "ZeroReflection",
-                    "SpinMux", "SpinSwap", "MajoranaGate", "InnerSigns", "PhaseGradientRotation",
-                    "GivensRotation", "TailAngleLoad", "SFAngleLoad"})
+LEAVES = frozenset({"QROAMRead", "QROAMErase", "PhaseFixup", "AngleErase", "SpinMux", "SpinSwap",
+                    "MajoranaGate", "InnerSigns", "PhaseGradientRotation", "GivensRotation",
+                    "TailAngleLoad", "SFAngleLoad"})
 """Operators whose rules call no dfthc operator; their rules are not run to find rows."""
+REFLECTION_ROWS = {"DFTHCBlockEncoding": "RefT2", "ControlledDFTHCBlockEncoding": "ControlledRefT2",
+                   "DFTHCWalk": "RefAB", "ControlledDFTHCWalk": "ControlledRefAB"}
+"""The row of the reflection helper each composite's rule calls: the helper is no operator, so the
+row is found by the ``MultiControlledX`` it emits and keeps the name of the operator it replaced."""
 COMPOSITES = frozenset({"DFTHCWalk", "ControlledDFTHCWalk", "DFTHCBlockEncoding",
                         "ControlledDFTHCBlockEncoding", "InnerSelect", "InnerSelectDagger"})
 """The partition rows are the children of these that are not in :data:`INNER_COMPOSITES`."""
 INNER_COMPOSITES = frozenset({"DFTHCBlockEncoding", "ControlledDFTHCBlockEncoding",
                               "InnerSelect", "InnerSelectDagger"})
 LEVELS = {"L1": {"PhaseGradientRotation", "FlaggedUniformPrep", "Adjoint(FlaggedUniformPrep)",
-                 "QROAMRead", "PhaseFixup", "QROAMErase", "ZeroReflection", "C(ZeroReflection)"},
+                 "QROAMRead", "PhaseFixup", "QROAMErase"},
           "L3": {"RefT2", "RefAB", "ControlledRefT2", "ControlledRefAB", "DFTHCBlockEncoding",
                  "ControlledDFTHCBlockEncoding", "DFTHCWalk", "ControlledDFTHCWalk"},
           "L4": {"ControlledWalkPower", "QPE"}}
@@ -191,9 +196,6 @@ PARENT_KEYS = {
     ("QROAMRead", "OuterPrepare"): "outer_read", ("QROAMRead", "InnerPrepare"): "inner_read",
     ("PhaseFixup", "OuterUnprepareFromOutcomes"): "outer_erase",
     ("PhaseFixup", "InnerUnprepareFromOutcomes"): "inner_erase",
-    ("ZeroReflection", "RefT2"): "ref_t2", ("ZeroReflection", "RefAB"): "ref_ab",
-    ("C(ZeroReflection)", "RefT2"): "controlled_ref_t2",
-    ("C(ZeroReflection)", "RefAB"): "controlled_ref_ab",
 }
 """The ``costs_reference`` key of the L1 rows, by class and parent class."""
 STEPS = {"OuterPrepare": "1-4", "InnerPrepare": "5-8", "InnerSigns": "9", "InnerSelect": "10-18",
@@ -213,9 +215,7 @@ PARENT_STEPS = {("FlaggedUniformPrep", "OuterPrepare"): "1",
                 ("PhaseGradientRotation", "FlaggedUniformPrep"): "1, 5",
                 ("QROAMRead", "OuterPrepare"): "2", ("QROAMRead", "InnerPrepare"): "6",
                 ("PhaseFixup", "OuterUnprepareFromOutcomes"): "26",
-                ("PhaseFixup", "InnerUnprepareFromOutcomes"): "21",
-                ("ZeroReflection", "RefT2"): "23", ("ZeroReflection", "RefAB"): "28",
-                ("C(ZeroReflection)", "RefT2"): "23", ("C(ZeroReflection)", "RefAB"): "28"}
+                ("PhaseFixup", "InnerUnprepareFromOutcomes"): "21"}
 
 
 @dataclasses.dataclass
@@ -250,6 +250,20 @@ class Row:
     op: object = None
     size_op: Callable[[], object] | None = None
     """Builds, in tape mode, the operator whose resource functions give the row's gates."""
+
+
+@dataclasses.dataclass
+class ReflectionCall:
+    """A reflection helper's call in a composite's rule, seen through the ``MultiControlledX``
+    it emits; ``name`` is its row (:data:`REFLECTION_ROWS`)."""
+
+    name: str
+    mcx: qp.MultiControlledX
+
+    @property
+    def wires(self) -> list:
+        """The control (if any), the pattern and the work."""
+        return [*self.mcx.wires, *self.mcx.work_wires]
 
 
 def build_system(name: str) -> System:
@@ -309,15 +323,20 @@ def power_program(s: System, power: int):
 
 
 def _children(op) -> list:
-    """The dfthc operators the pinned rule of ``op`` calls (tape mode, nothing compiled)."""
+    """The dfthc operators and the reflection helper's call (:class:`ReflectionCall`) the pinned
+    rule of ``op`` makes, in order (tape mode, nothing compiled)."""
     if op.name in LEAVES or op.name not in FIXED_DECOMPS:
         return []
     with qp.capture.pause(), qp.queuing.AnnotatedQueue() as queue:
         FIXED_DECOMPS[op.name](**op.arguments)
-    return [child for child in queue.queue if surviving_dfthc_operators([child.name])]
+    return [ReflectionCall(REFLECTION_ROWS[op.name], child) if child.name == "MultiControlledX"
+            else child for child in queue.queue
+            if child.name == "MultiControlledX" or surviving_dfthc_operators([child.name])]
 
 
 def _target(op):
+    if isinstance(op, ReflectionCall):
+        return op.mcx
     return op.base if op.name.startswith("Adjoint(") else op
 
 
@@ -386,19 +405,23 @@ def _fixup_program(a: dict):
     return program, lambda: build(AbstractArray((size,), bool)), start
 
 
-def _controlled_reflection_program(reflection):
-    """``qp.ctrl`` of the reflection's ``ZeroReflection`` with one more work wire. Returns
-    ``(program, size_op, wires)``."""
-    zero, one = len(reflection.zero_wires), len(reflection.one_wires)
-    work = ZeroReflection.required_wires(zero, one, True)["work"]
-    n = zero + one + work + 1
-    wires = list(range(n))
+def _reflection_program(name: str, p: WalkParams):
+    """The reflection helper of row ``name`` (:data:`REFLECTION_ROWS`) alone, as the walk calls
+    it: the control first if controlled, its registers at the layout's widths, then its work."""
+    helper = ref_ab if name.endswith("RefAB") else ref_t2
+    controlled = name.startswith("Controlled")
+    sizes = WalkLayout.register_sizes(p)
+    wires, start = {}, int(controlled)
+    for register in REFLECTIONS[helper][1]:
+        wires[register] = list(range(start, start + sizes[register]))
+        start += sizes[register]
+    work = list(range(start, start + reflection_work(start - controlled, controlled)))
 
-    def build():
-        return qp.ctrl(ZeroReflection(wires[:zero], wires[zero:zero + one],
-                                      wires[zero + one:n - 1]), control=wires[n - 1])
+    def program():
+        return ((lambda: helper(**wires, work=work, control=0 if controlled else None)),
+                start + len(work))
 
-    return (lambda: (build, n)), build, n
+    return program
 
 
 def _dirty(L: int) -> int:
@@ -435,11 +458,6 @@ def closed_form(name: str, op, p: WalkParams) -> tuple[costs.Cost, int]:
                                               a["block_bits"], a["onehot_bits"])
         cost = costs.phase_fixup(ranges, a["onehot_bits"], a["control_value"] is not None)
         return cost, cost.toffoli
-    if name in ("ZeroReflection", "C(ZeroReflection)"):
-        n_w = len(op.zero_wires) + len(op.one_wires)
-        controlled = name.startswith("C(")
-        cost = costs.zero_reflection(n_w, controlled)
-        return cost, cost.toffoli - int(n_w >= (2 if controlled else 3))
     walk_a = costs.measured_and_uncomputes(p, False)
     table = {
         "OuterPrepare": (costs.outer_prepare(p),
@@ -482,9 +500,10 @@ def _level(name: str) -> str:
 
 def build_rows(s: System) -> list[Row]:
     """Every row of ``s``: the distinct calls in the walk, then the controlled walk's own, in the
-    order of first appearance; then the two programs the walk does not call, and L4. A row's id
-    is its class name if the class appears with one signature, else ``name@parent id``, with
-    ``#2``, ``#3`` for further calls of the class under the same parent."""
+    order of first appearance; then the ``PhaseFixup`` programs the walk does not call, and L4. A
+    row's id is its class name (a reflection's: its :data:`REFLECTION_ROWS` name) if the class
+    appears with one signature, else ``name@parent id``, with ``#2``, ``#3`` for further calls of
+    the class under the same parent."""
     p = s.params
     with qp.capture.pause(), qp.queuing.AnnotatedQueue():
         roots = [_walk_op(s, False), _walk_op(s, True)]
@@ -521,9 +540,11 @@ def build_rows(s: System) -> list[Row]:
             partition=parent_name in COMPOSITES and op.name not in INNER_COMPOSITES,
             closed=closed, uncomputes=uncomputes, wires=len(op.wires),
             program=(_walk_rows_program(s, op.name) if op.name in FEMOCO_PROGRAMS
+                     else _reflection_program(op.name, p) if isinstance(op, ReflectionCall)
                      else _call_program(op)),
             key=PARENT_KEYS.get((op.name, parent_name), NAME_KEYS.get(op.name)),
-            descendants=below[sig], op=op, size_op=lambda op=op: op))
+            descendants=below[sig], op=op,
+            size_op=lambda op=op: op.mcx if isinstance(op, ReflectionCall) else op))
     rows += _extra_rows(s, rows)
     return rows
 
@@ -545,15 +566,6 @@ def _extra_rows(s: System, rows: list[Row]) -> list[Row]:
                 partition=False, closed=closed, uncomputes=uncomputes, wires=wires, program=program,
                 key=PARENT_KEYS[("PhaseFixup", row.name)], descendants=frozenset({
                     "PhaseFixup"}), size_op=size_op))
-        if row.name == "ZeroReflection":
-            program, size_op, wires = _controlled_reflection_program(row.op)
-            closed, uncomputes = closed_form("C(ZeroReflection)", row.op, p)
-            extra.append(dataclasses.replace(
-                row, id=f"C(ZeroReflection)@{row.parent}", name="C(ZeroReflection)",
-                steps=PARENT_STEPS[("C(ZeroReflection)", row.parent)], calls=0,
-                controlled_calls=0, partition=False, closed=closed, uncomputes=uncomputes,
-                wires=wires, program=program, key=PARENT_KEYS[("C(ZeroReflection)", row.parent)],
-                descendants=frozenset({"C(ZeroReflection)"}), size_op=size_op))
     walk = next(row for row in rows if row.name == "ControlledDFTHCWalk")
     for power in POWERS:
         extra.append(Row(

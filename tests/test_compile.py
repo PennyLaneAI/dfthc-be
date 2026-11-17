@@ -202,11 +202,11 @@ def test_compiled_resources_rejects_operations_outside_gate_set(monkeypatch):
 
 
 def test_surviving_dfthc_operators_sees_wrapped_names():
-    keys = ["OuterPrepare", "Adjoint(OuterPrepare)", "C(RefT2)"]
-    names = ["OuterPrepare", "C(OuterPrepare)", "Adjoint(OuterPrepare)", "Adjoint(C(RefT2))",
+    keys = ["OuterPrepare", "Adjoint(OuterPrepare)", "C(SpinSwap)"]
+    names = ["OuterPrepare", "C(OuterPrepare)", "Adjoint(OuterPrepare)", "Adjoint(C(SpinSwap))",
              "OuterPrepareX", "CNOT", "C(PauliX)", "Adjoint(TemporaryAND)"]
     assert surviving_dfthc_operators(names, keys) == [
-        "Adjoint(C(RefT2))", "Adjoint(OuterPrepare)", "C(OuterPrepare)", "OuterPrepare",
+        "Adjoint(C(SpinSwap))", "Adjoint(OuterPrepare)", "C(OuterPrepare)", "OuterPrepare",
     ]
 
 

@@ -139,11 +139,13 @@ def qroam_erase(ranges: Sequence[Range], block_bits: int, width: int, onehot_bit
     return Cost(fixup.toffoli, 2**block_bits * width)
 
 
-def zero_reflection(n_w: int, controlled: bool) -> Cost:
-    """``ZeroReflection`` on ``n_w`` wires (spec 9.24 row): ``T = max(n_w - 2, 0)``, controlled
+def reflection(n_w: int, controlled: bool) -> Cost:
+    """A reflection about a pattern of ``n_w`` wires, a ``MultiControlledX``-based
+    multi-controlled Z with ``GlobalPhase(pi)`` or, controlled, with ``Z`` on the control (spec
+    9.24 row): ``T = max(n_w - 2, 0)``, controlled
     ``n_w - 1``."""
     if n_w < 1:
-        raise ValueError(f"ZeroReflection needs n_w >= 1; got {n_w}")
+        raise ValueError(f"a reflection needs n_w >= 1; got {n_w}")
     return Cost(n_w - 1 if controlled else max(n_w - 2, 0))
 
 
@@ -273,13 +275,13 @@ def inner_select(p: WalkParams) -> Cost:
 
 
 def ref_t2(p: WalkParams, controlled: bool) -> Cost:
-    """``RefT2`` (spec 9.24 row): ``ZeroReflection`` with ``n_w = w_b + b_k2 + 2``."""
-    return zero_reflection(p.w_b + p.b_k2 + 2, controlled)
+    """``ref_t2`` (spec 9.24 row): :func:`reflection` with ``n_w = w_b + b_k2 + 2``."""
+    return reflection(p.w_b + p.b_k2 + 2, controlled)
 
 
 def ref_ab(p: WalkParams, controlled: bool) -> Cost:
-    """``RefAB`` (spec 9.24 row): ``ZeroReflection`` with ``n_w = w_x + b_k1 + w_b + b_k2 + 2``."""
-    return zero_reflection(p.w_x + p.b_k1 + p.w_b + p.b_k2 + 2, controlled)
+    """``ref_ab`` (spec 9.24 row): :func:`reflection` with ``n_w = w_x + b_k1 + w_b + b_k2 + 2``."""
+    return reflection(p.w_x + p.b_k1 + p.w_b + p.b_k2 + 2, controlled)
 
 
 def junk_measurements(p: WalkParams) -> Cost:
@@ -292,14 +294,14 @@ def junk_measurements(p: WalkParams) -> Cost:
 
 def block_encoding(p: WalkParams, controlled: bool) -> Cost:
     """``DFTHCBlockEncoding`` (spec 9.24 row): ``T_out + T_out^dag + 2 (T_in + T_sel + T_in^dag)
-    + T_RefT2`` (``InnerSigns`` costs 0), ``M = K1 d1 + 2 (K2 d2 + (N - 1)(b_rot - 1) + 3)``;
-    the controlled version controls only ``RefT2``."""
+    + T_ref_t2`` (``InnerSigns`` costs 0), ``M = K1 d1 + 2 (K2 d2 + (N - 1)(b_rot - 1) + 3)``;
+    the controlled version controls only ``ref_t2``."""
     inner = inner_prepare(p) + inner_select(p) + inner_unprepare(p)
     return outer_prepare(p) + outer_unprepare(p) + 2 * inner + ref_t2(p, controlled)
 
 
 def walk(p: WalkParams, controlled: bool) -> Cost:
-    """``DFTHCWalk`` and the controlled walk (spec 9.24 row): ``T_BE + T_RefAB``, controlled
+    """``DFTHCWalk`` and the controlled walk (spec 9.24 row): ``T_BE + T_ref_ab``, controlled
     ``+2``; ``M = M_BE``."""
     return block_encoding(p, controlled) + ref_ab(p, controlled)
 

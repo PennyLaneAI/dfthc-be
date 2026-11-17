@@ -8,7 +8,6 @@ from pennylane.wires import Wires
 
 from dfthc.ops._validate import check_wires
 from dfthc.ops.majorana import MajoranaGate
-from dfthc.ops.reflections import ZeroReflection
 from dfthc.ops.spin import SpinSwap
 
 
@@ -32,7 +31,6 @@ def test_distinct_wires_pass_in_every_register_form():
     the longer registers that at_least permits (phase_grad, work)."""
     check_wires("Op", {"a": [0, 1], "r": [], "phase_grad": Wires([2, 3, 4]), "work": ["w0", "w1"]},
                 {"a": 2, "r": 0, "phase_grad": 2, "work": 1}, at_least=("phase_grad", "work"))
-    ZeroReflection([0, 1, 2], [3], work=[4, 5, 6])
 
 
 def test_abstract_wires_and_tracers_are_not_compared():

@@ -124,8 +124,7 @@ def test_inventory_of_the_qpe_program():
     program, num_wires = qpe_program(c.params, c.tables, 2)
     names = captured_targets(program, num_wires)
     assert {"QPERound", "ControlledWalkPower", "ControlledDFTHCWalk",
-            "ControlledDFTHCBlockEncoding", "ControlledRefT2", "ControlledRefAB",
-            "PhaseGradientRotation"} <= set(names)
+            "ControlledDFTHCBlockEncoding", "PhaseGradientRotation"} <= set(names)
     assert names.count("QPERound") == 2 and names.count("ControlledWalkPower") == 2
     assert not [name for name in names if "C(" in name]
     assert inventory(names) == LEAF_ADJOINTS | TEMPLATE_ADJOINTS
