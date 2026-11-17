@@ -42,10 +42,11 @@ def load_bits(value, wires):
 
 
 def angle_value(x, b_rot):
-    """The angle registers' big-endian integer: register k (rung k) holds x[k]."""
+    """The angle registers' big-endian integer: register k (rung k, b_rot - 1 wires) holds
+    x[k]."""
     value = 0
     for x_k in x:
-        value = (value << b_rot) | int(x_k)
+        value = (value << (b_rot - 1)) | int(x_k)
     return value
 
 
@@ -96,10 +97,10 @@ def rung_matrix(x, b_rot):
 @pytest.mark.parametrize("b_rot", [2, 3, 4])
 def test_rung_matrix_for_every_angle(b_rot):
     """The dense 4 x 4 action on the mode qubits from all four basis inputs, the angle and
-    phase-gradient registers projected out, for every x < 2**b_rot (the stored angles use
-    x < 2**(b_rot - 1)): the sign of spec 6.3, no global phase and no leakage."""
+    phase-gradient registers projected out, for every x < 2**(b_rot - 1) that the angle register
+    holds: the sign of spec 6.3, no global phase and no leakage."""
     matrix = compiled_matrix(rung, 2, b_rot)
-    for x in range(2**b_rot):
+    for x in range(2 ** (b_rot - 1)):
         assert np.allclose(matrix([x]), rung_matrix(x, b_rot), rtol=0, atol=1e-10), x
         assert np.allclose(rung_matrix(x, b_rot), ladder_matrix(np.array([x]), b_rot, 2), rtol=0,
                            atol=1e-12)
@@ -111,12 +112,12 @@ def test_auto_derived_rung_adjoint_rotates_back(b_rot):
     """qp.adjoint(GivensRotation(...)), the leaf adjoint GivensLadderDagger uses, is the
     transposed rung (theta -> -theta) for every x."""
     matrix = compiled_matrix(adjoint_rung, 2, b_rot)
-    for x in range(2**b_rot):
+    for x in range(2 ** (b_rot - 1)):
         assert np.allclose(matrix([x]), rung_matrix(x, b_rot).T, rtol=0, atol=1e-10), x
 
 
 # (b_rot, integer angles below 2**(b_rot - 1)) per N. At b_rot = 4 the rungs turn by multiples
-# of 45 degrees; N = 4 uses b_rot = 3 (90 degrees) to stay at 18 lightning wires. The angles are
+# of 45 degrees; N = 4 uses b_rot = 3 (90 degrees) to stay at 15 lightning wires. The angles are
 # distinct, and for N >= 3 both the opposite rung order and the reversed register order give
 # different unitaries (asserted below), so the test pins both. At N = 3, u has a nonzero odd
 # component, so the gamma_0 identity also sees a flipped rung sign (u_j -> (-1)^j u_j).
@@ -248,7 +249,7 @@ def test_rung_toffoli_count(p, adjoint):
                          ids=["sto3g", "631g", "mid", "femoco-width"])
 def test_ladder_toffoli_count(p, cls):
     """T4 at both test presets, MID_NAPHTHALENE and FeMoco-54's widths (N = 54, b_rot = 15: a
-    table-free 53-rung ladder on 878 wires, about 1.5 s, which master plan section 7 allows in any
+    table-free 53-rung ladder on 825 wires, about 1.5 s, which master plan section 7 allows in any
     tier): T = 2 (b_rot - 1)(N - 1) for the ladder and the dagger, 1,484 at FeMoco-54; A = T,
     M = 0."""
     resources = compiled_resources(*ladder_program(cls, p.N, p.b_rot))
@@ -261,7 +262,7 @@ def test_femoco_counts_on_the_closed_form():
     """FeMoco-54 on the closed forms: 28 per rung, 1,484 per ladder and per dagger (spec 9.24)."""
     assert costs.givens_rotation(FEMOCO54) == costs.Cost(28)
     assert costs.givens_ladder(FEMOCO54) == costs.Cost(2 * 14 * 53) == costs.Cost(1484)
-    assert GivensLadder.required_wires(15, 54) == {"system": 54, "angles": 795,
+    assert GivensLadder.required_wires(15, 54) == {"system": 54, "angles": 742,
                                                    "phase_grad": 15, "work": 14}
 
 
@@ -274,8 +275,8 @@ def test_pinned_rules_are_chosen_and_nothing_survives_at_device_level(capfd):
     def program():
         GivensLadder(3, **wires)
         GivensLadderDagger(3, **wires)
-        rung(wires["system"][:2], wires["angles"][:3], wires["phase_grad"], wires["work"])
-        adjoint_rung(wires["system"][:2], wires["angles"][:3], wires["phase_grad"],
+        rung(wires["system"][:2], wires["angles"][:2], wires["phase_grad"], wires["work"])
+        adjoint_rung(wires["system"][:2], wires["angles"][:2], wires["phase_grad"],
                      wires["work"])
 
     qp.analyze(verbose_program(program, num_wires), level="user")()
@@ -294,7 +295,7 @@ def test_rules_are_valid(num_modes, b_rot):
         assert list(qp.list_decomps(cls)) == [rule]
     wires, _ = layout(num_modes, b_rot)
     qp.testing.assert_valid_decomp_rule(
-        GivensRotation(wires["system"][:1], wires["system"][1:2], wires["angles"][:b_rot],
+        GivensRotation(wires["system"][:1], wires["system"][1:2], wires["angles"][:b_rot - 1],
                        wires["phase_grad"], wires["work"]), _givens_rotation, check_matrix=False)
     qp.testing.assert_valid_decomp_rule(GivensLadder(b_rot, **wires), _givens_ladder,
                                         check_matrix=False)
@@ -303,23 +304,24 @@ def test_rules_are_valid(num_modes, b_rot):
 
 
 def test_required_wires():
-    assert GivensRotation.required_wires(4) == {"q_i": 1, "q_j": 1, "angle": 4, "phase_grad": 4,
+    assert GivensRotation.required_wires(4) == {"q_i": 1, "q_j": 1, "angle": 3, "phase_grad": 4,
                                                 "work": 3}
-    assert GivensLadder.required_wires(4, 2) == GivensLadderDagger.required_wires(4, 2) == {
-        "system": 2, "angles": 4, "phase_grad": 4, "work": 3}
+    assert GivensLadder.required_wires(4, 3) == GivensLadderDagger.required_wires(4, 3) == {
+        "system": 3, "angles": 6, "phase_grad": 4, "work": 3}
 
 
 @pytest.mark.parametrize(("build", "match"), [
-    (lambda: GivensRotation([0], [1], [2], [3], []), r"b_rot = len\(angle\) must lie in \[2,"),
-    (lambda: GivensRotation([0], [1], [2, 3, 4], [5, 6], [7, 8]),
-     "'phase_grad' has 2 wires; expected 3"),
-    (lambda: GivensRotation([0, 9], [1], [2, 3], [5, 6], [7]), "'q_i' has 2 wires; expected 1"),
+    (lambda: GivensRotation([0], [1], [], [3], []),
+     r"b_rot = len\(phase_grad\) must lie in \[2,"),
+    (lambda: GivensRotation([0], [1], [2, 3, 4], [5, 6, 7], [8, 9]),
+     "'angle' has 3 wires; expected 2"),
+    (lambda: GivensRotation([0, 9], [1], [2], [5, 6], [7]), "'q_i' has 2 wires; expected 1"),
     (lambda: GivensLadder(3, [0], [], [1, 2, 3], [4, 5]), "system needs N >= 2"),
     (lambda: GivensLadder(3, [0, 1, 2], [3, 4, 5], [6, 7, 8], [9, 10]),
-     "'angles' has 3 wires; expected 6"),
+     "'angles' has 3 wires; expected 4"),
     (lambda: GivensLadderDagger(1, [0, 1], [2], [3], []), r"b_rot must lie in \[2,"),
     (lambda: GivensLadderDagger(2, [0, 1], [2, 3, 9], [4, 5], [6]),
-     "'angles' has 3 wires; expected 2"),
+     "'angles' has 3 wires; expected 1"),
 ])
 def test_constructors_validate(build, match):
     with pytest.raises(ValueError, match=match):

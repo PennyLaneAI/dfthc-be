@@ -49,9 +49,9 @@ def random_tables(p, seed=3):
 
 
 def register_value(angles, b_rot):
-    """The angle registers' big-endian integer when register k holds angles[k] (spec 6.7), written
-    out bit by bit, independently of the module's angle_entry."""
-    return int("".join(format(angle, f"0{b_rot}b") for angle in angles), 2)
+    """The angle registers' big-endian integer when register k, of b_rot - 1 bits, holds
+    angles[k] (spec 6.7), written out bit by bit, independently of the module's angle_entry."""
+    return int("".join(format(angle, f"0{b_rot - 1}b") for angle in angles), 2)
 
 
 def vendored_tables(system, p):
@@ -61,7 +61,7 @@ def vendored_tables(system, p):
 
 RANDOM_R3 = WalkParams(N=3, R=3, B=3, C=1, n_plus=1, b_rot=3, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1,
                        ke1=1, ke2=1)
-RANDOM_R1 = WalkParams(N=2, R=1, B=2, C=2, n_plus=2, b_rot=3, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1,
+RANDOM_R1 = WalkParams(N=2, R=1, B=2, C=2, n_plus=2, b_rot=4, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1,
                        ke1=1, ke2=1)
 SHAPES = {
     "sto3g": (H2_STO3G_TEST, vendored_tables("h2_sto3g_R2_B2_C1", H2_STO3G_TEST)),
@@ -73,7 +73,7 @@ SHAPES = {
 
 def layout(p, tail, sf, ob):
     """Wires: x_o, r, b, angles, G0, G1, b_neq_B, then work for the largest of the three."""
-    sizes = {"x_o": p.w_x, "r": p.w_r, "b": p.w_b, "angles": (p.N - 1) * p.b_rot, "G0": 1,
+    sizes = {"x_o": p.w_x, "r": p.w_r, "b": p.w_b, "angles": (p.N - 1) * (p.b_rot - 1), "G0": 1,
              "G1": 1, "b_neq_B": 1}
     works = (TailAngleLoad.required_wires(tail, p.n_plus, p.RC, p.X_o, p.b_rot)["work"],
              SFAngleLoad.required_wires(sf, p.R, p.B, p.b_rot)["work"],
@@ -102,10 +102,11 @@ def make_erase(p, tail, sf, ob, wires, works):
 
 def expected_cost(p, ob):
     """The erase's closed form for any SF one-hot width ob: the SF fix-up (enabled) over
-    sf_fixup_high_ranges plus the tail fix-up (no one-hot, no enable); M = (N - 1) b_rot + 3."""
+    sf_fixup_high_ranges plus the tail fix-up (no one-hot, no enable);
+    M = (N - 1)(b_rot - 1) + 3."""
     sf = costs.phase_fixup(AngleErase.sf_fixup_high_ranges(p.R, p.B, ob), ob, True)
     tail = costs.phase_fixup(AngleErase.tail_fixup_high_ranges(p.N, p.R, p.C), 0, False)
-    return costs.Cost(sf.toffoli + tail.toffoli, (p.N - 1) * p.b_rot + 3)
+    return costs.Cost(sf.toffoli + tail.toffoli, (p.N - 1) * (p.b_rot - 1) + 3)
 
 
 def compiled_erase(p, tail, sf, ob):
@@ -125,7 +126,7 @@ def assert_counts(resources, expected):
 @pytest.mark.parametrize("name", ["sto3g", "631g"])
 def test_counts_at_the_test_presets(name):
     """T4 at H2_STO3G_TEST and H2_631G_TEST (vendored tables, ob = w_b): dfthc.costs.angle_erase,
-    M = (N - 1) b_rot + 3 (7 and 15)."""
+    M = (N - 1)(b_rot - 1) + 3 (6 and 12)."""
     p, (tail, sf) = SHAPES[name]
     assert_counts(compiled_erase(p, tail, sf, p.w_b), costs.angle_erase(p))
 
@@ -133,7 +134,7 @@ def test_counts_at_the_test_presets(name):
 @pytest.mark.compiled
 @pytest.mark.slow
 def test_counts_at_mid_naphthalene():
-    """T4 at MID_NAPHTHALENE (naphthalene tables, nightly tier): T = 26, M = 138."""
+    """T4 at MID_NAPHTHALENE (naphthalene tables, nightly tier): T = 26, M = 129."""
     p = MID_NAPHTHALENE
     assert_counts(compiled_erase(p, *vendored_tables("naphthalene", p), p.w_b),
                   costs.angle_erase(p))
@@ -153,26 +154,26 @@ def test_fixup_high_ranges_agree_with_the_cost_model():
     """The erase's fix-up ranges are the oracle of dfthc.costs.angle_erase: at ob = w_b it equals
     the two fix-ups' closed forms at the presets, FeMoco-54 included, and on a grid of shapes with
     R from 1 to 6, B from 1 to 8, N from 2 to 5, C from 1 to 3 whose select one-hot fits,
-    2**w_b <= (N - 1) b_rot + 1 (spec 8.3)."""
+    2**w_b <= (N - 1)(b_rot - 1) + 1 (spec 8.3)."""
     assert AngleErase.sf_fixup_high_ranges(10, 27, 5) == [(0, 10, 4)]
     assert AngleErase.tail_fixup_high_ranges(54, 10, 27) == [(270, 324, 9)]
     grid = [WalkParams(N=n, R=r, B=b, C=c, n_plus=1, b_rot=4, b_k1=2, b_k2=2, s_u=3, k1=0, k2=0,
                        ke1=0, ke2=0)
             for n, r, b, c in itertools.product(range(2, 6), range(1, 7), range(1, 9), (1, 2, 3))
-            if 2 ** lg(b + 1) <= (n - 1) * 4 + 1]
+            if 2 ** lg(b + 1) <= (n - 1) * 3 + 1]
     for p in [FEMOCO54, H2_STO3G_TEST, H2_631G_TEST, MID_NAPHTHALENE, *grid]:
         assert costs.angle_erase(p) == expected_cost(p, p.w_b), p
 
 
 def test_femoco_counts_on_the_closed_form():
-    """FeMoco-54 on the closed forms: T = (11 + 30) + 61 = 102, M = 53 * 15 + 3 = 798; work is the
+    """FeMoco-54 on the closed forms: T = (11 + 30) + 61 = 102, M = 53 * 14 + 3 = 745; work is the
     tail fix-up's 8 wires (the SF fix-up needs 4)."""
     p = FEMOCO54
-    assert costs.angle_erase(p) == costs.Cost(11 + 30 + 61, 798) == costs.Cost(102, 798)
+    assert costs.angle_erase(p) == costs.Cost(11 + 30 + 61, 745) == costs.Cost(102, 745)
     tail = tuple((0,) * 53 for _ in range(54))
     sf = tuple(tuple((0,) * 53 for _ in range(27)) for _ in range(10))
     assert AngleErase.required_wires(tail, sf, 27, 54, 10, 27, 27, 15, 5) == {
-        "angles": 795, "b_neq_B": 1, "G0": 1, "G1": 1, "x_o": 9, "r": 4, "b": 5, "work": 8}
+        "angles": 742, "b_neq_B": 1, "G0": 1, "G1": 1, "x_o": 9, "r": 4, "b": 5, "work": 8}
 
 
 @pytest.mark.compiled
@@ -232,7 +233,7 @@ SEEDS = [0, *(pytest.param(seed, marks=pytest.mark.slow) for seed in range(1, 5)
 @pytest.mark.compiled
 @pytest.mark.parametrize("seed", SEEDS)
 def test_lightning_smoke_run(seed):
-    """Compiled loads then erase at H2_STO3G_TEST (15 wires) restore a phased state of x_o, r and
+    """Compiled loads then erase at H2_STO3G_TEST (14 wires) restore a phased state of x_o, r and
     b and clear every ancilla, for five measurement seeds (seeds 1 to 4 in the nightly tier;
     the certificates prove every outcome, this runs the compiled path)."""
     p, (tail, sf) = SHAPES["sto3g"]
@@ -284,7 +285,7 @@ def test_round_trip_under_forced_schedules(name, ob):
     amps = rng.normal(size=size) + 1j * rng.normal(size=size)
     initial = SparseState(num_wires, keys, amps / np.linalg.norm(amps))
     expected_keys, expected_amps = sorted_terms(initial)
-    num_measured = (p.N - 1) * p.b_rot + 3
+    num_measured = (p.N - 1) * (p.b_rot - 1) + 3
     for schedule in [[1] * num_measured, *rng.integers(0, 2, (2, num_measured)).tolist()]:
         simulator = SparseSimulator(num_wires, policy=ForcedPolicy(schedule), strict=True)
         keys, amps = sorted_terms(simulator.run(operations, initial_state=initial))
@@ -300,7 +301,8 @@ def erase_masks(p, tail, sf):
                 for r in range(p.R) for b in range(p.B)]
     tail_masks = [(register_value(row, p.b_rot) << 3) | 2 | int(j >= p.n_plus)
                   for j, row in enumerate(tail)]
-    return [(sf_masks, (p.N - 1) * p.b_rot + 1), (tail_masks, (p.N - 1) * p.b_rot + 3)]
+    width = (p.N - 1) * (p.b_rot - 1)
+    return [(sf_masks, width + 1), (tail_masks, width + 3)]
 
 
 class MaskRecorder(QROAMEmitter):
@@ -329,7 +331,7 @@ def rule_masks(p, tail, sf):
 def test_no_mask_is_zero_and_parities_are_linear():
     """Spec 12.5's linearity for the erase's masks, which are never zero (the b_neq_B and G0
     bits): the masks the rule builds equal erase_masks, then the capture core at the FeMoco-54
-    shapes (270 SF masks over 796 outcomes, 54 tail masks over 798, random tables with a zero
+    shapes (270 SF masks over 743 outcomes, 54 tail masks over 745, random tables with a zero
     angle entry in each; classical, nothing compiled) and the tape implementation at
     H2_631G_TEST, both with f(0) = 0 and f(x ^ y) = f(x) ^ f(y) for 100 random pairs."""
     p = FEMOCO54
@@ -386,9 +388,9 @@ def test_rule_is_valid_in_tape_mode(name, ob):
 
 
 def erase_args(**changes):
-    """Valid AngleErase arguments (N = 2, R = B = 2, C = 1, b_rot = 3, ob = 2), with changes."""
+    """Valid AngleErase arguments (N = 2, R = B = 2, C = 1, b_rot = 4, ob = 2), with changes."""
     return {"tail_angles": ((1,), (2,)), "sf_angles": (((1,), (2,)), ((3,), (0,))), "n_plus": 1,
-            "N": 2, "R": 2, "B": 2, "C": 1, "b_rot": 3, "sf_onehot_bits": 2,
+            "N": 2, "R": 2, "B": 2, "C": 1, "b_rot": 4, "sf_onehot_bits": 2,
             "angles": [0, 1, 2], "b_neq_B": [3], "G0": [4], "G1": [5], "x_o": [6, 7], "r": [8],
             "b": [9, 10], "work": [11]} | changes
 
@@ -402,10 +404,10 @@ def test_required_wires():
 
 DOMAIN_CHANGES = [
     {"sf_onehot_bits": 3},
-    {"b_rot": 2, "tail_angles": ((1,), (0,)), "sf_angles": (((1,), (0,)), ((0,), (1,)))},
+    {"b_rot": 3},
     {"N": 3}, {"N": 1}, {"C": 0}, {"R": 0}, {"tail_angles": 3}, {"n_plus": 3},
     {"sf_angles": (((1, 1), (2, 2)), ((3, 3), (0, 0)))},
-    {"sf_angles": (((1,), (4,)), ((3,), (0,)))},
+    {"sf_angles": (((1,), (8,)), ((3,), (0,)))},
 ]
 """Invalid compilable arguments of ``erase_args``: the one-hot range and capacity, the sizes, the
 table shapes and the angle range."""
@@ -429,12 +431,11 @@ def test_select_and_erase_reject_the_same_domains_with_the_same_message(change):
 
 @pytest.mark.parametrize(("change", "match"), [
     ({"sf_onehot_bits": 3}, r"SF one-hot bits must lie in \[0, 2\]"),
-    ({"b_rot": 2, "angles": [0, 1], "tail_angles": ((1,), (0,)),
-      "sf_angles": (((1,), (0,)), ((0,), (1,)))}, "needs 4 wires, more than the 3 reset angle"),
+    ({"b_rot": 3, "angles": [0, 1]}, "needs 4 wires, more than the 3 reset angle"),
     ({"N": 3}, "tail_angles must have N = 3 rows"),
     ({"tail_angles": 3}, "tail_angles must have N = 2 rows"),
     ({"sf_angles": (((1, 1), (2, 2)), ((3, 3), (0, 0)))}, "sf_angles N - 1 = 1 angles per entry"),
-    ({"sf_angles": (((1,), (4,)), ((3,), (0,)))}, r"angles must lie in \[0, 2\*\*\(b_rot - 1\)"),
+    ({"sf_angles": (((1,), (8,)), ((3,), (0,)))}, r"angles must lie in \[0, 2\*\*\(b_rot - 1\)"),
     ({"work": []}, "'work' has 0 wires; expected 1"),
 ])
 def test_constructor_validates(change, match):

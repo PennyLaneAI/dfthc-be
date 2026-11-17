@@ -133,10 +133,10 @@ def test_inventory_of_the_qpe_program():
 
 def test_qpe_closed_forms_at_femoco():
     """Spec 11.3: no compile at FeMoco-54 shape; the closed form with T_C(W) = 9,792 and
-    M_W = 2,524 (Task 4.5 compiles those two) gives T = 9,792, 29,377, 68,548 and
-    M = 2,525, 7,574, 17,671 for t = 1, 2, 3."""
+    M_W = 2,418 (Task 4.5 compiles those two) gives T = 9,792, 29,377, 68,548 and
+    M = 2,419, 7,256, 16,929 for t = 1, 2, 3."""
     assert [costs.iterative_qpe(FEMOCO54, t) for t in (1, 2, 3)] == [
-        costs.Cost(9792, 2525), costs.Cost(29377, 7574), costs.Cost(68548, 17671)]
+        costs.Cost(9792, 2419), costs.Cost(29377, 7256), costs.Cost(68548, 16929)]
 
 
 if __name__ == "__main__":

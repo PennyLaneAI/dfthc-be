@@ -2,7 +2,8 @@
 
 **Rung.** On the mode qubits ``(q_k, q_{k+1})``, big-endian (spec 6.7), a rung fixes ``|00>``
 and ``|11>`` and rotates ``{|01>, |10>}`` by ``[[cos t, -sin t], [sin t, cos t]]`` with
-``t = 4 pi x / 2**b_rot``, where ``x`` is the integer in the rung's angle register (spec 6.3).
+``t = 4 pi x / 2**b_rot``, where ``x < 2**(b_rot - 1)`` is the integer in the rung's
+``(b_rot - 1)``-wire angle register (spec 6.3).
 It is dfthcbe's ``GivensRotationByPhaseGradient``: a Clifford basis change around two ``Rz(t)``,
 each an addition of ``x`` into the phase-gradient register or a subtraction, as the qubit says.
 
@@ -27,19 +28,20 @@ class GivensRotation(Operator2):
     r"""One rung of the Givens ladder: a real rotation of ``{|01>, |10>}`` by the loaded angle.
 
     **Action.** On ``(q_i, q_j)``, with :math:`\theta = 4\pi x/2^{b_{rot}}` and ``x`` the
-    big-endian integer in ``angle``: :math:`|00\rangle` and :math:`|11\rangle` are fixed,
-    :math:`|01\rangle \mapsto \cos\theta|01\rangle + \sin\theta|10\rangle` and
-    :math:`|10\rangle \mapsto -\sin\theta|01\rangle + \cos\theta|10\rangle`, exactly, with no
-    global phase (spec 6.3). ``angle`` is unchanged; ``phase_grad`` is returned unchanged.
+    big-endian integer in ``angle``, so :math:`x < 2^{b_{rot} - 1}`: :math:`|00\rangle` and
+    :math:`|11\rangle` are fixed, :math:`|01\rangle \mapsto \cos\theta|01\rangle +
+    \sin\theta|10\rangle` and :math:`|10\rangle \mapsto -\sin\theta|01\rangle +
+    \cos\theta|10\rangle`, exactly, with no global phase (spec 6.3). ``angle`` is unchanged;
+    ``phase_grad`` is returned unchanged.
 
-    **Registers.** With :math:`b_{rot}` = ``len(angle)``:
+    **Registers.** With :math:`b_{rot}` = ``len(phase_grad)``:
 
     ============== ========================= ====================== ====================
     name           width                     input                  output
     ============== ========================= ====================== ====================
     ``q_i``        1                         any                    rotated
     ``q_j``        1                         any                    rotated
-    ``angle``      :math:`b_{rot}`           any (``x``)            unchanged
+    ``angle``      :math:`b_{rot} - 1`       any (``x``)            unchanged
     ``phase_grad`` :math:`b_{rot}`           phase-gradient state   unchanged (catalysed)
     ``work``       :math:`b_{rot} - 1`       ``|0>``                ``|0>``
     ============== ========================= ====================== ====================
@@ -47,8 +49,8 @@ class GivensRotation(Operator2):
     **Compilable arguments.** None; the sizes follow from the wires. :math:`b_{rot} \ge 2`.
 
     **Pre- and postconditions.** ``phase_grad`` holds the state that ``PhaseGradientStatePrep``
-    prepares on :math:`b_{rot}` wires; ``work`` starts and ends in ``|0>``. The stored angles of
-    the walk have ``x < 2**(b_rot - 1)`` (spec 6.3), but the action holds for every ``x``.
+    prepares on :math:`b_{rot}` wires; ``work`` starts and ends in ``|0>``. ``angle`` has no
+    top bit: the stored angles have ``x < 2**(b_rot - 1)`` (spec 6.3).
 
     **Decomposition** (dfthcbe's ``GivensRotationByPhaseGradient``; spec 9.14), in time order,
     with :math:`\sqrt{X} = HSH` and :math:`\sqrt{X}^\dagger = HS^\dagger H`:
@@ -61,7 +63,8 @@ class GivensRotation(Operator2):
 
     Each :math:`R_z(\theta)` on a qubit ``q`` is Qualtran's ``ControlledAddOrSubtract``:
     ``X(q)``, ``CNOT`` from ``q`` onto every ``phase_grad`` wire, ``SemiAdder(angle, phase_grad,
-    work)``, the same CNOTs, ``X(q)``. It maps the gradient's value ``g`` to ``g + x`` for
+    work)``, the same CNOTs, ``X(q)``; the adder aligns ``x`` at the least significant bit of
+    ``phase_grad``. It maps the gradient's value ``g`` to ``g + x`` for
     ``q = 1`` and to ``g - x`` for ``q = 0``, so ``q = 1`` picks up
     :math:`e^{+2\pi i x/2^{b_{rot}}}` and ``q = 0`` the conjugate (spec 6.5): exactly
     :math:`R_z(\theta)`.
@@ -71,7 +74,8 @@ class GivensRotation(Operator2):
     :class:`GivensLadderDagger` uses it. Never controlled.
 
     **Cost.** :func:`dfthc.costs.givens_rotation`: :math:`T = 2(b_{rot} - 1)`, two
-    :math:`b_{rot}`-bit ``SemiAdder``\ s, all ``TemporaryAND`` with measured uncomputes
+    ``SemiAdder``\ s into the :math:`b_{rot}`-bit gradient (their cost depends only on its
+    width), all ``TemporaryAND`` with measured uncomputes
     (``A = T``); ``M = 0``. The adjoint costs the same. At FeMoco-54: 28, as dfthcbe's; the
     paper counts :math:`b_{rot}` Toffolis per :math:`R_z`, so 30 per rung (PRX Table III;
     ``rz-addsub`` in spec 13.1).
@@ -89,17 +93,16 @@ class GivensRotation(Operator2):
         from dfthc.ops.givens import GivensRotation
 
         def program():
-            qp.PhaseGradientStatePrep(wires=[5, 6, 7])
-            GivensRotation(q_i=[0], q_j=[1], angle=[2, 3, 4], phase_grad=[5, 6, 7],
-                           work=[8, 9])
+            qp.PhaseGradientStatePrep(wires=[4, 5, 6])
+            GivensRotation(q_i=[0], q_j=[1], angle=[2, 3], phase_grad=[4, 5, 6], work=[7, 8])
 
-        compiled_resources(program, num_wires=10).toffoli  # 2 (3 - 1) = 4
+        compiled_resources(program, num_wires=9).toffoli  # 2 (3 - 1) = 4
     """
 
     wire_argnames = ("q_i", "q_j", "angle", "phase_grad", "work")
 
     def __init__(self, q_i, q_j, angle, phase_grad, work):
-        b_rot = check_int("b_rot = len(angle)", len(angle), low=2)
+        b_rot = check_int("b_rot = len(phase_grad)", len(phase_grad), low=2)
         check_wires("GivensRotation",
                     {"q_i": q_i, "q_j": q_j, "angle": angle, "phase_grad": phase_grad,
                      "work": work},
@@ -109,7 +112,7 @@ class GivensRotation(Operator2):
     @staticmethod
     def required_wires(b_rot: int) -> dict[str, int]:
         """Exact register sizes."""
-        return {"q_i": 1, "q_j": 1, "angle": b_rot, "phase_grad": b_rot, "work": b_rot - 1}
+        return {"q_i": 1, "q_j": 1, "angle": b_rot - 1, "phase_grad": b_rot, "work": b_rot - 1}
 
 
 def _sqrt_x(wire, adjoint: bool) -> None:
@@ -132,11 +135,11 @@ def _rz(qubit, angle, phase_grad, work) -> None:
 
 
 def _givens_rotation_resources(q_i, q_j, angle, phase_grad, work):
-    b_rot = len(angle)
+    b_rot = len(phase_grad)
     return {
         qp.H: 10, qp.S: 3, resource_key(lambda: qp.adjoint(qp.S(Wire[1]))): 3,
         qp.CNOT: 4 * b_rot + 2, qp.X: 4,
-        resource_key(lambda: qp.SemiAdder(Wire[b_rot], Wire[b_rot], Wire[b_rot - 1])): 2,
+        resource_key(lambda: qp.SemiAdder(Wire[b_rot - 1], Wire[b_rot], Wire[b_rot - 1])): 2,
     }
 
 
@@ -169,13 +172,13 @@ def _ladder_sizes(op: str, b_rot, system) -> tuple[int, int]:
 
 
 def _ladder_required_wires(b_rot: int, num_modes: int) -> dict[str, int]:
-    return {"system": num_modes, "angles": (num_modes - 1) * b_rot, "phase_grad": b_rot,
+    return {"system": num_modes, "angles": (num_modes - 1) * (b_rot - 1), "phase_grad": b_rot,
             "work": b_rot - 1}
 
 
 def _rung_key(b_rot: int, adjoint: bool):
     def build():
-        rung = GivensRotation(Wire[1], Wire[1], Wire[b_rot], Wire[b_rot], Wire[b_rot - 1])
+        rung = GivensRotation(Wire[1], Wire[1], Wire[b_rot - 1], Wire[b_rot], Wire[b_rot - 1])
         return qp.adjoint(rung) if adjoint else rung
 
     return resource_key(build)
@@ -184,10 +187,10 @@ def _rung_key(b_rot: int, adjoint: bool):
 def _rungs(b_rot, system, angles, phase_grad, work, order, adjoint: bool) -> None:
     """The rungs ``k`` of ``order`` on ``(system[k], system[k+1])`` with angle register ``k``.
     Registers are unpacked into lists once, so each rung is passed lists of wires (spec 9.0)."""
-    system, angles = list(system), list(angles)
+    system, angles, width = list(system), list(angles), b_rot - 1
     phase_grad, work = list(phase_grad), list(work)
     for k in order:
-        wires = ([system[k]], [system[k + 1]], angles[k * b_rot:(k + 1) * b_rot], phase_grad,
+        wires = ([system[k]], [system[k + 1]], angles[k * width:(k + 1) * width], phase_grad,
                  work)
         if adjoint:
             qp.adjoint(GivensRotation(*wires))
@@ -200,7 +203,7 @@ class GivensLadder(Operator2):
 
     **Action.** :math:`U = G_0 G_1 \cdots G_{N-2}` on ``system``, with :math:`G_k` the
     :class:`GivensRotation` on modes ``(q_k, q_{k+1})`` driven by angle register ``k``,
-    ``angles[k b_rot:(k + 1) b_rot]`` (spec 6.7). Then
+    ``angles[k (b_rot - 1):(k + 1)(b_rot - 1)]`` (spec 6.7). Then
     :math:`U^\dagger \gamma_{0,f} U = \sum_j u_j \gamma_{j,f}` for
     ``u = vector_from_angles(x, b_rot)`` (spec 6.3), and :math:`U` equals
     :func:`dfthc.data.angles.ladder_matrix` ``(x, b_rot, N)``. ``angles`` is unchanged.
@@ -211,13 +214,13 @@ class GivensLadder(Operator2):
     name           width                     input                  output
     ============== ========================= ====================== ====================
     ``system``     ``N`` (at least 2)        any                    :math:`U` applied
-    ``angles``     :math:`(N - 1) b_{rot}`   any                    unchanged
+    ``angles``     :math:`(N-1)(b_{rot}-1)`  any                    unchanged
     ``phase_grad`` :math:`b_{rot}`           phase-gradient state   unchanged (catalysed)
     ``work``       :math:`b_{rot} - 1`       ``|0>``                ``|0>``
     ============== ========================= ====================== ====================
 
-    **Compilable arguments.** ``b_rot`` (int, at least 2): the width of one angle register and
-    of ``phase_grad``. ``N`` follows from ``system``.
+    **Compilable arguments.** ``b_rot`` (int, at least 2): the width of ``phase_grad``; one angle
+    register has :math:`b_{rot} - 1` wires. ``N`` follows from ``system``.
 
     **Pre- and postconditions.** As for :class:`GivensRotation`.
 
@@ -246,11 +249,11 @@ class GivensLadder(Operator2):
         from dfthc.ops.givens import GivensLadder
 
         def program():
-            qp.PhaseGradientStatePrep(wires=[9, 10, 11])
-            GivensLadder(3, system=[0, 1, 2], angles=[3, 4, 5, 6, 7, 8],
-                         phase_grad=[9, 10, 11], work=[12, 13])
+            qp.PhaseGradientStatePrep(wires=[7, 8, 9])
+            GivensLadder(3, system=[0, 1, 2], angles=[3, 4, 5, 6], phase_grad=[7, 8, 9],
+                         work=[10, 11])
 
-        compiled_resources(program, num_wires=14).toffoli  # 2 (3 - 1)(3 - 1) = 8
+        compiled_resources(program, num_wires=12).toffoli  # 2 (3 - 1)(3 - 1) = 8
     """
 
     compilable_argnames = ("b_rot",)
@@ -297,7 +300,7 @@ class GivensLadderDagger(Operator2):
     ============== ========================= ====================== ====================
     ``system``     ``N`` (at least 2)        any                    :math:`U^\dagger`
                                                                     applied
-    ``angles``     :math:`(N - 1) b_{rot}`   any                    unchanged
+    ``angles``     :math:`(N-1)(b_{rot}-1)`  any                    unchanged
     ``phase_grad`` :math:`b_{rot}`           phase-gradient state   unchanged (catalysed)
     ``work``       :math:`b_{rot} - 1`       ``|0>``                ``|0>``
     ============== ========================= ====================== ====================
@@ -328,11 +331,11 @@ class GivensLadderDagger(Operator2):
         from dfthc.ops.givens import GivensLadderDagger
 
         def program():
-            qp.PhaseGradientStatePrep(wires=[9, 10, 11])
-            GivensLadderDagger(3, system=[0, 1, 2], angles=[3, 4, 5, 6, 7, 8],
-                               phase_grad=[9, 10, 11], work=[12, 13])
+            qp.PhaseGradientStatePrep(wires=[7, 8, 9])
+            GivensLadderDagger(3, system=[0, 1, 2], angles=[3, 4, 5, 6], phase_grad=[7, 8, 9],
+                               work=[10, 11])
 
-        compiled_resources(program, num_wires=14).toffoli  # 8
+        compiled_resources(program, num_wires=12).toffoli  # 8
     """
 
     compilable_argnames = ("b_rot",)

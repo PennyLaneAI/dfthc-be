@@ -985,10 +985,12 @@ def femoco_summary(system: dict) -> list[str]:
               "registers (20 wires, which make the comparator adjoint free, `cmp-free`) and the "
               "keep test's `less_than_x_o`; `inner` holds the dirty work registers (16 wires), "
               "and its `less_than_b`, `sgn`, `d_sgn` and `r` take 7 wires against the paper's "
-              "11 for G, r and c; `select` adds the flags `G0`, `G1`, `b_neq_B` and `sg` to the "
-              "angles; the shared `work` pool (the controlled `RefAB`'s 44 wires, the largest "
-              "need) takes the place of the paper's 110 outer temporaries, because our outer "
-              "junk shares the angle register like the inner junk.", "",
+              "11 for G, r and c; `select` holds N - 1 angle registers of b_rot - 1 wires (the "
+              "paper's b_rot-bit registers carry a top bit that is always 0) and adds the flags "
+              "`G0`, `G1`, `b_neq_B` and `sg`; the shared `work` pool (the controlled `RefAB`'s "
+              "44 wires, the largest need) takes the place of the paper's 110 outer "
+              "temporaries, because our outer junk shares the angle register like the inner "
+              "junk.", "",
               "### QPE at FeMoco-54 (spec 11.3)", "",
               "| t | T | M | A | Qubits |", "| ---: | ---: | ---: | ---: | ---: |"]
     for bits in (1, 2, 3, 10, 20, 23):

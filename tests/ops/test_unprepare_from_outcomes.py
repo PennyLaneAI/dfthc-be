@@ -62,7 +62,8 @@ from dfthc.testing.tape import decompose_for_simulation
 
 
 def shape(N, R, B, C, b_k1, b_k2, k1, k2, ke1, ke2):
-    return WalkParams(N=N, R=R, B=B, C=C, n_plus=1, b_rot=4, b_k1=b_k1, b_k2=b_k2, s_u=3, k1=k1,
+    """b_rot = 5: the select's one-hot fits up to B = 6 at N = 3 (spec 8.3)."""
+    return WalkParams(N=N, R=R, B=B, C=C, n_plus=1, b_rot=5, b_k1=b_k1, b_k2=b_k2, s_u=3, k1=k1,
                       k2=k2, ke1=ke1, ke2=ke2)
 
 

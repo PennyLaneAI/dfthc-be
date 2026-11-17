@@ -102,19 +102,19 @@ def test_counts_at_mid_naphthalene(program):
 
 def test_femoco_counts_on_the_closed_forms():
     """FeMoco-54 (spec 9.22 and 9.24), without compiling (master plan section 12.9; the FeMoco
-    compile is Task 4.5's): T = 9,746 + 44 = 9,790, controlled 9,747 + 45 = 9,792; M = 2,524;
-    T_Toffoli = 18 + 20 + 72 + 780 + 216 + 12 = 1,118; A = 8,672 and 8,674; M + A = 11,196 and
-    11,198."""
+    compile is Task 4.5's): T = 9,746 + 44 = 9,790, controlled 9,747 + 45 = 9,792; M = 2,418;
+    T_Toffoli = 18 + 20 + 72 + 780 + 216 + 12 = 1,118; A = 8,672 and 8,674; M + A = 11,090 and
+    11,092."""
     p = FEMOCO54
     assert [costs.ref_ab(p, c).toffoli for c in (False, True)] == [44, 45]
-    assert costs.walk(p, False) == costs.Cost(9790, 2524)
-    assert costs.walk(p, True) == costs.Cost(9792, 2524)
+    assert costs.walk(p, False) == costs.Cost(9790, 2418)
+    assert costs.walk(p, True) == costs.Cost(9792, 2418)
     assert [2 * p.w_x, 4 * p.w_b, (p.K1 - 1) * p.d1, 2 * (p.K2 - 1) * p.d2, 4 * p.N, 12] == [
         18, 20, 72, 780, 216, 12]
     assert costs.toffoli_only(p) == 1118
     assert [costs.measured_and_uncomputes(p, c) for c in (False, True)] == [8672, 8674]
     assert [costs.walk(p, c).measurements + costs.measured_and_uncomputes(p, c)
-            for c in (False, True)] == [11196, 11198]
+            for c in (False, True)] == [11090, 11092]
 
 
 if __name__ == "__main__":

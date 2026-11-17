@@ -195,7 +195,7 @@ def test_work_size_covers_every_child_at_random_shapes():
                       b_k1=rng.randint(1, 16), b_k2=rng.randint(1, 16), s_u=rng.randint(3, b_rot))
         values |= dict(k1=rng.randint(0, lg(N + R * C)), k2=rng.randint(0, lg(B + 1)),
                        ke1=rng.randint(0, lg(N + R * C)), ke2=rng.randint(0, lg(R * C)))
-        if 2 ** lg(B + 1) > (N - 1) * b_rot + 1:  # WalkParams rejects it (spec 8.3)
+        if 2 ** lg(B + 1) > (N - 1) * (b_rot - 1) + 1:  # WalkParams rejects it (spec 8.3)
             continue
         p = WalkParams(**values)
         if 2**p.ke1 > p.K1 * p.d1 or 2**(p.ke2 + p.w_b) > p.K2 * p.d2:

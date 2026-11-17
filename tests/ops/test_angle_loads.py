@@ -36,9 +36,9 @@ def random_tables(p, seed=3):
 
 
 def register_value(angles, b_rot):
-    """The angle registers' big-endian integer when register k holds angles[k] (spec 6.7), written
-    out bit by bit, independently of the module's angle_entry."""
-    return int("".join(format(angle, f"0{b_rot}b") for angle in angles), 2)
+    """The angle registers' big-endian integer when register k, of b_rot - 1 bits, holds
+    angles[k] (spec 6.7), written out bit by bit, independently of the module's angle_entry."""
+    return int("".join(format(angle, f"0{b_rot - 1}b") for angle in angles), 2)
 
 
 def vendored_tables(system, p):
@@ -47,10 +47,11 @@ def vendored_tables(system, p):
 
 
 # R = 3 leaves r = 3 unvisited, X_o = 6 leaves x_o = 6, 7 failed, B = 3 makes b = 3 the identity
-# term; R = 1 gives an SF address of b alone (r has no wires).
+# term; R = 1 gives an SF address of b alone (r has no wires); at N = 2 and B = 2 the select's
+# one-hot needs b_rot = 4 (spec 8.3).
 RANDOM_R3 = WalkParams(N=3, R=3, B=3, C=1, n_plus=1, b_rot=3, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1,
                        ke1=1, ke2=1)
-RANDOM_R1 = WalkParams(N=2, R=1, B=2, C=2, n_plus=2, b_rot=3, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1,
+RANDOM_R1 = WalkParams(N=2, R=1, B=2, C=2, n_plus=2, b_rot=4, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1,
                        ke1=1, ke2=1)
 SHAPES = {
     "sto3g": (H2_STO3G_TEST, vendored_tables("h2_sto3g_R2_B2_C1", H2_STO3G_TEST)),
@@ -62,7 +63,7 @@ SHAPES = {
 
 def layout(p, tail, sf):
     """Wires: x_o, r, b, angles, G0, G1, b_neq_B, then work for the larger load."""
-    sizes = {"x_o": p.w_x, "r": p.w_r, "b": p.w_b, "angles": (p.N - 1) * p.b_rot, "G0": 1,
+    sizes = {"x_o": p.w_x, "r": p.w_r, "b": p.w_b, "angles": (p.N - 1) * (p.b_rot - 1), "G0": 1,
              "G1": 1, "b_neq_B": 1}
     tail_work = TailAngleLoad.required_wires(tail, p.n_plus, p.RC, p.X_o, p.b_rot)["work"]
     sf_work = SFAngleLoad.required_wires(sf, p.R, p.B, p.b_rot)["work"]
@@ -204,7 +205,7 @@ def compiled_loads_state(name):
 
 @pytest.mark.compiled
 def test_compiled_loads_on_lightning():
-    """T3 on the compiled path at H2_STO3G_TEST (15 wires) and at random-R1 (12 wires; the SF
+    """T3 on the compiled path at H2_STO3G_TEST (14 wires) and at random-R1 (12 wires; the SF
     address is b alone, and b = B = 2 and the failed b = 3 must stay untouched): both loads give
     exactly the state of the exclusive-branch table, so the rules' leaf words are built and
     loaded correctly under capture, without phases, and the one-register SF address lowers. The
@@ -263,14 +264,14 @@ def test_toffoli_count_at_mid_naphthalene(which):
 
 def test_femoco_counts_on_the_closed_form():
     """FeMoco-54 on the closed forms (no FeMoco table is compiled, master plan 12.9): tail 61 and
-    SF 11 + 10 * 28 = 291; the loads have 54 and 270 rows of 797 and 796 bits."""
+    SF 11 + 10 * 28 = 291; the loads have 54 and 270 rows of 744 and 743 bits."""
     p = FEMOCO54
     assert costs.tail_angle_load(p) == costs.Cost(61) == costs.Cost(costs.unary(270, 324, 9, False))
     assert costs.sf_angle_load(p) == costs.Cost(11 + 10 * 28) == costs.Cost(291)
     tail = TailAngleLoad.load_shape(p.N, p.RC, p.X_o, p.b_rot)
     sf = SFAngleLoad.load_shape(p.N, p.R, p.B, p.b_rot)
-    assert tail == {"address_widths": (9,), "live_ranges": ((270, 324),), "width": 797}
-    assert sf == {"address_widths": (4, 5), "live_ranges": ((0, 10), (0, 27)), "width": 796}
+    assert tail == {"address_widths": (9,), "live_ranges": ((270, 324),), "width": 744}
+    assert sf == {"address_widths": (4, 5), "live_ranges": ((0, 10), (0, 27)), "width": 743}
     tail_angles, sf_angles = random_tables(p)
     assert TailAngleLoad.required_wires(tail_angles, p.n_plus, p.RC, p.X_o, p.b_rot)["work"] == 8
     assert SFAngleLoad.required_wires(sf_angles, p.R, p.B, p.b_rot)["work"] == 9
@@ -312,9 +313,9 @@ def test_rules_are_valid(name):
 
 
 def test_entries_and_rows_by_hand():
-    """angle_entry puts register 0 first (spec 6.7); a load's rows hold its entries big-endian,
-    bit i of a row for target wire i, so wider entries need no word packing."""
-    assert angle_entry((1, 2, 3), 3) == 0b001_010_011
+    """angle_entry puts register 0 first, b_rot - 1 bits each (spec 6.7); a load's rows hold its
+    entries big-endian, bit i of a row for target wire i, so wider entries need no word packing."""
+    assert angle_entry((1, 2, 3), 3) == 0b01_10_11
     rows = _rows([0b001_1_0, 0b010_1_0, 0b011_1_1], 5)
     assert rows.dtype == bool
     assert rows.astype(int).tolist() == [[0, 0, 1, 1, 0], [0, 1, 0, 1, 0], [0, 1, 1, 1, 1]]
@@ -332,7 +333,7 @@ def test_load_shapes_and_required_wires():
         "r": 0, "b": 2, "G0": 1, "angles": 3, "b_neq_B": 1, "work": 2}
     p, (tail, sf) = SHAPES["631g"]
     assert TailAngleLoad.required_wires(tail, p.n_plus, p.RC, p.X_o, p.b_rot) == {
-        "x_o": 3, "angles": 12, "G0": 1, "G1": 1, "work": 2}
+        "x_o": 3, "angles": 9, "G0": 1, "G1": 1, "work": 2}
 
 
 TAIL = ((1,), (2,))
@@ -342,13 +343,13 @@ SF = (((1,), (2,)), ((3,), (0,)))
 def tail_args(**changes):
     """Valid TailAngleLoad arguments (N = 2, RC = 2, b_rot = 3), with ``changes``."""
     return {"tail_angles": TAIL, "n_plus": 1, "RC": 2, "X_o": 4, "b_rot": 3, "x_o": [0, 1],
-            "angles": [2, 3, 4], "G0": [5], "G1": [6], "work": [7]} | changes
+            "angles": [2, 3], "G0": [5], "G1": [6], "work": [7]} | changes
 
 
 def sf_args(**changes):
     """Valid SFAngleLoad arguments (R = B = 2, N = 2, b_rot = 3), with ``changes``."""
     return {"sf_angles": SF, "R": 2, "B": 2, "b_rot": 3, "r": [0], "b": [1, 2], "G0": [3],
-            "angles": [4, 5, 6], "b_neq_B": [7], "work": [8, 9, 10]} | changes
+            "angles": [4, 5], "b_neq_B": [7], "work": [8, 9, 10]} | changes
 
 
 @pytest.mark.parametrize(("build", "match"), [

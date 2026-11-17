@@ -84,14 +84,17 @@ registers its spec 9 table names (spec 9.0, wire passing).
 | `system` (`psi_up`, `psi_dn`) | 4 | 108 |
 | `outer` | 12 | 71 |
 | `inner` | 16 | 65 |
-| `select` (`angles`, `junk_overflow`, `G0`, `G1`, `b_neq_B`, `sg`) | 11 | 799 |
+| `select` (`angles`, `junk_overflow`, `G0`, `G1`, `b_neq_B`, `sg`) | 11 | 746 |
 | `phase_grad` | 4 | 15 |
 | `work` (the shared pool) | 8 | 44 |
-| **walk** | **55** | **1,102** |
+| **walk** | **55** | **1,049** |
 
-The junk shares 72 + 390 wires with the 795 angle wires at FeMoco-54, so the walk needs 462 wires
-fewer than with junk registers of its own; at `H2_STO3G_TEST` the 7 inner junk wires exceed the 4
-angle wires, so `junk_overflow` has 3. The paper's FeMoco-54 count is 1,131 (its Table 3): the
+`angles` holds `N - 1` angle registers of `b_rot - 1` wires: the stored angles are below
+`2**(b_rot - 1)`, so a `b_rot`-th bit would always be 0, and each Givens rung adds its
+`(b_rot - 1)`-bit angle into the `b_rot`-bit `phase_grad` (spec 6.3, 6.7). The junk shares 72 + 390
+wires with the 742 angle wires at FeMoco-54, so the walk needs 462 wires fewer than with junk
+registers of its own; at `H2_STO3G_TEST` the 7 inner junk wires exceed the 3 angle wires, so
+`junk_overflow` has 4. The paper's FeMoco-54 count is 1,131 (its Table 3): the
 resource report compares the two by group ([`resources.md`](resources.md)).
 
 The controlled walk adds one control wire; the QPE adds `qpe_control` and `qpe_grad` (t wires),

@@ -259,15 +259,15 @@ def majorana_gate() -> Cost:
 
 def angle_erase(p: WalkParams) -> Cost:
     """``AngleErase`` (spec 9.24 row): ``U(0, R, w_r, 1) + O(w_b) + U(RC, X_o, w_x, 0)``,
-    ``M = (N - 1) b_rot + 3``."""
+    ``M = (N - 1)(b_rot - 1) + 3``."""
     toffoli = (unary(0, p.R, p.w_r, True) + onehot(p.w_b)
                + unary(p.RC, p.X_o, p.w_x, controlled=False))
-    return Cost(toffoli, (p.N - 1) * p.b_rot + 3)
+    return Cost(toffoli, (p.N - 1) * (p.b_rot - 1) + 3)
 
 
 def inner_select(p: WalkParams) -> Cost:
     """``InnerSelect`` and its adjoint (spec 9.24 row): ``T_tail + T_SF + 2 + 2N +
-    4 (b_rot - 1)(N - 1) + 5 + T_angle erase``, ``M = (N - 1) b_rot + 3``."""
+    4 (b_rot - 1)(N - 1) + 5 + T_angle erase``, ``M = (N - 1)(b_rot - 1) + 3``."""
     return (tail_angle_load(p) + sf_angle_load(p) + 2 * spin_mux() + 2 * spin_swap(p)
             + 2 * givens_ladder(p) + majorana_gate() + angle_erase(p))
 
@@ -292,8 +292,8 @@ def junk_measurements(p: WalkParams) -> Cost:
 
 def block_encoding(p: WalkParams, controlled: bool) -> Cost:
     """``DFTHCBlockEncoding`` (spec 9.24 row): ``T_out + T_out^dag + 2 (T_in + T_sel + T_in^dag)
-    + T_RefT2`` (``InnerSigns`` costs 0), ``M = K1 d1 + 2 (K2 d2 + (N - 1) b_rot + 3)``; the
-    controlled version controls only ``RefT2``."""
+    + T_RefT2`` (``InnerSigns`` costs 0), ``M = K1 d1 + 2 (K2 d2 + (N - 1)(b_rot - 1) + 3)``;
+    the controlled version controls only ``RefT2``."""
     inner = inner_prepare(p) + inner_select(p) + inner_unprepare(p)
     return outer_prepare(p) + outer_unprepare(p) + 2 * inner + ref_t2(p, controlled)
 

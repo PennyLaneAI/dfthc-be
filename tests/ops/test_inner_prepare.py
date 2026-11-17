@@ -49,8 +49,9 @@ FAILURE_SIGN_MARGIN = 1e-2
 
 def failed_address_case(B, k2, ke2=1, seed=5):
     """A spec 12.1 T3 shape: x_o of 3 bits with SF rows [0, 2) (R = 2, C = 1), one-body rows 2 to
-    4 (N = 3) and failed values 5 to 7; (B + 1, k2) as given; b_k2 = 2 and s_u = 3."""
-    params = WalkParams(N=3, R=2, B=B, C=1, n_plus=1, b_rot=4, b_k1=2, b_k2=2, s_u=3, k1=1,
+    4 (N = 3) and failed values 5 to 7; (B + 1, k2) as given; b_k2 = 2 and s_u = 3; b_rot = 5,
+    so that the select's one-hot fits up to B = 6 (spec 8.3)."""
+    params = WalkParams(N=3, R=2, B=B, C=1, n_plus=1, b_rot=5, b_k1=2, b_k2=2, s_u=3, k1=1,
                         k2=k2, ke1=1, ke2=ke2)
     return params, random_factors(3, 2, B, 1, n_plus=1, seed=seed)
 

@@ -1,6 +1,6 @@
 """Outcome certificates of spec 12.5 for TailAngleLoad, SFAngleLoad -> AngleErase (nightly tier).
 
-The erase X-measures ``M = (N - 1) b_rot + 3`` qubits. The phase it leaves on a branch is
+The erase X-measures ``M = (N - 1)(b_rot - 1) + 3`` qubits. The phase it leaves on a branch is
 ``(-1)^(xi . g)`` with ``g`` the branch's loaded content, which the load tests establish as a
 function of ``(x_o, r, b)``, and its two fix-ups apply ``(-1)^f_xi`` with ``f`` from
 ``mcm_parities``, GF(2)-linear (test_angle_erase checks it on the erase's masks). So the residual
@@ -60,12 +60,12 @@ def vendored_tables(system, p):
 
 RANDOM_R3 = WalkParams(N=3, R=3, B=3, C=1, n_plus=1, b_rot=3, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1,
                        ke1=1, ke2=1)
-RANDOM_R1 = WalkParams(N=2, R=1, B=2, C=2, n_plus=2, b_rot=3, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1,
+RANDOM_R1 = WalkParams(N=2, R=1, B=2, C=2, n_plus=2, b_rot=4, b_k1=2, b_k2=2, s_u=3, k1=1, k2=1,
                        ke1=1, ke2=1)
 # (params, tables, SF one-hot bits): both test presets with their vendored tables (ob = w_b, the
 # walk's); R = 3 (r = 3 unvisited, failed x_o = 6, 7) with a zero tail row and a zero SF entry, on
 # the ob = 0 fallback and with a split one-hot (ob = 1: r and the high bit of b iterated); R = 1
-# (the SF address is b alone).
+# (the SF address is b alone; b_rot = 4 so that its one-hot fits, spec 8.3).
 CASES = {
     "sto3g": (H2_STO3G_TEST, vendored_tables("h2_sto3g_R2_B2_C1", H2_STO3G_TEST), 2),
     "631g": (H2_631G_TEST, vendored_tables("h2_631g_R2_B2_C2", H2_631G_TEST), 2),
@@ -77,7 +77,7 @@ CASES = {
 
 
 def layout(p, tail, sf, ob):
-    sizes = {"x_o": p.w_x, "r": p.w_r, "b": p.w_b, "angles": (p.N - 1) * p.b_rot, "G0": 1,
+    sizes = {"x_o": p.w_x, "r": p.w_r, "b": p.w_b, "angles": (p.N - 1) * (p.b_rot - 1), "G0": 1,
              "G1": 1, "b_neq_B": 1}
     works = (TailAngleLoad.required_wires(tail, p.n_plus, p.RC, p.X_o, p.b_rot)["work"],
              SFAngleLoad.required_wires(sf, p.R, p.B, p.b_rot)["work"],
@@ -129,7 +129,7 @@ def test_loads_erase_round_trip_certificate(name):
     assert not nonlinear_conditionals(operations)
     initial = random_input_state(num_wires, wires["x_o"] + wires["r"] + wires["b"])
     expected_keys, expected_amps = sorted_terms(initial)
-    num_measured = (p.N - 1) * p.b_rot + 3
+    num_measured = (p.N - 1) * (p.b_rot - 1) + 3
     schedules = [[0] * num_measured] + [
         [int(i == j) for j in range(num_measured)] for i in range(num_measured)]
     for schedule in schedules:
