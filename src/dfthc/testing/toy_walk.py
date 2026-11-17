@@ -165,6 +165,7 @@ def _controlled_toy_walk_resources(base, control_wires, control_values, work_wir
 
 @qp.register_resources(_controlled_toy_walk_resources)
 def _controlled_toy_walk(base, control_wires, control_values, work_wires, work_wire_type):
+    """``work_wires`` and ``work_wire_type`` are unused: the construction needs no work wire."""
     if len(control_wires) != 1:
         raise ValueError(f"C(ToyWalk) takes one control wire; got {len(control_wires)}")
     control, system, ancilla = control_wires[0], base.system[0], base.ancilla[0]

@@ -57,7 +57,7 @@ def assert_counts(resources, p, controlled):
 @pytest.mark.parametrize("program", PROGRAMS)
 @pytest.mark.parametrize("name", ["sto3g", "631g"])
 def test_counts_at_the_test_presets(name, program):
-    """T = 158 / 160 and 239 / 241, M = 50 and 68, A = 108 / 110 and 178 / 180."""
+    """T = 158 / 160 and 239 / 241, M = 48 and 62, A = 108 / 110 and 178 / 180."""
     c = walk_sim.case(name)
     assert_counts(compile_program(c, program), c.params, PROGRAMS[program])
 
@@ -90,7 +90,7 @@ def compile_mid(program: str) -> dict:
 @pytest.mark.parametrize("program", PROGRAMS)
 def test_counts_at_mid_naphthalene(program):
     """T4 at MID_NAPHTHALENE (nightly), each program compiled once in a subprocess under
-    run_watched with a 4 GB cap: T = 1,910 / 1,912, M = 502, A = 1,675 / 1,677. The MID_COMPILE
+    run_watched with a 4 GB cap: T = 1,910 / 1,912, M = 484, A = 1,675 / 1,677. The MID_COMPILE
     line records the watched wall time and peak memory, for comparison with the K-1 stand-in at
     the same sizes (spikes/results/k1_mid10.json and k1d_PX_mid10.json)."""
     command = [sys.executable, str(Path(__file__).resolve()), program]

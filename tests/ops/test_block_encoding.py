@@ -271,8 +271,8 @@ def compile_class(c, kind):
 @pytest.mark.parametrize("kind", KINDS)
 @pytest.mark.parametrize("name", ["sto3g", "631g", "fails-c3"])
 def test_counts(name, kind):
-    """T4 compiled, each alone: T, M, A at both test presets (T = 150 / 151 and 231 / 232,
-    M = 50 and 68) and at fails-c3."""
+    """T4 compiled, each alone: T, M, A at both test presets (T = 150 / 151 and 230 / 231,
+    M = 48 and 62) and at fails-c3."""
     c = case(name)
     assert_counts(compile_class(c, kind), c.params, kind == "controlled")
 

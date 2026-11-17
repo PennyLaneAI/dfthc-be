@@ -20,8 +20,12 @@ entry and that every canary named here exists.
   one-CNOT base rule, no measurement). It fails only when no unitary path exists. Canaries:
   `test_measuring_adjoint_rule_has_no_controlled_path` and
   `test_measuring_adjoint_without_unitary_inverse_has_no_path`. Mitigation: spec 7.4 rules 5 and
-  6; never place a measuring operator under `qp.ctrl`. Since G0 no program wraps a dfthc composite
-  in an adjoint or a control (spec 7.4 rule 6), so no measuring rule is wrapped by design.
+  6; never place a measuring operator under `qp.ctrl`. The only modified composite a program
+  requests is `C(DFTHCWalk)` (the toy's `C(ToyWalk)`), whose rule is pinned and controls only the
+  reflections (spec 7.4 rule 6). Catalyst still builds the generic controlled candidate of
+  `C(DFTHCWalk)` one level deep: it requests `C(DFTHCBlockEncoding)`, whose measuring base rule is
+  skipped with the expected warning, so the cascade stops there and no measuring rule is used
+  under control. The candidate costs +26 % compile memory at naphthalene (584 to 733 MB).
 - **L-3, rule selection is cost-based.** With unweighted counts the solver picks the auto-derived
   inverse (two CNOTs) over the measured adjoint rule. Canary:
   `test_unweighted_solver_prefers_unitary_inverse`. Mitigation: weighted gate set, pins, T6.

@@ -361,13 +361,14 @@ class DFTHCBlockEncoding(Operator2):
     oblivious amplitude amplification, whose reflection is controlled on the success of
     :math:`x_o` (B.2, Eq. (88)); the costs are its Table 3 (PRX Table III). dfthcbe:
     ``DFTHCBlockEncoding`` (``dfthcbe/block_encoding.py``), 9,596 Toffolis at FeMoco-54 by its
-    call graph, :math:`212 + 2 (913 + 220) + 2 \cdot 3502 + 20 + 94`; ours is +153 (the inner
-    prepare +58 and select +35 per round, the inner unprepare -3 per round, the outer prepare -2
-    and unprepare -25; spec 13.1). The paper gives 9,997 per walk, 46 of them for
-    :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}`; against the other 9,951 ours is -202: the
-    Givens ladders -424 (``rz-addsub``), the 26-bit inner entries against its 20-bit ones +186,
+    call graph, :math:`212 + 2 (913 + 220) + 2 \cdot 3502 + 20 + 94`; ours is +150 (the inner
+    reads +120, the angle loads +50 and erases +24, the inner erases +4, the outer read +4, the
+    uniform preparations -36, the outer unprepare -12 and the spin multiplexers -4; spec 13.1).
+    The paper gives 9,997 per walk, 46 of them for
+    :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}`; against the other 9,951 ours is -205: the
+    Givens ladders -424 (``rz-addsub``), the 26-bit inner entries against its 20-bit ones +184,
     exact boundaries and one-hot padding +80 (``exact-iter``, ``no-prune``, ``onehot-pad``), the
-    free comparator adjoints -46 (``cmp-free``) and the rest +2 (spec 13.1). As the paper does
+    free comparator adjoints -46 (``cmp-free``) and the rest +1 (spec 13.1). As the paper does
     (App. B.7.2, steps 2 and 4, and Table 3, whose inner QROM temporaries share the angle
     qubits), the rule measures each read's junk right after its prepare; dfthcbe keeps the junk
     until the erase. The controlled block encoding is dfthcbe's
@@ -507,11 +508,11 @@ class DFTHCWalk(Operator2):
     App. A.1), whose reflection covers every ancilla of the linear combination and of the
     qubitization signal (App. B); its Table 3 (PRX Table III) gives 9,997 Toffolis at FeMoco-54,
     46 of them for :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}` with the phase-estimation
-    control (App. B.7, Eqs. (96) and (128)). Ours is -204: the block encoding's -202 and
+    control (App. B.7, Eqs. (96) and (128)). Ours is -207: the block encoding's -205 and
     ``ref_ab``'s 44 against 46 (spec 13.1). dfthcbe: ``DFTHCWalk``
     (``dfthcbe/block_encoding.py``), the same two children with the same sign (Qualtran's
     ``reflection_around_zero`` with ``global_phase=-1``), :math:`9596 + 45 = 9641` by its call
-    graph; ours is +152: the block encoding's +153 and ``ref_ab``'s 44 against 45 (dfthcbe's
+    graph; ours is +149: the block encoding's +150 and ``ref_ab``'s 44 against 45 (dfthcbe's
     uncontrolled reflection adds a phase target). The controlled walk is the unit of the paper's
     phase estimation (Sec. II, after Eq. (11)), which counts the control on
     :math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}` only (App. B.7.2, Eq. (128)) and so
@@ -589,6 +590,7 @@ def _controlled_walk_resources(base, control_wires, control_values, work_wires, 
 
 @qp.register_resources(_controlled_walk_resources)
 def _controlled_walk(base, control_wires, control_values, work_wires, work_wire_type):
+    """``work_wires`` and ``work_wire_type`` are unused: ``base.work`` serves every step."""
     if len(control_wires) != 1:
         raise ValueError(f"C(DFTHCWalk) takes one control wire; got {len(control_wires)}")
     p, t = _rebuild(base.params, base.tables)
