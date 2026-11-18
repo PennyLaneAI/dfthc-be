@@ -218,22 +218,7 @@ PREAMBLE = r"""\documentclass[border=6pt]{standalone}
 """
 
 POSTAMBLE = r"""\end{quantikz}}
-\begin{tabular}{@{}l@{}}
-\usebox{\circbox}\\[2pt]
-\parbox{\wd\circbox}{\small
-Colours as in the dfthcbe figure: green flagged uniform preparation, blue data loads, yellow
-comparators, grey index/erase boxes, orange rotations and Majorana gate, pink reflection.
-Meters: $H$, measurement and reset (X-basis); the junk registers \texttt{junk\_x\_o}
-($(K_1{-}1)d_1$) and \texttt{junk\_b} ($(K_2{-}1)d_2$) are the first wires of \texttt{angles},
-X-measured in the columns J right after each prepare (Q-1 variant (b)); their outcomes feed
-the fix-ups of the unprepares from outcomes (\texttt{junk\_x\_o}: steps 24--27, not drawn).
-$\mathrm{In}_Z$: phase fix-up over the index from measurement parities; $\mathcal{E}$: its
-one-hot on reset wires (step 21b: target $\|$ the first $2^{k_{e2}+w_b}-d_2$ wires of
-\texttt{angles}). $\le^{\dagger}$: measured comparator uncompute (no Toffoli).
-$\nabla$: \texttt{phase\_grad} used as catalyst. Not drawn: the shared \texttt{work} pool;
-$\mathrm{REF}_{T_2}$ includes $\mathrm{GlobalPhase}(\pi)$. $X_o = N{+}RC$; $l_x$, $l_b$:
-odd parts of $X_o$, $B{+}1$. Red circles: wires and gates that differ from the dfthcbe figure.}
-\end{tabular}
+\usebox{\circbox}
 \end{document}
 """
 

@@ -37,6 +37,26 @@ explains each difference step by step.
 
 ![DFTHC block encoding, steps 1-23](docs/figures/walk_circuit.png)
 
+How to read the figure:
+
+- **Colours** are as in the dfthcbe figure: green is the flagged uniform preparation, blue the
+  data loads, yellow the comparators, grey the index and erase boxes, orange the rotations and the
+  Majorana gate, and pink the reflection.
+- **Meters** are an H followed by a measurement and reset, i.e. an X-basis measurement.
+- **Junk.** The junk registers `junk_x_o` ((K<sub>1</sub>−1)d<sub>1</sub> wires) and `junk_b`
+  ((K<sub>2</sub>−1)d<sub>2</sub> wires) are the first wires of `angles`. They are X-measured in
+  the columns J, right after each prepare (Q-1 variant (b)). Their outcomes feed the fix-ups of the
+  unprepares from outcomes; for `junk_x_o` that is steps 24-27, which are not drawn.
+- **In<sub>Z</sub>** is a phase fix-up over the index, computed from measurement parities.
+  **ℰ** is its one-hot register on reset wires. In step 21b that is the target together with the
+  first 2<sup>k<sub>e2</sub>+w<sub>b</sub></sup> − d<sub>2</sub> wires of `angles`.
+- **≤<sup>†</sup>** is a measured comparator uncompute, which costs no Toffoli.
+- **∇** marks `phase_grad` used as a catalyst.
+- **Not drawn:** the shared `work` pool, and the `GlobalPhase(π)` inside REF<sub>T2</sub>.
+- **Symbols:** X<sub>o</sub> = N + RC; l<sub>x</sub> and l<sub>b</sub> are the odd parts of
+  X<sub>o</sub> and B + 1.
+- **Red circles** mark the wires and gates that differ from the dfthcbe figure.
+
 ## Quick start
 
 ```bash
