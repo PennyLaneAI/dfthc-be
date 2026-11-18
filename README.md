@@ -97,7 +97,7 @@ warns once that it could not determine a conditional's branch; the counts are ex
 - the block encoding and walk end to end on H2, against the encoded Hamiltonian to 1e-10;
 - GF(2) certificates for every measured erase;
 - exact QPE on a toy walk;
-- exact T, M and A counts against closed forms;
+- exact gate counts (Toffolis, measurements, measured AND uncomputes) against closed forms;
 - canary tests that pin every known PennyLane or Catalyst limitation.
 
 ## Repository layout
@@ -108,8 +108,8 @@ src/dfthc/
   ops/                Operator2 blocks: primitives, the paper's blocks, block encoding and walk
   qpe.py              controlled walk powers and iterative phase estimation
   registers.py        WalkLayout: the named wire groups of the walk
-  compile.py          gate set, pinned rules, compiled_resources() (the tests' compile-and-count helper)
-  costs.py            closed-form T, M and A of every block
+  compile.py          gate set, rule registration, compiled_resources() (the tests' compile-and-count helper)
+  costs.py            closed-form Toffoli and measurement counts of every block
   costs_reference.py  the paper's and dfthcbe's costs, and the causes of each difference
   testing/            sparse simulator, walk cases, memory watchdog, compile cache provenance
 data/dfthc/           DFTHC factors vendored from dfthcbe (Apache-2.0)

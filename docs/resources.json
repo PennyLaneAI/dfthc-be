@@ -13571,7 +13571,7 @@
      "projection": null
     }
    ],
-   "qpe_basis": "T and A from the compiled controlled walk, M from the walk (`--large femoco54`, once each per code hash): T = (2^t - 1) T_C(W) + (t^3 - t)/6, M = (2^t - 1) M_W + t and A = (2^t - 1) A_C(W) + (t^3 - t)/6, every correction at its maximum branch.",
+   "qpe_basis": "Toffolis from the compiled controlled walk (`--large femoco54`, once per code hash): Toffolis = (2^t - 1) \u00d7 (Toffolis of the controlled walk) + (t^3 - t)/6, every phase correction at its maximum branch.",
    "qpe": {
     "1": {
      "toffoli": 9792,

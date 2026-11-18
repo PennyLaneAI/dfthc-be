@@ -173,9 +173,8 @@ def test_femoco_cache(monkeypatch):
     walk = report.current(cache, "femoco54/DFTHCWalk", hash_)
     cwalk = report.current(cache, "femoco54/ControlledDFTHCWalk", hash_)
     summary = record["systems"]["femoco54"]
-    assert summary["qpe_basis"].startswith("T and A from the compiled controlled walk, M from "
-                                           "the walk (`--large femoco54`, once each per code "
-                                           "hash): ")
+    assert summary["qpe_basis"].startswith("Toffolis from the compiled controlled walk "
+                                           "(`--large femoco54`, once per code hash): ")
     for bits in (1, 2, 3, 10, 20, 23):
         expected = {"toffoli": (2**bits - 1) * cwalk["toffoli"] + (bits**3 - bits) // 6,
                     "measurements": (2**bits - 1) * walk["measurements"] + bits,

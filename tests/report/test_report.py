@@ -124,7 +124,7 @@ def test_report_h2_rows_and_columns(tmp_path):
             assert 0 not in codes.values() and set(codes) <= set(report.REASON_CODES)
     text = (tmp_path / "resources.md").read_text()
     assert all(f"`{row_id}`" in text for row_id in H2_ROWS)
-    assert "| Row | Level | Steps | Calls (W, C(W)) | T / M / A measured |" in text
+    assert "| Row | Level | Steps | Calls (W, C(W)) | Toffolis measured |" in text
 
 
 @pytest.mark.compiled
@@ -533,11 +533,12 @@ def test_qpe_summary_and_wire_boundaries(femoco_report):
     assert [record["qpe"][str(bits)]["measured_and_uncomputes"] for bits in (1, 2, 3)] == [
         8674, 26023, 60722]
     assert [record["qpe"][str(bits)]["wires"] for bits in (20, 23)] == [1070, 1074]
-    assert "A = (2^t - 1) A_C(W) + (t^3 - t)/6" in record["qpe_basis"]
-    assert record["qpe_basis"].endswith("a compile with `--large femoco54` replaces them by the "
-                                        "compiled T_C(W), M_W and A_C(W).")
+    assert "Toffolis = (2^t - 1) × (Toffolis of the controlled walk) + (t^3 - t)/6" in (
+        record["qpe_basis"])
+    assert record["qpe_basis"].endswith("a compile with `--large femoco54` replaces it by the "
+                                        "compiled count.")
     assert "Task" not in record["qpe_basis"]
-    assert "| t | T | M | A | Qubits |" in markdown
+    assert "| t | Toffolis | Qubits |" in markdown
     h2, femoco = report.build_system("H2_STO3G_TEST"), report.build_system("femoco54")
     assert [report.qpe_wires(h2, bits) for bits in (3, 4, 5)] == [59, 60, 62]
     assert [report.qpe_wires(femoco, bits) for bits in (21, 22, 23)] == [1071, 1072, 1074]
@@ -563,8 +564,8 @@ def test_qpe_summary_takes_m_from_the_walk(tmp_path):
         assert (qpe["toffoli"], qpe["measurements"], qpe["measured_and_uncomputes"]) == (
             (2**bits - 1) * 9792 + (bits**3 - bits) // 6, (2**bits - 1) * 2418 + bits,
             (2**bits - 1) * 8674 + (bits**3 - bits) // 6), bits
-    assert record["qpe_basis"].startswith("T and A from the compiled controlled walk, M from the "
-                                          "walk (`--large femoco54`, once each per code hash): ")
+    assert record["qpe_basis"].startswith("Toffolis from the compiled controlled walk "
+                                          "(`--large femoco54`, once per code hash): ")
     assert "Task" not in record["qpe_basis"]
 
 
@@ -616,7 +617,6 @@ def test_qubit_summary_at_femoco(femoco_report):
     assert {g: record["qubit_groups"][g] - paper[g] for g in paper} == {
         "system": 0, "outer": 21, "inner": 12, "select": -49, "phase_grad": 0, "work": -66}
     assert "| **total** | **1,049** | **1,131** | **-82** |" in markdown
-    assert "852 of the M are the block encoding's own junk measurements" in markdown
     assert "Q-1, open" not in markdown and "Early junk measurement" not in markdown
     assert "`junk-qubits`" not in markdown
 
