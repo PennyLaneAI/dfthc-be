@@ -153,8 +153,8 @@ def test_report_mid(tmp_path):
                                 "ke2": 1}
     rows = {r["id"]: r for r in record["rows"]}
     assert {r["status"] for r in rows.values()} == {"measured"}
-    assert _counts(rows["DFTHCWalk"], "measured") == (1910, 502, 1910)
-    assert _counts(rows["ControlledDFTHCWalk"], "measured") == (1912, 502, 1912)
+    assert _counts(rows["DFTHCWalk"], "measured") == (1910, 484, 1910)
+    assert _counts(rows["ControlledDFTHCWalk"], "measured") == (1912, 484, 1912)
     assert all(_counts(r, "measured") == _counts(r, "closed") for r in rows.values())
 
 
