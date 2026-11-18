@@ -7523,8 +7523,12 @@
      "calls": 1,
      "controlled_calls": 0,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 6533,
+      "measurements": 1464,
+      "measured_and_uncomputes": 6533
+     },
      "closed": {
       "toffoli": 6533,
       "measurements": 1464,
@@ -7566,11 +7570,11 @@
       "ref-target": -1,
       "qpe-ctrl": -1
      },
-     "cliffords": null,
+     "cliffords": 615533,
      "clifford_kind": "upper bound (CNOT, PauliX); expected, hinted (CZ, PauliZ)",
      "wires": 757,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 16.65,
+     "peak_mb": 837.9
     },
     {
      "id": "DFTHCBlockEncoding",
@@ -7579,8 +7583,12 @@
      "calls": 1,
      "controlled_calls": 0,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 6491,
+      "measurements": 1464,
+      "measured_and_uncomputes": 6491
+     },
      "closed": {
       "toffoli": 6491,
       "measurements": 1464,
@@ -7619,11 +7627,11 @@
       "onehot-pad": 24,
       "ref-unif": -1
      },
-     "cliffords": null,
+     "cliffords": 615437,
      "clifford_kind": "upper bound (CNOT, PauliX); expected, hinted (CZ, PauliZ)",
      "wires": 757,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 13.78,
+     "peak_mb": 821.3
     },
     {
      "id": "OuterPrepare",
@@ -7632,8 +7640,12 @@
      "calls": 1,
      "controlled_calls": 1,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 148,
+      "measurements": 0,
+      "measured_and_uncomputes": 126
+     },
      "closed": {
       "toffoli": 148,
       "measurements": 0,
@@ -7656,11 +7668,11 @@
       "exact-iter": 3,
       "iter-const": -2
      },
-     "cliffords": null,
+     "cliffords": 6855,
      "clifford_kind": "upper bound (CNOT, PauliX)",
      "wires": 129,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 2.18,
+     "peak_mb": 380.3
     },
     {
      "id": "FlaggedUniformPrep@OuterPrepare",
@@ -7669,8 +7681,12 @@
      "calls": 1,
      "controlled_calls": 1,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 33,
+      "measurements": 0,
+      "measured_and_uncomputes": 26
+     },
      "closed": {
       "toffoli": 33,
       "measurements": 0,
@@ -7690,11 +7706,11 @@
       "rot-add": 2,
       "unif-odd": 9
      },
-     "cliffords": null,
+     "cliffords": 223,
      "clifford_kind": "exact",
      "wires": 44,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.28,
+     "peak_mb": 324.7
     },
     {
      "id": "PhaseGradientRotation@FlaggedUniformPrep@OuterPrepare",
@@ -7703,8 +7719,12 @@
      "calls": 2,
      "controlled_calls": 2,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 6,
+      "measurements": 0,
+      "measured_and_uncomputes": 6
+     },
      "closed": {
       "toffoli": 6,
       "measurements": 0,
@@ -7719,11 +7739,11 @@
       "rot-add": 1
      },
      "codes_paper": {},
-     "cliffords": null,
+     "cliffords": 41,
      "clifford_kind": "exact",
      "wires": 21,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.14,
+     "peak_mb": 314.2
     },
     {
      "id": "QROAMRead@OuterPrepare",
@@ -7732,8 +7752,12 @@
      "calls": 1,
      "controlled_calls": 1,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 92,
+      "measurements": 0,
+      "measured_and_uncomputes": 92
+     },
      "closed": {
       "toffoli": 92,
       "measurements": 0,
@@ -7748,11 +7772,11 @@
       "exact-iter": 3
      },
      "codes_paper": {},
-     "cliffords": null,
+     "cliffords": 6487,
      "clifford_kind": "upper bound (CNOT, PauliX)",
      "wires": 60,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.86,
+     "peak_mb": 356.3
     },
     {
      "id": "InnerPrepare",
@@ -7761,8 +7785,12 @@
      "calls": 2,
      "controlled_calls": 2,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 424,
+      "measurements": 0,
+      "measured_and_uncomputes": 408
+     },
      "closed": {
       "toffoli": 424,
       "measurements": 0,
@@ -7789,11 +7817,11 @@
       "flat-r": 42,
       "sign-bits": 14
      },
-     "cliffords": null,
+     "cliffords": 87288,
      "clifford_kind": "upper bound (CNOT, PauliX)",
      "wires": 291,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 2.95,
+     "peak_mb": 415.0
     },
     {
      "id": "FlaggedUniformPrep@InnerPrepare",
@@ -7802,8 +7830,12 @@
      "calls": 2,
      "controlled_calls": 2,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 15,
+      "measurements": 0,
+      "measured_and_uncomputes": 14
+     },
      "closed": {
       "toffoli": 15,
       "measurements": 0,
@@ -7823,11 +7855,11 @@
       "rot-add": 2,
       "unif-odd": 1
      },
-     "cliffords": null,
+     "cliffords": 113,
      "clifford_kind": "exact",
      "wires": 28,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.23,
+     "peak_mb": 323.2
     },
     {
      "id": "PhaseGradientRotation@FlaggedUniformPrep@InnerPrepare",
@@ -7836,8 +7868,12 @@
      "calls": 4,
      "controlled_calls": 4,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 6,
+      "measurements": 0,
+      "measured_and_uncomputes": 6
+     },
      "closed": {
       "toffoli": 6,
       "measurements": 0,
@@ -7852,11 +7888,11 @@
       "rot-add": 1
      },
      "codes_paper": {},
-     "cliffords": null,
+     "cliffords": 39,
      "clifford_kind": "exact",
      "wires": 21,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.16,
+     "peak_mb": 313.9
     },
     {
      "id": "QROAMRead@InnerPrepare",
@@ -7865,8 +7901,12 @@
      "calls": 2,
      "controlled_calls": 2,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 390,
+      "measurements": 0,
+      "measured_and_uncomputes": 390
+     },
      "closed": {
       "toffoli": 390,
       "measurements": 0,
@@ -7883,11 +7923,11 @@
       "flat-r": 42
      },
      "codes_paper": {},
-     "cliffords": null,
+     "cliffords": 87058,
      "clifford_kind": "upper bound (CNOT, PauliX)",
      "wires": 236,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 2.47,
+     "peak_mb": 386.2
     },
     {
      "id": "InnerSigns",
@@ -7896,8 +7936,12 @@
      "calls": 2,
      "controlled_calls": 2,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 0,
+      "measurements": 0,
+      "measured_and_uncomputes": 0
+     },
      "closed": {
       "toffoli": 0,
       "measurements": 0,
@@ -7910,11 +7954,11 @@
      "delta_paper": 0,
      "codes_dfthcbe": {},
      "codes_paper": {},
-     "cliffords": null,
+     "cliffords": 2,
      "clifford_kind": "exact",
      "wires": 3,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 0.72,
+     "peak_mb": 285.6
     },
     {
      "id": "InnerSelect",
@@ -7923,8 +7967,12 @@
      "calls": 1,
      "controlled_calls": 1,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 2609,
+      "measurements": 493,
+      "measured_and_uncomputes": 2609
+     },
      "closed": {
       "toffoli": 2609,
       "measurements": 493,
@@ -7955,11 +8003,11 @@
       "onehot-const": -1,
       "attrib": 36
      },
-     "cliffords": null,
+     "cliffords": 215121,
      "clifford_kind": "upper bound (CNOT, PauliX); expected, hinted (CZ, PauliZ)",
      "wires": 617,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 6.66,
+     "peak_mb": 491.4
     },
     {
      "id": "TailAngleLoad",
@@ -7968,8 +8016,12 @@
      "calls": 2,
      "controlled_calls": 2,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 43,
+      "measurements": 0,
+      "measured_and_uncomputes": 43
+     },
      "closed": {
       "toffoli": 43,
       "measurements": 0,
@@ -7988,11 +8040,11 @@
       "prefix-stops": 4,
       "iter-const": -2
      },
-     "cliffords": null,
+     "cliffords": 17748,
      "clifford_kind": "upper bound (CNOT, PauliX)",
      "wires": 507,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.48,
+     "peak_mb": 329.6
     },
     {
      "id": "SFAngleLoad",
@@ -8001,8 +8053,12 @@
      "calls": 2,
      "controlled_calls": 2,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 433,
+      "measurements": 0,
+      "measured_and_uncomputes": 433
+     },
      "closed": {
       "toffoli": 433,
       "measurements": 0,
@@ -8021,11 +8077,11 @@
       "exact-iter": 71,
       "iter-const": -1
      },
-     "cliffords": null,
+     "cliffords": 178597,
      "clifford_kind": "upper bound (CNOT, PauliX)",
      "wires": 512,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 3.23,
+     "peak_mb": 389.1
     },
     {
      "id": "SpinMux",
@@ -8034,8 +8090,12 @@
      "calls": 4,
      "controlled_calls": 4,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 1,
+      "measurements": 0,
+      "measured_and_uncomputes": 1
+     },
      "closed": {
       "toffoli": 1,
       "measurements": 0,
@@ -8052,11 +8112,11 @@
      "codes_paper": {
       "mux": 1
      },
-     "cliffords": null,
+     "cliffords": 8,
      "clifford_kind": "exact",
      "wires": 5,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.11,
+     "peak_mb": 313.0
     },
     {
      "id": "SpinSwap",
@@ -8065,8 +8125,12 @@
      "calls": 4,
      "controlled_calls": 4,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 36,
+      "measurements": 0,
+      "measured_and_uncomputes": 36
+     },
      "closed": {
       "toffoli": 36,
       "measurements": 0,
@@ -8079,11 +8143,11 @@
      "delta_paper": 0,
      "codes_dfthcbe": {},
      "codes_paper": {},
-     "cliffords": null,
+     "cliffords": 252,
      "clifford_kind": "exact",
      "wires": 74,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.19,
+     "peak_mb": 316.5
     },
     {
      "id": "GivensLadder",
@@ -8092,8 +8156,12 @@
      "calls": 2,
      "controlled_calls": 2,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 980,
+      "measurements": 0,
+      "measured_and_uncomputes": 980
+     },
      "closed": {
       "toffoli": 980,
       "measurements": 0,
@@ -8108,11 +8176,11 @@
      "codes_paper": {
       "rz-addsub": -70
      },
-     "cliffords": null,
+     "cliffords": 8470,
      "clifford_kind": "exact",
      "wires": 555,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.46,
+     "peak_mb": 334.7
     },
     {
      "id": "GivensRotation",
@@ -8121,8 +8189,12 @@
      "calls": 70,
      "controlled_calls": 70,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 28,
+      "measurements": 0,
+      "measured_and_uncomputes": 28
+     },
      "closed": {
       "toffoli": 28,
       "measurements": 0,
@@ -8137,11 +8209,11 @@
      "codes_paper": {
       "rz-addsub": -2
      },
-     "cliffords": null,
+     "cliffords": 242,
      "clifford_kind": "exact",
      "wires": 45,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.28,
+     "peak_mb": 318.5
     },
     {
      "id": "MajoranaGate",
@@ -8150,8 +8222,12 @@
      "calls": 1,
      "controlled_calls": 1,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 5,
+      "measurements": 0,
+      "measured_and_uncomputes": 5
+     },
      "closed": {
       "toffoli": 5,
       "measurements": 0,
@@ -8166,11 +8242,11 @@
      "codes_paper": {
       "maj-and": -2
      },
-     "cliffords": null,
+     "cliffords": 26,
      "clifford_kind": "exact",
      "wires": 10,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.18,
+     "peak_mb": 311.3
     },
     {
      "id": "GivensLadderDagger",
@@ -8179,8 +8255,12 @@
      "calls": 2,
      "controlled_calls": 2,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 980,
+      "measurements": 0,
+      "measured_and_uncomputes": 980
+     },
      "closed": {
       "toffoli": 980,
       "measurements": 0,
@@ -8195,11 +8275,11 @@
      "codes_paper": {
       "rz-addsub": -70
      },
-     "cliffords": null,
+     "cliffords": 8470,
      "clifford_kind": "exact",
      "wires": 555,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.46,
+     "peak_mb": 336.1
     },
     {
      "id": "Adjoint(GivensRotation)",
@@ -8208,8 +8288,12 @@
      "calls": 70,
      "controlled_calls": 70,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 28,
+      "measurements": 0,
+      "measured_and_uncomputes": 28
+     },
      "closed": {
       "toffoli": 28,
       "measurements": 0,
@@ -8224,11 +8308,11 @@
      "codes_paper": {
       "rz-addsub": -2
      },
-     "cliffords": null,
+     "cliffords": 242,
      "clifford_kind": "exact",
      "wires": 45,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.28,
+     "peak_mb": 319.7
     },
     {
      "id": "AngleErase",
@@ -8237,8 +8321,12 @@
      "calls": 2,
      "controlled_calls": 2,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 94,
+      "measurements": 493,
+      "measured_and_uncomputes": 94
+     },
      "closed": {
       "toffoli": 94,
       "measurements": 493,
@@ -8265,11 +8353,11 @@
       "no-prune": 5,
       "prefix-stops": 4
      },
-     "cliffords": null,
+     "cliffords": 1290,
      "clifford_kind": "upper bound (CNOT, PauliX); expected, hinted (CZ, PauliZ)",
      "wires": 518,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 2.81,
+     "peak_mb": 358.1
     },
     {
      "id": "InnerUnprepareFromOutcomes",
@@ -8278,8 +8366,12 @@
      "calls": 2,
      "controlled_calls": 2,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 100,
+      "measurements": 27,
+      "measured_and_uncomputes": 116
+     },
      "closed": {
       "toffoli": 100,
       "measurements": 27,
@@ -8307,11 +8399,11 @@
       "onehot-const": -2,
       "attrib": -36
      },
-     "cliffords": null,
+     "cliffords": 1193,
      "clifford_kind": "upper bound (CNOT, PauliX); expected, hinted (CZ, PauliZ)",
      "wires": 107,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 3.85,
+     "peak_mb": 418.0
     },
     {
      "id": "Adjoint(FlaggedUniformPrep)@InnerUnprepareFromOutcomes",
@@ -8320,8 +8412,12 @@
      "calls": 2,
      "controlled_calls": 2,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 14,
+      "measurements": 0,
+      "measured_and_uncomputes": 15
+     },
      "closed": {
       "toffoli": 14,
       "measurements": 0,
@@ -8341,11 +8437,11 @@
       "rot-add": 2,
       "unif-odd": 1
      },
-     "cliffords": null,
+     "cliffords": 113,
      "clifford_kind": "exact",
      "wires": 28,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.24,
+     "peak_mb": 323.6
     },
     {
      "id": "RefT2",
@@ -8354,8 +8450,12 @@
      "calls": 1,
      "controlled_calls": 0,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 19,
+      "measurements": 0,
+      "measured_and_uncomputes": 19
+     },
      "closed": {
       "toffoli": 19,
       "measurements": 0,
@@ -8370,11 +8470,11 @@
      "codes_paper": {
       "ref-unif": -1
      },
-     "cliffords": null,
+     "cliffords": 48,
      "clifford_kind": "exact",
      "wires": 40,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.23,
+     "peak_mb": 319.3
     },
     {
      "id": "InnerSelectDagger",
@@ -8383,8 +8483,12 @@
      "calls": 1,
      "controlled_calls": 1,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 2609,
+      "measurements": 493,
+      "measured_and_uncomputes": 2609
+     },
      "closed": {
       "toffoli": 2609,
       "measurements": 493,
@@ -8415,11 +8519,11 @@
       "onehot-const": -1,
       "attrib": 36
      },
-     "cliffords": null,
+     "cliffords": 215121,
      "clifford_kind": "upper bound (CNOT, PauliX); expected, hinted (CZ, PauliZ)",
      "wires": 617,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 6.22,
+     "peak_mb": 526.2
     },
     {
      "id": "Adjoint(MajoranaGate)",
@@ -8428,8 +8532,12 @@
      "calls": 1,
      "controlled_calls": 1,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 5,
+      "measurements": 0,
+      "measured_and_uncomputes": 5
+     },
      "closed": {
       "toffoli": 5,
       "measurements": 0,
@@ -8444,11 +8552,11 @@
      "codes_paper": {
       "maj-and": -2
      },
-     "cliffords": null,
+     "cliffords": 26,
      "clifford_kind": "exact",
      "wires": 10,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.16,
+     "peak_mb": 313.1
     },
     {
      "id": "OuterUnprepareFromOutcomes",
@@ -8457,8 +8565,12 @@
      "calls": 1,
      "controlled_calls": 1,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 58,
+      "measurements": 23,
+      "measured_and_uncomputes": 80
+     },
      "closed": {
       "toffoli": 58,
       "measurements": 23,
@@ -8482,11 +8594,11 @@
       "iter-const": -2,
       "onehot-const": -2
      },
-     "cliffords": null,
+     "cliffords": 525,
      "clifford_kind": "upper bound (CNOT, PauliX); expected, hinted (CZ, PauliZ)",
      "wires": 106,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.79,
+     "peak_mb": 346.8
     },
     {
      "id": "Adjoint(FlaggedUniformPrep)@OuterUnprepareFromOutcomes",
@@ -8495,8 +8607,12 @@
      "calls": 1,
      "controlled_calls": 1,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 26,
+      "measurements": 0,
+      "measured_and_uncomputes": 33
+     },
      "closed": {
       "toffoli": 26,
       "measurements": 0,
@@ -8516,11 +8632,11 @@
       "rot-add": 2,
       "unif-odd": 9
      },
-     "cliffords": null,
+     "cliffords": 223,
      "clifford_kind": "exact",
      "wires": 44,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.31,
+     "peak_mb": 327.7
     },
     {
      "id": "RefAB",
@@ -8529,8 +8645,12 @@
      "calls": 1,
      "controlled_calls": 0,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 42,
+      "measurements": 0,
+      "measured_and_uncomputes": 42
+     },
      "closed": {
       "toffoli": 42,
       "measurements": 0,
@@ -8548,11 +8668,11 @@
       "ref-target": -1,
       "qpe-ctrl": -1
      },
-     "cliffords": null,
+     "cliffords": 96,
      "clifford_kind": "exact",
      "wires": 86,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.37,
+     "peak_mb": 320.0
     },
     {
      "id": "ControlledDFTHCWalk",
@@ -8561,8 +8681,12 @@
      "calls": 0,
      "controlled_calls": 1,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 6535,
+      "measurements": 1464,
+      "measured_and_uncomputes": 6535
+     },
      "closed": {
       "toffoli": 6535,
       "measurements": 1464,
@@ -8603,11 +8727,11 @@
       "ctrl-ref-t2": 1,
       "ref-target": -1
      },
-     "cliffords": null,
+     "cliffords": 615539,
      "clifford_kind": "upper bound (CNOT, PauliX); expected, hinted (CZ, PauliZ)",
      "wires": 758,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 17.72,
+     "peak_mb": 977.1
     },
     {
      "id": "ControlledRefT2",
@@ -8616,8 +8740,12 @@
      "calls": 0,
      "controlled_calls": 1,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 20,
+      "measurements": 0,
+      "measured_and_uncomputes": 20
+     },
      "closed": {
       "toffoli": 20,
       "measurements": 0,
@@ -8633,11 +8761,11 @@
       "ref-unif": -1,
       "ctrl-ref-t2": 1
      },
-     "cliffords": null,
+     "cliffords": 50,
      "clifford_kind": "exact",
      "wires": 42,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.3,
+     "peak_mb": 321.9
     },
     {
      "id": "ControlledRefAB",
@@ -8646,8 +8774,12 @@
      "calls": 0,
      "controlled_calls": 1,
      "partition": true,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 43,
+      "measurements": 0,
+      "measured_and_uncomputes": 43
+     },
      "closed": {
       "toffoli": 43,
       "measurements": 0,
@@ -8662,11 +8794,11 @@
      "codes_paper": {
       "ref-target": -1
      },
-     "cliffords": null,
+     "cliffords": 98,
      "clifford_kind": "exact",
      "wires": 88,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.34,
+     "peak_mb": 322.8
     },
     {
      "id": "PhaseFixup@InnerUnprepareFromOutcomes",
@@ -8675,8 +8807,12 @@
      "calls": 0,
      "controlled_calls": 0,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 82,
+      "measurements": 0,
+      "measured_and_uncomputes": 82
+     },
      "closed": {
       "toffoli": 82,
       "measurements": 0,
@@ -8698,11 +8834,11 @@
       "onehot-pad": 8,
       "onehot-const": -2
      },
-     "cliffords": null,
+     "cliffords": 909,
      "clifford_kind": "expected, hinted (CZ, PauliZ)",
      "wires": 50,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 3.24,
+     "peak_mb": 383.6
     },
     {
      "id": "PhaseFixup@OuterUnprepareFromOutcomes",
@@ -8711,8 +8847,12 @@
      "calls": 0,
      "controlled_calls": 0,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 24,
+      "measurements": 0,
+      "measured_and_uncomputes": 24
+     },
      "closed": {
       "toffoli": 24,
       "measurements": 0,
@@ -8731,11 +8871,11 @@
       "iter-const": -2,
       "onehot-const": -2
      },
-     "cliffords": null,
+     "cliffords": 111,
      "clifford_kind": "expected, hinted (CZ, PauliZ)",
      "wires": 27,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 1.35,
+     "peak_mb": 321.3
     },
     {
      "id": "ControlledWalkPower(p=1)",
@@ -8744,8 +8884,12 @@
      "calls": 0,
      "controlled_calls": 0,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 6535,
+      "measurements": 1464,
+      "measured_and_uncomputes": 6535
+     },
      "closed": {
       "toffoli": 6535,
       "measurements": 1464,
@@ -8777,11 +8921,11 @@
       "ctrl-ref-t2": 1,
       "ref-target": -1
      },
-     "cliffords": null,
+     "cliffords": 615539,
      "clifford_kind": "upper bound (CNOT, PauliX); expected, hinted (CZ, PauliZ)",
      "wires": 758,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 18.29,
+     "peak_mb": 986.2
     },
     {
      "id": "ControlledWalkPower(p=2)",
@@ -8790,8 +8934,12 @@
      "calls": 0,
      "controlled_calls": 0,
      "partition": false,
-     "status": "pending",
-     "measured": null,
+     "status": "measured",
+     "measured": {
+      "toffoli": 13070,
+      "measurements": 2928,
+      "measured_and_uncomputes": 13070
+     },
      "closed": {
       "toffoli": 13070,
       "measurements": 2928,
@@ -8823,11 +8971,11 @@
       "ctrl-ref-t2": 2,
       "ref-target": -2
      },
-     "cliffords": null,
+     "cliffords": 1231078,
      "clifford_kind": "upper bound (CNOT, PauliX); expected, hinted (CZ, PauliZ)",
      "wires": 758,
-     "seconds": null,
-     "peak_mb": null
+     "seconds": 18.19,
+     "peak_mb": 1043.2
     }
    ]
   },
@@ -10304,43 +10452,43 @@
   }
  },
  "log": [
-  "fe2s2/DFTHCWalk: compiled (16.7 s, 793.0 MB)",
-  "fe2s2/DFTHCBlockEncoding: compiled (16.0 s, 774.1 MB)",
-  "fe2s2/OuterPrepare: compiled (5.5 s, 376.8 MB)",
-  "fe2s2/FlaggedUniformPrep@OuterPrepare: compiled (4.3 s, 323.2 MB)",
-  "fe2s2/PhaseGradientRotation@FlaggedUniformPrep@OuterPrepare: compiled (4.2 s, 312.8 MB)",
-  "fe2s2/QROAMRead@OuterPrepare: compiled (4.9 s, 356.4 MB)",
-  "fe2s2/InnerPrepare: compiled (5.9 s, 416.3 MB)",
-  "fe2s2/FlaggedUniformPrep@InnerPrepare: compiled (4.2 s, 323.9 MB)",
-  "fe2s2/PhaseGradientRotation@FlaggedUniformPrep@InnerPrepare: compiled (4.0 s, 313.9 MB)",
-  "fe2s2/QROAMRead@InnerPrepare: compiled (5.3 s, 382.8 MB)",
-  "fe2s2/InnerSigns: compiled (3.6 s, 285.7 MB)",
-  "fe2s2/InnerSelect: compiled (6.8 s, 433.0 MB)",
-  "fe2s2/TailAngleLoad: compiled (4.3 s, 323.2 MB)",
-  "fe2s2/SFAngleLoad: compiled (5.1 s, 346.5 MB)",
-  "fe2s2/SpinMux: compiled (4.0 s, 312.4 MB)",
-  "fe2s2/SpinSwap: compiled (4.2 s, 313.8 MB)",
-  "fe2s2/GivensLadder: compiled (4.5 s, 330.1 MB)",
-  "fe2s2/GivensRotation: compiled (4.3 s, 316.0 MB)",
-  "fe2s2/MajoranaGate: compiled (4.1 s, 311.8 MB)",
-  "fe2s2/GivensLadderDagger: compiled (4.3 s, 328.6 MB)",
-  "fe2s2/Adjoint(GivensRotation): compiled (4.3 s, 318.1 MB)",
-  "fe2s2/AngleErase: compiled (4.9 s, 341.4 MB)",
-  "fe2s2/InnerUnprepareFromOutcomes: compiled (8.8 s, 471.2 MB)",
-  "fe2s2/Adjoint(FlaggedUniformPrep)@InnerUnprepareFromOutcomes: compiled (4.3 s, 324.5 MB)",
-  "fe2s2/RefT2: compiled (4.2 s, 320.0 MB)",
-  "fe2s2/InnerSelectDagger: compiled (6.9 s, 435.0 MB)",
-  "fe2s2/Adjoint(MajoranaGate): compiled (4.1 s, 312.4 MB)",
-  "fe2s2/OuterUnprepareFromOutcomes: compiled (4.6 s, 342.9 MB)",
-  "fe2s2/Adjoint(FlaggedUniformPrep)@OuterUnprepareFromOutcomes: compiled (4.2 s, 324.1 MB)",
-  "fe2s2/RefAB: compiled (4.3 s, 322.7 MB)",
-  "fe2s2/ControlledDFTHCWalk: compiled (18.5 s, 916.5 MB)",
-  "fe2s2/ControlledRefT2: compiled (4.7 s, 319.9 MB)",
-  "fe2s2/ControlledRefAB: compiled (4.2 s, 323.6 MB)",
-  "fe2s2/PhaseFixup@InnerUnprepareFromOutcomes: compiled (8.0 s, 440.2 MB)",
-  "fe2s2/PhaseFixup@OuterUnprepareFromOutcomes: compiled (4.2 s, 319.1 MB)",
-  "fe2s2/ControlledWalkPower(p=1): compiled (19.7 s, 964.9 MB)",
-  "fe2s2/ControlledWalkPower(p=2): compiled (20.4 s, 961.9 MB)"
+  "fe4s4/DFTHCWalk: compiled (18.6 s, 837.9 MB)",
+  "fe4s4/DFTHCBlockEncoding: compiled (16.8 s, 821.3 MB)",
+  "fe4s4/OuterPrepare: compiled (5.1 s, 380.3 MB)",
+  "fe4s4/FlaggedUniformPrep@OuterPrepare: compiled (3.9 s, 324.7 MB)",
+  "fe4s4/PhaseGradientRotation@FlaggedUniformPrep@OuterPrepare: compiled (3.7 s, 314.2 MB)",
+  "fe4s4/QROAMRead@OuterPrepare: compiled (4.4 s, 356.3 MB)",
+  "fe4s4/InnerPrepare: compiled (5.7 s, 415.0 MB)",
+  "fe4s4/FlaggedUniformPrep@InnerPrepare: compiled (3.8 s, 323.2 MB)",
+  "fe4s4/PhaseGradientRotation@FlaggedUniformPrep@InnerPrepare: compiled (3.7 s, 313.9 MB)",
+  "fe4s4/QROAMRead@InnerPrepare: compiled (5.1 s, 386.2 MB)",
+  "fe4s4/InnerSigns: compiled (3.3 s, 285.6 MB)",
+  "fe4s4/InnerSelect: compiled (9.3 s, 491.4 MB)",
+  "fe4s4/TailAngleLoad: compiled (4.1 s, 329.6 MB)",
+  "fe4s4/SFAngleLoad: compiled (5.8 s, 389.1 MB)",
+  "fe4s4/SpinMux: compiled (3.7 s, 313.0 MB)",
+  "fe4s4/SpinSwap: compiled (3.8 s, 316.5 MB)",
+  "fe4s4/GivensLadder: compiled (4.1 s, 334.7 MB)",
+  "fe4s4/GivensRotation: compiled (3.9 s, 318.5 MB)",
+  "fe4s4/MajoranaGate: compiled (3.7 s, 311.3 MB)",
+  "fe4s4/GivensLadderDagger: compiled (4.2 s, 336.1 MB)",
+  "fe4s4/Adjoint(GivensRotation): compiled (3.9 s, 319.7 MB)",
+  "fe4s4/AngleErase: compiled (5.6 s, 358.1 MB)",
+  "fe4s4/InnerUnprepareFromOutcomes: compiled (6.4 s, 418.0 MB)",
+  "fe4s4/Adjoint(FlaggedUniformPrep)@InnerUnprepareFromOutcomes: compiled (3.9 s, 323.6 MB)",
+  "fe4s4/RefT2: compiled (3.8 s, 319.3 MB)",
+  "fe4s4/InnerSelectDagger: compiled (8.9 s, 526.2 MB)",
+  "fe4s4/Adjoint(MajoranaGate): compiled (3.8 s, 313.1 MB)",
+  "fe4s4/OuterUnprepareFromOutcomes: compiled (4.4 s, 346.8 MB)",
+  "fe4s4/Adjoint(FlaggedUniformPrep)@OuterUnprepareFromOutcomes: compiled (3.9 s, 327.7 MB)",
+  "fe4s4/RefAB: compiled (4.4 s, 320.0 MB)",
+  "fe4s4/ControlledDFTHCWalk: compiled (19.4 s, 977.1 MB)",
+  "fe4s4/ControlledRefT2: compiled (4.1 s, 321.9 MB)",
+  "fe4s4/ControlledRefAB: compiled (3.9 s, 322.8 MB)",
+  "fe4s4/PhaseFixup@InnerUnprepareFromOutcomes: compiled (5.9 s, 383.6 MB)",
+  "fe4s4/PhaseFixup@OuterUnprepareFromOutcomes: compiled (4.0 s, 321.3 MB)",
+  "fe4s4/ControlledWalkPower(p=1): compiled (21.0 s, 986.2 MB)",
+  "fe4s4/ControlledWalkPower(p=2): compiled (21.2 s, 1043.2 MB)"
  ],
  "compiled": {
   "h2_sto3g_R2_B2_C1/DFTHCWalk": [
@@ -17380,6 +17528,1348 @@
     },
     "num_wires": 499,
     "seconds": 17.02
+   }
+  ],
+  "fe4s4/DFTHCWalk": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 18.6,
+     "peak_mb": 837.9,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 6533,
+    "measurements": 1464,
+    "measured_and_uncomputes": 6533,
+    "counts": {
+     "Adjoint(S)": 420,
+     "Adjoint(TemporaryAND)": 6533,
+     "CNOT": 516090,
+     "CZ": 2017,
+     "GlobalPhase": 2,
+     "Hadamard": 3056,
+     "MidCircuitMeasure": 1464,
+     "PauliX": 93490,
+     "PauliZ": 38,
+     "PhaseGradientStatePrep": 1,
+     "S": 420,
+     "TemporaryAND": 6533
+    },
+    "num_wires": 757,
+    "seconds": 16.65
+   }
+  ],
+  "fe4s4/DFTHCBlockEncoding": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 16.8,
+     "peak_mb": 821.3,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 6491,
+    "measurements": 1464,
+    "measured_and_uncomputes": 6491,
+    "counts": {
+     "Adjoint(S)": 420,
+     "Adjoint(TemporaryAND)": 6491,
+     "CNOT": 516089,
+     "CZ": 2017,
+     "GlobalPhase": 1,
+     "Hadamard": 3054,
+     "MidCircuitMeasure": 1464,
+     "PauliX": 93398,
+     "PauliZ": 38,
+     "S": 420,
+     "TemporaryAND": 6491
+    },
+    "num_wires": 757,
+    "seconds": 13.78
+   }
+  ],
+  "fe4s4/OuterPrepare": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 5.1,
+     "peak_mb": 380.3,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 148,
+    "measurements": 0,
+    "measured_and_uncomputes": 126,
+    "counts": {
+     "Adjoint(TemporaryAND)": 126,
+     "CNOT": 3467,
+     "Hadamard": 40,
+     "PauliX": 3348,
+     "TemporaryAND": 148
+    },
+    "num_wires": 129,
+    "seconds": 2.18
+   }
+  ],
+  "fe4s4/FlaggedUniformPrep@OuterPrepare": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 3.9,
+     "peak_mb": 324.7,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 33,
+    "measurements": 0,
+    "measured_and_uncomputes": 26,
+    "counts": {
+     "Adjoint(TemporaryAND)": 26,
+     "CNOT": 106,
+     "Hadamard": 24,
+     "PauliX": 93,
+     "TemporaryAND": 33
+    },
+    "num_wires": 44,
+    "seconds": 1.28
+   }
+  ],
+  "fe4s4/PhaseGradientRotation@FlaggedUniformPrep@OuterPrepare": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 3.7,
+     "peak_mb": 314.2,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 6,
+    "measurements": 0,
+    "measured_and_uncomputes": 6,
+    "counts": {
+     "Adjoint(TemporaryAND)": 6,
+     "CNOT": 41,
+     "TemporaryAND": 6
+    },
+    "num_wires": 21,
+    "seconds": 1.14
+   }
+  ],
+  "fe4s4/QROAMRead@OuterPrepare": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 4.4,
+     "peak_mb": 356.3,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 92,
+    "measurements": 0,
+    "measured_and_uncomputes": 92,
+    "counts": {
+     "Adjoint(TemporaryAND)": 92,
+     "CNOT": 3265,
+     "PauliX": 3222,
+     "TemporaryAND": 92
+    },
+    "num_wires": 60,
+    "seconds": 1.86
+   }
+  ],
+  "fe4s4/InnerPrepare": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 5.7,
+     "peak_mb": 415.0,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 424,
+    "measurements": 0,
+    "measured_and_uncomputes": 408,
+    "counts": {
+     "Adjoint(TemporaryAND)": 408,
+     "CNOT": 43700,
+     "Hadamard": 24,
+     "PauliX": 43564,
+     "TemporaryAND": 424
+    },
+    "num_wires": 291,
+    "seconds": 2.95
+   }
+  ],
+  "fe4s4/FlaggedUniformPrep@InnerPrepare": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 3.8,
+     "peak_mb": 323.2,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 15,
+    "measurements": 0,
+    "measured_and_uncomputes": 14,
+    "counts": {
+     "Adjoint(TemporaryAND)": 14,
+     "CNOT": 84,
+     "Hadamard": 8,
+     "PauliX": 21,
+     "TemporaryAND": 15
+    },
+    "num_wires": 28,
+    "seconds": 1.23
+   }
+  ],
+  "fe4s4/PhaseGradientRotation@FlaggedUniformPrep@InnerPrepare": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 3.7,
+     "peak_mb": 313.9,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 6,
+    "measurements": 0,
+    "measured_and_uncomputes": 6,
+    "counts": {
+     "Adjoint(TemporaryAND)": 6,
+     "CNOT": 39,
+     "TemporaryAND": 6
+    },
+    "num_wires": 21,
+    "seconds": 1.16
+   }
+  ],
+  "fe4s4/QROAMRead@InnerPrepare": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 5.1,
+     "peak_mb": 386.2,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 390,
+    "measurements": 0,
+    "measured_and_uncomputes": 390,
+    "counts": {
+     "Adjoint(TemporaryAND)": 390,
+     "CNOT": 43532,
+     "PauliX": 43526,
+     "TemporaryAND": 390
+    },
+    "num_wires": 236,
+    "seconds": 2.47
+   }
+  ],
+  "fe4s4/InnerSigns": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 3.3,
+     "peak_mb": 285.6,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 0,
+    "measurements": 0,
+    "measured_and_uncomputes": 0,
+    "counts": {
+     "CZ": 1,
+     "PauliZ": 1
+    },
+    "num_wires": 3,
+    "seconds": 0.72
+   }
+  ],
+  "fe4s4/InnerSelect": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 9.3,
+     "peak_mb": 491.4,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 2609,
+    "measurements": 493,
+    "measured_and_uncomputes": 2609,
+    "counts": {
+     "Adjoint(S)": 210,
+     "Adjoint(TemporaryAND)": 2609,
+     "CNOT": 212209,
+     "CZ": 182,
+     "Hadamard": 1199,
+     "MidCircuitMeasure": 493,
+     "PauliX": 1093,
+     "PauliZ": 18,
+     "S": 210,
+     "TemporaryAND": 2609
+    },
+    "num_wires": 617,
+    "seconds": 6.66
+   }
+  ],
+  "fe4s4/TailAngleLoad": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 4.1,
+     "peak_mb": 329.6,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 43,
+    "measurements": 0,
+    "measured_and_uncomputes": 43,
+    "counts": {
+     "Adjoint(TemporaryAND)": 43,
+     "CNOT": 17746,
+     "PauliX": 2,
+     "TemporaryAND": 43
+    },
+    "num_wires": 507,
+    "seconds": 1.48
+   }
+  ],
+  "fe4s4/SFAngleLoad": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 5.8,
+     "peak_mb": 389.1,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 433,
+    "measurements": 0,
+    "measured_and_uncomputes": 433,
+    "counts": {
+     "Adjoint(TemporaryAND)": 433,
+     "CNOT": 178595,
+     "PauliX": 2,
+     "TemporaryAND": 433
+    },
+    "num_wires": 512,
+    "seconds": 3.23
+   }
+  ],
+  "fe4s4/SpinMux": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 3.7,
+     "peak_mb": 313.0,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 1,
+    "measurements": 0,
+    "measured_and_uncomputes": 1,
+    "counts": {
+     "Adjoint(TemporaryAND)": 1,
+     "CNOT": 4,
+     "PauliX": 4,
+     "TemporaryAND": 1
+    },
+    "num_wires": 5,
+    "seconds": 1.11
+   }
+  ],
+  "fe4s4/SpinSwap": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 3.8,
+     "peak_mb": 316.5,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 36,
+    "measurements": 0,
+    "measured_and_uncomputes": 36,
+    "counts": {
+     "Adjoint(TemporaryAND)": 36,
+     "CNOT": 108,
+     "PauliX": 144,
+     "TemporaryAND": 36
+    },
+    "num_wires": 74,
+    "seconds": 1.19
+   }
+  ],
+  "fe4s4/GivensLadder": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 4.1,
+     "peak_mb": 334.7,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 980,
+    "measurements": 0,
+    "measured_and_uncomputes": 980,
+    "counts": {
+     "Adjoint(S)": 105,
+     "Adjoint(TemporaryAND)": 980,
+     "CNOT": 7770,
+     "Hadamard": 350,
+     "PauliX": 140,
+     "S": 105,
+     "TemporaryAND": 980
+    },
+    "num_wires": 555,
+    "seconds": 1.46
+   }
+  ],
+  "fe4s4/GivensRotation": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 3.9,
+     "peak_mb": 318.5,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 28,
+    "measurements": 0,
+    "measured_and_uncomputes": 28,
+    "counts": {
+     "Adjoint(S)": 3,
+     "Adjoint(TemporaryAND)": 28,
+     "CNOT": 222,
+     "Hadamard": 10,
+     "PauliX": 4,
+     "S": 3,
+     "TemporaryAND": 28
+    },
+    "num_wires": 45,
+    "seconds": 1.28
+   }
+  ],
+  "fe4s4/MajoranaGate": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 3.7,
+     "peak_mb": 311.3,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 5,
+    "measurements": 0,
+    "measured_and_uncomputes": 5,
+    "counts": {
+     "Adjoint(TemporaryAND)": 5,
+     "CNOT": 6,
+     "Hadamard": 6,
+     "PauliX": 14,
+     "TemporaryAND": 5
+    },
+    "num_wires": 10,
+    "seconds": 1.18
+   }
+  ],
+  "fe4s4/GivensLadderDagger": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 4.2,
+     "peak_mb": 336.1,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 980,
+    "measurements": 0,
+    "measured_and_uncomputes": 980,
+    "counts": {
+     "Adjoint(S)": 105,
+     "Adjoint(TemporaryAND)": 980,
+     "CNOT": 7770,
+     "Hadamard": 350,
+     "PauliX": 140,
+     "S": 105,
+     "TemporaryAND": 980
+    },
+    "num_wires": 555,
+    "seconds": 1.46
+   }
+  ],
+  "fe4s4/Adjoint(GivensRotation)": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 3.9,
+     "peak_mb": 319.7,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 28,
+    "measurements": 0,
+    "measured_and_uncomputes": 28,
+    "counts": {
+     "Adjoint(S)": 3,
+     "Adjoint(TemporaryAND)": 28,
+     "CNOT": 222,
+     "Hadamard": 10,
+     "PauliX": 4,
+     "S": 3,
+     "TemporaryAND": 28
+    },
+    "num_wires": 45,
+    "seconds": 1.28
+   }
+  ],
+  "fe4s4/AngleErase": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 5.6,
+     "peak_mb": 358.1,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 94,
+    "measurements": 493,
+    "measured_and_uncomputes": 94,
+    "counts": {
+     "Adjoint(TemporaryAND)": 94,
+     "CNOT": 98,
+     "CZ": 182,
+     "Hadamard": 493,
+     "MidCircuitMeasure": 493,
+     "PauliX": 499,
+     "PauliZ": 18,
+     "TemporaryAND": 94
+    },
+    "num_wires": 518,
+    "seconds": 2.81
+   }
+  ],
+  "fe4s4/InnerUnprepareFromOutcomes": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 6.4,
+     "peak_mb": 418.0,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 100,
+    "measurements": 27,
+    "measured_and_uncomputes": 116,
+    "counts": {
+     "Adjoint(TemporaryAND)": 116,
+     "CNOT": 281,
+     "CZ": 792,
+     "Hadamard": 51,
+     "MidCircuitMeasure": 27,
+     "PauliX": 69,
+     "TemporaryAND": 100
+    },
+    "num_wires": 107,
+    "seconds": 3.85
+   }
+  ],
+  "fe4s4/Adjoint(FlaggedUniformPrep)@InnerUnprepareFromOutcomes": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 3.9,
+     "peak_mb": 323.6,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 14,
+    "measurements": 0,
+    "measured_and_uncomputes": 15,
+    "counts": {
+     "Adjoint(TemporaryAND)": 15,
+     "CNOT": 84,
+     "Hadamard": 8,
+     "PauliX": 21,
+     "TemporaryAND": 14
+    },
+    "num_wires": 28,
+    "seconds": 1.24
+   }
+  ],
+  "fe4s4/RefT2": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 3.8,
+     "peak_mb": 319.3,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 19,
+    "measurements": 0,
+    "measured_and_uncomputes": 19,
+    "counts": {
+     "Adjoint(TemporaryAND)": 19,
+     "CNOT": 1,
+     "GlobalPhase": 1,
+     "Hadamard": 2,
+     "PauliX": 44,
+     "TemporaryAND": 19
+    },
+    "num_wires": 40,
+    "seconds": 1.23
+   }
+  ],
+  "fe4s4/InnerSelectDagger": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 8.9,
+     "peak_mb": 526.2,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 2609,
+    "measurements": 493,
+    "measured_and_uncomputes": 2609,
+    "counts": {
+     "Adjoint(S)": 210,
+     "Adjoint(TemporaryAND)": 2609,
+     "CNOT": 212209,
+     "CZ": 182,
+     "Hadamard": 1199,
+     "MidCircuitMeasure": 493,
+     "PauliX": 1093,
+     "PauliZ": 18,
+     "S": 210,
+     "TemporaryAND": 2609
+    },
+    "num_wires": 617,
+    "seconds": 6.22
+   }
+  ],
+  "fe4s4/Adjoint(MajoranaGate)": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 3.8,
+     "peak_mb": 313.1,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 5,
+    "measurements": 0,
+    "measured_and_uncomputes": 5,
+    "counts": {
+     "Adjoint(TemporaryAND)": 5,
+     "CNOT": 6,
+     "Hadamard": 6,
+     "PauliX": 14,
+     "TemporaryAND": 5
+    },
+    "num_wires": 10,
+    "seconds": 1.16
+   }
+  ],
+  "fe4s4/OuterUnprepareFromOutcomes": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 4.4,
+     "peak_mb": 346.8,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 58,
+    "measurements": 23,
+    "measured_and_uncomputes": 80,
+    "counts": {
+     "Adjoint(TemporaryAND)": 80,
+     "CNOT": 241,
+     "CZ": 68,
+     "Hadamard": 63,
+     "MidCircuitMeasure": 23,
+     "PauliX": 153,
+     "TemporaryAND": 58
+    },
+    "num_wires": 106,
+    "seconds": 1.79
+   }
+  ],
+  "fe4s4/Adjoint(FlaggedUniformPrep)@OuterUnprepareFromOutcomes": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 3.9,
+     "peak_mb": 327.7,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 26,
+    "measurements": 0,
+    "measured_and_uncomputes": 33,
+    "counts": {
+     "Adjoint(TemporaryAND)": 33,
+     "CNOT": 106,
+     "Hadamard": 24,
+     "PauliX": 93,
+     "TemporaryAND": 26
+    },
+    "num_wires": 44,
+    "seconds": 1.31
+   }
+  ],
+  "fe4s4/RefAB": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 4.4,
+     "peak_mb": 320.0,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 42,
+    "measurements": 0,
+    "measured_and_uncomputes": 42,
+    "counts": {
+     "Adjoint(TemporaryAND)": 42,
+     "CNOT": 1,
+     "GlobalPhase": 1,
+     "Hadamard": 2,
+     "PauliX": 92,
+     "TemporaryAND": 42
+    },
+    "num_wires": 86,
+    "seconds": 1.37
+   }
+  ],
+  "fe4s4/ControlledDFTHCWalk": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 19.4,
+     "peak_mb": 977.1,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 6535,
+    "measurements": 1464,
+    "measured_and_uncomputes": 6535,
+    "counts": {
+     "Adjoint(S)": 420,
+     "Adjoint(TemporaryAND)": 6535,
+     "CNOT": 516090,
+     "CZ": 2017,
+     "Hadamard": 3056,
+     "MidCircuitMeasure": 1464,
+     "PauliX": 93496,
+     "PauliZ": 40,
+     "PhaseGradientStatePrep": 1,
+     "S": 420,
+     "TemporaryAND": 6535
+    },
+    "num_wires": 758,
+    "seconds": 17.72
+   }
+  ],
+  "fe4s4/ControlledRefT2": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 4.1,
+     "peak_mb": 321.9,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 20,
+    "measurements": 0,
+    "measured_and_uncomputes": 20,
+    "counts": {
+     "Adjoint(TemporaryAND)": 20,
+     "CNOT": 1,
+     "Hadamard": 2,
+     "PauliX": 46,
+     "PauliZ": 1,
+     "TemporaryAND": 20
+    },
+    "num_wires": 42,
+    "seconds": 1.3
+   }
+  ],
+  "fe4s4/ControlledRefAB": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 3.9,
+     "peak_mb": 322.8,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 43,
+    "measurements": 0,
+    "measured_and_uncomputes": 43,
+    "counts": {
+     "Adjoint(TemporaryAND)": 43,
+     "CNOT": 1,
+     "Hadamard": 2,
+     "PauliX": 94,
+     "PauliZ": 1,
+     "TemporaryAND": 43
+    },
+    "num_wires": 88,
+    "seconds": 1.34
+   }
+  ],
+  "fe4s4/PhaseFixup@InnerUnprepareFromOutcomes": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 5.9,
+     "peak_mb": 383.6,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 82,
+    "measurements": 0,
+    "measured_and_uncomputes": 82,
+    "counts": {
+     "Adjoint(TemporaryAND)": 82,
+     "CNOT": 113,
+     "CZ": 792,
+     "PauliX": 4,
+     "TemporaryAND": 82
+    },
+    "num_wires": 50,
+    "seconds": 3.24
+   }
+  ],
+  "fe4s4/PhaseFixup@OuterUnprepareFromOutcomes": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 4.0,
+     "peak_mb": 321.3,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 24,
+    "measurements": 0,
+    "measured_and_uncomputes": 24,
+    "counts": {
+     "Adjoint(TemporaryAND)": 24,
+     "CNOT": 39,
+     "CZ": 68,
+     "PauliX": 4,
+     "TemporaryAND": 24
+    },
+    "num_wires": 27,
+    "seconds": 1.35
+   }
+  ],
+  "fe4s4/ControlledWalkPower(p=1)": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 21.0,
+     "peak_mb": 986.2,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 6535,
+    "measurements": 1464,
+    "measured_and_uncomputes": 6535,
+    "counts": {
+     "Adjoint(S)": 420,
+     "Adjoint(TemporaryAND)": 6535,
+     "CNOT": 516090,
+     "CZ": 2017,
+     "Hadamard": 3056,
+     "MidCircuitMeasure": 1464,
+     "PauliX": 93496,
+     "PauliZ": 40,
+     "PhaseGradientStatePrep": 1,
+     "S": 420,
+     "TemporaryAND": 6535
+    },
+    "num_wires": 758,
+    "seconds": 18.29
+   }
+  ],
+  "fe4s4/ControlledWalkPower(p=2)": [
+   {
+    "code_hash": "8358348c46fb56697aa8a39d0891d87172624d45aaf8222db8fc1233c0cf050d",
+    "environment": {
+     "python": "3.12.7",
+     "platform": "macOS-27.0.1-arm64-arm-64bit",
+     "pennylane": "0.46.0.dev151",
+     "pennylane_catalyst": "0.16.0.dev140",
+     "pennylane_lightning": "0.46.0.dev34",
+     "jax": "0.7.1",
+     "jaxlib": "0.7.1",
+     "numpy": "2.5.4",
+     "lock_sha256": "201c74003e976a452329f867aaa8b83d00929c13c93c64b69c686571e6776af3"
+    },
+    "run": {
+     "returncode": 0,
+     "seconds": 21.2,
+     "peak_mb": 1043.2,
+     "timed_out": false
+    },
+    "status": "compiled",
+    "toffoli": 13070,
+    "measurements": 2928,
+    "measured_and_uncomputes": 13070,
+    "counts": {
+     "Adjoint(S)": 840,
+     "Adjoint(TemporaryAND)": 13070,
+     "CNOT": 1032180,
+     "CZ": 4034,
+     "Hadamard": 6112,
+     "MidCircuitMeasure": 2928,
+     "PauliX": 186992,
+     "PauliZ": 80,
+     "PhaseGradientStatePrep": 1,
+     "S": 840,
+     "TemporaryAND": 13070
+    },
+    "num_wires": 758,
+    "seconds": 18.19
    }
   ]
  }
