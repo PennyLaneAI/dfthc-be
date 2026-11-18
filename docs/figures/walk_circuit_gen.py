@@ -6,7 +6,8 @@ sips -s format png -Z 3600 walk_circuit.pdf --out walk_circuit.png"""
 
 GREEN, BLUE, YELLOW, GREY, ORANGE, PINK, CAT = ("green!22", "cyan!18", "yellow!60", "gray!35",
                                                 "orange!35", "red!18", "gray!12")
-T = lambda s: r"\texttt{" + s.replace("_", r"\_") + "}"
+def T(s):
+    return r"\texttt{" + s.replace("_", r"\_") + "}"
 
 ROWS = [  # (label, bundle)
     (T("succ_x_o"), None),
