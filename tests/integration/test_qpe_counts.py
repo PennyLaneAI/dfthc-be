@@ -1,3 +1,17 @@
+# Copyright 2026 Xanadu Quantum Technologies Inc.
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """QPE resource counts (spec 11.3; master plan Task 4.2): the iterative QPE program compiles at
 H2_STO3G_TEST and H2_631G_TEST for t = 1, 2, 3, and its worst-case counts equal
 dfthc.costs.iterative_qpe exactly: T = (2^t - 1) T_C(W) + (t^3 - t)/6 and M = (2^t - 1) M_W + t,

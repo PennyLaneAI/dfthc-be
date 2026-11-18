@@ -1,3 +1,17 @@
+# Copyright 2026 Xanadu Quantum Technologies Inc.
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """The walk's shared work pool (spec 10.1 and 10.2): every call of the three assembly rules (the
 block encoding's, the walk's and the controlled walk's) gets exactly its required_wires, its work is
 a prefix of the pool, and neither the pool nor the comparators' dirty work registers appear where

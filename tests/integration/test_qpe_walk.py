@@ -1,3 +1,17 @@
+# Copyright 2026 Xanadu Quantum Technologies Inc.
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+#     http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """Iterative phase estimation of the DFTHC walk itself on the sparse simulator (spec 11.1; master
 plan Task 4.1): the branch distribution of the control bits equals the exact distribution the
 encoded model predicts, at H2_STO3G_TEST (t = 1 nightly, t = 2 release) and at FAILS_C3 (t = 1
