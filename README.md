@@ -20,11 +20,11 @@ swap's or a single Toffoli's is one too), each compiled count equal to its close
 | --- | ---: | ---: | ---: | ---: |
 | H2, STO-3G | 177 | 341 | 392 | 400 |
 | naphthalene | 327 | 1,910 | 1,937 | 1,965 |
-| Fe2S2 | 498 | 4,411* | 4,420 | 4,506 |
+| Fe2S2 | 498 | 4,411 | 4,420 | 4,506 |
 | Fe4S4 | 757 | 6,533* | 6,336 | 6,556 |
 | FeMoco-54 | 1,049 (paper: 1,131) | 9,790 | 9,641 | 9,997 |
 
-\* Closed form; not recompiled since the 2026-11-17 changes (`--large fe2s2|fe4s4`).
+\* Closed form; not compiled under the current code (`--large fe4s4`).
 
 Each difference from dfthcbe and from the paper is broken down by cause in
 [`docs/resources.md`](docs/resources.md), which reports every block of every system, with
