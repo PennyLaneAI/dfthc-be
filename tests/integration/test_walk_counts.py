@@ -15,7 +15,7 @@
 """Whole-program counts of the walk and the controlled walk (spec 9.22 and 9.24):
 each compiles as one program, its T, M and A equal the closed forms exactly at the test
 presets (per commit) and at MID_NAPHTHALENE (nightly, each compile in a subprocess under
-run_watched, which records its time and memory), and the FeMoco-54 values on the closed forms.
+run_measured, which records its time and memory), and the FeMoco-54 values on the closed forms.
 
 ``python tests/integration/test_walk_counts.py PROGRAM`` compiles one MID_NAPHTHALENE program
 (``walk`` or ``controlled_walk``) and prints its counts as JSON on a line prefixed ``RESULT``.
@@ -36,13 +36,11 @@ from dfthc.data.factors import load_factors
 from dfthc.ops.walk import DFTHCWalk
 from dfthc.params import FEMOCO54, MID_NAPHTHALENE
 from dfthc.testing import walk_sim
-from dfthc.testing.watchdog import effective_limit_mb, run_watched
+from dfthc.testing.measure import run_measured
 
 REPO = Path(__file__).resolve().parents[2]
 PROGRAMS = {"walk": False, "controlled_walk": True}
 """Each program and whether it is the controlled walk, qp.ctrl(DFTHCWalk)."""
-CAP_MB = 4096
-"""The MID_NAPHTHALENE compiles' cap: the watchdog kills at 3,840 MB (docs/environment.md)."""
 PREFIX = "RESULT "
 
 
@@ -105,17 +103,16 @@ def compile_mid(program: str) -> dict:
 @pytest.mark.parametrize("program", PROGRAMS)
 def test_counts_at_mid_naphthalene(program):
     """T4 at MID_NAPHTHALENE (nightly), each program compiled once in a subprocess under
-    run_watched with a 4 GB cap: T = A = 1,910 / 1,912, M = 484, no Toffoli. The MID_COMPILE
-    line records the watched wall time and peak memory."""
+    run_measured: T = A = 1,910 / 1,912, M = 484, no Toffoli. The MID_COMPILE line records the
+    subprocess's wall time and peak memory."""
     command = [sys.executable, str(Path(__file__).resolve()), program]
     env = os.environ | {"PYTHONPATH": str(REPO / "src"),
                         "CATALYST_SILENCE_RULE_LOWERING_WARNINGS": "0"}
-    run = run_watched(command, cap_mb=CAP_MB, timeout_s=900, cwd=REPO, env=env)
+    run = run_measured(command, timeout_s=900, cwd=REPO, env=env)
     lines = [line for line in run.stdout.splitlines() if line.startswith(PREFIX)]
     result = json.loads(lines[0][len(PREFIX):]) if len(lines) == 1 else None
-    print("MID_COMPILE " + json.dumps({"watchdog": run.summary(), "result": result}))
-    assert run.killed is None and not run.survivors and run.returncode == 0, run.stderr[-2000:]
-    assert run.peak_mb <= effective_limit_mb(CAP_MB)
+    print("MID_COMPILE " + json.dumps({"run": run.summary(), "result": result}))
+    assert not run.timed_out and run.returncode == 0, run.stderr[-2000:]
     assert result is not None, run.stdout[-2000:]
     controlled = PROGRAMS[program]
     expected = costs.walk(MID_NAPHTHALENE, controlled)

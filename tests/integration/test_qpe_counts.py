@@ -16,10 +16,10 @@
 H2_STO3G_TEST and H2_631G_TEST for t = 1, 2, 3, and its worst-case counts equal
 dfthc.costs.iterative_qpe exactly: T = (2^t - 1) T_C(W) + (t^3 - t)/6 and M = (2^t - 1) M_W + t,
 with T_C(W) and M_W compiled at the same preset (A likewise: (2^t - 1) A_C(W) + (t^3 - t)/6).
-Every compile runs in a subprocess under run_watched, and its QPE_COMPILE line records the
-watched time and peak memory and the expected CZ and PauliZ totals. The inventory test of Task
-3.4 passes for the program at H2_STO3G_TEST with t = 2. Nothing is compiled at FeMoco-54 shape:
-there the closed form stands (spec 11.3).
+Every compile runs in a subprocess under run_measured, and its QPE_COMPILE line records the
+subprocess's wall time and peak memory and the expected CZ and PauliZ totals. The inventory test
+of Task 3.4 passes for the program at H2_STO3G_TEST with t = 2. Nothing is compiled at FeMoco-54
+shape: there the closed form stands (spec 11.3).
 
 ``python tests/integration/test_qpe_counts.py PRESET PROGRAM`` compiles one program at ``sto3g``
 or ``631g``: ``walk`` (the controlled walk) or ``qpe1``, ``qpe2``, ``qpe3`` (the QPE program with
@@ -43,13 +43,11 @@ from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST
 from dfthc.qpe import qpe_program
 from dfthc.registers import WalkLayout
 from dfthc.testing import walk_sim
+from dfthc.testing.measure import run_measured
 from dfthc.testing.resources import LEAF_ADJOINTS, TEMPLATE_ADJOINTS, captured_targets, inventory
-from dfthc.testing.watchdog import effective_limit_mb, run_watched
 
 REPO = Path(__file__).resolve().parents[2]
 PRESETS = {"sto3g": H2_STO3G_TEST, "631g": H2_631G_TEST}
-CAP_MB = 4096
-"""Each compile's cap: the watchdog kills at 3,840 MB (docs/environment.md)."""
 PREFIX = "RESULT "
 CLIFFORDS = ("CZ", "PauliZ")
 """Recorded, not asserted, as expected totals: the deterministic CZ and Z of InnerSigns and of
@@ -85,18 +83,17 @@ def compile_counts(name: str, program: str) -> dict:
 
 
 @functools.cache
-def watched(name: str, program: str) -> dict:
-    """``compile_counts`` in a subprocess under run_watched (4 GB cap); prints the QPE_COMPILE
-    line and returns the counts."""
+def measured(name: str, program: str) -> dict:
+    """``compile_counts`` in a subprocess under run_measured; prints the QPE_COMPILE line and
+    returns the counts."""
     command = [sys.executable, str(Path(__file__).resolve()), name, program]
     env = os.environ | {"PYTHONPATH": str(REPO / "src"),
                         "CATALYST_SILENCE_RULE_LOWERING_WARNINGS": "0"}
-    run = run_watched(command, cap_mb=CAP_MB, timeout_s=900, cwd=REPO, env=env)
+    run = run_measured(command, timeout_s=900, cwd=REPO, env=env)
     lines = [line for line in run.stdout.splitlines() if line.startswith(PREFIX)]
     result = json.loads(lines[0][len(PREFIX):]) if len(lines) == 1 else None
-    print("QPE_COMPILE " + json.dumps({"watchdog": run.summary(), "result": result}))
-    assert run.killed is None and not run.survivors and run.returncode == 0, run.stderr[-2000:]
-    assert run.peak_mb <= effective_limit_mb(CAP_MB)
+    print("QPE_COMPILE " + json.dumps({"run": run.summary(), "result": result}))
+    assert not run.timed_out and run.returncode == 0, run.stderr[-2000:]
     assert result is not None, run.stdout[-2000:]
     return result
 
@@ -113,7 +110,7 @@ def test_qpe_counts(name, t):
     A = 180, 541, 1,264. The program has exactly WalkLayout's wires with qpe_bits = t: the
     corrections' 2t - 1 wires are the work pool's (8 and 9 wires)."""
     p = PRESETS[name]
-    walk, qpe = watched(name, "walk"), watched(name, f"qpe{t}")
+    walk, qpe = measured(name, "walk"), measured(name, f"qpe{t}")
     assert (walk["toffoli"], walk["measurements"], walk["measured_and_uncomputes"]) == (
         costs.walk(p, True).toffoli, costs.walk(p, False).measurements,
         costs.measured_and_uncomputes(p, True))

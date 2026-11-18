@@ -115,7 +115,7 @@ src/dfthc/
   compile.py          gate set, rule registration, compiled_resources() (the tests' compile-and-count helper)
   costs.py            closed-form Toffoli and measurement counts of every block
   costs_reference.py  the paper's and dfthcbe's costs, and the causes of each difference
-  testing/            sparse simulator, walk cases, memory watchdog, compile cache provenance
+  testing/            sparse simulator, walk cases, measured subprocess runs, compile cache provenance
 data/dfthc/           DFTHC factors vendored from dfthcbe (Apache-2.0)
 scripts/              environment setup, test runner, resource report, fixture generators
 tests/                the test suite

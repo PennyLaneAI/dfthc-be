@@ -107,4 +107,4 @@ measurements in M) and the QPE summary, while the code hash matches.
 
 `scripts/test.sh` runs two workers at lowered priority (`DFTHC_TEST_WORKERS` overrides). One
 test: `scripts/test.sh tests/ops/test_walk.py::test_name -q`. The nightly and release tiers and
-every heavy run go under the watchdog, one at a time (see [`environment.md`](environment.md)).
+every heavy run go one at a time (see [`environment.md`](environment.md)).

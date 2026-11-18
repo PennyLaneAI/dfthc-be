@@ -377,7 +377,7 @@ dfthc-be/
       toy_walk.py             ToyWalk, its C(ToyWalk) rule and ToyControlledWalkPower for QPE tests (§11.4)
       fixtures.py             small parameter sets, loaders for reference fixtures
       resources.py            assertions on compiled resources, warning filters
-      watchdog.py             memory and time watchdog for heavy runs (§15)
+      measure.py              run_measured(): a subprocess with a timeout, its wall time and peak memory
       provenance.py           code hash and environment record of cached compiles (§13.3)
       canary.py               run_snippet(): canary snippets in a fresh Python process (§14)
   tests/
@@ -517,7 +517,7 @@ pip freeze > requirements-nightly.lock
 - **The "could not be parsed" text alone proves nothing.** The text is `failed to load built-in decomposition rules from '...mlirbc': the rules file could not be parsed`. A failed compile prints it, because Catalyst tries the bytecode file as a fallback after its solver failed, but a successful verbose compile prints it too (spike T6). The cause of a failure is the `Decomposition rule not found for operator '<op>'` line of the same message. The file itself is intentionally not shipped (R-3).
 - **Activating the venv is recommended but not required.** Calling `.venv/bin/python` directly also works with in-call rule lowering.
 
-**Machine limits.** The development laptop has 10 cores and 16 GB, and the user works on it while agents run. `scripts/test.sh` runs 2 xdist workers by default (`DFTHC_TEST_WORKERS` overrides) at lowered priority: `nice -n 10`, or, in the agent sandbox, which forbids setpriority(), the utility QoS clamp of `taskpolicy`. Each process tree has a sampled 8 GB memory cap: macOS enforces no memory limit (`setrlimit` rejects lowering `RLIMIT_AS`, `RLIMIT_RSS` and `RLIMIT_DATA`), so the watchdog kills a tree at the first sample above 7.5 GB, and the overshoot is bounded by one 50 ms sampling interval of growth. The heavy-process and large-compile policy is in §15.
+**Machine limits.** The development laptop has 10 cores and 16 GB, and the user works on it while agents run. `scripts/test.sh` runs 2 xdist workers by default (`DFTHC_TEST_WORKERS` overrides) at lowered priority: `nice -n 10`, or, in the agent sandbox, which forbids setpriority(), the utility QoS clamp of `taskpolicy`. The heavy-process and large-compile policy is in §15.
 
 **Bumping the nightlies** (orchestrator work, at a phase gate).
 1. Recreate `.venv` with the recipe.
@@ -1370,7 +1370,7 @@ Correctness for every outcome of an erase block is proved with GF(2) linearity, 
 - **Layout.** `tests/data`, `tests/ops` (one module per operator, holding T2–T6), `tests/integration` (T8 and QPE), `tests/sim`, `tests/canary`, `tests/report`.
 - **Markers.** `compiled`, `slow`, `release`, `canary`, `femoco`, `subprocess`. `release` implies `slow`: a `conftest.py` hook adds `slow` to every test marked `release`, and the tier commands also exclude `release` explicitly.
 - **Budgets** are wall-clock times on the development laptop with the default 2 workers at lowered priority (§7.1). No tier contains a FeMoco-shaped compile; the release tier checks the cached FeMoco-54 counts without compiling (§15).
-- **Who runs what.** Agents run their targeted tests while developing and the per-commit tier at commit time; a per-commit run is not a heavy process. The nightly tier runs only at phase gates, started by the orchestrator under the watchdog, one run at a time. The release tier runs once, at the end of Phase 5, after the user's go-ahead.
+- **Who runs what.** Agents run their targeted tests while developing and the per-commit tier at commit time; a per-commit run is not a heavy process. The nightly tier runs only at phase gates, started by the orchestrator, one run at a time. The release tier runs once, at the end of Phase 5, after the user's go-ahead.
 
 | Tier | Command | Content | Budget |
 | --- | --- | --- | --- |
@@ -1381,7 +1381,7 @@ Correctness for every outcome of an erase block is proved with GF(2) linearity, 
 The release tier is reduced from the original plan (12 h with every core; E-1 and E-3 under two seeded schedules on all 16 inputs; FeMoco compiles). The §12.5 certificates already prove every erase outcome, so end-to-end schedules are smoke tests, and the nightly runs at the gates already cover the rest. Phase 3 projects the release run from per-input timings; if the projection exceeds 8 h, the orchestrator escalates with options before Phase 5.
 
 **Benchmark gate (Phase 1, workstream B).**
-- *Budgets.* One complete E-1 schedule of `H2_STO3G_TEST` (16 inputs) must finish within 20 minutes and below 3.75 GB (the watchdog's kill point under a 4 GB cap), so it is not a heavy process. One `H2_631G_TEST` input must finish within 10 minutes and below 3.75 GB.
+- *Budgets.* One complete E-1 schedule of `H2_STO3G_TEST` (16 inputs) must finish within 20 minutes and below 3.75 GB, so it is not a heavy process. One `H2_631G_TEST` input must finish within 10 minutes and below 3.75 GB.
 - *Mitigations, applied in order if over budget:*
   1. batch all inputs through a reference register;
   2. vectorize the hot handlers;
@@ -1436,11 +1436,13 @@ See §10.3: 1,049 with Q-1 variant (b) (1,511 with the junk kept to the erase) a
 1. Builds the walk at FeMoco-54 shape (`random_factors`, fixed seed) and at every vendored system with default precisions.
 2. Compiles with `compiled_resources` on `null.qubit`, within the load policy of §15:
    - at the H2 systems and `naphthalene`: every operator of §9 separately, plus the walk and the controlled walk, and the QPE program ($t \le 3$) at the H2 systems;
-   - at `fe2s2` and `fe4s4`: the same programs as heavy runs, started by the orchestrator under the watchdog. Each program is first projected from the smaller compiles and compiled on the development laptop only if the projection stays within 7.5 GB (the watchdog's effective limit) and 60 minutes; the others follow the G0 decision of §16, K-1, or keep their closed form, marked refused. A program's size is its gates from its operator's resource functions; a program no larger than some measured one of its kind takes the largest time and peak over all measurements of its kind, and a larger one is extrapolated (K-1's method). The first killed or failed compile stops the system's run: the remaining programs are recorded as skipped, never as measurements, and the orchestrator escalates;
-   - at FeMoco-54: only the walk and the controlled walk, once each, as the last step of Phase 4. Every per-operator FeMoco-54 row is the closed form, validated exactly by the compiles above. If the walk is refused, killed or fails, the run stops before the controlled walk, which is recorded as skipped, and the orchestrator escalates to the user (§16, "Where compiles above the cap run").
+   - at `fe2s2` and `fe4s4`: the same programs, only with `--large`, as heavy runs started by the orchestrator;
+   - at FeMoco-54: only the walk and the controlled walk, once each (`--large femoco54`), as the last step of Phase 4. Every per-operator FeMoco-54 row is the closed form, validated exactly by the compiles above.
+
+   Each program compiles in its own subprocess with a timeout (15 minutes, 60 with `--large`), which records its wall time and peak memory (`dfthc.testing.measure.run_measured`). A failed or timed-out compile is recorded with its status, never as a measurement.
 3. Evaluates `dfthc.costs` (ours), the paper's Table III formulas and dfthcbe's formulas from `dfthc.costs_reference`, at the same parameters.
 4. Checks exactly, and exits non-zero on any difference: every compiled count equals its closed form, and at FeMoco-54 the sum over the blocks of calls per walk times the closed form, plus in $M$ the block encoding's own junk measurements (Q-1 variant (b)), equals the compiled walk and controlled-walk totals of $T$, $M$ and $A$.
-5. Writes `docs/resources.md` and `docs/resources.json`. The json caches every heavy compile with its counts, a hash of the code (the package outside `dfthc.testing`, `scripts/resource_report.py`, which builds the programs and selects the cache's entries, and the lock file) that ignores docstrings and comments, the environment, the wall time and the peak memory. Later runs reuse an entry while its hash matches, so a FeMoco-54 recompile happens only after a code change. An entry of another hash stays in the json as history; its row shows the closed form, marked pending, and never as a current measurement.
+5. Writes `docs/resources.md` and `docs/resources.json`. The json caches every heavy compile with its counts, a hash of the code (the package outside `dfthc.testing`, `scripts/resource_report.py`, which builds the programs and selects the cache's entries, and the lock file) that ignores docstrings and comments, the environment, the wall time and the peak memory (the largest resident size of the compiling subprocess and its reaped children). Later runs reuse an entry while its hash matches, so a FeMoco-54 recompile happens only after a code change. An entry of another hash stays in the json as history; its row shows the closed form, marked pending, and never as a current measurement.
 
 Each row is one program: an operator exactly as the walk or the controlled walk calls it (one row per distinct call, so `QROAMRead` has four), `PhaseFixup` with its callers' arguments, the reflection helpers (rows `RefT2`, `RefAB`, `ControlledRefT2`, `ControlledRefAB`), `ControlledWalkPower` ($p = 1, 2$) and the QPE program. The partition rows, the children of the walks, block encodings and selects, times their calls per walk give the walk exactly, with the block encoding's own junk measurements in $M$; the walk's unprepares from outcomes erase without `QROAMErase`, so the `PhaseFixup` rows take their erase arguments and `QROAMErase` has no row. Each report row contains:
 - block and paper steps;
@@ -1560,7 +1562,7 @@ A row's reason codes are the causes with a nonzero contribution to its delta, ea
     - *Canary:* `test_undecomposed_operator_op_reaches_runtime`: at `level="user"` an `Operator2` listed in the gate set remains named; with a rule the device pass decomposes it, and without a rule compiling for execution fails.
 21. **L-21: Each distinct compilable table is a distinct graph node and rule compile.** On 2026-11-12 each distinct table traces its rule exactly once per compile (the "twice" read on 2026-11-11 was the decoration-time compile of L-27), identical tables in one program share that trace, compile time grows with table size, and each distinct table adds its own rule trace ([catalyst#3173](https://github.com/PennyLaneAI/catalyst/issues/3173)).
     - *Mitigation:* few distinct table operators per walk (§9); the K-1 budget.
-    - *Canary:* `test_each_distinct_table_is_a_separate_rule_compile`. *Benchmark:* `test_compile_time_scaling` records the CPU time of the compile and the peak memory (the summed physical footprint of the process tree, as the watchdog measures it) for 1, 2 and 4 distinct tables, and for one table at sizes 64, 1,024 and 8,640 entries. It fails if a measurement is more than twice the baseline stored in `tests/canary/compile_baseline.json` (CPU time: and more than 2 s above it), or if the 8,640-entry compile costs less than five times the 64-entry one; refresh the baseline at each nightly bump.
+    - *Canary:* `test_each_distinct_table_is_a_separate_rule_compile`. *Benchmark:* `test_compile_time_scaling` records the CPU time of the compile and the peak memory (`wait4`'s largest resident size of the compiling process and its reaped children) for 1, 2 and 4 distinct tables, and for one table at sizes 64, 1,024 and 8,640 entries. It fails if a measurement is more than twice the baseline stored in `tests/canary/compile_baseline.json` (CPU time: and more than 2 s above it), or if the 8,640-entry compile costs less than five times the 64-entry one; refresh the baseline at each nightly bump.
 22. **L-22: Unresolved loops produce symbolic counts.** Loops whose bounds are not concrete, including the inner loops of PennyLane's select-swap `QROM`, give symbolic `qp.analyze` counts.
     - *Mitigation:* loops unrolled in Python or with static bounds; T4 asserts `is_symbolic == False`.
     - *Canary:* shared with L-12 and L-17 (`test_select_swap_qrom_counts_are_symbolic`, `test_dynamic_loop_counts_are_symbolic`).
@@ -1590,9 +1592,8 @@ A row's reason codes are the causes with a nonzero contribution to its delta, ea
 
 Decided by the user on 2026-11-11 ("Keep large-scale compilations to a minimum"; "Try to not run heavy processes throughout"). The development laptop has 10 cores and 16 GB, and the user works on it. `docs/environment.md` gives the commands.
 - *Heavy process:* a run whose process tree exceeds 4 GB of memory, keeps more than 2 cores busy or lasts longer than 30 minutes, and any FeMoco-shaped compile (a program holding a FeMoco-54 table).
-- *Memory cap:* 8 GB per process tree, a sampled limit (§7.1). The watchdog `dfthc.testing.watchdog` samples the tree's memory every 50 ms, kills it at the first sample above 7.5 GB (15/16 of the cap) and records the kill; every run that could approach the cap goes through it. The overshoot past 7.5 GB is bounded by one interval of growth, and stays below 8 GB for growth under 10 GB/s; compiles grew at 11 to 89 MB/s on average and at most about 0.5 GB/s within one interval. Projections and budgets use 7.5 GB, where execution stops. The watchdog fails closed: it starts nothing where it cannot measure (off macOS), and a measurement error kills the tree. A check whose budget would exceed 7.5 GB first measures at smaller sizes, projects, and escalates before it runs.
-- *Concurrency:* heavy processes run one at a time, never next to a test suite, under the watchdog.
-- *Large-scale compiles:* about six FeMoco-scale compiles for the whole project, each logged; more need the user's approval. None runs in the per-commit or nightly tier. K-1 compiles at FeMoco-54 shape only if its projection fits (§16); the resource report compiles the FeMoco-54 walk and controlled walk once each and caches the counts with the code hash (§13.3).
+- *Concurrency:* heavy processes run one at a time, never next to a test suite.
+- *Large-scale compiles:* about six FeMoco-scale compiles for the whole project, each logged; more need the user's approval. None runs in the per-commit or nightly tier. The resource report compiles the FeMoco-54 walk and controlled walk once each and caches the counts with the code hash (§13.3). The largest compile, the FeMoco-54 walk, takes about 50 s and 1.6 GB, and no run exceeded 2 GB, so no memory limit is enforced.
 
 ## 16. Risks and open questions
 

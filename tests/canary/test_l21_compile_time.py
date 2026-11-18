@@ -17,13 +17,13 @@
 The per-commit canary counts rule traces: every distinct table traces its rule once per compile
 (on 2026-11-11 it read twice, because the program was also compiled at decoration, L-27), and
 identical tables in one program share those traces. The nightly benchmark compiles
-each case in a fresh process under the watchdog and records wall time (informational), CPU time
+each case in a fresh process under ``run_measured`` and records wall time (informational), CPU time
 (Python plus the Catalyst compiler subprocess, measured across the compile only: the difference of
 ``getrusage`` for the process and its finished children before and after ``qp.analyze``) and peak
-memory (the watchdog's summed physical footprint of the process tree). It fails if CPU time
-exceeds the stored baseline by more than a factor of two and more than ``CPU_SLACK_SECONDS``,
-if peak memory exceeds twice the baseline, or if the compile cost no longer grows with table
-size. Refresh the baseline at every nightly bump, serially:
+memory (``wait4``'s maximum resident size of the process and its reaped children). It fails if
+CPU time exceeds the stored baseline by more than a factor of two and more than
+``CPU_SLACK_SECONDS``, if peak memory exceeds twice the baseline, or if the compile cost no
+longer grows with table size. Refresh the baseline at every nightly bump, serially:
 
     DFTHC_UPDATE_COMPILE_BASELINE=1 DFTHC_TEST_WORKERS=0 \
         scripts/test.sh tests/canary/test_l21_compile_time.py
@@ -40,7 +40,7 @@ from pennylane.core import Operator2
 
 from dfthc.compile import GATE_SET
 from dfthc.testing.canary import outcome, snippet_command
-from dfthc.testing.watchdog import HEAVY_MEMORY_MB, run_watched
+from dfthc.testing.measure import run_measured
 
 pytestmark = [pytest.mark.canary, pytest.mark.compiled]
 
@@ -55,7 +55,7 @@ CASES = {
 CPU_SLACK_SECONDS = 2.0
 """Absolute CPU slack of the baseline check (sub-second cases are noise-dominated when loaded)."""
 SIZE_GROWTH_MIN = 5
-"""Least compile CPU-time ratio of the 8,640- to the 64-entry case (about 55 on 2026-11-12)."""
+"""Least compile CPU-time ratio of the 8,640- to the 64-entry case (about 47 on 2026-11-18)."""
 
 _RULE_TRACES: list[tuple[int, ...]] = []
 
@@ -181,13 +181,11 @@ report("MEASURE", measure)
 
 
 def _measure(count: int, size: int) -> dict:
-    """Compile one case in a fresh process under the watchdog; CPU delta and tree peak memory."""
+    """Compile one case in a fresh process under ``run_measured``; CPU delta and peak memory."""
     command, env = snippet_command(f"COUNT = {count}\nSIZE = {size}\n" + _SNIPPET)
-    run = run_watched(command, cap_mb=HEAVY_MEMORY_MB, timeout_s=3600, env=env)
+    run = run_measured(command, timeout_s=3600, env=env)
     tail = "\n".join(run.stderr.splitlines()[-20:])
-    assert run.killed is None and run.returncode == 0 and not run.survivors, (
-        run.killed, run.returncode, run.survivors, tail
-    )
+    assert not run.timed_out and run.returncode == 0, (run.timed_out, run.returncode, tail)
     values = json.loads(outcome(run, "MEASURE").removeprefix("OK "))
     values["peak_mb"] = round(run.peak_mb, 1)
     return values

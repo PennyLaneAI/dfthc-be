@@ -16,11 +16,10 @@
 ``dfthc.costs_reference`` and ``dfthc.testing.provenance``.
 
 Per commit: every row and column at ``H2_STO3G_TEST`` (one compile per row, in this process), the
-two failing checks, the watched and projection-gated ``--large`` path on a stand-in with its stop
-policy, a projection for every large row (also after ``fe2s2``'s entries join), the code-hash
-cache, the reason codes and the QPE summary at FeMoco-54, dfthcbe's call graph against the port,
-Table III, and the projection method on monotone and non-monotone points. Nightly: the whole
-report at ``naphthalene``, every program in its own watched subprocess.
+two failing checks, the measured ``--large`` path on stand-ins, the programs ``--large`` compiles
+at FeMoco-54, the code-hash cache, the reason codes and the QPE summary at FeMoco-54, dfthcbe's
+call graph against the port, and Table III. Nightly: the whole report at ``naphthalene``, every
+program in its own subprocess.
 """
 
 import dataclasses
@@ -32,7 +31,6 @@ import shutil
 import sys
 from pathlib import Path
 
-import numpy as np
 import pytest
 
 from dfthc import costs, costs_reference
@@ -122,7 +120,7 @@ def test_report_h2_rows_and_columns(tmp_path):
     keys = {"id", "level", "steps", "calls", "controlled_calls", "partition", "status", "measured",
             "closed", "dfthcbe", "paper", "paper_step18", "delta_dfthcbe", "delta_paper",
             "codes_dfthcbe", "codes_paper", "cliffords", "clifford_kind", "wires", "seconds",
-            "peak_mb", "gates", "projection"}
+            "peak_mb"}
     assert all(set(r) == keys for r in records.values())
     w = records["DFTHCWalk"]
     assert (_counts(w, "closed"), w["dfthcbe"], w["paper"]) == ((158, 48, 158), 167, 205)
@@ -159,7 +157,7 @@ def test_report_h2(row_id):
 @pytest.mark.subprocess
 def test_report_mid(tmp_path):
     """The report at naphthalene (MID_NAPHTHALENE's parameters): every program compiles in its
-    own watched subprocess to its closed form, and the partition gives the measured walks."""
+    own subprocess to its closed form, and the partition gives the measured walks."""
     assert report.main(["--systems", "naphthalene", "--out", str(tmp_path)]) == 0
     record = json.loads((tmp_path / "resources.json").read_text())["systems"]["naphthalene"]
     assert record["params"] == {"N": 10, "R": 8, "B": 6, "C": 5, "n_plus": 5, "b_rot": 15,
@@ -228,177 +226,68 @@ def test_report_fails_on_a_measurement_mismatch(tmp_path, monkeypatch, capsys):
 
 
 @pytest.mark.subprocess
-def test_large_compile_is_watched(tmp_path, monkeypatch):
-    """--large on a stand-in: a program that allocates past a 200 MB cap is killed by the
-    watchdog and recorded as killed, not as a measurement; a program projected above the limits
-    is refused, with its projection, without compiling."""
-    standin = [sys.executable, "-c", "import time\nx = bytearray(400 * 2**20)\n"
-               "x[::4096] = b'1' * len(x[::4096])\ntime.sleep(20)"]
-    monkeypatch.setattr(report, "child_command", lambda s, row: standin)
-    monkeypatch.setattr(report, "LARGE_CAP_MB", 200)
-    monkeypatch.setattr(report, "calibration", lambda *args: [(1, 0.1, 10.0), (2, 0.2, 10.0)])
-    argv = ["--systems", "H2_STO3G_TEST", "--large", "H2_STO3G_TEST", "--rows", "SpinSwap",
+def test_large_compile_is_measured(tmp_path, monkeypatch):
+    """--large on stand-ins: each program runs in its own subprocess under run_measured with the
+    large timeout. A program that prints the counts is a measurement with the subprocess's wall
+    time and peak memory; one that allocates 200 MB and outlives the timeout is killed and
+    recorded as timed out, with its peak memory; one that exits without counts is recorded as
+    failed. Neither is a measurement."""
+    _, rows = h2()
+    mux = rows["SpinMux"]
+    counts = {"toffoli": mux.closed.toffoli, "measurements": mux.closed.measurements,
+              "measured_and_uncomputes": mux.uncomputes, "counts": {}, "num_wires": mux.wires,
+              "seconds": 0.1}
+    standins = {
+        "SpinMux": f"print({report.PREFIX + json.dumps(counts)!r})",
+        "SpinSwap": "x = bytearray(200 * 2**20)\nx[::4096] = b'1' * len(x[::4096])\n"
+                    "import time\ntime.sleep(60)",
+        "InnerSigns": "raise SystemExit(2)",
+    }
+    monkeypatch.setattr(report, "child_command",
+                        lambda s, row: [sys.executable, "-c", standins[row.id]])
+    monkeypatch.setattr(report, "LARGE_TIMEOUT_S", 5)
+    argv = ["--systems", "H2_STO3G_TEST", "--large", "H2_STO3G_TEST", "--rows", *standins,
             "--out", str(tmp_path)]
     assert report.main(argv) == 0
     record = json.loads((tmp_path / "resources.json").read_text())
-    entry = record["compiled"]["H2_STO3G_TEST/SpinSwap"][-1]
-    assert (entry["status"], entry["reason"]) == ("killed", "memory")
-    assert entry["watchdog"]["cap_mb"] == 200 and entry["watchdog"]["survivors"] == []
-    assert entry["watchdog"]["timeout_s"] == report.LARGE_TIMEOUT_S
-    row = next(r for r in record["systems"]["H2_STO3G_TEST"]["rows"] if r["id"] == "SpinSwap")
-    assert (row["status"], row["measured"]) == ("killed", None)
-
-    monkeypatch.setattr(report, "LARGE_CAP_MB", report.MEMORY_CAP_MB)
-    monkeypatch.setattr(report, "calibration", lambda *args: [(1, 1.0, 100.0), (2, 2.0, 5000.0)])
-
-    def no_compile(*args):
-        raise AssertionError("a refused program must not be compiled")
-
-    monkeypatch.setattr(report, "measure", no_compile)
-    assert report.main(argv) == 0
-    record = json.loads((tmp_path / "resources.json").read_text())
-    entries = record["compiled"]["H2_STO3G_TEST/SpinSwap"]
-    assert [e["status"] for e in entries] == ["killed", "refused"]
-    projection = entries[-1]["projection"]
-    assert not projection["allowed"] and "GB > 7.5 GB" in projection["reason"]
-    row = next(r for r in record["systems"]["H2_STO3G_TEST"]["rows"] if r["id"] == "SpinSwap")
-    assert (row["status"], row["measured"]) == ("refused", None)
+    entries = {row_id: record["compiled"][f"H2_STO3G_TEST/{row_id}"][-1] for row_id in standins}
+    records = {r["id"]: r for r in record["systems"]["H2_STO3G_TEST"]["rows"]}
+    assert entries["SpinMux"]["status"] == "compiled"
+    assert records["SpinMux"]["peak_mb"] == entries["SpinMux"]["run"]["peak_mb"] > 0
+    swap = entries["SpinSwap"]
+    assert (swap["status"], swap["reason"]) == ("timed out", "over 5 s")
+    assert swap["run"]["timed_out"] and swap["run"]["seconds"] >= 5
+    assert swap["run"]["peak_mb"] >= 200
+    assert (entries["InnerSigns"]["status"], entries["InnerSigns"]["run"]["returncode"]) == (
+        "failed", 2)
+    for row_id, status in (("SpinSwap", "timed out"), ("InnerSigns", "failed")):
+        assert (records[row_id]["status"], records[row_id]["measured"]) == (status, None)
+    assert "| `H2_STO3G_TEST/SpinSwap` | timed out | over 5 s |" in (
+        tmp_path / "resources.md").read_text()
 
 
-def _standin(name: str):
-    """H2_STO3G_TEST's system and rows under another system's name (the stop policy keys on the
-    name; nothing is compiled)."""
-    s = dataclasses.replace(report.build_system("H2_STO3G_TEST"), name=name)
-    return s, report.build_rows(s)
-
-
-def test_large_stops_after_a_refusal_at_femoco(monkeypatch):
-    """Under --large at FeMoco-54, a refused first program stops the run: the controlled walk is
-    never measured and is recorded as skipped, and the log names the escalation."""
-    s, rows = _standin("femoco54")
-    monkeypatch.setattr(report, "projection", lambda *args: {"allowed": False,
-                                                              "reason": "8.0 GB > 7.5 GB"})
-    monkeypatch.setattr(report, "measure", lambda *args: pytest.fail("nothing is compiled"))
-    cache = {}
-    log = report.run_system(s, rows, cache, "1" * 64, projected=True, only=None)
-    assert [cache[f"femoco54/{p}"][-1]["status"] for p in report.FEMOCO_PROGRAMS] == [
-        "refused", "skipped"]
-    assert set(cache) == {"femoco54/DFTHCWalk", "femoco54/ControlledDFTHCWalk"}
-    assert any("stopped; escalate to the user" in line for line in log)
-
-
-@pytest.mark.parametrize("status", ["killed", "failed"])
-def test_large_stops_after_a_failed_or_killed_compile(monkeypatch, status):
-    """Under --large, the first killed or failed compile stops the system's run: the next
-    program is never measured and is recorded as skipped, and the log names the escalation."""
-    s, rows = _standin("fe2s2")
-    monkeypatch.setattr(report, "projection", lambda *args: {"allowed": True,
-                                                              "reason": "within the limits"})
+def test_large_compiles_only_the_walks_at_femoco(monkeypatch):
+    """At FeMoco-54 (a stand-in: H2_STO3G_TEST's rows under its name, nothing is compiled) only
+    --large compiles, and only the walk and the controlled walk, each with the large timeout;
+    a failed compile is recorded and does not stop the run."""
+    s = dataclasses.replace(report.build_system("H2_STO3G_TEST"), name="femoco54")
+    rows = report.build_rows(s)
     measured = []
 
-    def stops_once(system, row, *args):
-        assert not measured, f"the run continued after a {status} compile"
-        measured.append(row.id)
-        return {"code_hash": "1" * 64, "environment": {}, "status": status,
-                "reason": "memory" if status == "killed" else "compile",
-                "watchdog": {"seconds": 1.0, "peak_mb": 7700.0}}
+    def fails(system, row, hash_, timeout_s):
+        measured.append((row.id, timeout_s))
+        return {"code_hash": hash_, "environment": {}, "status": "failed", "reason": "compile",
+                "run": {"seconds": 1.0, "peak_mb": 10.0}}
 
-    monkeypatch.setattr(report, "measure", stops_once)
+    monkeypatch.setattr(report, "measure", fails)
     cache = {}
-    log = report.run_system(s, rows, cache, "1" * 64, projected=True,
-                            only={"SpinMux", "SpinSwap"})
-    assert measured == ["SpinMux"]
-    assert [cache[f"fe2s2/{r}"][-1]["status"] for r in ("SpinMux", "SpinSwap")] == [
-        status, "skipped"]
-    assert any(f"stopped; the {status} compile escalates" in line for line in log)
-
-
-@functools.cache
-def _compiled_rows(name: str) -> tuple[list, dict[str, int]]:
-    """The rows the report compiles at a system and their gates (tape mode, no compile)."""
-    s = report.build_system(name)
-    rows = [row for row in report.build_rows(s) if report.compiled_here(s, row)]
-    return rows, report.gates(rows)
-
-
-def _synthetic_entries(cache: dict, name: str, hash_: str) -> None:
-    """Current entries for every sized row of the system, with made-up seconds and MB."""
-    rows, sizes = _compiled_rows(name)
-    for row in rows:
-        if row.id in sizes:
-            size = sizes[row.id]
-            cache[f"{name}/{row.id}"] = [{
-                "code_hash": hash_, "status": "compiled", "gates": size,
-                "family": report.family(row),
-                "watchdog": {"seconds": 1.0 + size / 20_000, "peak_mb": 200.0 + 3 * size / 1000}}]
-
-
-def test_every_large_row_projects():
-    """Every program the report compiles at fe2s2 and fe4s4 has a size measure (gates from its
-    operator's resource functions) and an allowed projection from a calibration built like the
-    report's: the real rows and gates of the H2 systems and naphthalene, with made-up seconds and
-    MB (a synthetic cache, so that a code-hash change does not break this test). Rows no larger
-    than a measured member of their family take the family's largest measurement; the others are
-    extrapolated (nothing is compiled)."""
-    hash_ = "1" * 64
-    cache = {}
-    for name in report.SMALL:
-        _synthetic_entries(cache, name, hash_)
-    methods = set()
-    for name in ("fe2s2", "fe4s4"):
-        rows, sizes = _compiled_rows(name)
-        assert len(rows) == len(sizes) == 37, name
-        for row in rows:
-            estimate = report.projection(cache, row, hash_, sizes[row.id])
-            assert estimate["allowed"], (name, row.id, estimate["reason"])
-            methods.add(estimate["method"])
-    assert methods == {"bounded", "k1"}
-
-
-def test_large_sequence_projects_fe4s4_after_fe2s2():
-    """The run order: after `--large fe2s2`, its entries calibrate `--large fe4s4`.
-    Every fe4s4 program projects from its family's entries at the small systems and at fe2s2: an
-    extrapolated one through the fe2s2 point, a bounded one as the family's largest time and peak
-    over all of them, so an expensive fe2s2 entry of a constant-size block (here a made-up
-    3,500 s, 7,000 MB SpinMux) sets the fe4s4 projection although other entries are cheaper."""
-    hash_ = "1" * 64
-    cache = {}
-    for name in (*report.SMALL, "fe2s2"):
-        _synthetic_entries(cache, name, hash_)
-    cache["fe2s2/SpinMux"][0]["watchdog"] = {"seconds": 3500.0, "peak_mb": 7000.0}
-    _, fe2s2_sizes = _compiled_rows("fe2s2")
-    rows, sizes = _compiled_rows("fe4s4")
-    for row in rows:
-        estimate = report.projection(cache, row, hash_, sizes[row.id])
-        points = report.calibration(cache, report.family(row), hash_)
-        assert estimate["allowed"], (row.id, estimate["reason"])
-        assert fe2s2_sizes[row.id] in {g for g, _, _ in points}, row.id
-        if estimate["method"] == "bounded":
-            assert (estimate["seconds"], estimate["peak_mb"]) == (
-                max(s for _, s, _ in points), max(m for _, _, m in points)), row.id
-        else:
-            assert max(g for g, _, _ in estimate["points"]) == fe2s2_sizes[row.id], row.id
-    spin_mux = next(row for row in rows if row.id == "SpinMux")
-    assert report.projection(cache, spin_mux, hash_, sizes["SpinMux"])["peak_mb"] == 7000.0
-
-
-def test_bounded_projection_takes_every_measurement():
-    """A target no larger than some measured member of its family projects to the family's
-    largest time and largest peak, whatever their gate counts; gate count only decides between
-    this and extrapolation. From (100 gates, 3,500 s, 7,000 MB) and (200 gates, 10 s, 100 MB), a
-    150-gate target projects 3,500 s and 7,000 MB, not the larger member's 10 s and 100 MB: within
-    60 minutes and 7.5 GB, refused under the small systems' 4 GB cap, and refused under 60 minutes
-    once the smaller member took 3,700 s."""
-    points = [(100, 3500.0, 7000.0), (200, 10.0, 100.0)]
-    estimate = provenance.project_compile(points, 150)
-    assert (estimate["method"], estimate["seconds"], estimate["peak_mb"]) == (
-        "bounded", 3500.0, 7000.0)
-    assert estimate["allowed"]
-    assert provenance.project_compile(points, 150, cap_mb=report.SMALL_CAP_MB)["reason"] == (
-        "the family's largest measurement; 6.8 GB > 3.8 GB")
-    slow = provenance.project_compile([(100, 3700.0, 7000.0), (200, 10.0, 100.0)], 150)
-    assert not slow["allowed"] and slow["reason"] == (
-        "the family's largest measurement; 62 min > 60 min")
+    assert report.run_system(s, rows, cache, "1" * 64, large=False, only=None) == []
+    assert cache == {} and measured == []
+    log = report.run_system(s, rows, cache, "1" * 64, large=True, only=None)
+    assert measured == [(program, report.LARGE_TIMEOUT_S) for program in report.FEMOCO_PROGRAMS]
+    assert set(cache) == {f"femoco54/{program}" for program in report.FEMOCO_PROGRAMS}
+    assert log == [f"femoco54/{program}: failed (1.0 s, 10.0 MB)"
+                   for program in report.FEMOCO_PROGRAMS]
 
 
 def _copy_package(root: Path) -> Path:
@@ -451,7 +340,7 @@ def test_cache_needs_matching_code_hash(tmp_path, monkeypatch):
     measured = {"toffoli": 2, "measurements": 0, "measured_and_uncomputes": 2,
                 "counts": {"TemporaryAND": 2, "Adjoint(TemporaryAND)": 2}, "num_wires": 5,
                 "seconds": 1.0,
-                "watchdog": {"seconds": 3.0, "peak_mb": 200.0}, "gates": 10}
+                "run": {"seconds": 3.0, "peak_mb": 200.0}}
     stale = {"code_hash": "0" * 64, "environment": {}, "status": "compiled"} | measured
     (out / "resources.json").write_text(json.dumps(
         {"compiled": {"H2_STO3G_TEST/SpinSwap": [stale]}}))
@@ -569,7 +458,7 @@ def test_qpe_summary_takes_m_from_the_walk(tmp_path):
              "measurements": 2419, "measured_and_uncomputes": 9792, "num_wires": 1050,
              "counts": {"TemporaryAND": 9792, "Adjoint(TemporaryAND)": 9792,
                         "MidCircuitMeasure": 2419},
-             "seconds": 1.0, "watchdog": {"peak_mb": 1.0}}
+             "seconds": 1.0, "run": {"peak_mb": 1.0}}
     (tmp_path / "resources.json").write_text(json.dumps(
         {"compiled": {"femoco54/ControlledDFTHCWalk": [entry]}}))
     assert report.main(["--systems", "femoco54", "--rows", "--out", str(tmp_path)]) == 1
@@ -601,7 +490,7 @@ def test_femoco_summary_says_how_the_walks_are_compiled(femoco_report, tmp_path)
         entries[f"femoco54/{program}"] = [{
             "code_hash": provenance.code_hash(), "status": "compiled", "toffoli": toffoli,
             "measurements": measurements, "measured_and_uncomputes": uncomputes,
-            "num_wires": wires, "seconds": 1.0, "watchdog": {"peak_mb": 1.0},
+            "num_wires": wires, "seconds": 1.0, "run": {"peak_mb": 1.0},
             "counts": {"TemporaryAND": toffoli, "Adjoint(TemporaryAND)": uncomputes,
                        "MidCircuitMeasure": measurements}}]
     (tmp_path / "resources.json").write_text(json.dumps({"compiled": entries}))
@@ -685,28 +574,3 @@ def test_paper_table3_reproduces_table_iii():
         "ref_t2": 21, "ref_ab": 46, "outer_erase": 37, "inner_erase": 180,
         "block_encoding": 9951, "walk": 9997}
 
-
-def test_project_compile_is_the_k1_method():
-    """The K-1 projection beyond the measured sizes: a power law in time through the two
-    largest points (exponent at least 1) and a least-squares line in memory (slope at least 0);
-    within them, the largest of all the measurements; refused above 60 min or above
-    the 7.5 GB kill point of the 8 GB cap, so a 7.8 GB projection is refused."""
-    points = [(1000, 10.0, 500.0), (2000, 20.0, 600.0), (4000, 80.0, 700.0)]
-    result = provenance.project_compile(points, 8000)
-    slope, intercept = np.polyfit([1000, 2000, 4000], [500, 600, 700], 1)
-    assert result["allowed"] and result["time_exponent"] == 2.0
-    assert result["seconds"] == pytest.approx(320.0, rel=0, abs=1e-9)
-    assert result["peak_mb"] == pytest.approx(intercept + slope * 8000, rel=0, abs=0.05)
-    assert provenance.project_compile([(1000, 10.0, 500.0), (2000, 11.0, 500.0)],
-                                      4000)["seconds"] == pytest.approx(22.0, rel=0, abs=1e-9)
-    refused = provenance.project_compile([(1000, 1.0, 1000.0), (2000, 2.0, 2000.0)], 7800)
-    assert refused["peak_mb"] == pytest.approx(7800.0, rel=0, abs=0.05)
-    assert not refused["allowed"] and refused["reason"] == "7.6 GB > 7.5 GB"
-    assert not provenance.project_compile([(1000, 1.0, 1.0)], 2000)["allowed"]
-    bounded = provenance.project_compile([(50, 9.0, 280.0), (100, 5.0, 300.0),
-                                          (200, 4.0, 310.0)], 80)
-    assert (bounded["method"], bounded["seconds"], bounded["peak_mb"]) == ("bounded", 9.0, 310.0)
-    assert bounded["allowed"] and result["method"] == "k1"
-    slow = provenance.project_compile([(100, 4000.0, 300.0)], 50)
-    assert not slow["allowed"] and slow["reason"] == (
-        "the family's largest measurement; 67 min > 60 min")

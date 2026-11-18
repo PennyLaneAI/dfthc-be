@@ -191,16 +191,17 @@ entry and that every canary named here exists.
   decoration-time compile of L-27. The canary now keeps that compile off and pins the doubled
   count separately.)
   Benchmark: `test_compile_time_scaling` (nightly) compiles 1, 2 and 4 distinct 64-entry tables
-  and single tables of 64, 1,024 and 8,640 entries, each in a fresh process under the watchdog.
+  and single tables of 64, 1,024 and 8,640 entries, each in a fresh process (`run_measured`).
   It fails at more than twice `tests/canary/compile_baseline.json` in CPU time (across the compile
   only: the process plus the Catalyst compiler subprocess; and more than 2 s above it, because
-  sub-second cases are noise-dominated) or peak memory (`peak_mb`: the summed physical footprint
-  of the process tree, as the watchdog measures it), or if the 8,640-entry case costs less than 5
+  sub-second cases are noise-dominated) or peak memory (`peak_mb`: `wait4`'s largest resident
+  size of the process and its reaped children), or if the 8,640-entry case costs less than 5
   times the CPU time of the 64-entry case. Wall time is recorded for information.
   The benchmark programs disable the decoration-time compile (L-27). On the development laptop
-  (2026-11-12) the ratio was 55, and one 8,640-entry table took 25 s wall, 25 s
-  CPU and 973 MB (earlier, with the decoration-time compile and under memory pressure: ratio 84,
-  37 s wall, 36 s CPU and 1.5 GB). Mitigation: few distinct table operators
+  (2026-11-18) the ratio was 47, and one 8,640-entry table took 23 s wall, 22 s CPU and 892 MB
+  (2026-11-12, by the summed footprint of the process tree: ratio 55, 25 s wall, 25 s CPU and
+  973 MB; earlier, with the decoration-time compile and under memory pressure: ratio 84, 37 s
+  wall, 36 s CPU and 1.5 GB). Mitigation: few distinct table operators
   per walk; the K-1 budget.
 - **L-22, unresolved loops give symbolic counts.** Shared with L-12 and L-17
   (`test_select_swap_qrom_counts_are_symbolic`, `test_dynamic_loop_counts_are_symbolic`).

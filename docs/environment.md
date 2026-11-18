@@ -54,15 +54,9 @@ The development laptop has 10 cores and 16 GB, and is in use while tests run (sp
 - `scripts/test.sh` runs 2 xdist workers (`DFTHC_TEST_WORKERS` overrides; `0` runs serially) at
   lowered priority: `nice -n 10`, or, in the agent sandbox, where setpriority() is forbidden, the
   utility QoS clamp of `taskpolicy`.
-- Each process tree has a sampled 8 GB memory cap: the watchdog kills it at the first sample above
-  7.5 GB, so the overshoot past 7.5 GB is bounded by 50 ms of growth. A heavy run (above 4 GB,
-  more than 2 busy cores, longer than 30 minutes, or any FeMoco-shaped compile) is started alone,
-  under `PYTHONPATH=src .venv/bin/python -m dfthc.testing.watchdog -- <command>`.
-- Every compile of the resource report runs in its own process under `run_watched`: a 4 GB cap
-  at the small systems, the 8 GB cap for `--large`, whose programs are projected first
-  (`dfthc.testing.provenance.project_compile`) and compiled only within 7.5 GB and 60 minutes.
-  The first killed or failed compile of a `--large` run stops it, and so does the first refusal
-  at FeMoco-54; the remaining programs are recorded as skipped.
+- A heavy run (above 4 GB, more than 2 busy cores, longer than 30 minutes, or any FeMoco-shaped
+  compile) is started alone. The largest compile, the FeMoco-54 walk, takes about 50 s and
+  1.6 GB.
 
 ## The reference environment `.venv-ref`
 
@@ -80,14 +74,16 @@ main environment imports Qualtran.
 
 `scripts/resource_report.py` writes `docs/resources.md` and `docs/resources.json` (spec 13.3). It
 compiles every program of the walk at the H2 systems and `naphthalene`, each in its own process
-under the watchdog, and reuses every compile cached under the current code hash:
+with a timeout (`dfthc.testing.measure.run_measured`, which records its wall time and peak
+memory), and reuses every compile cached under the current code hash:
 
 ```bash
 PYTHONPATH=src .venv/bin/python scripts/resource_report.py
 ```
 
-The large systems compile only with `--large fe2s2`, `--large fe4s4` or `--large femoco54`,
-which project each program first and are heavy runs: start them alone, under the watchdog.
+The large systems compile only with `--large fe2s2`, `--large fe4s4` or `--large femoco54`
+(at FeMoco-54 only the walk and the controlled walk), with a 60-minute timeout per program.
+They are heavy runs: start them alone.
 
 ## Bumping the nightlies
 

@@ -38,8 +38,7 @@ from dfthc.testing.provenance import code_hash, environment
 REPO = Path(__file__).resolve().parents[2]
 EXPECTED = {"DFTHCWalk": (9790, 2418, 9790), "ControlledDFTHCWalk": (9792, 2418, 9792)}
 EXPECTED_WIRES = {"DFTHCWalk": 1049, "ControlledDFTHCWalk": 1050}
-RECOMPILE = ("scripts/resource_report.py --large femoco54 (alone, under the watchdog; "
-             "docs/environment.md)")
+RECOMPILE = "scripts/resource_report.py --large femoco54 (a heavy run, docs/environment.md)"
 
 
 def _load_script():
@@ -92,7 +91,7 @@ def femoco_cache_problems(record: dict, hash_: str) -> list[str]:
                              if recorded.get(field) != running.get(field))
             if differs:
                 problems.append(f"{key}: environment differs from the running one in {differs}")
-        if not entry.get("watchdog", {}).get("peak_mb"):
+        if not entry.get("run", {}).get("peak_mb"):
             problems.append(f"{key}: no peak memory")
     return problems
 
@@ -102,7 +101,7 @@ def test_stale_femoco_entry_names_the_recompile():
     the recompile (per commit; nothing is compiled)."""
     stale = {"code_hash": "0" * 64, "status": "compiled", "toffoli": 9790, "measurements": 2418,
              "measured_and_uncomputes": 9790, "counts": {}, "environment": {"python": "3.12"},
-             "seconds": 1.0, "watchdog": {"peak_mb": 1.0}}
+             "seconds": 1.0, "run": {"peak_mb": 1.0}}
     problems = femoco_cache_problems({"compiled": {"femoco54/DFTHCWalk": [stale]}}, "1" * 64)
     assert len(problems) == 2
     assert problems[0].startswith("femoco54/DFTHCWalk: no compile for code hash 111111111111 "
@@ -119,7 +118,7 @@ def valid_entry(program: str) -> dict:
             "counts": {"TemporaryAND": toffoli, "Adjoint(TemporaryAND)": uncomputes,
                        "MidCircuitMeasure": measurements, "CNOT": 1},
             "num_wires": EXPECTED_WIRES[program], "environment": environment(),
-            "seconds": 36.5, "watchdog": {"peak_mb": 1692.1}}
+            "seconds": 36.5, "run": {"peak_mb": 1692.1}}
 
 
 def _more_toffolis(entry):
@@ -137,7 +136,7 @@ DEFECTS = {
     "toolchain": (lambda e: e["environment"].update(pennylane="0.0"),
                   "environment differs from the running one in ['pennylane']"),
     "seconds": (lambda e: e.pop("seconds"), "no seconds"),
-    "peak": (lambda e: e.update(watchdog={}), "no peak memory"),
+    "peak": (lambda e: e.update(run={}), "no peak memory"),
 }
 """One defect per arm of ``femoco_cache_problems`` and the one problem it must report."""
 

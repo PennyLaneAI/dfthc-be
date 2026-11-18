@@ -29,20 +29,18 @@ rule in tape mode, nothing compiled), the reflection helpers' calls (rows ``RefT
 program the walk does not call (``PhaseFixup`` with each erase's fix-up arguments) and the L4
 programs (``ControlledWalkPower`` with p = 1, 2; the QPE program with t = 1, 2, 3 at the H2
 systems).
-Each program is compiled once, in its own subprocess under ``run_watched``, with
-``compiled_resources`` on ``null.qubit``; its counts go into the ``"compiled"`` section of the json
-with :func:`~dfthc.testing.provenance.code_hash`, the environment, the compile time, the watched
-peak memory and the gate count from the resource functions. An entry of the current code hash is
-reused; an entry of another hash stays as history and is never shown as a current measurement.
+Each program is compiled once, in its own subprocess under
+:func:`~dfthc.testing.measure.run_measured` with a timeout, with ``compiled_resources`` on
+``null.qubit``; its counts go into the ``"compiled"`` section of the json with
+:func:`~dfthc.testing.provenance.code_hash`, the environment, the compile time and the
+subprocess's wall time and peak memory. A failed or timed-out compile is recorded with its status
+and is not a measurement. An entry of the current code hash is reused; an entry of another hash
+stays as history and is never shown as a current measurement.
 
 The H2 systems and ``naphthalene`` compile every program that has no current entry. ``fe2s2``,
-``fe4s4`` and FeMoco-54 compile only with ``--large SYSTEM``, run alone under the load limits
-of docs/environment.md: each program is first projected with
-:func:`~dfthc.testing.provenance.project_compile` from its current entries at smaller systems and
-compiled only if the projection is within 7.5 GB and 60 min, under the 8 GB cap; a refused or
-killed program is recorded with its projection and is not a measurement. At FeMoco-54 only the walk
-and the controlled walk compile; every other FeMoco-54 row is its closed form,
-validated by the compiles at the other systems and by the cross-check.
+``fe4s4`` and FeMoco-54 compile only with ``--large SYSTEM``, a heavy run (docs/environment.md).
+At FeMoco-54 only the walk and the controlled walk compile; every other FeMoco-54 row is its
+closed form, validated by the compiles at the other systems and by the cross-check.
 
 The script exits with status 1 after writing both files if a check fails: a measured T, M or A
 that differs from its closed form, a nonzero delta against dfthcbe or the paper without a reason
@@ -69,14 +67,10 @@ sys.path.insert(0, str(REPO / "src"))
 
 import numpy as np  # noqa: E402
 import pennylane as qp  # noqa: E402
-from pennylane.decomposition import DecompositionGraph  # noqa: E402
-from pennylane.typing import AbstractArray  # noqa: E402
 
 from dfthc import costs, costs_reference  # noqa: E402
 from dfthc.compile import (  # noqa: E402
     FIXED_DECOMPS,
-    GATE_SET,
-    PENNYLANE_PINS,
     compiled_resources,
     surviving_dfthc_operators,
 )
@@ -89,8 +83,8 @@ from dfthc.ops.walk import REFLECTIONS, DFTHCWalk  # noqa: E402
 from dfthc.params import FEMOCO54, H2_STO3G_TEST, WalkParams, lg, odd_part  # noqa: E402
 from dfthc.qpe import ControlledWalkPower, qpe_program  # noqa: E402
 from dfthc.registers import WalkLayout  # noqa: E402
-from dfthc.testing.provenance import code_hash, environment, project_compile  # noqa: E402
-from dfthc.testing.watchdog import MEMORY_CAP_MB, run_watched  # noqa: E402
+from dfthc.testing.measure import run_measured  # noqa: E402
+from dfthc.testing.provenance import code_hash, environment  # noqa: E402
 
 SMALL = ("h2_sto3g_R2_B2_C1", "h2_631g_R2_B2_C2", "h2_631g_R2_B3_C3", "naphthalene")
 LARGE = ("fe2s2", "fe4s4", "femoco54")
@@ -106,8 +100,7 @@ FEMOCO_SEED = 0
 """``random_factors(54, 10, 27, 27, n_plus=27, seed=0)``, as the work-pool test uses."""
 QPE_BITS = (1, 2, 3)
 POWERS = (1, 2)
-SMALL_CAP_MB, SMALL_TIMEOUT_S = 4096, 900
-LARGE_CAP_MB, LARGE_TIMEOUT_S = MEMORY_CAP_MB, 3600
+SMALL_TIMEOUT_S, LARGE_TIMEOUT_S = 900, 3600
 JSON_NAME, MD_NAME = "resources.json", "resources.md"
 PREFIX = "RESULT "
 CLIFFORDS = ("PauliX", "PauliY", "PauliZ", "Hadamard", "S", "Adjoint(S)", "CNOT", "CZ", "SWAP",
@@ -261,8 +254,6 @@ class Row:
     key: str | None
     descendants: frozenset[str]
     op: object = None
-    size_op: Callable[[], object] | None = None
-    """Builds, in tape mode, the operator whose resource functions give the row's gates."""
 
 
 @dataclasses.dataclass
@@ -313,12 +304,6 @@ def walk_program(s: System, controlled: bool):
         _walk_op(s, controlled)
 
     return qfunc, s.layout.num_wires + int(controlled)
-
-
-def _power_op(s: System, power: int):
-    groups = {name: getattr(s.layout, name) for name in ControlledWalkPower.wire_argnames[1:]}
-    return ControlledWalkPower(power, s.params.as_compilable(), s.tables.as_compilable(),
-                               [s.layout.num_wires], **groups)
 
 
 def power_program(s: System, power: int):
@@ -403,9 +388,8 @@ def _erase_arguments(op) -> dict:
 
 def _fixup_program(a: dict):
     """``PhaseFixup`` with an erase's fix-up arguments ``a`` (:func:`_erase_arguments`): its
-    covered set, one-hot bits, enable and work, on a one-hot of ``2**onehot_bits`` wires; the
-    program's parities are all ``False``, and the size operator (tape mode) takes an abstract
-    parity array. Returns ``(program, size_op, wires)``."""
+    covered set, one-hot bits, enable and work, on a one-hot of ``2**onehot_bits`` wires, with
+    all parities ``False``. Returns ``(program, wires)``."""
     covered = QROAMRead.loaded_ranges(a["address_widths"], a["live_ranges"], a["block_bits"])
     sizes = PhaseFixup.required_wires(a["address_widths"], covered, a["onehot_bits"],
                                       a["control_value"])
@@ -415,14 +399,11 @@ def _fixup_program(a: dict):
         wires[name] = list(range(start, start + sizes[name]))
         start += sizes[name]
 
-    def build(parities):
-        return PhaseFixup(parities, a["address_widths"], covered, a["onehot_bits"],
-                          a["control_value"], **wires)
-
     def program():
-        return (lambda: build(np.zeros(size, dtype=bool))), start
+        return (lambda: PhaseFixup(np.zeros(size, dtype=bool), a["address_widths"], covered,
+                                   a["onehot_bits"], a["control_value"], **wires)), start
 
-    return program, lambda: build(AbstractArray((size,), bool)), start
+    return program, start
 
 
 def _reflection_program(name: str, p: WalkParams):
@@ -561,8 +542,7 @@ def build_rows(s: System) -> list[Row]:
                      else _reflection_program(name, p) if isinstance(op, ReflectionCall)
                      else _call_program(op)),
             key=PARENT_KEYS.get((name, parent_name), NAME_KEYS.get(name)),
-            descendants=below[sig], op=op,
-            size_op=lambda op=op: op.mcx if isinstance(op, ReflectionCall) else op))
+            descendants=below[sig], op=op))
     rows += _extra_rows(s, rows)
     return rows
 
@@ -576,14 +556,14 @@ def _extra_rows(s: System, rows: list[Row]) -> list[Row]:
     for row in rows:
         if row.name in FROM_OUTCOMES:
             erase = _erase_arguments(row.op)
-            program, size_op, wires = _fixup_program(erase)
+            program, wires = _fixup_program(erase)
             closed, uncomputes = closed_form("PhaseFixup", erase, p)
             extra.append(dataclasses.replace(
                 row, id=f"PhaseFixup@{row.id}", name="PhaseFixup", parent=row.name, level="L1",
                 steps=PARENT_STEPS[("PhaseFixup", row.name)], calls=0, controlled_calls=0,
                 partition=False, closed=closed, uncomputes=uncomputes, wires=wires, program=program,
-                key=PARENT_KEYS[("PhaseFixup", row.name)], descendants=frozenset({
-                    "PhaseFixup"}), size_op=size_op))
+                key=PARENT_KEYS[("PhaseFixup", row.name)],
+                descendants=frozenset({"PhaseFixup"})))
     walk = next(row for row in rows if row.name == "ControlledDFTHCWalk")
     for power in POWERS:
         extra.append(Row(
@@ -593,8 +573,7 @@ def _extra_rows(s: System, rows: list[Row]) -> list[Row]:
             uncomputes=power * costs.measured_and_uncomputes(p, True),
             wires=s.layout.num_wires + 1,
             program=(lambda power=power: power_program(s, power)), key="controlled_walk_power",
-            descendants=walk.descendants | {"ControlledWalkPower"},
-            size_op=lambda power=power: _power_op(s, power)))
+            descendants=walk.descendants | {"ControlledWalkPower"}))
     if s.name in QPE_SYSTEMS or s.name == "femoco54":
         for bits in QPE_BITS:
             extra.append(Row(
@@ -630,17 +609,6 @@ def clifford_kind(row: Row) -> str:
     return "; ".join(parts) or "exact"
 
 
-def gates(rows: list[Row]) -> dict[str, int]:
-    """Each row's emitted gates from the resource functions of its size operator (no compile):
-    the size measure of the projection. One decomposition graph serves all rows; the QPE rows,
-    which the large systems never compile, have none."""
-    with qp.capture.pause(), qp.queuing.AnnotatedQueue():
-        ops = {row.id: row.size_op() for row in rows if row.size_op is not None}
-    solution = DecompositionGraph(operations=list(ops.values()), gate_set=GATE_SET,
-                                  fixed_decomps={**FIXED_DECOMPS, **PENNYLANE_PINS}).solve()
-    return {row_id: int(solution.resource_estimate(op).num_gates) for row_id, op in ops.items()}
-
-
 def compile_counts(s: System, row: Row) -> dict:
     """Compile one row's program in this process; its counts and compile time."""
     qfunc, num_wires = row.program()
@@ -669,19 +637,16 @@ def child_command(s: System, row: Row) -> list[str]:
     return [sys.executable, str(Path(__file__).resolve()), "--compile-one", s.name, row.id]
 
 
-def measure(s: System, row: Row, hash_: str, cap_mb: float, timeout_s: float) -> dict:
-    """Compile one row in a subprocess under ``run_watched``; the cache entry. A killed or
-    failed compile is recorded with its status and is never a measurement."""
-    command = child_command(s, row)
+def measure(s: System, row: Row, hash_: str, timeout_s: float) -> dict:
+    """Compile one row in a subprocess under ``run_measured``; the cache entry. A failed or
+    timed-out compile is recorded with its status and is never a measurement."""
     env = os.environ | {"PYTHONPATH": str(REPO / "src"),
                         "CATALYST_SILENCE_RULE_LOWERING_WARNINGS": "0"}
-    run = run_watched(command, cap_mb=cap_mb, timeout_s=timeout_s, cwd=REPO, env=env)
+    run = run_measured(child_command(s, row), timeout_s=timeout_s, cwd=REPO, env=env)
     lines = [line for line in run.stdout.splitlines() if line.startswith(PREFIX)]
-    summary = run.summary()
-    summary["command"] = summary["command"][-2:]
-    entry = {"code_hash": hash_, "environment": environment(), "watchdog": summary}
-    if run.killed or run.survivors:
-        return entry | {"status": "killed", "reason": run.killed}
+    entry = {"code_hash": hash_, "environment": environment(), "run": run.summary()}
+    if run.timed_out:
+        return entry | {"status": "timed out", "reason": f"over {timeout_s:.0f} s"}
     if run.returncode != 0 or len(lines) != 1:
         return entry | {"status": "failed", "reason": run.stderr[-2000:]}
     return entry | {"status": "compiled"} | json.loads(lines[0][len(PREFIX):])
@@ -694,34 +659,6 @@ def current(cache: dict, key: str, hash_: str) -> dict | None:
     return entries[-1] if entries else None
 
 
-def family(row: Row) -> str:
-    """The calibration family of a row: its class and comparison key, which name the same block
-    at every system although a row's id can differ between systems (``PhaseGradientRotation`` has
-    one call shape at the H2 systems and two elsewhere); an L4 row's id."""
-    return row.id if row.level == "L4" else f"{row.name}:{row.key or row.id}"
-
-
-def calibration(cache: dict, family_: str, hash_: str) -> list[tuple]:
-    """``(gates, seconds, peak_mb)`` of every current entry of the family, at every system."""
-    points = []
-    for key, entries in cache.items():
-        entry = current({key: entries}, key, hash_)
-        if entry and entry.get("family") == family_ and entry.get("gates"):
-            points.append((entry["gates"], entry["watchdog"]["seconds"],
-                           entry["watchdog"]["peak_mb"]))
-    return points
-
-
-def projection(cache: dict, row: Row, hash_: str, size: int | None) -> dict:
-    """The row's projection to ``size`` gates from the current entries of its family at every
-    system, earlier large systems included (:func:`~dfthc.testing.provenance.project_compile`
-    under the 8 GB cap: the family's largest measurement if some entry has at least ``size``
-    gates, else extrapolated)."""
-    if size is None:
-        return {"allowed": False, "reason": "no size measure", "gates": None, "points": []}
-    return project_compile(calibration(cache, family(row), hash_), size, cap_mb=LARGE_CAP_MB)
-
-
 def compiled_here(s: System, row: Row) -> bool:
     """Whether the report compiles this row at this system at all (spec 13.3 step 2)."""
     if s.name == "femoco54":
@@ -729,54 +666,25 @@ def compiled_here(s: System, row: Row) -> bool:
     return not (row.name == "QPE" and s.name not in QPE_SYSTEMS)
 
 
-def run_system(s: System, rows: list[Row], cache: dict, hash_: str, *, projected: bool,
+def run_system(s: System, rows: list[Row], cache: dict, hash_: str, *, large: bool,
                only: set[str] | None) -> list[str]:
     """Compile the rows of ``s`` that this run compiles and record them in ``cache``; the log.
 
-    Rows with a current entry are reused. ``projected`` (``--large``) first projects each row
-    from its current entries (:func:`projection`) and compiles it under the 8 GB cap only if the
-    projection allows; a refused row is recorded with its projection. Under ``projected`` the
-    first ``killed`` or ``failed`` row stops the system's run, and so does the first ``refused``
-    row at FeMoco-54: every remaining candidate is recorded as ``skipped``, never a measurement,
-    and the log names the escalation. The large systems compile
-    nothing without ``projected``; the others compile under a 4 GB cap."""
-    log, stopped = [], None
-    if s.name in LARGE and not projected:
+    Rows with a current entry are reused. The large systems compile only under ``large``
+    (``--large``), with the longer timeout."""
+    log = []
+    if s.name in LARGE and not large:
         return log
-    candidates = [row for row in rows if compiled_here(s, row)
-                  and (only is None or row.id in only)
-                  and not current(cache, f"{s.name}/{row.id}", hash_)]
-    sizes = gates(candidates) if candidates else {}
-    for row in candidates:
+    timeout_s = LARGE_TIMEOUT_S if large else SMALL_TIMEOUT_S
+    for row in rows:
         key = f"{s.name}/{row.id}"
-        if stopped:
-            cache.setdefault(key, []).append(
-                {"code_hash": hash_, "environment": environment(), "status": "skipped",
-                 "reason": f"not compiled after {stopped}"})
-            log.append(f"{key}: skipped (after {stopped})")
+        if not compiled_here(s, row) or (only is not None and row.id not in only) \
+                or current(cache, key, hash_):
             continue
-        if projected:
-            estimate = projection(cache, row, hash_, sizes.get(row.id))
-            if not estimate["allowed"]:
-                cache.setdefault(key, []).append(
-                    {"code_hash": hash_, "environment": environment(), "status": "refused",
-                     "gates": sizes.get(row.id), "projection": estimate})
-                log.append(f"{key}: refused ({estimate['reason']})")
-                if s.name == "femoco54":
-                    stopped = f"{key} refused"
-                    log.append(f"{s.name}: stopped; escalate to the user with the projection")
-                continue
-            entry = measure(s, row, hash_, LARGE_CAP_MB, LARGE_TIMEOUT_S)
-            entry["projection"] = estimate
-        else:
-            entry = measure(s, row, hash_, SMALL_CAP_MB, SMALL_TIMEOUT_S)
-        entry["gates"], entry["family"] = sizes.get(row.id), family(row)
+        entry = measure(s, row, hash_, timeout_s)
         cache.setdefault(key, []).append(entry)
-        log.append(f"{key}: {entry['status']} ({entry['watchdog']['seconds']} s, "
-                   f"{entry['watchdog']['peak_mb']} MB)")
-        if projected and entry["status"] in ("killed", "failed"):
-            stopped = f"{key} {entry['status']}"
-            log.append(f"{s.name}: stopped; the {entry['status']} compile escalates")
+        log.append(f"{key}: {entry['status']} ({entry['run']['seconds']} s, "
+                   f"{entry['run']['peak_mb']} MB)")
     return log
 
 
@@ -833,9 +741,7 @@ def report_system(s: System, rows: list[Row], cache: dict, hash_: str) -> tuple[
             "cliffords": sum(counts.get(name, 0) for name in CLIFFORDS) if entry else None,
             "clifford_kind": clifford_kind(row), "wires": row.wires,
             "seconds": entry["seconds"] if entry else None,
-            "peak_mb": entry["watchdog"]["peak_mb"] if entry else None,
-            "gates": entry.get("gates") if entry else None,
-            "projection": history[-1].get("projection") if history else None,
+            "peak_mb": entry["run"]["peak_mb"] if entry else None,
         })
     errors += cross_check(s, records)
     record = {"params": dataclasses.asdict(p), "wires": s.layout.num_wires,
@@ -940,7 +846,7 @@ def render(report: dict) -> str:
         lines.append("")
     if "femoco54" in report["systems"]:
         lines += femoco_summary(report["systems"]["femoco54"])
-    lines += large_compiles(report)
+    lines += compile_log(report)
     lines += ["## Reason codes", "", "The codes of a row are the causes with a nonzero "
               "contribution to its delta, with that contribution (against dfthcbe; against the "
               "paper); the contributions sum to the delta exactly, and two different causes may "
@@ -1026,23 +932,18 @@ def femoco_summary(system: dict) -> list[str]:
     return lines
 
 
-def large_compiles(report: dict) -> list[str]:
-    """The large-compile log: every refused, killed or failed entry of the current code hash
-    with its projection, and the count of entries kept as history (other code hashes)."""
+def compile_log(report: dict) -> list[str]:
+    """Every failed or timed-out compile of the current code hash, and the count of entries
+    kept as history (other code hashes)."""
     hash_, lines, history = report["code_hash"], [], 0
     for key, entries in report["compiled"].items():
         history += sum(e["code_hash"] != hash_ for e in entries)
-        for e in entries:
-            if e["code_hash"] == hash_ and e["status"] != "compiled":
-                projection = e.get("projection") or {}
-                lines.append(f"| `{key}` | {e['status']} | {projection.get('seconds', '—')} | "
-                             f"{projection.get('peak_mb', '—')} | "
-                             f"{projection.get('reason', e.get('reason', ''))} |")
-    out = ["## Large compiles", "", f"Entries of other code hashes kept as history, never shown "
+        lines += [f"| `{key}` | {e['status']} | {e.get('reason', '')} |" for e in entries
+                  if e["code_hash"] == hash_ and e["status"] != "compiled"]
+    out = ["## Compile log", "", f"Entries of other code hashes kept as history, never shown "
            f"as current measurements: {history}.", ""]
     if lines:
-        out += ["| Program | Status | Projected s | Projected MB | Reason |",
-                "| --- | --- | ---: | ---: | --- |", *lines, ""]
+        out += ["| Program | Status | Reason |", "| --- | --- | --- |", *lines, ""]
     return out
 
 
@@ -1073,7 +974,7 @@ def main(argv: list[str] | None = None) -> int:
     for name in sorted(systems, key=lambda n: (SYSTEMS + TEST_SYSTEMS).index(n)):
         s = build_system(name)
         rows = build_rows(s)
-        report["log"] += run_system(s, rows, cache, hash_, projected=name == args.large,
+        report["log"] += run_system(s, rows, cache, hash_, large=name == args.large,
                                     only=None if args.rows is None else set(args.rows))
         record, failed = report_system(s, rows, cache, hash_)
         report["systems"][name] = record
