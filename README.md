@@ -66,22 +66,27 @@ scripts/test.sh -m "not slow and not release"   # per-commit tier, about 15 minu
 
 ```python
 import pennylane as qp
-from dfthc.compile import compiled_resources
-from dfthc.ops.walk import DFTHCWalk
-from dfthc.testing import walk_sim
+import dfthc
 
-case = walk_sim.case("sto3g")  # H2 test preset: parameters, tables and wire layout
+params = dfthc.H2_STO3G_TEST  # a small H2 test preset
+tables = dfthc.WalkTables.from_factors(dfthc.load_factors("h2_sto3g_R2_B2_C1"), params)
+wires = dfthc.WalkLayout.from_params(params)
 
-def program():
-    qp.PhaseGradientStatePrep(case.layout.phase_grad)
-    DFTHCWalk(*case.compilable, **case.groups())
+@qp.qjit(capture=True)
+@qp.decompose(gate_set=dfthc.GATE_SET, fixed_decomps=dfthc.PINS)
+@qp.qnode(qp.device("null.qubit", wires=wires.num_wires))
+def walk():
+    qp.PhaseGradientStatePrep(wires.phase_grad)
+    dfthc.DFTHCWalk(params, tables, **wires.groups())
+    return qp.probs(wires=0)
 
-res = compiled_resources(program, case.num_wires)  # qjit(capture=True), decompose, analyze
-print(res.toffoli, res.measurements, res.measured_and_uncomputes)  # 158 48 108
+counts = qp.analyze(walk)().resources.counts
+print(counts["Toffoli"] + counts["TemporaryAND"])  # 158
 ```
 
-Run it with `PYTHONPATH=src .venv/bin/python`. `qp.analyze` also warns that it could not determine
-a conditional's branch; it raises that once per program, and the counts are exact.
+Run it with `PYTHONPATH=src .venv/bin/python`. `dfthc.PINS` fixes one rule per operator, and for
+`qp.QROM` the unary-iteration rule, whose counts are concrete. `qp.analyze` warns once that it
+could not determine a conditional's branch; the counts are exact.
 
 ## Verification
 
@@ -102,7 +107,7 @@ src/dfthc/
   ops/                Operator2 blocks: primitives, the paper's blocks, block encoding and walk
   qpe.py              controlled walk powers and iterative phase estimation
   registers.py        WalkLayout: the named wire groups of the walk
-  compile.py          gate set, pinned rules, compiled_resources()
+  compile.py          gate set, pinned rules, compiled_resources() (the tests' compile-and-count helper)
   costs.py            closed-form T, M and A of every block
   costs_reference.py  the paper's and dfthcbe's costs, and the causes of each difference
   testing/            sparse simulator, walk cases, memory watchdog, compile cache provenance

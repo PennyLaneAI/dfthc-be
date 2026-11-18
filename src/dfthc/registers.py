@@ -136,6 +136,12 @@ class WalkLayout:
             start += sizes[name]
         return parts
 
+    def groups(self) -> dict[str, Wires]:
+        """The wire groups of the assembly operators by argument name: ``outer``, ``inner``,
+        ``select``, ``system``, ``phase_grad`` and ``work``."""
+        return {name: getattr(self, name)
+                for name in ("outer", "inner", "select", "system", "phase_grad", "work")}
+
     def angle_register(self, k: int) -> Wires:
         """The ``b_rot - 1`` wires of angle register ``k``, which drives rung ``k`` (spec 6.7)."""
         if not 0 <= k < self.params.N - 1:

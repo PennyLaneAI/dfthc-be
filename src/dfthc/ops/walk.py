@@ -37,8 +37,9 @@ need (spec 9.0, wire passing). ``work`` is the walk's shared pool: every child r
 :math:`|0\rangle`; the comparators' dirty work registers belong to the ``outer`` and ``inner``
 groups, never to ``work`` (spec 10.2).
 
-**Arguments.** ``params`` is :meth:`WalkParams.as_compilable` and ``tables`` is
-:meth:`WalkTables.as_compilable`; the rules rebuild both with ``from_compilable``. One list,
+**Arguments.** ``params`` is a ``WalkParams`` and ``tables`` a ``WalkTables``, or their
+``as_compilable()`` tuples, which the constructors store; the rules rebuild both with
+``from_compilable``. One list,
 :func:`_children`, gives the rule its steps in time order (the children with their compilable
 arguments, work needs and lent one-hot wires, and the junk measurements), and the resource
 function its declaration, so the two cannot disagree; :func:`_walk_children` does the same for
@@ -167,10 +168,15 @@ def _check(params, tables) -> tuple[WalkParams, WalkTables]:
     the tables have the shapes of ``params`` and lie in the children's ranges, the erases'
     one-hot registers fit (``2**ke1 <= K1 d1``, ``2**(ke2 + w_b) <= K2 d2`` and
     ``2**w_b <= (N - 1)(b_rot - 1) + 1``), and the layout's ``work`` pool covers every child of
-    the walk and the controlled walk. ``ValueError`` otherwise."""
+    the walk and the controlled walk. ``WalkParams`` and ``WalkTables`` objects are accepted as
+    their ``as_compilable()`` tuples. ``ValueError`` otherwise."""
+    if isinstance(params, WalkParams):
+        params = params.as_compilable()
+    if isinstance(tables, WalkTables):
+        tables = tables.as_compilable()
     if not isinstance(params, (tuple, list)) or not isinstance(tables, (tuple, list)):
-        raise ValueError("params and tables must be WalkParams.as_compilable() and "
-                         "WalkTables.as_compilable()")
+        raise ValueError("params and tables must be WalkParams and WalkTables or their "
+                         "as_compilable() tuples")
     p, t = _rebuild(params, tables)
     _check_outer(p.X_o, t.outer_alt, t.outer_keep, p.b_k1, p.k1, p.ke1, p.s_u)
     _check_inner(p.N, p.R, p.B, p.C, t.inner_alt, t.inner_keep, t.inner_sgn, t.inner_d_sgn,

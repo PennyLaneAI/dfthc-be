@@ -86,8 +86,7 @@ class WalkCase:
     def groups(self, controlled: bool = False) -> dict[str, list[int]]:
         """The wire groups of an assembly operator, ``control`` first if ``controlled`` (as
         ``ControlledWalkPower`` takes them)."""
-        groups = {name: list(getattr(self.layout, name)) for name in
-                  ("outer", "inner", "select", "system", "phase_grad", "work")}
+        groups = {name: list(wires) for name, wires in self.layout.groups().items()}
         return {"control": self.control} | groups if controlled else groups
 
     def block(self) -> np.ndarray:
