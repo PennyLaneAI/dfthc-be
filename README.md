@@ -131,3 +131,9 @@ docs/
   superpowers/        the design spec and the implementation plans
   agents/             handoff notes and the ledger of the agent-driven development
 ```
+
+## License
+
+Apache License 2.0; see [LICENSE](LICENSE). The repository includes data and a few ported
+functions from [dfthcbe](https://github.com/Covestro-HPQC/dfthcbe), also Apache-2.0; see
+[NOTICE](NOTICE).

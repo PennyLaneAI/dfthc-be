@@ -1,0 +1,10 @@
+dfthc
+Licensed under the Apache License, Version 2.0; see LICENSE.
+
+This repository contains material from dfthcbe (https://github.com/Covestro-HPQC/dfthcbe),
+Copyright 2026 Covestro Deutschland AG, licensed under the Apache License, Version 2.0:
+
+- data/dfthc/: an unmodified copy of dfthcbe's data/dfthc/ with its LICENSE; see the NOTICE there.
+- src/dfthc/data/sos.py: walk_integrals and _hamiltonian_matrix are ports of dfthcbe code.
+- scripts/make_dfthcbe_fixtures.py: signal_block is a port of _signal_block in dfthcbe's
+  tests/test_block_encoding.py.
