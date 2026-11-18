@@ -110,7 +110,7 @@ def branch_classes(p):
     and failed x_o (succ_x_o = 0) on an SF row, a tail row and, if it exists, x_o = X_o. The
     inner read loads a zero entry at a failed b, so the alias swap leaves (b, r) = (0, 0) there:
     the SF load then writes sf_angles[0][0] and b_neq_B = 1, and only the Majorana gate's succ_b
-    control keeps the branch the identity (spec 8.5, ledger row 2D.2). That class sits on the
+    control keeps the branch the identity (spec 8.5). That class sits on the
     last SF row, whose own rank is not 0; a failed b at b = 2**w_b - 1 (nothing loaded) stays."""
     classes = [(x, 1, 0, b, 1, x // p.C) for x in range(p.RC) for b in range(p.B + 1)]
     classes += [(0, 1, 0, 2**p.w_b - 1, 0, 0), (p.RC - 1, 1, 0, 0, 0, 0),
@@ -186,7 +186,7 @@ def assert_same_state(state, keys, amps):
 
 def schedules(num, rng):
     """The all-ones, the alternating and a seeded forced schedule of ``num`` outcomes (an
-    all-ones schedule sees only each address's mask parity, ledger row 2D.2)."""
+    all-ones schedule sees only each address's mask parity)."""
     return {"ones": [1] * num, "alternating": [i % 2 for i in range(num)],
             "seeded": rng.integers(0, 2, num).tolist()}
 
@@ -211,7 +211,7 @@ def test_action_against_the_encoded_model(name, kind):
     term equals the encoded model's generator piece (flavour_actions; for InnerSelectDagger its
     adjoint), every ancilla is |0> and the index registers are unchanged, under the all-ones, the
     alternating and a seeded forced schedule of the erase (strict mode). The simulator asserts
-    every AND precondition, which lightning cannot see (ledger row 2E.5). sto3g is the H2 test
+    every AND precondition, which lightning cannot see. sto3g is the H2 test
     shape; random-C3 has a ladder of two rungs, a Q1 row and C = 3 (rank selection); 631g (N = 4,
     three D1 rows and a Q1 row, about 200,000 terms) runs in the nightly tier."""
     p = SHAPES[name][0]

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for dfthc.testing.canary, the subprocess runner of the canary suite (plan Task 0.2)."""
+"""Tests for dfthc.testing.canary, the subprocess runner of the canary suite."""
 
 import sys
 

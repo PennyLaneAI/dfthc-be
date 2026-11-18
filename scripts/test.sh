@@ -5,7 +5,7 @@
 # variable must be exported before Python starts. Works from the main checkout and from every
 # git worktree: the shared .venv lives next to the main checkout's .git directory.
 #
-# Load limits (master plan section 12.9): 2 xdist workers unless DFTHC_TEST_WORKERS says
+# Load limits (docs/environment.md): 2 xdist workers unless DFTHC_TEST_WORKERS says
 # otherwise (0 runs serially), at lowered priority. nice needs setpriority(), which the agent
 # sandbox forbids; there nice only warns and runs the command unchanged, so the run gets the
 # utility QoS clamp of taskpolicy instead, which children inherit.
@@ -26,7 +26,7 @@ if [[ -z "$(nice -n 10 true 2>&1)" ]]; then
 elif taskpolicy -c utility true 2>/dev/null; then
     lower_priority="taskpolicy -c utility"
 else
-    # Fail closed: the load limits (master plan section 12.9) forbid running at normal priority.
+    # Fail closed: the load limits (docs/environment.md) forbid running at normal priority.
     echo "test.sh: cannot lower the priority (neither nice nor taskpolicy works)" >&2
     exit 2
 fi

@@ -5,7 +5,7 @@
 # Scratch experiments (not part of the project)
 .scratch/
 
-# Worktree lanes and workflow artifacts (master plan section 12.2)
+# Local worktrees and tool artifacts
 .worktrees/
 .superpowers/
 

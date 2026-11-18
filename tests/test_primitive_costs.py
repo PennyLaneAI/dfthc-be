@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Pin the PennyLane primitive costs assumed by the closed forms of spec 9.24 (T4, Task 0.2)."""
+"""Pin the PennyLane primitive costs assumed by the closed forms of spec 9.24 (T4)."""
 
 import pennylane as qp
 import pytest

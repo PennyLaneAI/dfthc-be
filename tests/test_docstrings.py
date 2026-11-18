@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The documentation set (spec 2.3 D-6, 5.2) and the operator docstrings (spec 9.0; master plan
-Task 4.4).
+"""The documentation set (spec 2.3 D-6, 5.2) and the operator docstrings (spec 9.0).
 
 Every ``Operator2`` subclass of ``dfthc.ops`` and ``dfthc.qpe`` has the nine docstring sections
 of spec 9.0 in order, and its cost section names an existing ``dfthc.costs`` function. The
@@ -40,7 +39,7 @@ from dfthc.testing.toy_walk import ToyControlledWalkPower
 
 REPO = Path(__file__).resolve().parents[1]
 DOCS = REPO / "docs"
-SPEC = DOCS / "superpowers" / "specs" / "2026-11-11-dfthc-pennylane-design.md"
+SPEC = DOCS / "design.md"
 SECTIONS = (
     ("purpose and mathematical action", r"\*\*Action\b"),
     ("register table", r"\*\*Registers\.\*\*"),
@@ -55,9 +54,8 @@ SECTIONS = (
 """Spec 9.0's sections in order, each a bold heading at the start of a docstring line. QROAMRead,
 PhaseFixup and the two unprepares from outcomes, which also take dynamic arguments, title
 section 3 "Arguments"."""
-DOCUMENTS = ("architecture.md", "conventions.md", "environment.md", "limitations.md",
-             "verification.md", "resources.md", "resources.json", "agents/HANDOFF.md",
-             "agents/LEDGER.md")
+DOCUMENTS = ("design.md", "architecture.md", "conventions.md", "environment.md", "limitations.md",
+             "verification.md", "resources.md", "resources.json")
 """The documentation set of spec 5.2 under ``docs/``."""
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)\)")
 
@@ -141,8 +139,7 @@ def markdown_anchors(text: str) -> set[str]:
     return anchors
 
 
-DOCUMENT_PATHS = tuple(sorted(path.relative_to(DOCS) for path in DOCS.rglob("*.md")
-                              if "superpowers" not in path.relative_to(DOCS).parts))
+DOCUMENT_PATHS = tuple(sorted(path.relative_to(DOCS) for path in DOCS.rglob("*.md")))
 
 
 @pytest.mark.parametrize("document", DOCUMENT_PATHS, ids=lambda path: path.as_posix())
@@ -171,7 +168,7 @@ def test_documentation_links_resolve(document):
 def test_limitations_match_the_canaries_and_spec_14():
     """docs/limitations.md has an entry for every limitation L-1 to L-29 of spec 14, and every
     canary it names is a test function in tests/canary; spec 14 has the same entries and names
-    the same canaries (final review m-31)."""
+    the same canaries."""
     text = (DOCS / "limitations.md").read_text()
     spec = spec_section("## 14.", "## 15.")
     for where, document in (("limitations.md", text), ("spec 14", spec)):
@@ -188,8 +185,8 @@ def test_limitations_match_the_canaries_and_spec_14():
 
 def test_every_l6_mitigation_names_the_five_looped_operators():
     """Spec 7.4 rule 4's looped operators, never adjointed or controlled, are the ones that spec
-    14's L-6, HANDOFF 7's L-6 row and docs/limitations.md's L-6 entry name, each with "never
-    adjointed or controlled" (final review m-23)."""
+    14's L-6 and docs/limitations.md's L-6 entry name, each with "never
+    adjointed or controlled"."""
     classes = {cls.__name__ for cls in CLASSES.values()} | {ToyControlledWalkPower.__name__}
     rule_4 = re.search(r"`qp\.for_loop` appears in five operators.*",
                        spec_section("### 7.4", "### 7.5")).group(0)
@@ -199,8 +196,6 @@ def test_every_l6_mitigation_names_the_five_looped_operators():
     entries = {
         "spec 14": re.search(r"\*\*L-6:.*?(?=\n7\. \*\*L-7)", spec_section("## 14.", "## 15."),
                              re.S).group(0),
-        "HANDOFF 7": re.search(r"^\| L-6 \|.*$", (DOCS / "agents" / "HANDOFF.md").read_text(),
-                               re.M).group(0),
         "limitations.md": re.search(r"\*\*L-6,.*?(?=\n- \*\*L-7)",
                                     (DOCS / "limitations.md").read_text(), re.S).group(0),
     }
@@ -211,7 +206,7 @@ def test_every_l6_mitigation_names_the_five_looped_operators():
 
 def test_spec_14_l23_names_every_operator_with_a_dynamic_argument():
     """Spec 14's L-23 mitigation names exactly the operators that declare dynamic arguments
-    and convert lists in ``__init__`` (final review m-24)."""
+    and convert lists in ``__init__``."""
     entry = re.search(r"\*\*L-23:.*?(?=\n24\. \*\*L-24)", spec_section("## 14.", "## 15."),
                       re.S).group(0)
     dynamic = {cls.__name__ for cls in CLASSES.values() if getattr(cls, "dynamic_argnames", ())}
@@ -221,8 +216,8 @@ def test_spec_14_l23_names_every_operator_with_a_dynamic_argument():
 
 
 def test_architecture_assigns_each_module_to_one_layer():
-    """docs/architecture.md's layer table lists every module in one layer only (final review
-    m-28), so the page's claim that each layer depends only on lower ones can hold."""
+    """docs/architecture.md's layer table lists every module in one layer only, so the page's
+    claim that each layer depends only on lower ones can hold."""
     text = (DOCS / "architecture.md").read_text()
     table = text.split("## Layers", 1)[1].split("\n## ", 1)[0]
     layers = Counter()
@@ -231,20 +226,8 @@ def test_architecture_assigns_each_module_to_one_layer():
     assert layers and [module for module, count in layers.items() if count > 1] == []
 
 
-PAPER_CITATION = "Phys. Rev. X 15, 041016 (2025), DOI 10.1103/pb2g-j9cw"
-"""The paper as the spec's reference gives it, with its DOI."""
-
-
-@pytest.mark.parametrize("draft", sorted((DOCS / "upstream").glob("*.md")), ids=lambda p: p.name)
-def test_upstream_drafts_cite_the_paper_in_full(draft):
-    """Every mention of the paper's DOI in an upstream draft is the full citation (final review
-    m-32): journal, volume, article number and year, then the DOI."""
-    text = " ".join(draft.read_text().split())
-    assert text.count("10.1103/pb2g-j9cw") == text.count(PAPER_CITATION)
-
-
 def test_spec_11_3_gives_the_qpe_wire_totals_of_the_layout():
-    """Spec 11.3's wire totals of the QPE program (final review I-4) are the walk's wires plus
+    """Spec 11.3's wire totals of the QPE program are the walk's wires plus
     the QPE control, read from WalkLayout (no compile), plus t gradient wires: 56 + t at
     H2_STO3G_TEST and 1,050 + t at FeMoco-54."""
     text = spec_section("### 11.3", "### 11.4")

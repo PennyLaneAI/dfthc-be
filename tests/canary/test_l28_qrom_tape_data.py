@@ -14,7 +14,7 @@
 
 """Canary L-28: `qp.QROM` takes no measurement values as data in tape mode (spec section 14).
 
-Found by Task 6.4 on 2026-11-16. The erase fix-ups' leaf loop could be `H . QROM(parities) . H`
+Found on 2026-11-16. The erase fix-ups' leaf loop could be `H . QROM(parities) . H`
 on the one-hot register (the audit's probe 4: exact phases under capture, one Toffoli fewer per
 fix-up), but in tape mode the parities are `MeasurementValue`s (K-10), and `QROM` and its leaf
 operator `MultiX` accept only bool or integer arrays. The fix-ups must work in both modes (spec

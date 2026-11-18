@@ -14,13 +14,13 @@
 
 """Canary L-26: unsigned dynamic arguments get no decomposition rule (spec section 14).
 
-L-26 was found by Task 0.9b on 2026-11-12. Catalyst's `_MLIR_DTYPES_TO_PY_DTYPES` in
+L-26 was found on 2026-11-12. Catalyst's `_MLIR_DTYPES_TO_PY_DTYPES` in
 `catalyst/decomposition/type_utils.py` maps only `i1`, `i8`, `i16`, `i32` and `i64` (and floats
 and complex numbers), so an `Operator2` with an unsigned dynamic argument (`uint32`, MLIR `ui32`)
 gets no rule: Catalyst warns "Failed to synthesize the distributed decomposition rules for <Op>:
 'ui32'" and the solver then fails with "Decomposition rule not found for operator '<Op>'". The
 same operator with `int32` or `int64` data compiles. Compilable table words are therefore `int64`
-holding 32 data bits each (ledger decision "Table words are `int64`").
+holding 32 data bits each.
 """
 
 import pytest

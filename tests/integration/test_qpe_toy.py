@@ -307,7 +307,7 @@ def test_compiled_feed_forward_leaves_an_eigenvector(bits, monkeypatch):
 
 @pytest.mark.parametrize("mode", ["tape", pytest.param("capture", marks=pytest.mark.compiled)])
 def test_earlier_bits_have_shape_t_in_every_round(mode, monkeypatch):
-    """Spec 11.1, master plan Task 4.1: every QPERound of the driver gets earlier_bits of shape
+    """Spec 11.1: every QPERound of the driver gets earlier_bits of shape
     (t,), round t - 1 included (no bit set yet). In tape mode entry l of round j is False for
     l <= j and, for l > j, the very MeasurementValue that round l's measurement returned; under
     capture it is a boolean array of the same shape, the measured bits set with .at[j].set."""

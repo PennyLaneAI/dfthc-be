@@ -19,8 +19,8 @@ the operators' own T3 tests stand in (tests/ops/test_block_encoding.py, tests/op
 Every run starts with every ancilla in |0> and ``phase_grad`` in the gradient state the program
 prepares, decomposes the production classes on the tape path, and is strict (every erase outcome
 has probability 1/2, every AND precondition holds). The expected values come from the encoded
-model, ``encoded_block`` (spec 8.5): its ``Lambda~`` (ledger row 1A.5) and our failure signs, not
-dfthcbe's (ledger row 2D.2). Schedules (spec 12.5): S0 every erase outcome 0, S1 every outcome 1,
+model, ``encoded_block`` (spec 8.5): its ``Lambda~`` and our failure signs, not
+dfthcbe's. Schedules (spec 12.5): S0 every erase outcome 0, S1 every outcome 1,
 and seeded random outcomes; the certificates of spec 12.5 prove every outcome, so these are smoke
 tests. Inputs are system basis states, psi_up's bits first; FIXED_INPUTS are spec 12.6's four.
 
@@ -41,7 +41,7 @@ FIXED_INPUTS = (0b0000, 0b1000, 0b1010, 0b1111)
 TWO_ELECTRON_631G = tuple(v for v in range(256) if bin(v).count("1") == 2)
 """The 28 two-electron basis states of H2_631G_TEST (N = 4, 8 spin orbitals)."""
 ATOL = 1e-10
-"""Spec 12.4 and the Task 3.5 brief: every E-check comparison to 1e-10."""
+"""Spec 12.4: every E-check comparison to 1e-10."""
 
 nightly, release = pytest.mark.slow, pytest.mark.release
 
@@ -147,7 +147,7 @@ def test_e4_prepare_then_unprepare(kind):
     """E-4 at H2_STO3G_TEST: U then U-dagger (the block encoding's children without ref_t2)
     returns every ancilla to |0> and the system unchanged, on all 16 inputs, under the
     alternating and a seeded schedule of the five erases (an all-ones or all-zeros schedule sees
-    less of the erases' masks; ledger row 2D.2)."""
+    less of the erases' masks)."""
     c = walk_sim.case("sto3g")
     ops = walk_sim.prepare_unprepare(c)
     outcomes = walk_sim.schedule(kind, walk_sim.num_measurements(ops), seed=14)

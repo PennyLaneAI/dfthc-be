@@ -139,7 +139,7 @@ def check_call(op, layout) -> int:
 
 @pytest.mark.parametrize("name", PRESETS)
 def test_every_call_gets_exactly_its_required_wires(name):
-    """Spec 10.2 and master plan Tasks 3.3 and 3.4: in the three assembly rules every child
+    """Spec 10.2: in the three assembly rules every child
     receives exactly required_wires (phase_grad of the prepare classes is a minimum: they get the
     whole register; the walks' block encoding gets the whole groups and pool), its work is the
     pool's prefix of that size and disjoint from its other registers, no other register holds a

@@ -23,6 +23,13 @@ Supporting tests: `tests/test_work_pool.py` (every call gets exactly its `requir
 `tests/test_primitive_costs.py` (the gate set and PennyLane's primitive costs),
 `tests/report/` (the resource report), `tests/test_docstrings.py` (the documentation).
 
+**Tolerances.** Every `np.allclose`, `np.isclose`, `np.testing.assert_allclose`,
+`pytest.approx` and `math.isclose` call states both tolerances: `rtol=0` with an absolute `atol`
+(1e-12 for dense and simulator comparisons), or an explicit `rtol` with `atol=0` where a relative
+bound is meant. NumPy's default `rtol=1e-5` would silently loosen a 1e-12 check near amplitudes of
+order one. `tests/test_tolerance_hygiene.py` enforces this under `tests/` and
+`src/dfthc/testing/`.
+
 ## The sparse simulator (spec 12.3)
 
 `dfthc.testing.tape.decompose_for_simulation` decomposes a program on the tape path with the
@@ -84,7 +91,7 @@ H2 sizes and `ControlledWalkPower` at `MID_NAPHTHALENE`. The FeMoco-54 values (w
 Toffolis, controlled walk 9,792) are asserted on the closed forms
 per commit. The resource report compiles every program of the walk at the H2 systems and
 `naphthalene` (and `fe2s2`, `fe4s4` as heavy runs), checks each against its closed form, and
-checks that the partition rows times their calls give the compiled walk. Task 4.5 compiled the
+checks that the partition rows times their calls give the compiled walk. The report compiled the
 FeMoco-54 walk and controlled walk once each and cached them in [`resources.json`](resources.json);
 `tests/report/test_femoco_cache.py` (release tier) asserts, without compiling, the cached counts,
 their gate dictionaries and wires, the partition sum (plus the block encodings' junk
@@ -100,5 +107,4 @@ measurements in M) and the QPE summary, while the code hash matches.
 
 `scripts/test.sh` runs two workers at lowered priority (`DFTHC_TEST_WORKERS` overrides). One
 test: `scripts/test.sh tests/ops/test_walk.py::test_name -q`. The nightly and release tiers and
-every heavy run are started by the orchestrator under the watchdog (see
-[`environment.md`](environment.md)).
+every heavy run go under the watchdog, one at a time (see [`environment.md`](environment.md)).

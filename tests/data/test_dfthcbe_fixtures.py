@@ -131,8 +131,8 @@ def test_encoded_block_equals_dfthcbe():
 
 
 def test_femoco_block_counts_are_loadable():
-    """The counts are pinned to dfthcbe's ``test_femoco_cost_by_block`` and add up; Task 4.3
-    compares them with ours."""
+    """The counts are pinned to dfthcbe's ``test_femoco_cost_by_block`` and add up; the resource
+    report compares them with ours."""
     counts = load_dfthcbe_fixture("femoco_block_toffolis.json")
     assert counts == FEMOCO_TOFFOLIS
     assert list(counts) == list(_script().FEMOCO_BLOCKS)

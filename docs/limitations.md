@@ -3,10 +3,8 @@
 One entry per limitation of spec section 14, with the behaviour the canary in `tests/canary/`
 pins today. A flipped canary is a signal to revisit the mitigation, not a failure to hide. All
 observations are from 2026-11-11 (PennyLane 0.46.0.dev151, Catalyst 0.16.0.dev140) unless an entry
-gives its own date. Entries marked **changed** differ from the spec's original wording. As of Task
-4.4 (2026-11-15), this file consolidates L-1 to L-27, including L-26 (Task 0.4b), L-27 (Task
-0.2c) and the ledger's later canary-state updates; Task 6.4 (2026-11-16) added L-28 and corrected
-L-12 and L-13, Task 6.2 added L-29. `tests/test_docstrings.py` checks that every limitation has an
+gives its own date. Entries marked **changed** differ from the spec's original wording.
+`tests/test_docstrings.py` checks that every limitation has an
 entry and that every canary named here exists.
 
 ## Decomposition rules, pins, control and templates
@@ -75,7 +73,7 @@ entry and that every canary named here exists.
   `test_resource_function_runs_with_capture_enabled`. Mitigation: `dfthc.compile.resource_key`
   builds keys with capture paused.
 - **L-12, select-swap `QROM` is not self-inverse and counts symbolically**, **changed**
-  (2026-11-16, Task 6.4). A dirty 16-entry `QROM` (select-swap chosen) applied twice has overlap
+  (2026-11-16). A dirty 16-entry `QROM` (select-swap chosen) applied twice has overlap
   0.8125 with the input; its counts are symbolic. Canaries:
   `test_select_swap_qrom_twice_is_not_identity`, `test_select_swap_qrom_counts_are_symbolic`.
   Not being self-inverse is the intended behaviour of a dirty read, which leaves junk for a
@@ -87,7 +85,7 @@ entry and that every canary named here exists.
   nests no `QROM` (`dfthc.compile.PENNYLANE_PINS`), then its own exact CSWAP network; a
   `PhaseFixup` that applies `CZ`/`Z` directly.
 - **L-13, `Select` with shared target wires crashes the compiler** (`'qref.operator' op qubit
-  operands must refer to distinct qubits`), **changed** (2026-11-16, Task 6.4). Canary:
+  operands must refer to distinct qubits`), **changed** (2026-11-16). Canary:
   `test_select_with_shared_target_crashes`. Mitigation: no `Select` of operators that share wires.
   `QROM`'s unary rule loads with `MultiX` and never hits L-13, so `QROAMRead`'s select is a
   `QROM`. Our own unary-iteration helper remains for what `QROM` does not offer: address ranges
@@ -102,7 +100,7 @@ entry and that every canary named here exists.
   `AliasSampling` compiles, because its uniform preparation is then Hadamards only. Canaries:
   `test_template_has_no_toffoli_level_path` (two cases) and
   `test_power_of_two_alias_sampling_compiles`. Mitigation: `FlaggedUniformPrep`.
-- **L-28, `QROM` takes no measurement values as data in tape mode** (new, found by Task 6.4 on
+- **L-28, `QROM` takes no measurement values as data in tape mode** (new,
   2026-11-16). `QROM`'s bitstrings, and the row of its leaf operator `MultiX`, must be bool or
   integer arrays: recording either with `MeasurementValue`s raises `ValueError`. Under capture
   the same data are traced bools, and the erase fix-up's leaf loop as `H . QROM(parities) . H`
@@ -111,7 +109,7 @@ entry and that every canary named here exists.
   `test_qrom_rejects_measurement_values_in_tape_mode`. Mitigation: the fix-ups keep their
   conditional `CZ` leaves (`emit_phase_fixup`, spec 9.4), which work in both modes (K-10), as the
   sparse simulator, `assert_valid_decomp_rule` and the report's call finder need.
-- **L-29, `FlipSign` does not scale to the walk's reflections** (new, found by Task 6.2 on
+- **L-29, `FlipSign` does not scale to the walk's reflections** (new,
   2026-11-17). `FlipSign` declares its multi-controlled `Z` with traced control values, and its
   compile time and memory grow exponentially with the number of pattern wires: 20 s at 6 wires,
   63 s at 12, over 6 min and 2.8 GB at 14 (`FlipSign` with `GlobalPhase(pi)`, `n - 3` work
@@ -128,7 +126,7 @@ entry and that every canary named here exists.
 - **L-23, list-valued dynamic arguments are not canonicalized** (pennylane#10060, open). The base
   class keeps a list as a list. Canary: `test_dynamic_list_argument_not_canonicalized`.
   Mitigation: dfthc operators with dynamic arguments convert lists to arrays in `__init__`.
-- **L-24, compilable integers must fit in signed 64 bits** (new, found by the Phase 0 dry-run).
+- **L-24, compilable integers must fit in signed 64 bits** (new).
   `2**63 - 1` compiles as a compilable argument; `2**63 + 1` does not (`CompileError`, MLIR "Large
   integer attributes currently not supported"). Canary: `test_compilable_int_must_fit_int64`.
   Mitigation: tables store wide entries as tuples of 32-bit words, least significant word first.
@@ -137,14 +135,14 @@ entry and that every canary named here exists.
   constant"); keyword arguments, `qp.adjoint(Op(...))` and `qp.adjoint(lambda: Op(...))()` work.
   Canary: `test_adjoint_of_class_traces_positional_arguments`. Mitigation: always use the
   instance form `qp.adjoint(Op(...))`.
-- **L-26, unsigned dynamic arguments get no decomposition rule** (new, found by Task 0.9b).
+- **L-26, unsigned dynamic arguments get no decomposition rule** (new).
   Catalyst's `_MLIR_DTYPES_TO_PY_DTYPES` (`catalyst/decomposition/type_utils.py`) maps only `i1`,
   `i8`, `i16`, `i32` and `i64` (and floats and complex numbers). On 2026-11-12 an `Operator2` whose
   dynamic argument is a `uint32` array warns "Failed to synthesize the distributed decomposition
   rules for <Op>: 'ui32'" and then fails with `CompileError` "Decomposition rule not found for
   operator '<Op>'"; the same operator with `int32` or `int64` data compiles. Canary:
   `test_unsigned_dynamic_argument_has_no_rule`. Mitigation: compilable table words are `int64`
-  holding 32 data bits each (ledger decision "Table words are `int64`").
+  holding 32 data bits each.
 
 ## Measurements, analysis, device level, warnings and compile time
 
@@ -189,7 +187,7 @@ entry and that every canary named here exists.
   (catalyst#3173). Canary: `test_each_distinct_table_is_a_separate_rule_compile` (per commit).
   On 2026-11-12 each distinct table traces its rule exactly once per compile, and identical
   tables in one program share that trace: compile time grows with table size, and each distinct
-  table adds its own rule trace. (Task 0.4 read "twice" on 2026-11-11; the second trace was the
+  table adds its own rule trace. (An earlier reading of "twice" on 2026-11-11 counted the
   decoration-time compile of L-27. The canary now keeps that compile off and pins the doubled
   count separately.)
   Benchmark: `test_compile_time_scaling` (nightly) compiles 1, 2 and 4 distinct 64-entry tables
@@ -200,15 +198,15 @@ entry and that every canary named here exists.
   of the process tree, as the watchdog measures it), or if the 8,640-entry case costs less than 5
   times the CPU time of the 64-entry case. Wall time is recorded for information.
   The benchmark programs disable the decoration-time compile (L-27). On the development laptop
-  (2026-11-12, after Task 0.2c) the ratio was 55, and one 8,640-entry table took 25 s wall, 25 s
-  CPU and 973 MB (Task 0.4, with the decoration-time compile and under memory pressure: ratio 84,
+  (2026-11-12) the ratio was 55, and one 8,640-entry table took 25 s wall, 25 s
+  CPU and 973 MB (earlier, with the decoration-time compile and under memory pressure: ratio 84,
   37 s wall, 36 s CPU and 1.5 GB). Mitigation: few distinct table operators
   per walk; the K-1 budget.
 - **L-22, unresolved loops give symbolic counts.** Shared with L-12 and L-17
   (`test_select_swap_qrom_counts_are_symbolic`, `test_dynamic_loop_counts_are_symbolic`).
   Mitigation: loops unrolled in Python or with static bounds; T4 asserts `is_symbolic == False`.
-- **L-27, `qp.qjit` compiles a fully annotated function ahead of time at decoration** (new, found
-  by the Opus review of Task 0.9c; zero arguments are the case `compiled_resources` hits).
+- **L-27, `qp.qjit` compiles a fully annotated function ahead of time at decoration** (new;
+  zero arguments are the case `compiled_resources` hits).
   `qp.qjit` AOT-compiles at decoration when every parameter has a Catalyst-supported type
   annotation (`params_are_annotated` in `catalyst/tracing/type_signatures.py`); a zero-argument
   function satisfies this rule vacuously. With `enable_aot_compilation=True` (the default,

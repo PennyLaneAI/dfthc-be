@@ -33,7 +33,7 @@ global phase under control shows. The expected blocks come from the encoded mode
 (:func:`dfthc.data.encoded.encoded_block`), never from the circuit. Every run is strict: each
 erase measurement must have probability 1/2, and every AND precondition is asserted (spec 12.3).
 
-:data:`CASES` names the shapes of the Phase 3 tests: the two test presets and
+:data:`CASES` names the shapes of the assembly tests: the two test presets and
 :data:`FAILS_C3`. At most 64 wires make a key one 64-bit word; wider programs (``H2_631G_TEST``:
 68 wires) are correct but about 25 times slower per input (``np.unique`` over two-word keys).
 """
@@ -58,7 +58,7 @@ from dfthc.testing.sparse_sim import ForcedPolicy, SparseSimulator, SparseState
 from dfthc.testing.tape import decompose_for_simulation
 
 ATOL = 1e-12
-"""Absolute tolerance of the state comparisons (HANDOFF section 6)."""
+"""Absolute tolerance of the state comparisons (docs/verification.md)."""
 
 AB_REGISTERS = ("x_o", "m_x_o", "sigma_1", "b", "m_b", "sigma_0")
 r"""The registers of :math:`\mathcal{A} \cup \mathcal{B}` that ``ref_ab`` reflects (spec 3.3)."""
@@ -111,7 +111,7 @@ class WalkCase:
 
 FAILS_C3 = WalkParams(N=2, R=3, B=2, C=3, n_plus=1, b_rot=4, b_k1=1, b_k2=2, s_u=3, k1=0, k2=0,
                       ke1=1, ke2=1)
-"""A shape the test presets cannot be (ledger rows 1A.5 and 2D.2), with ``random_factors(2, 3, 2,
+"""A shape the test presets cannot be, with ``random_factors(2, 3, 2,
 3, n_plus=1, seed=5)``: ``X_o = 11``, so the uniform preparation of ``x_o`` fails (P = 0.11),
 ``REF_T2`` is ``-I`` there and ``Lambda~ = Lambda / (1 - P)``; ``B + 1 = 3`` fails too, and with
 ``k2 = 0`` the failed ``b = 3`` reads padding in our read but entry ``B`` in dfthcbe's truncated
@@ -123,7 +123,7 @@ CASES = {
     "631g": lambda: (H2_631G_TEST, load_factors("h2_631g_R2_B2_C2")),
     "fails-c3": lambda: (FAILS_C3, random_factors(2, 3, 2, 3, n_plus=1, seed=5)),
 }
-"""The Phase 3 test shapes: ``H2_STO3G_TEST`` (56 wires with the control), ``H2_631G_TEST``
+"""The assembly test shapes: ``H2_STO3G_TEST`` (56 wires with the control), ``H2_631G_TEST``
 (68) and :data:`FAILS_C3` (59), each with its factors."""
 
 

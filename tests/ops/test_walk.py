@@ -212,7 +212,7 @@ def test_pinned_rules_are_chosen(kind, capfd):
     """T6 at H2_STO3G_TEST: the listing pairs each assembly operator with its pinned rule (the
     controlled walk, C(DFTHCWalk), with _controlled_walk and no block encoding operator), the
     Adjoint(MajoranaGate), the select dagger's leaf adjoint, with a lowered copy of the base rule
-    _majorana_gate (ledger row 2E.5)."""
+    _majorana_gate."""
     c = walk_sim.case("sto3g")
     controlled = kind == "controlled"
 
@@ -250,9 +250,9 @@ def test_nothing_survives_at_device_level():
 @pytest.mark.compiled
 @pytest.mark.parametrize("kind", KINDS)
 def test_inventory_of_captured_targets(kind):
-    """The inventory test (spec 7.4 rule 6, 12.1 T6; master plan section 3, item 20): compiling
+    """The inventory test (spec 7.4 rule 6, 12.1 T6): compiling
     the walk or the controlled walk at H2_STO3G_TEST, the frontend converts the program's own
-    top-level target (so the hook sees targets) and every Phase 3 class of the program. The
+    top-level target (so the hook sees targets) and every assembly class of the program. The
     modified targets of dfthc operators and of the templates they adjoint are exactly the leaf
     adjoints and the template adjoints, and for the controlled walk its own C(DFTHCWalk), whose
     rule is pinned, and C(DFTHCBlockEncoding): Catalyst still builds the generic controlled

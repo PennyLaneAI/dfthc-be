@@ -277,7 +277,7 @@ def test_toffoli_count_at_mid_naphthalene(which):
 
 
 def test_femoco_counts_on_the_closed_form():
-    """FeMoco-54 on the closed forms (no FeMoco table is compiled, master plan 12.9): tail 61 and
+    """FeMoco-54 on the closed forms (no FeMoco table is compiled): tail 61 and
     SF 11 + 10 * 28 = 291; the loads have 54 and 270 rows of 744 and 743 bits."""
     p = FEMOCO54
     assert costs.tail_angle_load(p) == costs.Cost(61) == costs.Cost(costs.unary(270, 324, 9, False))

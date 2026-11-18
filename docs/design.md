@@ -7,6 +7,7 @@
 | Branch | `main` |
 | Paper | G. H. Low et al., "Fast quantum simulation of electronic structure by spectral amplification", Phys. Rev. X 15, 041016 (2025), arXiv:2502.15882. Called "the paper" below. |
 | Reference implementation | [Covestro-HPQC/dfthcbe](https://github.com/Covestro-HPQC/dfthcbe) at commit `930255020cec30172e0a7d17c0071d9476a687d1` (Qualtran). Called "dfthcbe" below. |
+| History | Written before the implementation. Tasks, phases, spikes (K-*n*), the implementation plans, the handoff notes and the ledger it mentions are in the git history up to commit `c780263`. |
 | Toolchain snapshot | PennyLane `0.46.0.dev151`, Catalyst `0.16.0.dev140`, Lightning `0.46.0.dev34` (nightlies of 2026-11-11) |
 
 ## Table of contents
@@ -25,7 +26,7 @@
 12. [Verification and tests](#12-verification-and-tests)
 13. [Expected resources and the resource report](#13-expected-resources-and-the-resource-report)
 14. [Known limitations and mitigations](#14-known-limitations-and-mitigations)
-15. [Orchestration overview](#15-orchestration-overview)
+15. [Load policy](#15-load-policy)
 16. [Risks and open questions](#16-risks-and-open-questions)
 17. [References](#17-references)
 
@@ -384,9 +385,7 @@ dfthc-be/
   docs/
     architecture.md  conventions.md  environment.md  limitations.md  verification.md
     resources.md, resources.json (generated; the json also caches large compiles, §13.3)
-    agents/HANDOFF.md  agents/LEDGER.md
-    upstream/ (drafts of upstream issues with their reproducers; agents never file them)
-    superpowers/specs/ (this file)  superpowers/plans/ (the implementation plan)
+    design.md (this file)
 ```
 
 ### 5.3 Data flow
@@ -509,7 +508,7 @@ pip freeze > requirements-nightly.lock
 - **The linker warning is benign.** `ld: warning: object file ... was built for newer 'macOS' version (28.0) than being linked (27.0)` appears on every compile.
 - **Export `CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0` before Python starts.** Catalyst otherwise drops broken or excluded rules silently ([catalyst#3190](https://github.com/PennyLaneAI/catalyst/pull/3190)).
   - Catalyst reads the variable once, when `catalyst/decomposition/rule_lowering_warning.py` is imported. If it is unset or not `0`, that module installs an `ignore` filter for `RuleLoweringWarning`, so setting the variable later in `conftest.py` is too late.
-  - `scripts/test.sh` and `docs/agents/HANDOFF.md` export it.
+  - `scripts/test.sh` exports it.
   - `tests/conftest.py` also installs `warnings.filterwarnings("always", category=RuleLoweringWarning)` after importing Catalyst, as a second line of defence.
   - A subprocess canary checks both behaviours (§14, L-18).
 - **Keep the lock file.** `--pre` with the TestPyPI extra index also pulls dev builds of transitive dependencies (for example `termcolor 3.3.1.dev66` and `urllib3 2.8.1.dev35`). `requirements-nightly.lock` records the exact set.
@@ -1587,40 +1586,13 @@ A row's reason codes are the causes with a nonzero contribution to its delta, ea
     - *Mitigation:* the reflection helpers build the multi-controlled `Z` from `MultiControlledX` with static control values; the controlled form takes the control as one more control of value 1, then `Z` on the control (§9.6).
     - *Canary:* none; the scaling is too heavy to pin.
 
-## 15. Orchestration overview
+## 15. Load policy
 
-The implementation plan specifies tasks, prompts and acceptance checks. This section fixes the policy.
-
-**Roles.** Exact model identifiers are pinned in the plan from the list available at execution time. On 2026-11-11 the user chose `inherit`, the orchestrator's own model, for Tier A and the Opus reviewer, after `claude-opus-5-5-high-fast` stopped being offered; the others are `claude-sonnet-5-5-high`, `gpt-5.6-sol-high-fast` and `grok-4.7-high-fast`.
-- **Orchestrator.** The main session. It owns the plan, the ledger, merges and phase gates.
-- **Tier A (the orchestrator's model, `inherit`).** Circuit constructions with subtle phases or registers, the sparse simulator, assembly and end-to-end debugging, and phase and final reviews.
-- **Tier B (Sonnet 5.5).** Well-specified tasks: classical data, layout, reflections, report plumbing, documentation.
-- **Reviewer (GPT-5.6).** An independent review gate on every task: spec compliance and correctness against this document.
-- **Scout (Grok 4.7).** Quick source lookups in PennyLane, Catalyst and dfthcbe.
-
-**Workflow for each task.**
-1. The orchestrator creates the task branch `phase<N>/<task-id>` from local `main` in one of two worktree lanes.
-2. The implementer writes tests first, then implements. It runs the task's targeted tests while developing and the fast suite once at commit time, and fills in the self-review checklist (§9.0 docstring sections present, T2–T6 present, no forbidden constructs from §7.4).
-3. The reviewer reviews the diff against this specification.
-4. Tier A tasks also get an Opus review.
-5. The orchestrator merges into local `main` only after the tests pass and the reviews approve.
-6. `docs/agents/LEDGER.md` records status, branch, commit, test evidence, review verdicts and open issues for every task.
-
-**Handoff.** `docs/agents/HANDOFF.md` gives every agent the same context:
-- environment recipe and pitfalls (§7.1);
-- the rules of §7.4;
-- the limitations (§14);
-- the conventions (§6);
-- commands for the fast and full suites.
-
-**Git.** Local branches and worktrees only. Merges go into local `main`. Never push, never modify remotes. The repo-local git identity (`dwierichs` / `david.wierichs@xanadu.ai`) is shared by all worktrees.
-
-**Load policy** (decided by the user on 2026-11-11: "Keep large-scale compilations to a minimum"; "Try to not run heavy processes throughout"). The development laptop has 10 cores and 16 GB, and the user works on it. The plan (section 12.9) gives the details.
+Decided by the user on 2026-11-11 ("Keep large-scale compilations to a minimum"; "Try to not run heavy processes throughout"). The development laptop has 10 cores and 16 GB, and the user works on it. `docs/environment.md` gives the commands.
 - *Heavy process:* a run whose process tree exceeds 4 GB of memory, keeps more than 2 cores busy or lasts longer than 30 minutes, and any FeMoco-shaped compile (a program holding a FeMoco-54 table).
 - *Memory cap:* 8 GB per process tree, a sampled limit (§7.1). The watchdog `dfthc.testing.watchdog` samples the tree's memory every 50 ms, kills it at the first sample above 7.5 GB (15/16 of the cap) and records the kill; every run that could approach the cap goes through it. The overshoot past 7.5 GB is bounded by one interval of growth, and stays below 8 GB for growth under 10 GB/s; compiles grew at 11 to 89 MB/s on average and at most about 0.5 GB/s within one interval. Projections and budgets use 7.5 GB, where execution stops. The watchdog fails closed: it starts nothing where it cannot measure (off macOS), and a measurement error kills the tree. A check whose budget would exceed 7.5 GB first measures at smaller sizes, projects, and escalates before it runs.
-- *Concurrency:* at most two implementers run at once. The orchestrator starts every heavy process itself, one at a time and never next to another agent's test suite, and logs its peak memory and wall time in the ledger.
+- *Concurrency:* heavy processes run one at a time, never next to a test suite, under the watchdog.
 - *Large-scale compiles:* about six FeMoco-scale compiles for the whole project, each logged; more need the user's approval. None runs in the per-commit or nightly tier. K-1 compiles at FeMoco-54 shape only if its projection fits (§16); the resource report compiles the FeMoco-54 walk and controlled walk once each and caches the counts with the code hash (§13.3).
-- *Questions to the user* are asked at gates only: the K-1 escalation (where compiles above the cap run), the Q-1 decision, the go-ahead for the release run, and any compile beyond the six. The release go-ahead and the confirmation of the Q-1 working choice are asked together in Phase 5, right before the release run (or the FeMoco-54 recompile a code fix may need).
 
 ## 16. Risks and open questions
 

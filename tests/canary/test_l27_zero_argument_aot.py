@@ -14,7 +14,7 @@
 
 """Canary L-27: `qp.qjit` compiles a fully annotated function ahead of time at decoration.
 
-L-27 was found by the Opus review of Task 0.9c on 2026-11-12. Catalyst's `params_are_annotated`
+L-27 was found on 2026-11-12. Catalyst's `params_are_annotated`
 (`catalyst/tracing/type_signatures.py`) is true when every parameter has a Catalyst-supported
 type annotation; a function without parameters satisfies it vacuously. With
 `enable_aot_compilation=True`, the default (`catalyst/jit.py`), the `QJIT.__init__` AOT branch then

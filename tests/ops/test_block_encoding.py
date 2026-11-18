@@ -102,7 +102,7 @@ def test_prepare_then_unprepare_is_the_identity(name):
     """The E-4 precursor (spec 12.4): the rule's children without the reflection, U then
     U-dagger, return a superposition of two system states and every ancilla exactly,
     under the alternating and a seeded schedule of the five erases (an all-ones schedule sees only
-    each address's mask parity; ledger row 2D.2)."""
+    each address's mask parity)."""
     c = case(name)
     ops = walk_sim.prepare_unprepare(c)
     psi = walk_sim.superposition(c, SUPPORT[name], seed=5)

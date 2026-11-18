@@ -244,7 +244,7 @@ def test_round_trip_after_the_junk_measurement(key):
     outcomes return a random state of the inputs (x_o for the inner pair), every other register
     |0> and the phase gradient unchanged, under the alternating and a seeded schedule of all K d
     measurements, junk first; an all-ones schedule would see only each address's mask parity
-    (ledger row 2D.2). With more than one junk outcome, the outcomes passed in reversed order fail
+   . With more than one junk outcome, the outcomes passed in reversed order fail
     the round trip under the zero or some unit schedule: the fixup reads them in the junk
     register's wire order, the order of QROAMRead.junk_layout's slots."""
     pr = pair(key)
@@ -323,7 +323,7 @@ def test_lightning_round_trip_with_postselected_junk(key):
 
 
 class InnerRoundTripProbe(Operator2):
-    """Test operator (ledger decision "K-10 consequences" (3)): its rule calls ``InnerPrepare``,
+    """Test operator: its rule calls ``InnerPrepare``,
     X-measures ``junk_b`` and calls ``InnerUnprepareFromOutcomes`` with the outcomes, as the block
     encoding's rule does. ``wires`` is ``InnerPrepare``'s registers, concatenated in its
     ``wire_argnames`` order."""

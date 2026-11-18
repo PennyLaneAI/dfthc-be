@@ -30,7 +30,7 @@ none), so every register in |0> is its only legal pre-state, and each run starts
 outcome-dependent phase, a wrong amplitude or a leftover ancilla shows as a difference from it
 (the uniform preparation's adjoint moves any relative phase on ``x_o`` away from |0>). This fixed
 input does not instantiate spec 12.5's general premise of random complex address and control
-amplitudes: the read and erase carry that premise through Task 1C.5's QROAMRead -> QROAMErase
+amplitudes: the read and erase carry that premise through QROAMRead -> QROAMErase
 certificates (tests/ops/test_certificates_qroam.py), and this certificate composes them with the
 pair's other children on its one legal input. The tables are random, the shapes include a
 nontrivial uniform preparation (failure branches and its phase), dead positions in the read's
@@ -132,7 +132,7 @@ def certify(prepare, unprepare, wires, num_wires, inputs, num_measured):
 # (X_o, b_k1, k1, ke1, s_u): both test presets (X_o = 4 and 8, trivial uniform preparations);
 # X_o = 5 with ke1 = 2 (the fix-up leaf [4, 8) covers only 4 and 5 of the loaded [0, 6); the
 # uniform preparation fails with weight 0.15 and a phase; phase_grad has two wires more than s_u,
-# as when Phase 3 passes the whole register); X_o = 6 with k1 = 2 (dead positions 6 and 7, l = 3).
+# as when the walk passes the whole register); X_o = 6 with k1 = 2 (dead positions 6 and 7, l = 3).
 OUTER = {
     "sto3g": (4, 2, 1, 1, 3),
     "631g": (8, 2, 1, 1, 3),

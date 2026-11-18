@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for dfthc.testing.watchdog, the memory and time guard of heavy runs (plan Task 0.2)."""
+"""Tests for dfthc.testing.watchdog, the memory and time guard of heavy runs."""
 
 import contextlib
 import ctypes
@@ -150,7 +150,7 @@ def _record(start, footprint_mb=10.0):
 
 
 def test_a_reaped_root_is_not_adopted_again(monkeypatch):
-    """Final review m-18: once the root has been reaped, a process that reuses its pid (another
+    """Once the root has been reaped, a process that reuses its pid (another
     start time) is not adopted, measured or killed: every scan starts from the root's pid."""
     root = 424242
     records = iter([_record(start=1), None, _record(start=2, footprint_mb=50.0)])
@@ -178,7 +178,7 @@ HOLDER = ("import os, time; chunk = os.urandom(130 * 2**20); print('ready', flus
 
 
 def test_kills_on_the_summed_memory_of_the_tree():
-    """Final review m-12: the kill decision samples the tree's summed footprint, not its largest
+    """The kill decision samples the tree's summed footprint, not its largest
     process. One 130 MB process stays below the kill point of cap_mb = 200 (187.5 MB); two such
     siblings under one root exceed it together and are killed for memory."""
     alone = run_watched([sys.executable, "-c", HOLDER.format(sleep=2)], cap_mb=200, timeout_s=30)
@@ -388,18 +388,17 @@ def test_untraceable_descendant_holding_the_pipes_ends_the_run(
 ):
     """An escaped descendant that keeps the output pipes open cannot stall the run.
 
-    The command waits until the escaped descendant has left the session and published its
-    readiness before the root exits, so the descendant exists before either path starts. With
-    ``timeout_s=2`` (``kill_seconds=4``, so the time limit comes first, with slack over Python's
-    start-up under load) the time limit ends the loop and both bounded final reads time out; with
-    ``timeout_s=60`` the loop gives up ``_KILL_SECONDS`` after the root exited with nothing left
-    to sample. The escaped child sleeps 15 s, longer than either path takes (at most
-    ``min(timeout_s, kill_seconds) + 2 * kill_seconds`` after the start). The bound asserts only
-    that property, that the run ends long before the child's sleep, with 3 s for Python's start-up
-    and the readiness handshake under load (final review m-21: 6 s and 13 s, against 3.2 s and
-    10.1 s measured alone). The child publishes its pid to a cleanup file before it leaves the
-    session, so the ``finally`` block kills it even when the run ends before the readiness file
-    appears.
+    The command waits until the escaped descendant has left the session and published its readiness
+    before the root exits, so the descendant exists before either path starts. With ``timeout_s=2``
+    (``kill_seconds=4``, so the time limit comes first, with slack over Python's start-up under
+    load) the time limit ends the loop and both bounded final reads time out; with ``timeout_s=60``
+    the loop gives up ``_KILL_SECONDS`` after the root exited with nothing left to sample. The
+    escaped child sleeps 15 s, longer than either path takes (at most ``min(timeout_s, kill_seconds)
+    + 2 * kill_seconds`` after the start). The bound asserts only that property, that the run ends
+    long before the child's sleep, with 3 s for Python's start-up and the readiness handshake under
+    load (6 s and 13 s were seen under load, against 3.2 s and 10.1 s alone). The child publishes
+    its pid to a cleanup file before it leaves the session, so the ``finally`` block kills it even
+    when the run ends before the readiness file appears.
     """
     monkeypatch.setattr(watchdog, "_KILL_SECONDS", kill_seconds)
     cleanup_file, ready_file = tmp_path / "escaped.pid", tmp_path / "escaped.ready"
@@ -421,7 +420,7 @@ def test_untraceable_descendant_holding_the_pipes_ends_the_run(
 
 
 def test_held_pipes_found_by_the_loop_are_closed_at_once(monkeypatch, tmp_path):
-    """Final review m-19: once the loop has given up on the held pipes (``_KILL_SECONDS`` after
+    """Once the loop has given up on the held pipes (``_KILL_SECONDS`` after
     nothing traceable was left), the final read closes them after one short read instead of two
     more bounded waits, so the run ends ``_KILL_SECONDS`` after the root, as the module docstring
     says. Only the final read is timed, so start-up and load do not enter."""
@@ -466,7 +465,7 @@ class _RefusingProcess:
 
 
 def test_a_refused_kill_of_the_command_does_not_escape():
-    """Final review m-20 (ledger row L235): a command that refuses SIGKILL during the bounded
+    """A command that refuses SIGKILL during the bounded
     final reads still lets them end, with the output read so far and the pipes closed, instead
     of a PermissionError out of run_watched's finally block that loses the record."""
     proc = _RefusingProcess()
@@ -475,7 +474,7 @@ def test_a_refused_kill_of_the_command_does_not_escape():
 
 
 def test_command_line_reports_any_other_error(monkeypatch, capsys):
-    """Final review m-20 (ledger row L236): an exception other than WatchdogError, such as an
+    """An exception other than WatchdogError, such as an
     OSError from Popen, ends main with a WATCHDOG line that names it and status 3, not with a
     traceback."""
     def broken(*args, **kwargs):

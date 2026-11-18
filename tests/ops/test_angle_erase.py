@@ -429,7 +429,7 @@ table shapes and the angle range."""
 
 @pytest.mark.parametrize("change", DOMAIN_CHANGES)
 def test_select_and_erase_reject_the_same_domains_with_the_same_message(change):
-    """Final review m-4: InnerSelect checks its compilable arguments with AngleErase's validator
+    """InnerSelect checks its compilable arguments with AngleErase's validator
     (its fixup_bits is the erase's sf_onehot_bits), so both reject every invalid domain before
     any wire check, with the same message."""
     erase = erase_args(**change)

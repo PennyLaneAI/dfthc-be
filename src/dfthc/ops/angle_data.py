@@ -29,7 +29,7 @@ address ranges and nesting that ``qp.QROM`` does not offer (spec 9.3): at every 
 the compilable angle table. After both loads, tail rows hold tail data on ``G0 = 1``; every
 ``G0 = 0`` branch, failed ``x_o`` included, holds the SF entry of ``(r, b)`` where it is in
 range, and zeros elsewhere (``b = B``, failed ``b``, unvisited ``r``). :class:`AngleErase`
-(Task 2E.2) erases what they write.
+erases what they write.
 """
 
 from __future__ import annotations
@@ -148,7 +148,7 @@ class TailAngleLoad(Operator2):
     **Compilable arguments.** ``tail_angles``: ``N x (N - 1)`` ints in
     ``[0, 2**(b_rot - 1))``, the ``N+`` D1 rows first (``WalkTables.tail_angles``), ``N >= 2``;
     ``n_plus`` (``0 <= N+ <= N``); ``RC`` (int >= 1); ``X_o`` (``RC + N``); ``b_rot``
-    (int >= 2). ``b_rot`` sizes the angle registers; it is not in the master plan's interface
+    (int >= 2). ``b_rot`` sizes the angle registers; it is not in the original interface
     but determines the structure (spec 7.4 rules 1 and 3).
 
     **Pre- and postconditions.** ``angles``, ``G0``, ``G1`` and ``work`` start in ``|0>``;
@@ -289,7 +289,7 @@ class SFAngleLoad(Operator2):
     **Compilable arguments.** ``sf_angles``: ``R x B x (N - 1)`` ints in
     ``[0, 2**(b_rot - 1))`` (``WalkTables.sf_angles``), ``N >= 2``; ``R`` and ``B`` (ints >= 1,
     its first two sizes); ``b_rot`` (int >= 2), which sizes the angle registers (not in the
-    master plan's interface; spec 7.4 rules 1 and 3).
+    original interface; spec 7.4 rules 1 and 3).
 
     **Pre- and postconditions.** On enabled branches ``angles`` and ``b_neq_B`` start in
     ``|0>`` (they hold the tail load's data only where ``G0 = 1``); ``work`` starts and ends in

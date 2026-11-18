@@ -12,15 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Code hash, environment record and compile projection for cached compiles (spec 13.3; master
-plan Task 4.3 and section 12.9).
+"""Code hash, environment record and compile projection for cached compiles (spec 13.3; the load
+limits of docs/environment.md).
 
 :func:`code_hash` decides whether a compile cached in ``docs/resources.json`` is a current
 measurement: it hashes the syntax trees, without docstrings (comments are not in a syntax tree),
 of the package's modules and of ``scripts/resource_report.py``, which builds the cached programs
 and selects the cache's entries, and the lock file. So a documentation edit keeps the hash and any
 code or toolchain change gives a new one. ``dfthc/testing/`` is excluded: no compiled program
-depends on it. :func:`project_compile` is Task 0.9's K-1 projection method, replaced by the
+depends on it. :func:`project_compile` is the K-1 projection method (spec 16), replaced by the
 largest of the measurements where the target is no larger than a measured point.
 """
 
@@ -43,7 +43,7 @@ LOCK_FILE = "requirements-nightly.lock"
 REPORT_SCRIPT = "scripts/resource_report.py"
 DISTRIBUTIONS = ("pennylane", "pennylane_catalyst", "pennylane_lightning", "jax", "jaxlib", "numpy")
 TIME_LIMIT_S = 3600.0
-"""The compile time a large program may be projected to (60 min, master plan 12.9)."""
+"""The compile time a large program may be projected to (60 min, docs/environment.md)."""
 
 
 def _strip_docstrings(tree: ast.AST) -> ast.AST:
@@ -110,7 +110,7 @@ def project_compile(points: Sequence[tuple[int, float, float]], gates: int, *,
     multiplexer), the projection is the largest time and the largest peak over all points,
     whatever their gate counts (``method: "bounded"``): gate count is not a monotone measure of
     compile cost, and it only decides between this and extrapolation. Otherwise it extrapolates
-    by Task 0.9's K-1 method (``method: "k1"``): time as a power law through the two points with
+    by the K-1 method (``method: "k1"``): time as a power law through the two points with
     the most gates, exponent at least 1; memory as a least-squares line through all points, slope
     at least 0; fewer than two points with distinct gate counts give ``allowed: False`` and no
     projection. ``allowed`` is true only if time and memory stay within ``time_limit_s`` and

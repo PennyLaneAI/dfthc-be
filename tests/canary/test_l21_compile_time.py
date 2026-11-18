@@ -109,11 +109,11 @@ def _rule_traces(tables, *, aot=False) -> Counter:
 def test_each_distinct_table_is_a_separate_rule_compile():
     """L-21 (catalyst#3173): every distinct table traces the rule, identical tables share it.
 
-    On 2026-11-12 each distinct table traces its rule exactly once per compile. (Task 0.4 read
-    "twice" on 2026-11-11, because its program was also AOT-compiled at decoration, L-27: the two
+    On 2026-11-12 each distinct table traces its rule exactly once per compile. (An earlier reading
+    of "twice" on 2026-11-11, because its program was also AOT-compiled at decoration, L-27: the two
     traces were two compiles, not two traces in one.) A different count is a change of Catalyst's
-    behaviour: update the L-21 entries of docs/limitations.md and spec section 14 before
-    adjusting these numbers.
+    behaviour: update the L-21 entries of docs/limitations.md and spec section 14 before adjusting
+    these numbers.
     """
     first, second = (1, 2, 3), (3, 1, 2)
     note = "Catalyst's rule tracing changed: update the L-21 docs (limitations.md, spec section 14)"

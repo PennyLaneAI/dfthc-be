@@ -57,8 +57,8 @@ class WalkLayout:
     and ``junk_b = (K2 - 1) d2`` (:meth:`junk_sizes`); ``junk_overflow`` holds the junk wires
     beyond the ``(N - 1)(b_rot - 1)`` wires of ``angles``,
     ``max(junk_x_o, junk_b, (N - 1)(b_rot - 1)) - (N - 1)(b_rot - 1)`` (0 at FeMoco-54, 4 at
-    ``H2_STO3G_TEST``). The work pool size is :meth:`work_size`. That formula is
-    provisional: Task 3.3 asserts that every operator's ``required_wires()["work"]`` fits it.
+    ``H2_STO3G_TEST``). The work pool size is :meth:`work_size`. The assembly tests assert
+    that every operator's ``required_wires()["work"]`` fits it.
     """
 
     def __init__(self, params: WalkParams, qpe_bits: int, registers: dict[str, Wires]):

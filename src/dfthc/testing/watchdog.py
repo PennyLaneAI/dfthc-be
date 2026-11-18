@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Run a command under a memory and wall-time watchdog (master plan section 12.9).
+"""Run a command under a memory and wall-time watchdog (the load limits of docs/environment.md).
 
 The development laptop has 10 cores and 16 GB, and the user works on it. :data:`MEMORY_CAP_MB`
 (8 GB) is a sampled limit, not a hard one: macOS enforces no per-process or per-tree memory limit
@@ -43,7 +43,7 @@ created cannot be traced. If such a descendant keeps the output pipes open, the 
 watchdog error 5 s after nothing traceable is left, and every final read of the output is bounded,
 so the descendant cannot stall the watchdog.
 
-Command line, for heavy runs whose peak and wall time go into the ledger::
+Command line, for heavy runs::
 
     PYTHONPATH=src python -m dfthc.testing.watchdog [--cap-mb 8192] [--timeout-min 60] -- CMD ...
 

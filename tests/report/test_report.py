@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The resource report (spec 13.3; master plan Task 4.3): ``scripts/resource_report.py``,
+"""The resource report (spec 13.3): ``scripts/resource_report.py``,
 ``dfthc.costs_reference`` and ``dfthc.testing.provenance``.
 
 Per commit: every row and column at ``H2_STO3G_TEST`` (one compile per row, in this process), the
@@ -197,7 +197,7 @@ def test_report_fails_on_mismatch(tmp_path, monkeypatch, capsys):
 
 
 def test_report_fails_on_a_partition_that_misses_the_walk(tmp_path, monkeypatch, capsys):
-    """Spec 13.3 step 4, the cross-check (final review m-14; no compile): a partition row whose
+    """Spec 13.3 step 4, the cross-check (no compile): a partition row whose
     closed form is one Toffoli off makes the partition sum differ from the walk's closed form,
     and the script exits 1."""
     closed_form = report.closed_form
@@ -218,7 +218,7 @@ def test_report_fails_on_a_partition_that_misses_the_walk(tmp_path, monkeypatch,
 @pytest.mark.compiled
 @pytest.mark.subprocess
 def test_report_fails_on_a_measurement_mismatch(tmp_path, monkeypatch, capsys):
-    """Spec 13.3 step 4, the M arm (final review m-14): a closed form whose M differs from the
+    """Spec 13.3 step 4, the M arm: a closed form whose M differs from the
     compiled count, with T unchanged, makes the script exit 1 (one SpinSwap compile)."""
     monkeypatch.setattr(costs, "spin_swap", lambda p: costs.Cost(p.N, 1))
     assert report.main(["--systems", "H2_STO3G_TEST", "--rows", "SpinSwap", "--out",
@@ -310,7 +310,7 @@ def test_large_stops_after_a_failed_or_killed_compile(monkeypatch, status):
     assert measured == ["SpinMux"]
     assert [cache[f"fe2s2/{r}"][-1]["status"] for r in ("SpinMux", "SpinSwap")] == [
         status, "skipped"]
-    assert any(f"stopped; the orchestrator reports the {status} compile" in line for line in log)
+    assert any(f"stopped; the {status} compile escalates" in line for line in log)
 
 
 @functools.cache
@@ -356,7 +356,7 @@ def test_every_large_row_projects():
 
 
 def test_large_sequence_projects_fe4s4_after_fe2s2():
-    """The orchestrator's order: after `--large fe2s2`, its entries calibrate `--large fe4s4`.
+    """The run order: after `--large fe2s2`, its entries calibrate `--large fe4s4`.
     Every fe4s4 program projects from its family's entries at the small systems and at fe2s2: an
     extrapolated one through the fe2s2 point, a bounded one as the family's largest time and peak
     over all of them, so an expensive fe2s2 entry of a constant-size block (here a made-up
@@ -480,7 +480,7 @@ BE_PAPER = {"cmp-free": -93, "rot-add": 12, "unif-odd": 6, "exact-iter": 71, "it
             "onehot-const": -8, "flat-r": 120, "sign-bits": 60, "no-prune": 20, "prefix-stops": 16,
             "mux": 4, "rz-addsub": -424, "maj-and": -4, "sf-enable": 2, "onehot-pad": 40,
             "ref-unif": -1}
-"""The FeMoco-54 block encoding's contributions (the plan's decomposition table)."""
+"""The FeMoco-54 block encoding's contributions (spec 13.3)."""
 
 
 @pytest.fixture(scope="module")
@@ -495,10 +495,10 @@ def femoco_report(tmp_path_factory):
 def test_reason_codes_at_femoco(femoco_report):
     """The reason codes of the angle loads and erase, the reflections, block encodings, walks and
     walk powers at FeMoco-54, against dfthcbe and the paper, are exactly the causes with a nonzero
-    contribution, each with its contribution (the plan's decomposition table; nothing is
+    contribution, each with its contribution (spec 13.3; nothing is
     compiled). The angle rows split exact against truncated iteration (`exact-iter`) from no
     aligned-block pruning (`no-prune`) at the intermediate of `iteration_counts`: the angle
-    erase's +7 against dfthcbe is +2 over `r` and +5 over the tail rows (ledger row 2E.2). The
+    erase's +7 against dfthcbe is +2 over `r` and +5 over the tail rows. The
     tail walks reach the paper through dfthcbe's: its `s(RC)` = 4 stops on the dead SF prefix
     (`prefix-stops`) and its truncated iteration's -2 (`iter-const`). The QPE control is a cause
     only where our program lacks it, and the controlled REF_T2 shows the two causes that cancel
@@ -531,7 +531,7 @@ def test_reason_codes_at_femoco(femoco_report):
 
 def test_qpe_summary_and_wire_boundaries(femoco_report):
     """The FeMoco-54 QPE summary gives T and A from the controlled walk and M from the walk,
-    A = (2^t - 1) A_C(W) + (t^3 - t)/6 (the phase4-qpe plan's interface), in its record, its
+    A = (2^t - 1) A_C(W) + (t^3 - t)/6, in its record, its
     basis sentence and its table; and the QPE wires step by two where the phase register grows a
     spare wire: `H2_STO3G_TEST` 59, 60, 62 at t = 3, 4, 5 and FeMoco-54 1,071, 1,072, 1,074 at
     t = 21, 22, 23 (nothing is compiled)."""
@@ -560,7 +560,7 @@ def test_qpe_summary_and_wire_boundaries(femoco_report):
 
 
 def test_qpe_summary_takes_m_from_the_walk(tmp_path):
-    """Final review m-15: the FeMoco-54 QPE summary's M is (2^t - 1) M_W + t with the walk's M
+    """The FeMoco-54 QPE summary's M is (2^t - 1) M_W + t with the walk's M
     (spec 9.24 and 11.3), T and A from the controlled walk. A cached controlled walk whose M
     differs from the walk's (2,419 against the closed 2,418) leaves the summary's M on the walk's,
     and its basis sentence says so, naming no task: the pair is recompiled per code hash (nothing
@@ -585,7 +585,7 @@ def test_qpe_summary_takes_m_from_the_walk(tmp_path):
 
 
 def test_femoco_summary_says_how_the_walks_are_compiled(femoco_report, tmp_path):
-    """Final review m-22: the FeMoco-54 summary states in the present tense how its walk and
+    """The FeMoco-54 summary states in the present tense how its walk and
     controlled walk rows are measured, with no stale "until then": without a compile under the
     current code hash they show their closed form; with both compiled (entries injected here,
     nothing is compiled) their measured rows equal their closed forms."""
@@ -617,7 +617,7 @@ def test_qubit_summary_at_femoco(femoco_report):
     wires by group against the paper's Table 3 groups, 1,131 in all (-82: outer +21, inner +12,
     select -49 with 14-wire angle registers, work -66); the junk registers, 72 and 390 wires
     (462 in the record), both alias the start of the angle register, so together they take its
-    first 390 wires (final review m-22), and their 852 measurements per walk are the block
+    first 390 wires, and their 852 measurements per walk are the block
     encoding's own; the early junk measurement is no longer an open question or a deferred
     refinement (nothing is compiled)."""
     record, markdown = femoco_report
@@ -639,12 +639,12 @@ def test_qubit_summary_at_femoco(femoco_report):
 def test_dfthcbe_blocks_equal_the_call_graph():
     """costs_reference.dfthcbe_blocks equals dfthcbe's own call graph (Qualtran, .venv-ref;
     scripts/make_report_fixture.py) at every parameter set of the report, and the 12 FeMoco-54
-    block counts of Task 1A.6's fixture. The call graph's tail walk is its N leaves and its s(RC)
+    block counts of the dfthcbe fixture. The call graph's tail walk is its N leaves and its s(RC)
     stops on the dead SF prefix, truncated (-2), which is how iteration_causes takes the tail to
     the paper; and the iteration intermediate is dfthcbe's walk where it is a valid circuit. The
     fixture records the dfthcbe tree it was evaluated on: the source URL and digest and the
-    installed package's digest of Task 1A.6's provenance, which tests/data/test_dfthcbe_fixtures.py
-    pins to SOURCE_SHA256 and INSTALLED_SHA256 (final review m-16)."""
+    installed package's digest of the fixture provenance, which tests/data/test_dfthcbe_fixtures.py
+    pins to SOURCE_SHA256 and INSTALLED_SHA256."""
     fixture = load_dfthcbe_fixture("report_toffolis.json")
     provenance_ = load_dfthcbe_fixture("provenance.json")
     digests = ("dfthcbe_source_url", "dfthcbe_source_sha256", "dfthcbe_installed_sha256")
@@ -687,7 +687,7 @@ def test_paper_table3_reproduces_table_iii():
 
 
 def test_project_compile_is_the_k1_method():
-    """Task 0.9's projection beyond the measured sizes: a power law in time through the two
+    """The K-1 projection beyond the measured sizes: a power law in time through the two
     largest points (exponent at least 1) and a least-squares line in memory (slope at least 0);
     within them, the largest of all the measurements; refused above 60 min or above
     the 7.5 GB kill point of the 8 GB cap, so a 7.8 GB projection is refused."""

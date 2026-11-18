@@ -5,7 +5,7 @@ arXiv:2502.15882), its qubitized walk, the controlled walk and an iterative phas
 as PennyLane `Operator2` building blocks. Programs compile with `qp.qjit(capture=True)` and
 `qp.decompose` to a Toffoli-level gate set, and `qp.analyze` counts their resources exactly. The
 design is fixed by the specification
-([`superpowers/specs/2026-11-11-dfthc-pennylane-design.md`](superpowers/specs/2026-11-11-dfthc-pennylane-design.md),
+([`design.md`](design.md),
 cited as "spec N.M"); this page maps it onto the code.
 
 ## Layers
@@ -145,7 +145,7 @@ closed form, dfthcbe's and the paper's values, the deltas and the reason codes t
 each with its contribution (`dfthc.costs_reference.delta_causes`; spec 13.3). Its compiles are
 cached with `dfthc.testing.provenance.code_hash()`, which covers `src/dfthc` outside
 `dfthc.testing`, the report script and `requirements-nightly.lock`, while ignoring Python
-docstrings and comments. After Task 4.5, the FeMoco-54 walk and controlled-walk compiles can be
+docstrings and comments. The FeMoco-54 walk and controlled-walk compiles are
 reused while that hash matches.
 
 ## Further reading
@@ -154,5 +154,4 @@ reused while that hash matches.
 - [`verification.md`](verification.md): what each test establishes and how to run the tiers.
 - [`limitations.md`](limitations.md): the PennyLane and Catalyst limitations and their canaries.
 - [`environment.md`](environment.md): the environment, the load limits and the commands.
-- [`agents/HANDOFF.md`](agents/HANDOFF.md): the shared context of the development agents.
-- [`agents/LEDGER.md`](agents/LEDGER.md): task status, decisions and heavy-run evidence.
+- [`design.md`](design.md): the design specification, cited as "spec N.M".

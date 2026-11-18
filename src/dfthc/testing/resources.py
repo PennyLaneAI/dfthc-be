@@ -136,14 +136,14 @@ def captured_targets(qfunc: Callable[[], None], num_wires: int) -> list[str]:
     (``Adjoint(MajoranaGate)``, ``C(PauliZ)``), without the attribute dump that starts at the first
     ``{`` (spec 12.1, T6: the inventory test).
 
-    A port of Task 0.9d's capture instrument (``spikes/k1_whole_program.capture_instrument``): it
-    wraps Catalyst's private ``catalyst.from_plxpr.qfunc_interpreter._convert_decomp_target_spec``
-    for this one compile and restores it afterwards. The frontend converts every target it builds
-    rules for, chosen or not, so the list holds every distributed ``Adjoint``/``C`` candidate the
-    compile captured. The hook is private, which makes this a compatibility canary at every
-    nightly bump: a renamed hook raises ``AttributeError``, and callers assert that the program's
-    own top-level target is in the list, so a hook that no longer sees targets fails instead of
-    passing. The private module is imported here, so a renamed module fails only the callers.
+    It wraps Catalyst's private
+    ``catalyst.from_plxpr.qfunc_interpreter._convert_decomp_target_spec`` for this one compile and
+    restores it afterwards. The frontend converts every target it builds rules for, chosen or not,
+    so the list holds every distributed ``Adjoint``/``C`` candidate the compile captured. The hook
+    is private, which makes this a compatibility canary at every nightly bump: a renamed hook raises
+    ``AttributeError``, and callers assert that the program's own top-level target is in the list,
+    so a hook that no longer sees targets fails instead of passing. The private module is imported
+    here, so a renamed module fails only the callers.
     """
     import catalyst.from_plxpr.qfunc_interpreter as qfunc_interpreter
 

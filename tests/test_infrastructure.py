@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Repository scaffold, environment and test-runner checks (plan Task 0.1)."""
+"""Repository scaffold, environment and test-runner checks."""
 
 import ctypes
 import os
@@ -90,7 +90,7 @@ def lock_differences(lock: str, installed: dict[str, str]) -> list[str]:
 
 def test_lock_file_pins_exactly_the_installed_distributions():
     """requirements-nightly.lock is the running environment's pip freeze: every installed
-    distribution at its version and nothing else (final review m-13), so a toolchain change
+    distribution at its version and nothing else, so a toolchain change
     without a refreshed lock, and hence a new code hash, fails here."""
     installed = {dist.metadata["Name"]: dist.version for dist in distributions()}
     assert lock_differences((REPO / "requirements-nightly.lock").read_text(), installed) == []
@@ -167,7 +167,7 @@ def test_setup_env_targets_main_checkout_from_a_worktree(tmp_path):
                          ids=["unset", "empty", "zero", "three"])
 def test_runner_passes_the_requested_worker_count(tmp_path, workers, expected):
     """test.sh hands pytest ``-n 2`` with DFTHC_TEST_WORKERS unset or empty, and its value
-    otherwise (final review m-17): a fake DFTHC_VENV python prints its arguments, so a test.sh
+    otherwise: a fake DFTHC_VENV python prints its arguments, so a test.sh
     that hard-codes the default fails here."""
     (tmp_path / "env/bin").mkdir(parents=True)
     _fake_executable(tmp_path / "env/bin/python", 'echo "ARGS $*"')
@@ -183,7 +183,8 @@ def test_runner_passes_the_requested_worker_count(tmp_path, workers, expected):
 
 @pytest.mark.subprocess
 def test_runner_fails_closed_without_lowered_priority(tmp_path):
-    """Without a working nice or taskpolicy, test.sh exits 2 before pytest starts (plan 12.9)."""
+    """Without a working nice or taskpolicy, test.sh exits 2 before pytest starts (the load
+    limits of docs/environment.md)."""
     marker = tmp_path / "pytest.started"
     bin_dir = tmp_path / "bin"
     (tmp_path / "venv/bin").mkdir(parents=True)

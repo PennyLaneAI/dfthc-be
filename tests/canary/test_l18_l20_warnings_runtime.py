@@ -58,7 +58,7 @@ def test_unreachable_op_reports_missing_rule():
 
     The real cause, "Decomposition rule not found for operator '<op>'", is in the same message,
     next to the misleading text, which this canary records so that a fix of catalyst#2767 flips
-    it. The text alone proves nothing: a successful verbose compile prints it too (spike T6). The
+    it. The text alone proves nothing: a successful verbose compile prints it too. The
     evidence of the failure is the CompileError and the named operator.
     """
     result = run_snippet(

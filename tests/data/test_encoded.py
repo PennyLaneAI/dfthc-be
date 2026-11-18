@@ -138,7 +138,7 @@ def test_encoded_factors_are_valid_factors_of_the_same_shape():
 
 def test_uniform_failure_probability_reproduces_dfthcbe():
     """Values from dfthcbe's UniformViaPhaseGradient.failure_probability at the pinned commit
-    (Qualtran 0.7.0), recorded while writing this plan."""
+    (Qualtran 0.7.0)."""
     recorded = {(3, 3): 0.07858495705504472, (5, 3): 0.1506780981594029,
                 (324, 7): 0.0006445392838034328, (28, 7): 0.0007020808150612868,
                 (7, 4): 0.029699337423164093, (25, 12): 9.387453336647742e-07}

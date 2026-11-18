@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Every numerical comparison in the tests states both tolerances (HANDOFF section 6).
+"""Every numerical comparison in the tests states both tolerances (docs/verification.md).
 
 The rule, checked on the syntax tree of every ``.py`` file under ``tests/`` and
 ``src/dfthc/testing/``: a call to one of the comparison functions below is an offender unless it

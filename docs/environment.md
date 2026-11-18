@@ -49,30 +49,28 @@ pip freeze > requirements-nightly.lock
 
 ## Load limits
 
-The development laptop has 10 cores and 16 GB, and the user works on it while agents run
-(master plan section 12.9).
+The development laptop has 10 cores and 16 GB, and is in use while tests run (spec section 15).
 
 - `scripts/test.sh` runs 2 xdist workers (`DFTHC_TEST_WORKERS` overrides; `0` runs serially) at
   lowered priority: `nice -n 10`, or, in the agent sandbox, where setpriority() is forbidden, the
   utility QoS clamp of `taskpolicy`.
 - Each process tree has a sampled 8 GB memory cap: the watchdog kills it at the first sample above
-  7.5 GB, so the overshoot past 7.5 GB is bounded by 50 ms of growth. A heavy run (above 4 GB, more than 2 busy cores,
-  longer than 30 minutes, or any FeMoco-shaped compile) is started only by the orchestrator, alone,
-  under `PYTHONPATH=src .venv/bin/python -m dfthc.testing.watchdog -- <command>`, and logged in the
-  ledger with its peak memory and wall time.
+  7.5 GB, so the overshoot past 7.5 GB is bounded by 50 ms of growth. A heavy run (above 4 GB,
+  more than 2 busy cores, longer than 30 minutes, or any FeMoco-shaped compile) is started alone,
+  under `PYTHONPATH=src .venv/bin/python -m dfthc.testing.watchdog -- <command>`.
 - Every compile of the resource report runs in its own process under `run_watched`: a 4 GB cap
   at the small systems, the 8 GB cap for `--large`, whose programs are projected first
   (`dfthc.testing.provenance.project_compile`) and compiled only within 7.5 GB and 60 minutes.
   The first killed or failed compile of a `--large` run stops it, and so does the first refusal
-  at FeMoco-54; the remaining programs are recorded as skipped, and the orchestrator escalates.
+  at FeMoco-54; the remaining programs are recorded as skipped.
 
 ## The reference environment `.venv-ref`
 
 `.venv-ref` in the main checkout holds Qualtran 0.7.0 and dfthcbe at commit
 `930255020cec30172e0a7d17c0071d9476a687d1` (spec 8.6, Q-2). It only generates the reference
-fixtures under `tests/fixtures/dfthcbe/`: `scripts/make_dfthcbe_fixtures.py` (Task 1A.6) and
-`scripts/make_report_fixture.py` (Task 4.3). The recipe is Task 1A.6, Step 7, of the Phase 1 data
-plan; nothing in the main environment imports Qualtran.
+fixtures under `tests/fixtures/dfthcbe/`: `scripts/make_dfthcbe_fixtures.py` and
+`scripts/make_report_fixture.py`. `scripts/make_venv_ref.sh` builds it and runs the first; nothing in the
+main environment imports Qualtran.
 
 ```bash
 .venv-ref/bin/python scripts/make_report_fixture.py --out tests/fixtures/dfthcbe
@@ -89,12 +87,9 @@ PYTHONPATH=src .venv/bin/python scripts/resource_report.py
 ```
 
 The large systems compile only with `--large fe2s2`, `--large fe4s4` or `--large femoco54`,
-which project each program first and are heavy runs: the orchestrator starts them alone, under
-the watchdog, and logs each in the ledger.
+which project each program first and are heavy runs: start them alone, under the watchdog.
 
 ## Bumping the nightlies
-
-Bumps are orchestrator work, done at a phase gate.
 
 1. Recreate `.venv` with the recipe (`rm -rf .venv && scripts/setup_env.sh`).
 2. Run the per-commit tier, which holds most canaries: `scripts/test.sh -m "not slow and not release"`.

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """The shared constructor checks of dfthc.ops._validate (spec 9.0): wire lengths and, for
-concrete wires, wire identity (final review m-5)."""
+concrete wires, wire identity."""
 
 import jax
 import pytest

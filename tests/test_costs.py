@@ -16,8 +16,6 @@
 
 import dataclasses
 import itertools
-import sys
-from pathlib import Path
 
 import numpy as np
 import pennylane as qp
@@ -28,16 +26,12 @@ from dfthc.costs import Cost
 from dfthc.data.factors import load_factors
 from dfthc.params import FEMOCO54, H2_631G_TEST, H2_STO3G_TEST, MID_NAPHTHALENE, WalkParams, lg
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "spikes"))
-from prototypes import unary_toffolis  # noqa: E402
-
 P = FEMOCO54
 H2 = H2_STO3G_TEST
 ODD = WalkParams(N=3, R=3, B=3, C=1, n_plus=1, b_rot=5, b_k1=3, b_k2=4, s_u=3,
                  k1=1, k2=1, ke1=1, ke2=1)
-"""A second and a third shape, derived by hand from spec 9.24 (derivations in the Task 1A.7
-report). ``ODD`` has ``X_o = 6``, ``w_x = 3``, ``w_b = 2``, ``w_r = 2``, ``d1 = 6``, ``d2 = 10``
-and ``n_plus != N / 2``."""
+"""A second and a third shape, derived by hand from spec 9.24. ``ODD`` has ``X_o = 6``,
+``w_x = 3``, ``w_b = 2``, ``w_r = 2``, ``d1 = 6``, ``d2 = 10`` and ``n_plus != N / 2``."""
 
 
 def test_unary_iteration_rows():
@@ -54,8 +48,16 @@ def test_unary_iteration_rows():
     assert costs.unary_nested((0, 1, 0), (0, 8, 3), controlled=True) == costs.unary(0, 8, 3, True)
 
 
-def test_unary_equals_the_prototype_on_a_grid():
-    """200 random (lo, hi, n, c) with n <= 8 against spikes/prototypes.unary_toffolis (Task 0.7)."""
+def unary_toffolis(lo: int, hi: int, n: int, controlled: bool) -> int:
+    """U(lo, hi, n, c) of spec 9.24 counted as the nodes of the pruned iteration tree."""
+    if n == 0:
+        return 0
+    nodes = sum((hi - 1) // 2**m - lo // 2**m + 1 for m in range(1, n + 1))
+    return nodes - (0 if controlled else 1)
+
+
+def test_unary_equals_the_node_count_on_a_grid():
+    """200 random (lo, hi, n, c) with n <= 8 against the node count of the iteration tree."""
     rng = np.random.default_rng(924)
     for _ in range(200):
         n = int(rng.integers(1, 9))
@@ -241,13 +243,13 @@ REPORTED_BLOCK_BITS = {
     "fe4s4": (1, 3, 4, 1),
 }
 """``(k1, k2, ke1, ke2)`` of ``costs_reference.default_params`` for every vendored system, as
-recorded before final review m-1 (the report's and the dfthcbe fixture's parameters)."""
+first recorded (the report's and the dfthcbe fixture's parameters)."""
 PRESET_BLOCK_BITS = [(FEMOCO54, (2, 4, 4, 2)), (H2_STO3G_TEST, (0, 0, 1, 0)),
                      (H2_631G_TEST, (0, 1, 1, 0)), (MID_NAPHTHALENE, (1, 2, 3, 1))]
 
 
 def test_cheapest_block_bits_fit_the_erases_and_keep_every_reported_default():
-    """Final review m-1: the minimizer keeps the erases' one-hots inside their registers,
+    """The minimizer keeps the erases' one-hots inside their registers,
     2**ke1 <= K1 d1 and 2**(ke2 + w_b) <= K2 d2; at (N, R, B, C) = (10, 1, 16, 1) the free
     choice (0, 0, 2, 0) needed 32 > K2 d2 = 22 wires. The block bits of every vendored system
     and the minimizer's result at every preset are unchanged."""

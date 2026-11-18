@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The vendored dfthcbe data are complete, unmodified and licensed (spec section 8.1, Task 0.5)."""
+"""The vendored dfthcbe data are complete, unmodified and licensed (spec section 8.1)."""
 
 import hashlib
 import json

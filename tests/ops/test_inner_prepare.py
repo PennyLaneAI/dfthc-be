@@ -160,13 +160,13 @@ def test_every_basis_input_gets_the_sign_of_its_selected_weight(name):
     for a valid b_0 on an SF row and +1 otherwise. Summed per row, the signed weights equal the
     encoded model's inner amplitudes (spec 8.5), the failure signs equal ours (+1), and they
     equal dfthcbe's exactly when 2**w_b <= ceil((B + 1) / K2) K2, else differ as documented. At
-    5-1 ``phase_grad`` has two wires more than ``s_u``, as Phase 3 passes it, so the amplitudes
+    5-1 ``phase_grad`` has two wires more than ``s_u``, as the walk passes it, so the amplitudes
     pin which wires the rotations add into. Then InnerPrepare and InnerUnprepare leave ``x_o``
     in its uniform superposition and every other register in |0> under the all-ones outcome
     schedule (every fix-up applied), the alternating one, which also sees a permutation of the
     erase entries' bits that moves a bit to a position of the other parity, and a seeded one,
     which also sees the permutations that keep each bit's position parity, such as exchanging
-    bits 0 and 2 (final review m-7). The certificates prove every outcome (nightly)."""
+    bits 0 and 2. The certificates prove every outcome (nightly)."""
     p, factors, tables = case(name)
     sizes = InnerPrepare.required_wires(*structure(p))
     sizes["phase_grad"] += 2 if name == "5-1" else 0
@@ -371,7 +371,7 @@ RULE_SHAPES = {"sto3g": (2, 2, 2, 1, 2, 1, 1, 3), "7-0": (3, 2, 6, 1, 2, 0, 0, 3
 @pytest.mark.parametrize("name", list(RULE_SHAPES))
 def test_rules_are_valid(name, rule):
     """T2 in every branch of the hand-written resources. At the sto3g shape ``phase_grad`` has two
-    wires more than ``s_u``, as when Phase 3 passes the whole register, so the declared resources
+    wires more than ``s_u``, as when the walk passes the whole register, so the declared resources
     hold only if the rule passes the uniform preparation ``phase_grad[:s_u]``."""
     args = random_inner_args(*RULE_SHAPES[name])
     sizes = InnerPrepare.required_wires(*args[:4], *args[8:])

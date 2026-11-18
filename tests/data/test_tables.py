@@ -40,7 +40,7 @@ def _ints(values):
 
 @pytest.mark.parametrize(("params", "system"), PRESET_SYSTEMS)
 def test_preset_sizes_equal_the_factor_shapes(params, system):
-    """Moved here from Task 1A.2, which runs in the same wave as WalkParams (Task 1A.1)."""
+    """Tables accept the WalkParams presets."""
     f = load_factors(system)
     assert (params.N, params.R, params.B, params.C, params.n_plus) == (
         f.N, f.R, f.B, f.C, f.n_plus)

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""K-7: adjoints of PennyLane's comparators and of SemiAdder compile and are exact (Task 0.6).
+"""K-7: adjoints of PennyLane's comparators and of SemiAdder compile and are exact.
 
 Each test checks the forward result on every branch of a Hadamard superposition against an exact
 probability table. It then prepares a phased stabilizer state, applies the primitive and its

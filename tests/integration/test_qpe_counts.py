@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""QPE resource counts (spec 11.3; master plan Task 4.2): the iterative QPE program compiles at
+"""QPE resource counts (spec 11.3): the iterative QPE program compiles at
 H2_STO3G_TEST and H2_631G_TEST for t = 1, 2, 3, and its worst-case counts equal
 dfthc.costs.iterative_qpe exactly: T = (2^t - 1) T_C(W) + (t^3 - t)/6 and M = (2^t - 1) M_W + t,
 with T_C(W) and M_W compiled at the same preset (A likewise: (2^t - 1) A_C(W) + (t^3 - t)/6).
@@ -49,7 +49,7 @@ from dfthc.testing.watchdog import effective_limit_mb, run_watched
 REPO = Path(__file__).resolve().parents[2]
 PRESETS = {"sto3g": H2_STO3G_TEST, "631g": H2_631G_TEST}
 CAP_MB = 4096
-"""Each compile's cap: the watchdog kills at 3,840 MB (master plan 12.9)."""
+"""Each compile's cap: the watchdog kills at 3,840 MB (docs/environment.md)."""
 PREFIX = "RESULT "
 CLIFFORDS = ("CZ", "PauliZ")
 """Recorded, not asserted, as expected totals: the deterministic CZ and Z of InnerSigns and of
@@ -130,7 +130,7 @@ def test_qpe_counts(name, t):
 @pytest.mark.compiled
 @pytest.mark.slow
 def test_inventory_of_the_qpe_program():
-    """The inventory test of Task 3.4 (spec 7.4 rule 6, 12.1 T6) for the QPE program at
+    """The inventory test (spec 7.4 rule 6, 12.1 T6) for the QPE program at
     H2_STO3G_TEST with t = 2: the frontend converts both rounds, both walk powers, the controlled
     walk C(DFTHCWalk) (its rule pinned) and the correction, and the modified dfthc and template
     targets are exactly the controlled walk, C(DFTHCBlockEncoding) (where the generic controlled
@@ -148,7 +148,7 @@ def test_inventory_of_the_qpe_program():
 
 def test_qpe_closed_forms_at_femoco():
     """Spec 11.3: no compile at FeMoco-54 shape; the closed form with T_C(W) = 9,792 and
-    M_W = 2,418 (Task 4.5 compiles those two) gives T = 9,792, 29,377, 68,548 and
+    M_W = 2,418 (compiled by the report) gives T = 9,792, 29,377, 68,548 and
     M = 2,419, 7,256, 16,929 for t = 1, 2, 3."""
     assert [costs.iterative_qpe(FEMOCO54, t) for t in (1, 2, 3)] == [
         costs.Cost(9792, 2419), costs.Cost(29377, 7256), costs.Cost(68548, 16929)]

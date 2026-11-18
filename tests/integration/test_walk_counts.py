@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Whole-program counts of the walk and the controlled walk (spec 9.22 and 9.24; master plan Task
-3.4): each compiles as one program, its T, M and A equal the closed forms exactly at the test
+"""Whole-program counts of the walk and the controlled walk (spec 9.22 and 9.24):
+each compiles as one program, its T, M and A equal the closed forms exactly at the test
 presets (per commit) and at MID_NAPHTHALENE (nightly, each compile in a subprocess under
 run_watched, which records its time and memory), and the FeMoco-54 values on the closed forms.
 
@@ -42,7 +42,7 @@ REPO = Path(__file__).resolve().parents[2]
 PROGRAMS = {"walk": False, "controlled_walk": True}
 """Each program and whether it is the controlled walk, qp.ctrl(DFTHCWalk)."""
 CAP_MB = 4096
-"""The MID_NAPHTHALENE compiles' cap: the watchdog kills at 3,840 MB (master plan Task 3.4)."""
+"""The MID_NAPHTHALENE compiles' cap: the watchdog kills at 3,840 MB (docs/environment.md)."""
 PREFIX = "RESULT "
 
 
@@ -106,8 +106,7 @@ def compile_mid(program: str) -> dict:
 def test_counts_at_mid_naphthalene(program):
     """T4 at MID_NAPHTHALENE (nightly), each program compiled once in a subprocess under
     run_watched with a 4 GB cap: T = A = 1,910 / 1,912, M = 484, no Toffoli. The MID_COMPILE
-    line records the watched wall time and peak memory, for comparison with the K-1 stand-in at
-    the same sizes (spikes/results/k1_mid10.json and k1d_PX_mid10.json)."""
+    line records the watched wall time and peak memory."""
     command = [sys.executable, str(Path(__file__).resolve()), program]
     env = os.environ | {"PYTHONPATH": str(REPO / "src"),
                         "CATALYST_SILENCE_RULE_LOWERING_WARNINGS": "0"}
@@ -127,9 +126,9 @@ def test_counts_at_mid_naphthalene(program):
 
 
 def test_femoco_counts_on_the_closed_forms():
-    """FeMoco-54 (spec 9.22 and 9.24), without compiling (master plan section 12.9; the FeMoco
-    compile is Task 4.5's): T = 9,746 + 44 = 9,790, controlled 9,747 + 45 = 9,792; M = 2,418;
-    A = T, every Toffoli a TemporaryAND; M + A = 12,208 and 12,210."""
+    """FeMoco-54 (spec 9.22 and 9.24), without compiling (the FeMoco compile is the resource
+    report's): T = 9,746 + 44 = 9,790, controlled 9,747 + 45 = 9,792; M = 2,418; A = T, every
+    Toffoli a TemporaryAND; M + A = 12,208 and 12,210."""
     p = FEMOCO54
     assert [costs.ref_ab(p, c).toffoli for c in (False, True)] == [44, 45]
     assert costs.walk(p, False) == costs.Cost(9790, 2418)

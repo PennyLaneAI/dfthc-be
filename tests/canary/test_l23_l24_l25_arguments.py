@@ -15,9 +15,9 @@
 """Canaries L-23, L-24 and L-25: operator arguments (spec section 14).
 
 L-23 (pennylane#10060): the base class does not canonicalize list-valued dynamic arguments.
-L-24 and L-25 were found while dry-running the Phase 0 plan on 2026-11-11.
+L-24 and L-25 were found on 2026-11-11.
 L-24: compilable integer arguments are lowered as signed 64-bit values; larger values fail to
-compile. Tables therefore store wide entries as tuples of 32-bit words (plan Task 1A.4).
+compile. Tables therefore store wide entries as tuples of 32-bit words.
 L-25: under capture, qp.adjoint(OpClass)(*args) traces positional arguments, so a compilable
 argument passed positionally is rejected; the instance form qp.adjoint(OpClass(...)) works.
 """

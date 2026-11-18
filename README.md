@@ -119,17 +119,14 @@ src/dfthc/
 data/dfthc/           DFTHC factors vendored from dfthcbe (Apache-2.0)
 scripts/              environment setup, test runner, resource report, fixture generators
 tests/                the test suite
-spikes/               early feasibility probes
 docs/
+  design.md           the design specification, cited as "spec N.M"
   architecture.md     layers, the walk call by call, compilation rules (start here)
   resources.md        the resource report (resources.json: machine-readable, with compile cache)
   verification.md     what each test establishes, and the test tiers
   limitations.md      PennyLane and Catalyst limitations, and their canaries
   conventions.md      indices, signs, fermions, angles, registers
   environment.md      the pinned nightly toolchain, load limits, commands
-  upstream/           draft issue reports with reproducers
-  superpowers/        the design spec and the implementation plans
-  agents/             handoff notes and the ledger of the agent-driven development
 ```
 
 ## License

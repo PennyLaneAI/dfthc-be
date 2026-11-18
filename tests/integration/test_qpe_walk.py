@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Iterative phase estimation of the DFTHC walk itself on the sparse simulator (spec 11.1; master
-plan Task 4.1): the branch distribution of the control bits equals the exact distribution the
-encoded model predicts, at H2_STO3G_TEST (t = 1 nightly, t = 2 release) and at FAILS_C3 (t = 1
-and t = 2 nightly), with the erase measurements forced by the BranchPolicy's `otherwise` and
-every run strict. The reference formula is checked against the toy walk per commit."""
+"""Iterative phase estimation of the DFTHC walk itself on the sparse simulator (spec 11.1): the
+branch distribution of the control bits equals the exact distribution the encoded model predicts, at
+H2_STO3G_TEST (t = 1 nightly, t = 2 release) and at FAILS_C3 (t = 1 and t = 2 nightly), with the
+erase measurements forced by the BranchPolicy's `otherwise` and every run strict. The reference
+formula is checked against the toy walk per commit."""
 
 import numpy as np
 import pytest

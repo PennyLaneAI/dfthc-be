@@ -15,7 +15,7 @@
 """Generate ``tests/fixtures/dfthcbe/report_toffolis.json``: dfthcbe's Toffolis per block at every
 parameter set of the resource report, from its own call graph. Runs only in ``.venv-ref``.
 
-Usage, from the repository root (environment: docs/agents/HANDOFF.md, section 3.4)::
+Usage, from the repository root (environment: scripts/make_venv_ref.sh)::
 
     .venv-ref/bin/python scripts/make_report_fixture.py [--out tests/fixtures/dfthcbe]
 

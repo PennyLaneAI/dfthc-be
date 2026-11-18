@@ -14,7 +14,7 @@
 
 """Generate the dfthcbe reference fixtures of spec 8.6, check 4. Runs only in ``.venv-ref``.
 
-Usage, from the repository root (environment recipe: docs/agents/HANDOFF.md, section 3.4):
+Usage, from the repository root (environment: scripts/make_venv_ref.sh):
 
     .venv-ref/bin/python scripts/make_dfthcbe_fixtures.py [--out tests/fixtures/dfthcbe]
 

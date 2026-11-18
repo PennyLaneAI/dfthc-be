@@ -35,13 +35,6 @@ def decompose_for_simulation(qfunc: Callable, *args, **kwargs) -> qp.tape.Quantu
     ``qfunc`` queued. Our operators decompose with their pinned rules; PennyLane primitives may
     use rules the compiled path does not, which leaves the semantics unchanged (spec 12.3).
     """
-    return decompose_to(GATE_SET, qfunc, *args, **kwargs)
-
-
-def decompose_to(gate_set, qfunc: Callable, *args, **kwargs) -> qp.tape.QuantumScript:
-    """:func:`decompose_for_simulation` to ``gate_set`` instead of ``GATE_SET``: for programs
-    built before the gate set lost ``Toffoli``, such as the K-1 stand-in walk of the simulator
-    benchmark, whose bare ``Toffoli`` and ``CSWAP`` gates need ``Toffoli`` in the gate set."""
     graph_was_enabled = qp.decomposition.enabled_graph()
     qp.decomposition.enable_graph()
     try:
@@ -49,7 +42,7 @@ def decompose_to(gate_set, qfunc: Callable, *args, **kwargs) -> qp.tape.QuantumS
             with qp.queuing.AnnotatedQueue() as queue:
                 qfunc(*args, **kwargs)
             tape = qp.tape.QuantumScript.from_queue(queue)
-            [decomposed], _ = _tape_decompose(tape, gate_set=gate_set,
+            [decomposed], _ = _tape_decompose(tape, gate_set=GATE_SET,
                                               fixed_decomps={**FIXED_DECOMPS, **PENNYLANE_PINS})
     finally:
         if not graph_was_enabled:

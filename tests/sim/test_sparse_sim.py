@@ -133,7 +133,7 @@ def _random_circuit(rng, data, steps):
 
 
 def test_every_gate_set_member_but_mid_measure_has_a_handler():
-    """MidMeasure joins with the measurement policies (Task 1B.2)."""
+    """MidMeasure joins with the measurement policies."""
     assert set(GATE_SET) - {"MidMeasure"} <= SparseSimulator(1).supported_operations
 
 

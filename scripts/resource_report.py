@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The resource report: ``docs/resources.md`` and ``docs/resources.json`` (spec 13.3; master plan
-Tasks 4.3 and 4.5).
+"""The resource report: ``docs/resources.md`` and ``docs/resources.json`` (spec 13.3).
 
 Usage, from the repository root (``PYTHONPATH=src``)::
 
@@ -37,12 +36,12 @@ peak memory and the gate count from the resource functions. An entry of the curr
 reused; an entry of another hash stays as history and is never shown as a current measurement.
 
 The H2 systems and ``naphthalene`` compile every program that has no current entry. ``fe2s2``,
-``fe4s4`` and FeMoco-54 compile only with ``--large SYSTEM``, run by the orchestrator alone
-(master plan 12.9): each program is first projected with
+``fe4s4`` and FeMoco-54 compile only with ``--large SYSTEM``, run alone under the load limits
+of docs/environment.md: each program is first projected with
 :func:`~dfthc.testing.provenance.project_compile` from its current entries at smaller systems and
 compiled only if the projection is within 7.5 GB and 60 min, under the 8 GB cap; a refused or
 killed program is recorded with its projection and is not a measurement. At FeMoco-54 only the walk
-and the controlled walk compile (Task 4.5); every other FeMoco-54 row is its closed form,
+and the controlled walk compile; every other FeMoco-54 row is its closed form,
 validated by the compiles at the other systems and by the cross-check.
 
 The script exits with status 1 after writing both files if a check fails: a measured T, M or A
@@ -102,7 +101,7 @@ TEST_SYSTEMS = ("H2_STO3G_TEST",)
 QPE_SYSTEMS = ("h2_sto3g_R2_B2_C1", "h2_631g_R2_B2_C2", "h2_631g_R2_B3_C3", "H2_STO3G_TEST")
 """Where the QPE program is compiled (spec 11.3, 13.3 step 2)."""
 FEMOCO_PROGRAMS = ("DFTHCWalk", "ControlledDFTHCWalk")
-"""The only programs compiled at FeMoco-54 (spec 13.3 step 2; Task 4.5)."""
+"""The only programs compiled at FeMoco-54 (spec 13.3 step 2)."""
 FEMOCO_SEED = 0
 """``random_factors(54, 10, 27, 27, n_plus=27, seed=0)``, as the work-pool test uses."""
 QPE_BITS = (1, 2, 3)
@@ -159,7 +158,7 @@ REASON_CODES = {
                    "every p; the paper's QPE step controls only REF_{A u B} (App. B.7.2, "
                    "Eq. (128))",
 }
-"""Spec 13.3's reason codes, with the twelve this task adds (master plan Task 4.3). A row lists
+"""Spec 13.3's reason codes, with twelve more. A row lists
 the codes whose contribution to its delta is nonzero (``costs_reference.delta_causes``)."""
 
 LEAVES = frozenset({"QROAMRead", "QROAMErase", "PhaseFixup", "AngleErase", "SpinMux", "SpinSwap",
@@ -307,7 +306,7 @@ def _walk_op(s: System, controlled: bool):
 
 
 def walk_program(s: System, controlled: bool):
-    """The walk or controlled walk with its phase gradient: the programs of Task 3.4."""
+    """The walk or controlled walk with its phase gradient: the assembly programs."""
 
     def qfunc():
         qp.PhaseGradientStatePrep(s.layout.phase_grad)
@@ -323,8 +322,7 @@ def _power_op(s: System, power: int):
 
 
 def power_program(s: System, power: int):
-    """``ControlledWalkPower`` on ``WalkLayout``'s groups and one control wire after them (the
-    phase4-qpe plan's interface)."""
+    """``ControlledWalkPower`` on ``WalkLayout``'s groups and one control wire after them ."""
     groups = {name: getattr(s.layout, name) for name in ControlledWalkPower.wire_argnames[1:]}
 
     def qfunc():
@@ -611,7 +609,7 @@ def _extra_rows(s: System, rows: list[Row]) -> list[Row]:
 
 
 def qpe_wires(s: System, bits: int) -> int:
-    """The QPE program's wires without building it (the phase4-qpe plan's interface)."""
+    """The QPE program's wires without building it."""
     from dfthc.qpe import spare_wires_needed
 
     sizes = tuple(len(getattr(s.layout, name)) for name in ControlledWalkPower.wire_argnames[1:])
@@ -740,7 +738,7 @@ def run_system(s: System, rows: list[Row], cache: dict, hash_: str, *, projected
     projection allows; a refused row is recorded with its projection. Under ``projected`` the
     first ``killed`` or ``failed`` row stops the system's run, and so does the first ``refused``
     row at FeMoco-54: every remaining candidate is recorded as ``skipped``, never a measurement,
-    and the log names the escalation (master plan 12.6, 12.9; Task 4.5). The large systems compile
+    and the log names the escalation. The large systems compile
     nothing without ``projected``; the others compile under a 4 GB cap."""
     log, stopped = [], None
     if s.name in LARGE and not projected:
@@ -766,8 +764,7 @@ def run_system(s: System, rows: list[Row], cache: dict, hash_: str, *, projected
                 log.append(f"{key}: refused ({estimate['reason']})")
                 if s.name == "femoco54":
                     stopped = f"{key} refused"
-                    log.append(f"{s.name}: stopped; escalate to the user with the projection "
-                               "(master plan 12.6, \"Where compiles above the cap run\")")
+                    log.append(f"{s.name}: stopped; escalate to the user with the projection")
                 continue
             entry = measure(s, row, hash_, LARGE_CAP_MB, LARGE_TIMEOUT_S)
             entry["projection"] = estimate
@@ -779,8 +776,7 @@ def run_system(s: System, rows: list[Row], cache: dict, hash_: str, *, projected
                    f"{entry['watchdog']['peak_mb']} MB)")
         if projected and entry["status"] in ("killed", "failed"):
             stopped = f"{key} {entry['status']}"
-            log.append(f"{s.name}: stopped; the orchestrator reports the {entry['status']} "
-                       "compile and escalates (master plan 12.6, 12.9)")
+            log.append(f"{s.name}: stopped; the {entry['status']} compile escalates")
     return log
 
 
@@ -1024,10 +1020,9 @@ def femoco_summary(system: dict) -> list[str]:
               "(spec 13.1).",
               "- Keeping each alias swap's AND (the paper's remark after Eq. (127)): the swaps' "
               "undo becomes Clifford plus a measured uncompute, w_x + 2 w_b = 19 Toffolis less per "
-              "walk for 14 more dirty qubits (ledger rows 2D.1 and 2D.2).",
+              "walk for 14 more dirty qubits.",
               "- An SF fix-up one-hot of ob = w_b - 1 = 4 bits in `AngleErase`: 35 instead of 41 "
-              "Toffolis per erase, 12 less per walk and per controlled walk, no extra qubits "
-              "(ledger row 2E.2).", ""]
+              "Toffolis per erase, 12 less per walk and per controlled walk, no extra qubits.", ""]
     return lines
 
 

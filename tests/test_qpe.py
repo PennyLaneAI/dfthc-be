@@ -294,7 +294,7 @@ def malformed_walk_compilable(change):
                                         r"compilable arguments after power, \(\); got 1"),
 ], ids=["tail-angle", "table-fields", "arity", "toy-arity"])
 def test_qpe_round_validates_the_walk_powers_arguments(op_name, change, match):
-    """Spec 9.0 (final review I-2): QPERound checks the walk power's compilable arguments at
+    """Spec 9.0: QPERound checks the walk power's compilable arguments at
     construction, through the walk power's validate_compilable, before it computes the wire
     sizes; malformed tables raise ValueError there, not when the rule builds the walk power."""
     layout = WalkLayout.from_params(H2_STO3G_TEST, qpe_bits=2)

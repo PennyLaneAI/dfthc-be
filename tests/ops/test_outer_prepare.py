@@ -134,13 +134,13 @@ def test_prepared_state_is_the_alias_distribution(name):
     sqrt(1 - P_fail) included; every (x_0, m, sigma_1) occurs. The succ = 1 marginal is
     (1 - P_fail) alias_probabilities, and against the encoded model (spec 8.5) its total is
     Lambda / Lambda~ and its one-body part (1 - P_fail) w~_pm / Lambda. At x-o-5 ``phase_grad``
-    has two wires more than ``s_u``, as Phase 3 passes it, so the amplitudes pin which wires the
+    has two wires more than ``s_u``, as the walk passes it, so the amplitudes pin which wires the
     rotations add into. Then OuterUnprepare returns every register to |0> with amplitude 1
     under the all-ones outcome schedule (every fix-up applied), the alternating one and a seeded
     one: the all-ones parity sees only each mask's weight, the alternating one also a permutation
     of the erase entries' bits that moves a bit to a position of the other parity, and the seeded
     one the permutations that keep each bit's position parity, such as a bit reversal of an
-    odd-width entry (final review m-7). The certificates prove every outcome (nightly)."""
+    odd-width entry. The certificates prove every outcome (nightly)."""
     p, factors, tables = case(name)
     wires, num_wires = layout(p, extra_grad=2 if name == "x-o-5" else 0)
 
@@ -356,7 +356,7 @@ def test_pinned_rules_are_chosen_and_nothing_survives_at_device_level(capfd):
 def test_rules_are_valid(name, rule):
     """T2 in every branch of the hand-written resources: l_x = 1 (sto3g; no uniform work), l_x > 1
     (x-o-5), and k1 = 0 with b_k1 = 1 (no junk, no comparator work). At x-o-5 ``phase_grad`` has
-    two wires more than ``s_u``, as when Phase 3 passes the whole register, so the declared
+    two wires more than ``s_u``, as when the walk passes the whole register, so the declared
     resources hold only if the rule passes the uniform preparation ``phase_grad[:s_u]``."""
     p, _, tables = case(name)
     wires, _ = layout(p, extra_grad=2 if name == "x-o-5" else 0)

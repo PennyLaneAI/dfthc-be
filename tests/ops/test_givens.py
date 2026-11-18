@@ -263,7 +263,7 @@ def test_rung_toffoli_count(p, adjoint):
                          ids=["sto3g", "631g", "mid", "femoco-width"])
 def test_ladder_toffoli_count(p, cls):
     """T4 at both test presets, MID_NAPHTHALENE and FeMoco-54's widths (N = 54, b_rot = 15: a
-    table-free 53-rung ladder on 825 wires, about 1.5 s, which master plan section 7 allows in any
+    table-free 53-rung ladder on 825 wires, about 1.5 s, which is fine in any
     tier): T = 2 (b_rot - 1)(N - 1) for the ladder and the dagger, 1,484 at FeMoco-54; A = T,
     M = 0."""
     resources = compiled_resources(*ladder_program(cls, p.N, p.b_rot))

@@ -12,8 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""The cached FeMoco-54 compile of the walk and the controlled walk (spec 2.3 D-3, 13.3; master
-plan Task 4.5).
+"""The cached FeMoco-54 compile of the walk and the controlled walk (spec 2.3 D-3, 13.3).
 
 Nothing here compiles. The release-tier test reads ``docs/resources.json``: the entry of the
 current code hash for each program holds the counts of spec 9.24 (walk T = A = 9,790,
@@ -21,7 +20,7 @@ M = 2,418; controlled walk T = A = 9,792, M = 2,418), the code hash, the environ
 wall time and the peak memory, and the partition rows of the report (tape mode, no compile) times
 their calls per walk, plus in M the block encodings' own junk measurements
 (:func:`dfthc.costs.junk_measurements`; spec 16, Q-1 variant (b)), give exactly the cached T, M
-and A. A missing or stale entry fails and names the recompile, which only the orchestrator runs.
+and A. A missing or stale entry fails and names the recompile, a heavy run.
 """
 
 import importlib.util
@@ -39,8 +38,8 @@ from dfthc.testing.provenance import code_hash, environment
 REPO = Path(__file__).resolve().parents[2]
 EXPECTED = {"DFTHCWalk": (9790, 2418, 9790), "ControlledDFTHCWalk": (9792, 2418, 9792)}
 EXPECTED_WIRES = {"DFTHCWalk": 1049, "ControlledDFTHCWalk": 1050}
-RECOMPILE = ("scripts/resource_report.py --large femoco54 (the orchestrator, alone, under the "
-             "watchdog; master plan 12.9 and Task 4.5)")
+RECOMPILE = ("scripts/resource_report.py --large femoco54 (alone, under the watchdog; "
+             "docs/environment.md)")
 
 
 def _load_script():
@@ -145,7 +144,7 @@ DEFECTS = {
 
 @pytest.mark.parametrize("defect", DEFECTS)
 def test_each_arm_of_the_cache_check_reports_its_defect(defect):
-    """Final review m-11: a valid record has no problem, a platform other than the running one
+    """A valid record has no problem, a platform other than the running one
     included (m-13); one defect injected into a copy of the walk's valid entry gives exactly the
     one problem of its arm (per commit; nothing is compiled)."""
     record = {"compiled": {f"femoco54/{program}": [valid_entry(program)] for program in EXPECTED}}

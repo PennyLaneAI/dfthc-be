@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Tests for dfthc.compile and dfthc.testing.resources (plan Task 0.2)."""
+"""Tests for dfthc.compile and dfthc.testing.resources."""
 
 import itertools
 import re
@@ -145,7 +145,7 @@ def test_pinned_measured_adjoint_is_selected():
 
 @pytest.mark.compiled
 def test_compiled_resources_compiles_the_program_once(monkeypatch):
-    """Task 0.2c: one ``QJIT.aot_compile`` per resource count, the one inside ``qp.analyze``.
+    """One ``QJIT.aot_compile`` per resource count, the one inside ``qp.analyze``.
 
     A fully annotated ``qp.qjit`` function, such as this zero-argument one, is AOT-compiled to a
     linked binary at decoration (L-27), and ``qp.analyze`` then compiles the program again; the
@@ -168,7 +168,7 @@ def test_compiled_resources_compiles_the_program_once(monkeypatch):
 
 @pytest.mark.compiled
 def test_verbose_rule_listing_names_the_pinned_rules(capfd):
-    """Spec 12.1 T6, checked in Phase 0: the solver's rule listing is capturable."""
+    """Spec 12.1 T6: the solver's rule listing is capturable."""
 
     def qfunc():
         qp.H(0)
@@ -239,7 +239,7 @@ def test_device_level_rejects_surviving_dfthc_operator(monkeypatch, name):
 @pytest.mark.parametrize("name", ["ForeignOp", "C(ForeignOp)", "Adjoint(ForeignOp)",
                                   "MultiControlledX", "TemporaryAND"])
 def test_device_level_rejects_any_operation_the_device_does_not_run(monkeypatch, name):
-    """T5 at level="device" (final review m-6, spec 7.2): a non-dfthc custom operator, a wrapper
+    """T5 at level="device" (spec 7.2): a non-dfthc custom operator, a wrapper
     of one, or a PennyLane template that survives the device pass fails the closure, as a dfthc
     operator does. No compile can make one survive today (Catalyst rejects an operator without a
     rule, L-20), so qp.analyze's result is injected; the native residue of the walks' programs,
@@ -469,8 +469,7 @@ _TABLE_DUMP = (
     "{}{high:2,junk:5,low:1,target:5,work:13}{block_bits = 1 : i64, high_ranges = [[2, 0, 4]], "
     "table = [[0, [2]], [1, [18]]], width = 5 : i64}"
 )
-# The three wrapper forms of Task 0.9's recorded texts (spikes/results/k1_small.json), tables
-# shortened.
+# The three wrapper forms of the warning texts, tables shortened.
 _ANGLE_RULE = "Skipped the _proto_angle_erase decomposition rule for "
 _TABLE_RULE = "Skipped the _proto_table_erase decomposition rule for "
 EXPECTED_ADJOINT = f"{_ANGLE_RULE}Adjoint(ProtoAngleErase){_ANGLE_DUMP}{_SUFFIX}"
@@ -558,7 +557,7 @@ def test_classify_rule_warning_accepts_a_generator_of_names():
 
 # The real texts of PennyLane's own controlled adjoint TemporaryAND candidate, as printed by a
 # few-qubit compile of qp.ctrl(qp.SemiAdder(x_wires=[0, 1], y_wires=[2, 3], work_wires=[4]),
-# control=5) with CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0 (Task 0.2b). They name "rule for"
+# control=5) with CATALYST_SILENCE_RULE_LOWERING_WARNINGS=0. They name "rule for"
 # after "decomposition", and give a different reason than the measuring-rule warning.
 NOISE_ADJOINT_AND = (
     "Skipped the _adjoint_temporary_and decomposition rule for "
