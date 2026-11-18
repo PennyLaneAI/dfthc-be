@@ -73,7 +73,7 @@ tables = dfthc.WalkTables.from_factors(dfthc.load_factors("h2_sto3g_R2_B2_C1"), 
 wires = dfthc.WalkLayout.from_params(params)
 
 @qp.qjit(capture=True)
-@qp.decompose(gate_set=dfthc.GATE_SET, fixed_decomps=dfthc.PINS)
+@qp.decompose(gate_set=dfthc.GATE_SET)
 @qp.qnode(qp.device("null.qubit", wires=wires.num_wires))
 def walk():
     qp.PhaseGradientStatePrep(wires.phase_grad)
@@ -84,9 +84,9 @@ counts = qp.analyze(walk)().resources.counts
 print(counts["Toffoli"] + counts["TemporaryAND"])  # 158
 ```
 
-Run it with `PYTHONPATH=src .venv/bin/python`. `dfthc.PINS` fixes one rule per operator, and for
-`qp.QROM` the unary-iteration rule, whose counts are concrete. `qp.analyze` warns once that it
-could not determine a conditional's branch; the counts are exact.
+Run it with `PYTHONPATH=src .venv/bin/python`. Importing `dfthc` registers one decomposition rule
+per operator with `qp.add_decomps`, and the graph-based `qp.decompose` finds them. `qp.analyze`
+warns once that it could not determine a conditional's branch; the counts are exact.
 
 ## Verification
 
