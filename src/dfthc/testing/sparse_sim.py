@@ -6,7 +6,8 @@ wire values into ``uint64`` words: wire ``w`` is bit ``63 - w % 64`` of word ``w
 :data:`PRUNE_THRESHOLD` are dropped whenever terms merge.
 
 Wires are the integers ``0 .. num_wires - 1``. Every operation of ``dfthc.compile.GATE_SET`` has
-one handler, and so has ``Conditional``; ``TemporaryAND``, ``Adjoint(TemporaryAND)`` and
+one handler, and so have ``Conditional`` and ``Toffoli`` (outside the gate set, for circuits built
+by hand); ``TemporaryAND``, ``Adjoint(TemporaryAND)`` and
 ``PhaseGradientStatePrep`` check their preconditions on every term and raise ``AssertionError``
 with the offending key. Any other operation raises :class:`UnsupportedOperation`.
 

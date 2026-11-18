@@ -15,10 +15,14 @@ entry and that every canary named here exists.
   excluded even when pinned; with the pin there is no path. Canary:
   `test_allocating_rule_is_excluded`. Mitigation: explicit ancilla arguments (spec 7.4 rule 1).
   `Toffoli`'s `_toffoli_elbow` allocates, so every dfthc `Toffoli` and `CSWAP` is a two-control
-  `MultiControlledX` with an explicit zeroed work wire (spec 9.0), whose elbow rule applies when
-  `Toffoli` is left out of the gate set; the reflections get one lent zeroed wire for the same
-  purpose (spec 9.6). A bare `Toffoli` or `CSWAP` has no decomposition path then (the solver
-  failure reads "the rules file could not be parsed", L-18).
+  `MultiControlledX` with an explicit zeroed work wire (spec 9.0), whose elbow rule applies
+  because `Toffoli` is not in the gate set (`TemporaryAND` is its only non-Clifford gate, spec
+  7.3); the reflections get one lent zeroed wire for the same purpose (spec 9.6), and the toy walk
+  a `work` wire. A bare `Toffoli` or `CSWAP` has no decomposition path (the solver failure reads
+  "the rules file could not be parsed", L-18). The canaries whose PennyLane or Catalyst behaviour
+  involves a bare Toffoli (L-2, L-4, L-7, L-8, L-12 to L-14, L-18, L-19) compile to
+  `dfthc.testing.canary.TOFFOLI_GATE_SET`, the gate set plus `Toffoli`, so that what they pin is
+  not masked by the missing path.
 - **L-2, measuring adjoint rules under control** (pennylane#9629), **changed**. Inside a control
   region the measuring `Adjoint(Op)` rule is skipped even when pinned, and the solver silently
   controls the unitary inverse of `Op`'s base rule instead (one Toffoli and four PauliX for a

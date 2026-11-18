@@ -333,16 +333,18 @@ def expected_cost(p, ob):
 
 
 def assert_counts(resources, p, ob):
-    """T4 and the T6 signature: T and M exact; the plain Toffolis are the 2N + 5 of the spin
-    operators and the Majorana gate, so A = T - (2N + 5); the erase's hinted conditionals count
+    """T4 and the T6 signature: T and M exact; no Toffoli, every Toffoli a TemporaryAND with a
+    measured uncompute (the 2N + 5 of the spin operators and the Majorana gate included), so
+    A = T; the erase's hinted conditionals count
     their expectation (nothing else in the select emits CZ or Z): R B conditional CZ (ob >= 1) or
     Z (ob = 0) on the SF fix-up and N conditional Z on the tail fix-up, summed per gate type and
     rounded up once (L-17)."""
     expected = expected_cost(p, ob)
     assert (resources.toffoli, resources.measurements) == (expected.toffoli,
                                                            expected.measurements)
-    assert resources.counts["Toffoli"] == 2 * p.N + 5
-    assert resources.measured_and_uncomputes == resources.toffoli - (2 * p.N + 5)
+    assert (resources.counts.get("Toffoli", 0), resources.counts["TemporaryAND"]) == (
+        0, expected.toffoli)
+    assert resources.measured_and_uncomputes == expected.toffoli
     hinted = ({"CZ": math.ceil(p.R * p.B / 2), "PauliZ": math.ceil(p.N / 2)} if ob
               else {"CZ": 0, "PauliZ": math.ceil((p.R * p.B + p.N) / 2)})
     assert {gate: resources.counts.get(gate, 0) for gate in hinted} == hinted

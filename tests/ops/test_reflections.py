@@ -41,9 +41,9 @@ def split(sizes, controlled, wires) -> dict:
     return registers
 
 
-def layout(sizes, controlled, lent=0) -> tuple[dict, int]:
+def layout(sizes, controlled, lent=1) -> tuple[dict, int]:
     """The helper's arguments on consecutive wires (the work, then ``lent`` extra_work wires,
-    last) and the number of wires."""
+    last; the walk lends one) and the number of wires."""
     n = sum(sizes.values()) + controlled
     work = reflection_work(sum(sizes.values()), controlled)
     wires = split(sizes, controlled, list(range(n))) | {"work": list(range(n, n + work))}
@@ -85,14 +85,14 @@ def choi_matrix(num_system, apply, num_work):
 
 
 @pytest.mark.compiled
-@pytest.mark.parametrize("lent", [0, 1], ids=["pool", "lent"])
 @pytest.mark.parametrize("controlled", [False, True], ids=["plain", "controlled"])
 @pytest.mark.parametrize("kind", HELPERS)
-def test_exact_matrix_with_the_global_sign(kind, controlled, lent):
+def test_exact_matrix_with_the_global_sign(kind, controlled):
     """T3: at unit register widths the compiled matrix is exactly 2 Pi - I, global sign included,
     and controlled |0><0| (x) I + |1><1| (x) (2 Pi - I), where a wrong global sign of the
-    uncontrolled reflection would show as a relative phase; the work, and a lent extra_work
-    wire, return to |0>."""
+    uncontrolled reflection would show as a relative phase; the work and the lent extra_work
+    wire return to |0>."""
+    lent = 1
     helper, _, ones, _ = HELPERS[kind]
     sizes = pattern_sizes(kind)
     n_w = sum(sizes.values())
@@ -156,7 +156,7 @@ def test_action_at_the_walks_widths(kind, preset):
             helper(**wires)
             return qp.state()
 
-        clean = np.eye(2 ** len(wires["work"]))[0]
+        clean = np.eye(2 ** (len(wires["work"]) + len(wires["extra_work"])))[0]
         return circuit, clean
 
     circuit, clean = run(False)
@@ -179,32 +179,40 @@ COUNT_CASES = [pytest.param(kind, controlled, preset,
 @pytest.mark.parametrize(("kind", "controlled", "preset"), COUNT_CASES)
 def test_counts(kind, controlled, preset):
     """T4 compiled at both test presets, MID_NAPHTHALENE and FeMoco-54's register widths (the
-    reflections are table-free, so per commit): T = n_w - 2, controlled n_w - 1, against
-    dfthc.costs.ref_t2 and ref_ab, M = 0, one plain Toffoli, so A = T - 1; the sign is one
-    GlobalPhase uncontrolled and one PauliZ on the control controlled."""
+    reflections are table-free, so per commit), with the one extra_work wire the walk lends:
+    T = n_w - 2, controlled n_w - 1, against dfthc.costs.ref_t2 and ref_ab, M = 0, all
+    TemporaryAND with measured uncomputes and no Toffoli (the MultiControlledX's core included),
+    so A = T; the sign is one GlobalPhase uncontrolled and one PauliZ on the control
+    controlled."""
     helper, _, _, cost = HELPERS[kind]
     p = PRESETS[preset]
     wires, num_wires = layout(pattern_sizes(kind, p), controlled)
     resources = compiled_resources(lambda: helper(**wires), num_wires)
-    assert (resources.toffoli, resources.measurements) == (cost(p, controlled).toffoli, 0)
-    assert resources.counts["Toffoli"] == 1
-    assert resources.measured_and_uncomputes == resources.toffoli - 1
+    expected = cost(p, controlled).toffoli
+    assert (resources.toffoli, resources.measurements) == (expected, 0)
+    assert (resources.counts.get("Toffoli", 0), resources.counts["TemporaryAND"]) == (0, expected)
+    assert resources.measured_and_uncomputes == expected
     assert (resources.counts.get("GlobalPhase", 0), resources.counts.get("PauliZ", 0)) == (
         (0, 1) if controlled else (1, 0))
 
 
-@pytest.mark.compiled
 @pytest.mark.parametrize("controlled", [False, True], ids=["plain", "controlled"])
 @pytest.mark.parametrize("kind", HELPERS)
-def test_counts_with_a_lent_wire(kind, controlled):
-    """T4 at FeMoco-54's widths with one lent extra_work wire, as the walk passes: the counts
-    are unchanged under GATE_SET (one plain Toffoli, the MultiControlledX's core)."""
-    helper, _, _, cost = HELPERS[kind]
-    wires, num_wires = layout(pattern_sizes(kind, FEMOCO54), controlled, lent=1)
-    resources = compiled_resources(lambda: helper(**wires), num_wires)
-    assert (resources.toffoli, resources.measurements) == (cost(FEMOCO54, controlled).toffoli, 0)
-    assert resources.counts["Toffoli"] == 1
-    assert resources.measured_and_uncomputes == resources.toffoli - 1
+def test_at_least_two_controls_need_the_lent_wire(kind, controlled):
+    """GATE_SET has no Toffoli, so a reflection whose MultiControlledX has at least two controls
+    raises ValueError without its extra_work wire (it would have no decomposition path, L-18),
+    and one with fewer queues without it: n_w = 1 has no MultiControlledX, and the controlled
+    n_w = 1 and the plain n_w = 2 have one control."""
+    helper = HELPERS[kind][0]
+    wires, _ = layout(pattern_sizes(kind), controlled, lent=0)
+    with pytest.raises(ValueError, match="needs one zeroed extra_work wire"):
+        with qp.queuing.AnnotatedQueue():
+            helper(**wires)
+    for n_w in (1, 2) if not controlled else (1,):
+        with qp.queuing.AnnotatedQueue() as queue:
+            ref_ab([0], [], [], [], [], list(range(1, n_w)), [],
+                   control=n_w if controlled else None)
+        assert queue.queue
 
 
 def test_femoco_counts_and_work_on_the_closed_form():

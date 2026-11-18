@@ -12,11 +12,11 @@ from dfthc.ops.spin import SpinSwap
 
 
 @pytest.mark.parametrize(("build", "match"), [
-    (lambda: SpinSwap(sg=[0], psi_up=[1, 2], psi_dn=[2, 3]),
+    (lambda: SpinSwap(sg=[0], psi_up=[1, 2], psi_dn=[2, 3], work=[4]),
      "SpinSwap: wire 2 appears in registers 'psi_up' and 'psi_dn'"),
-    (lambda: MajoranaGate([0], [1], [2], [3], [4], [5], [5], work=[7, 8]),
+    (lambda: MajoranaGate([0], [1], [2], [3], [4], [5], [5], work=[7, 8, 9]),
      "MajoranaGate: wire 5 appears in registers 'flavour' and 'target'"),
-    (lambda: SpinSwap(sg=[0], psi_up=[1, 1], psi_dn=[2, 3]),
+    (lambda: SpinSwap(sg=[0], psi_up=[1, 1], psi_dn=[2, 3], work=[4]),
      "SpinSwap: wire 1 appears twice in register 'psi_up'"),
 ], ids=["across-registers", "flavour-is-target", "within-a-register"])
 def test_constructors_reject_a_repeated_wire(build, match):

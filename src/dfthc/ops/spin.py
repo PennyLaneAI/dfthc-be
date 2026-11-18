@@ -51,8 +51,8 @@ class SpinMux(Operator2):
     **Adjoint and control.** Self-adjoint: ``Adjoint(SpinMux)`` is pinned to the operator
     itself (spec 7.5). Never controlled. The walk applies it twice instead of adjointing it.
 
-    **Cost.** :func:`dfthc.costs.spin_mux`: :math:`T = 1`, one plain ``Toffoli`` (``A = 0``);
-    ``M = 0``. Two per ``InnerSelect``.
+    **Cost.** :func:`dfthc.costs.spin_mux`: :math:`T = 1`, one ``TemporaryAND`` with a measured
+    uncompute (``A = 1``); ``M = 0``. Two per ``InnerSelect``.
 
     **Paper and dfthcbe.** Steps 12 and 17; the paper computes :math:`\sigma_{G_0}` in App. B.3
     but has no Table III row for it. dfthcbe: ``InnerSelect._build_sigma``, two
@@ -148,8 +148,8 @@ class SpinSwap(Operator2):
     **Adjoint and control.** Self-adjoint: ``Adjoint(SpinSwap)`` is pinned to the operator
     itself (spec 7.5). Never controlled. The walk applies it twice instead of adjointing it.
 
-    **Cost.** :func:`dfthc.costs.spin_swap`: :math:`T = N`, ``N`` plain ``Toffoli`` gates from
-    the ``CSWAP`` (``A = 0``); ``M = 0``. Two per ``InnerSelect``; 54 at FeMoco-54.
+    **Cost.** :func:`dfthc.costs.spin_swap`: :math:`T = N`, one ``TemporaryAND`` with a measured
+    uncompute per ``CSWAP`` (``A = N``); ``M = 0``. Two per ``InnerSelect``; 54 at FeMoco-54.
 
     **Paper and dfthcbe.** Steps 13 and 17, the paper's :math:`U_{Swap}` (Table III); dfthcbe:
     ``InnerSelect.uswap``, a ``CSwap`` of ``N`` qubits.

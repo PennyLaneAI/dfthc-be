@@ -24,6 +24,8 @@ from pennylane.core import Operator2
 from pennylane.typing import Wire
 
 from dfthc.compile import mcm_parities, register_rule, resource_key
+from dfthc.ops._gates import cswap as zeroed_cswap
+from dfthc.ops._gates import toffoli_key
 from dfthc.testing.resources import classify_rule_warning
 
 WORD = 32
@@ -192,7 +194,7 @@ def counts_to_resources(counts: Counter) -> dict:
     """Map counted gate names to register_resources keys."""
     keys = {
         "PauliX": qp.X, "PauliZ": qp.Z, "Hadamard": qp.H, "CNOT": qp.CNOT, "CSWAP": qp.CSWAP,
-        "CZ": qp.CZ,
+        "CZ": qp.CZ, "ZeroedToffoli": toffoli_key(),
         "TemporaryAND": resource_key(lambda: qp.TemporaryAND(Wire[3])),
         "Adjoint(TemporaryAND)": resource_key(lambda: qp.adjoint(qp.TemporaryAND(Wire[3]))),
         "MidMeasure": resource_key(lambda: qp.ops.MidMeasure(Wire[1], reset=True)),
@@ -283,7 +285,7 @@ def _read_counts(table, high_ranges, block_bits, width):
     high = dummy[: sum(w for w, _, _ in high_ranges)]
     _read_body(counter, table, high_ranges, block_bits, width, high, dummy[:block_bits],
                dummy[:width], dummy[: (2**block_bits - 1) * width], dummy[:64],
-               lambda c, a, b: counter.counts.update({"CSWAP": 1}))
+               lambda c, a, b: counter.counts.update({"CNOT": 2, "ZeroedToffoli": 1}))
     return counter.counts
 
 
@@ -294,7 +296,7 @@ def _read_resources(table, high_ranges, block_bits, width, high, low, target, ju
 @qp.register_resources(_read_resources)
 def _proto_table_read(table, high_ranges, block_bits, width, high, low, target, junk, work):
     _read_body(_Emit(), table, high_ranges, block_bits, width, high, low, target, junk, work,
-               lambda c, a, b: qp.CSWAP([c, a, b]))
+               lambda c, a, b: zeroed_cswap(c, a, b, work[0]))
 
 
 register_rule(ProtoTableRead, _proto_table_read)

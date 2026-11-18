@@ -323,15 +323,19 @@ def power_program(s: System, power: int):
 
 def _children(op) -> list:
     """The dfthc operators and the reflection helpers' calls (:class:`ReflectionCall`) the pinned
-    rule of ``op`` makes, in order (tape mode, nothing compiled)."""
+    rule of ``op`` makes, in order (tape mode, nothing compiled). Only the rules of
+    :data:`REFLECTION_ROWS` call reflections; another rule's ``MultiControlledX`` is a Toffoli of
+    ``dfthc.ops._gates``, part of the rule's own row."""
     if op.name in LEAVES or op.name not in FIXED_DECOMPS:
         return []
     with qp.capture.pause(), qp.queuing.AnnotatedQueue() as queue:
         FIXED_DECOMPS[op.name](**op.arguments)
     reflections = iter(REFLECTION_ROWS.get(op.name, ()))
+    reflecting = op.name in REFLECTION_ROWS
     return [ReflectionCall(next(reflections), child) if child.name == "MultiControlledX"
             else child for child in queue.queue
-            if child.name == "MultiControlledX" or surviving_dfthc_operators([child.name])]
+            if (reflecting and child.name == "MultiControlledX")
+            or surviving_dfthc_operators([child.name])]
 
 
 def _target(op):
@@ -411,7 +415,8 @@ def _fixup_program(a: dict):
 
 def _reflection_program(name: str, p: WalkParams):
     """The reflection helper of row ``name`` (:data:`REFLECTION_ROWS`) alone, as the walk calls
-    it: the control first if controlled, its registers at the layout's widths, then its work."""
+    it: the control first if controlled, its registers at the layout's widths, then its work and
+    the one zeroed wire the walk lends it (``extra_work``)."""
     helper = ref_ab if name.endswith("RefAB") else ref_t2
     controlled = name.startswith("Controlled")
     sizes = WalkLayout.register_sizes(p)
@@ -420,10 +425,11 @@ def _reflection_program(name: str, p: WalkParams):
         wires[register] = list(range(start, start + sizes[register]))
         start += sizes[register]
     work = list(range(start, start + reflection_work(start - controlled, controlled)))
+    lent = [start + len(work)]
 
     def program():
-        return ((lambda: helper(**wires, work=work, control=0 if controlled else None)),
-                start + len(work))
+        return ((lambda: helper(**wires, work=work, control=0 if controlled else None,
+                                extra_work=lent)), lent[0] + 1)
 
     return program
 
@@ -440,8 +446,8 @@ def closed_form(name: str, op, p: WalkParams) -> tuple[costs.Cost, int]:
     ``op`` is the erase's arguments (:func:`_erase_arguments`). A counts the measured AND
     uncomputes inside the call: a prepare leaves its comparators' ANDs (``b_k`` and the uniform
     preparation's :func:`_dirty`) for its unprepare to measure (spec 9.24, 10.2), so per call A
-    is not ``T`` minus the plain ``Toffoli`` gates; over the walk it is
-    (``measured_and_uncomputes``)."""
+    is not always ``T``; every other call, and the walk (``measured_and_uncomputes``), has
+    ``A = T``: every Toffoli is a ``TemporaryAND``."""
     a = op if isinstance(op, dict) else _target(op).arguments if op is not None else {}
     if name == "PhaseGradientRotation":
         cost = costs.phase_gradient_rotation(a["k"], a["m"])
@@ -456,7 +462,7 @@ def closed_form(name: str, op, p: WalkParams) -> tuple[costs.Cost, int]:
         select = QROAMRead.select_size(a["address_widths"], a["live_ranges"], a["block_bits"],
                                        a["control_value"])
         cost = costs.qroam_read(*select, a["block_bits"], a["width"])
-        return cost, cost.toffoli - (2**a["block_bits"] - 1) * a["width"]
+        return cost, cost.toffoli
     if name == "PhaseFixup":
         ranges = QROAMErase.fixup_high_ranges(a["address_widths"], a["live_ranges"],
                                               a["block_bits"], a["onehot_bits"])
@@ -464,30 +470,28 @@ def closed_form(name: str, op, p: WalkParams) -> tuple[costs.Cost, int]:
         return cost, cost.toffoli
     walk_a = costs.measured_and_uncomputes(p, False)
     table = {
-        "OuterPrepare": (costs.outer_prepare(p),
-                         -_dirty(p.X_o) - (p.K1 - 1) * p.d1 - p.b_k1 - p.w_x),
+        "OuterPrepare": (costs.outer_prepare(p), -_dirty(p.X_o) - p.b_k1),
         "OuterUnprepareFromOutcomes": (costs.outer_unprepare_from_outcomes(p),
-                                       -p.w_x + p.b_k1 + _dirty(p.X_o)),
-        "InnerPrepare": (costs.inner_prepare(p),
-                         -_dirty(p.B + 1) - (p.K2 - 1) * p.d2 - p.b_k2 - p.w_b),
+                                       p.b_k1 + _dirty(p.X_o)),
+        "InnerPrepare": (costs.inner_prepare(p), -_dirty(p.B + 1) - p.b_k2),
         "InnerUnprepareFromOutcomes": (costs.inner_unprepare_from_outcomes(p),
-                                       -p.w_b + p.b_k2 + _dirty(p.B + 1)),
+                                       p.b_k2 + _dirty(p.B + 1)),
         "InnerSigns": (costs.inner_signs(), 0),
         "TailAngleLoad": (costs.tail_angle_load(p), 0),
         "SFAngleLoad": (costs.sf_angle_load(p), 0),
-        "SpinMux": (costs.spin_mux(), -1), "SpinSwap": (costs.spin_swap(p), -p.N),
+        "SpinMux": (costs.spin_mux(), 0), "SpinSwap": (costs.spin_swap(p), 0),
         "GivensRotation": (costs.givens_rotation(p), 0),
         "Adjoint(GivensRotation)": (costs.givens_rotation(p), 0),
         "GivensLadder": (costs.givens_ladder(p), 0),
         "GivensLadderDagger": (costs.givens_ladder(p), 0),
-        "MajoranaGate": (costs.majorana_gate(), -3),
-        "Adjoint(MajoranaGate)": (costs.majorana_gate(), -3),
+        "MajoranaGate": (costs.majorana_gate(), 0),
+        "Adjoint(MajoranaGate)": (costs.majorana_gate(), 0),
         "AngleErase": (costs.angle_erase(p), 0),
-        "InnerSelect": (costs.inner_select(p), -(2 * p.N + 5)),
-        "InnerSelectDagger": (costs.inner_select(p), -(2 * p.N + 5)),
-        "RefT2": (costs.ref_t2(p, False), -1), "ControlledRefT2": (costs.ref_t2(p, True), -1),
-        "RefAB": (costs.ref_ab(p, False), -1), "ControlledRefAB": (costs.ref_ab(p, True), -1),
-        "DFTHCBlockEncoding": (costs.block_encoding(p, False), 1 - costs.toffoli_only(p)),
+        "InnerSelect": (costs.inner_select(p), 0),
+        "InnerSelectDagger": (costs.inner_select(p), 0),
+        "RefT2": (costs.ref_t2(p, False), 0), "ControlledRefT2": (costs.ref_t2(p, True), 0),
+        "RefAB": (costs.ref_ab(p, False), 0), "ControlledRefAB": (costs.ref_ab(p, True), 0),
+        "DFTHCBlockEncoding": (costs.block_encoding(p, False), 0),
         "DFTHCWalk": (costs.walk(p, False), walk_a - costs.walk(p, False).toffoli),
         "ControlledDFTHCWalk": (costs.walk(p, True), costs.measured_and_uncomputes(p, True)
                                 - costs.walk(p, True).toffoli),
@@ -889,8 +893,9 @@ def render(report: dict) -> str:
              "the operator as the walk calls it, compiled on its own with `compiled_resources` "
              "on `null.qubit` where the status says measured. Toffolis are `Toffoli` plus "
              "`TemporaryAND` gates, as the paper and dfthcbe count them: a `TemporaryAND` is a "
-             "Toffoli onto a fresh target, and the plain Toffolis come from controlled swaps and "
-             "a few single gates. A measured value always equals the closed form of "
+             "Toffoli onto a fresh target. The gate set has no `Toffoli`, so every Toffoli is a "
+             "`TemporaryAND`, a controlled swap's or single Toffoli's too (with its zeroed work "
+             "wire and a measured uncompute). A measured value always equals the closed form of "
              "`dfthc.costs`, or the script fails. dfthcbe's and the paper's values are Toffolis "
              "per call (`dfthc.costs_reference`). Calls are per walk and per controlled walk; "
              "the partition rows (P) sum to the walk exactly.", "",

@@ -354,7 +354,8 @@ class QROAMRead(Operator2):
 
     **Cost.** :func:`dfthc.costs.qroam_read` with ``select_size(...)``: :math:`T = N(c, C)`,
     PennyLane's unary QROM over the ``C`` columns, plus :math:`(2^k - 1)` ``width``; ``M = 0``;
-    ``A = N(c, C)``. Where every block from 0 to the last is visited, ``N`` is one fewer than
+    ``A = T`` (each swap-network ``CSWAP`` a ``TemporaryAND`` with a measured uncompute on
+    ``work[0]``). Where every block from 0 to the last is visited, ``N`` is one fewer than
     exact unary iteration over the blocks (its root merges the two top ANDs into CNOTs). At
     FeMoco-54: outer 83 + 72 = 155, inner 542 + 390 = 932 (its 540 columns of ``x_o ‖ b_top``
     are contiguous). The ``CNOT`` and ``PauliX`` counts are upper bounds: ``QROM`` declares a

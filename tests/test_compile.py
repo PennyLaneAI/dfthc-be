@@ -96,8 +96,7 @@ def test_gate_set_matches_spec():
     assert GATE_SET == {
         "PauliX": 1, "PauliY": 1, "PauliZ": 1, "Hadamard": 1, "S": 1, "Adjoint(S)": 1,
         "CNOT": 1, "CZ": 1, "SWAP": 1, "GlobalPhase": 1, "MidMeasure": 1,
-        "Adjoint(TemporaryAND)": 1, "PhaseGradientStatePrep": 1,
-        "Toffoli": 1000, "TemporaryAND": 1000,
+        "Adjoint(TemporaryAND)": 1, "PhaseGradientStatePrep": 1, "TemporaryAND": 1000,
     }
 
 

@@ -12,7 +12,7 @@ import pytest
 from pennylane.core import Operator2
 
 from dfthc.compile import GATE_SET
-from dfthc.testing.canary import outcome, run_snippet
+from dfthc.testing.canary import TOFFOLI_GATE_SET, outcome, run_snippet
 
 pytestmark = [pytest.mark.canary, pytest.mark.compiled]
 
@@ -84,7 +84,7 @@ def test_controlled_change_op_basis_controls_everything():
         qp.Z(1)
 
     @qp.qjit(capture=True, enable_aot_compilation=False)
-    @qp.decompose(gate_set=GATE_SET)
+    @qp.decompose(gate_set=TOFFOLI_GATE_SET)
     @qp.qnode(qp.device("null.qubit", wires=3))
     def circuit():
         qp.ctrl(lambda: qp.change_op_basis(compute, target, compute), control=2)()
@@ -117,7 +117,7 @@ def test_generic_ctrl_adds_paulix_per_control():
     """
 
     @qp.qjit(capture=True, enable_aot_compilation=False)
-    @qp.decompose(gate_set=GATE_SET)
+    @qp.decompose(gate_set=TOFFOLI_GATE_SET)
     @qp.qnode(qp.device("null.qubit", wires=3))
     def circuit():
         qp.ctrl(L08Op([0, 1]), control=[2])

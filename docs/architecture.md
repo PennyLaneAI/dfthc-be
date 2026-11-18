@@ -113,8 +113,9 @@ to their group, never to `work` (spec 10.2).
 `qp.qjit(capture=True)` around `qp.decompose(gate_set=GATE_SET, fixed_decomps=...)` around a
 `null.qubit` QNode, analyzed by `qp.analyze`; the pins are `FIXED_DECOMPS` (every dfthc rule) and
 `PENNYLANE_PINS` (`QROM` to its unary-iteration rule, the select stage of `QROAMRead`; spec 7.5). It returns T (Toffoli plus
-`TemporaryAND`), M (`MidCircuitMeasure`) and A (`Adjoint(TemporaryAND)`), and fails if the counts
-are symbolic or an operation outside the gate set remains. Four rules carry the design
+`TemporaryAND`; `GATE_SET` has no `Toffoli`, so T is the `TemporaryAND` count), M
+(`MidCircuitMeasure`) and A (`Adjoint(TemporaryAND)`), and fails if the counts are symbolic or an
+operation outside the gate set remains. Four rules carry the design
 (spec 7.4):
 
 - every dfthc operator has exactly one decomposition rule per key, registered and pinned with

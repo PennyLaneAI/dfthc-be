@@ -6,8 +6,8 @@ import numpy as np
 import pennylane as qp
 import pytest
 
-from dfthc.compile import ANALYZE_NAMES, GATE_SET
-from dfthc.testing.canary import outcome, run_snippet
+from dfthc.compile import ANALYZE_NAMES
+from dfthc.testing.canary import TOFFOLI_GATE_SET, outcome, run_snippet
 
 pytestmark = [pytest.mark.canary, pytest.mark.compiled]
 
@@ -22,7 +22,7 @@ def test_select_swap_qrom_twice_is_not_identity():
     """L-12: the select-swap QROM (chosen for this dirty QROM) is not self-inverse."""
 
     @qp.qjit(capture=True)
-    @qp.decompose(gate_set=GATE_SET)
+    @qp.decompose(gate_set=TOFFOLI_GATE_SET)
     @qp.qnode(qp.device("lightning.qubit", wires=8))
     def circuit():
         for wire in range(4):
@@ -41,7 +41,7 @@ def test_select_swap_qrom_counts_are_symbolic():
     """L-12 and L-22: qp.analyze counts of the select-swap QROM are symbolic."""
 
     @qp.qjit(capture=True, enable_aot_compilation=False)
-    @qp.decompose(gate_set=GATE_SET)
+    @qp.decompose(gate_set=TOFFOLI_GATE_SET)
     @qp.qnode(qp.device("null.qubit", wires=8))
     def circuit():
         _dirty_qrom()
@@ -56,7 +56,7 @@ def test_select_with_shared_target_crashes():
     result = run_snippet(
         """
         @qp.qjit(capture=True, enable_aot_compilation=False)
-        @qp.decompose(gate_set=GATE_SET)
+        @qp.decompose(gate_set=TOFFOLI_GATE_SET)
         @qp.qnode(qp.device("null.qubit", wires=5))
         def circuit():
             qp.Select([qp.X(4), qp.Z(4), qp.Y(4), qp.H(4)], control=[0, 1], work_wires=[2, 3])
@@ -76,7 +76,7 @@ def test_mcx_without_work_wires_has_no_path():
     result = run_snippet(
         """
         @qp.qjit(capture=True, enable_aot_compilation=False)
-        @qp.decompose(gate_set=GATE_SET)
+        @qp.decompose(gate_set=TOFFOLI_GATE_SET)
         @qp.qnode(qp.device("null.qubit", wires=5))
         def circuit():
             qp.MultiControlledX(wires=[0, 1, 2, 3, 4])
@@ -107,7 +107,7 @@ def test_template_has_no_toffoli_level_path(label, statement):
     result = run_snippet(
         f"""
         @qp.qjit(capture=True, enable_aot_compilation=False)
-        @qp.decompose(gate_set=GATE_SET)
+        @qp.decompose(gate_set=TOFFOLI_GATE_SET)
         @qp.qnode(qp.device("null.qubit", wires=21))
         def circuit():
             {statement}
@@ -128,7 +128,7 @@ def test_power_of_two_alias_sampling_compiles():
     result = run_snippet(
         """
         @qp.qjit(capture=True, enable_aot_compilation=False)
-        @qp.decompose(gate_set=GATE_SET)
+        @qp.decompose(gate_set=TOFFOLI_GATE_SET)
         @qp.qnode(qp.device("null.qubit", wires=19))
         def circuit():
             qp.AliasSampling((0.1, 0.2, 0.3, 0.4), 3, target_wires=[0, 1],
@@ -140,4 +140,4 @@ def test_power_of_two_alias_sampling_compiles():
     )
     alias = outcome(result, "ALIAS_SAMPLING_4")
     assert alias.startswith("OK ")
-    assert set(json.loads(alias.removeprefix("OK "))) <= ANALYZE_NAMES
+    assert set(json.loads(alias.removeprefix("OK "))) <= ANALYZE_NAMES | {"Toffoli"}

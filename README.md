@@ -5,14 +5,16 @@ A fully compiled PennyLane implementation of the DFTHC block encoding of
 ([arXiv:2502.15882](https://arxiv.org/abs/2502.15882)): the block encoding, its qubitized walk, the
 controlled walk and an iterative phase estimation. Every block is a modular PennyLane `Operator2`
 with one pinned decomposition rule. Programs compile with `qp.qjit(capture=True)` and graph-based
-`qp.decompose` down to Cliffords, Toffolis, measured AND-uncomputes, mid-circuit measurements and
-a phase-gradient state, and `qp.analyze` counts their resources exactly. The Qualtran
+`qp.decompose` down to Cliffords, `TemporaryAND` (the only non-Clifford gate: every Toffoli is
+one), measured AND-uncomputes, mid-circuit measurements and a phase-gradient state, and
+`qp.analyze` counts their resources exactly. The Qualtran
 implementation [dfthcbe](https://github.com/Covestro-HPQC/dfthcbe) serves as the reference.
 
 ## Results
 
-Toffolis per walk step (Toffoli plus `TemporaryAND`), each compiled count equal to its closed form
-in `dfthc.costs`:
+Toffolis per walk step (`TemporaryAND` gates: the gate set has no `Toffoli`, so a controlled
+swap's or a single Toffoli's is one too), each compiled count equal to its closed form in
+`dfthc.costs`:
 
 | System | Walk qubits | Ours | dfthcbe | Paper |
 | --- | ---: | ---: | ---: | ---: |
@@ -82,10 +84,12 @@ def walk():
     return qp.probs(wires=0)
 
 counts = qp.analyze(walk)().resources.counts
-print(counts["Toffoli"] + counts["TemporaryAND"])  # 158
+print(counts["TemporaryAND"])  # 158
 ```
 
-Run it with `PYTHONPATH=src .venv/bin/python`. Importing `dfthc` registers one decomposition rule
+Run it with `PYTHONPATH=src .venv/bin/python`. `dfthc.GATE_SET` has no `Toffoli`, so the counts
+have no `Toffoli` key: every Toffoli is a `TemporaryAND`, uncomputed by measurement
+(`Adjoint(TemporaryAND)`, also 158). Importing `dfthc` registers one decomposition rule
 per operator with `qp.add_decomps`, and the graph-based `qp.decompose` finds them. `qp.analyze`
 warns once that it could not determine a conditional's branch; the counts are exact.
 

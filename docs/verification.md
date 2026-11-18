@@ -75,7 +75,9 @@ simulator against the encoded block's exact phase distribution
 ## Resources
 
 Every compiled count of Toffolis (`Toffoli` plus `TemporaryAND`), mid-circuit measurements and
-measured AND uncomputes (`Adjoint(TemporaryAND)`) equals `dfthc.costs`. Table-bearing blocks use the two H2 presets
+measured AND uncomputes (`Adjoint(TemporaryAND)`) equals `dfthc.costs`. The gate set has no
+`Toffoli`, so the tests also assert that no `Toffoli` remains: every Toffoli is a `TemporaryAND`,
+and over the walk, the controlled walk and the QPE programs A = T. Table-bearing blocks use the two H2 presets
 per commit and `MID_NAPHTHALENE` nightly; table-free blocks use representative register widths,
 including FeMoco-54 widths where inexpensive. The QPE tests compile the round and full program at
 H2 sizes and `ControlledWalkPower` at `MID_NAPHTHALENE`. The FeMoco-54 values (walk 9,790

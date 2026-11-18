@@ -90,7 +90,8 @@ def test_measuring_adjoint_rule_has_no_controlled_path():
         qp.add_decomps("Adjoint(L02Load)", _l02_unload)
 
         @qp.qjit(capture=True, enable_aot_compilation=False)
-        @qp.decompose(gate_set=GATE_SET, fixed_decomps={"Adjoint(L02Load)": _l02_unload})
+        @qp.decompose(gate_set=TOFFOLI_GATE_SET,
+                      fixed_decomps={"Adjoint(L02Load)": _l02_unload})
         @qp.qnode(qp.device("null.qubit", wires=3))
         def circuit():
             qp.ctrl(qp.adjoint(L02Load([0], [1])), control=2)
@@ -137,7 +138,7 @@ def test_measuring_adjoint_without_unitary_inverse_has_no_path():
         qp.add_decomps("Adjoint(L02Measured)", _l02_measured_adjoint)
 
         @qp.qjit(capture=True, enable_aot_compilation=False)
-        @qp.decompose(gate_set=GATE_SET,
+        @qp.decompose(gate_set=TOFFOLI_GATE_SET,
                       fixed_decomps={"L02Measured": _l02_measured,
                                      "Adjoint(L02Measured)": _l02_measured_adjoint})
         @qp.qnode(qp.device("null.qubit", wires=3))
@@ -208,7 +209,7 @@ def test_pin_applies_to_nested_instances():
 
         def build(pins):
             @qp.qjit(capture=True, enable_aot_compilation=False)
-            @qp.decompose(gate_set=GATE_SET, fixed_decomps=pins)
+            @qp.decompose(gate_set=TOFFOLI_GATE_SET, fixed_decomps=pins)
             @qp.qnode(qp.device("null.qubit", wires=9))
             def circuit():
                 qp.QROM(bits, control_wires=[0, 1, 2], target_wires=[3],

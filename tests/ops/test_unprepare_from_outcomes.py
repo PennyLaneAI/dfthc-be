@@ -366,8 +366,9 @@ def test_caller_inside_another_rule_is_valid_and_counted(key):
     """The junk outcomes cross an operator boundary inside another rule (K-10 part 2 in
     production form): T2 of the probe's rule in tape mode, where the outcomes are an object array
     of MeasurementValues, and its compiled T, M and A, where they are a traced bool array: T of
-    the prepare and the unprepare, all K2 d2 measurements, and A the prepare's uniform-preparation
-    and read ANDs plus the unprepare's."""
+    the prepare and the unprepare, all K2 d2 measurements, and A the prepare's T less the ANDs
+    its unprepare uncomputes (comparator and uniform preparation) plus the unprepare's: the
+    round trip's T, no Toffoli."""
     pr, flat = probe(key)
     op = InnerRoundTripProbe(pr.args, flat)
     qp.testing.assert_valid_decomp_rule(op, _inner_round_trip_probe, check_matrix=False)
@@ -376,8 +377,10 @@ def test_caller_inside_another_rule_is_valid_and_counted(key):
     prepare = costs.inner_prepare(p).toffoli
     expected = prepare + costs.inner_unprepare_from_outcomes(p).toffoli
     assert (resources.toffoli, resources.measurements) == (expected, p.K2 * p.d2)
-    prepare_and = prepare - (p.K2 - 1) * p.d2 - p.b_k2 - p.w_b - _dirty(p.B + 1)
+    prepare_and = prepare - p.b_k2 - _dirty(p.B + 1)
     assert resources.measured_and_uncomputes == prepare_and + expected_and_uncomputes(pr)
+    assert resources.measured_and_uncomputes == expected
+    assert resources.counts.get("Toffoli", 0) == 0
 
 
 def test_caller_inside_another_rule_restores_every_outcome():
@@ -426,21 +429,21 @@ def _dirty(L):
 
 
 def expected_and_uncomputes(pr) -> int:
-    """A of the unprepare from outcomes, as the baseline unprepare's (spec 9.24): the
-    comparator's b_k, the fixup's T and the adjoint uniform preparation's 3(n - 1) + 2(s_u - 1)
-    (n = lg l, none if l = 1)."""
+    """A of the unprepare from outcomes, as the baseline unprepare's (spec 9.24): the swaps'
+    w, the comparator's b_k, the fixup's T and the adjoint uniform preparation's
+    3(n - 1) + 2(s_u - 1) (n = lg l, none if l = 1)."""
     p = pr.params
     if pr.prepare is OuterPrepare:
-        L, b_k, ob = p.X_o, p.b_k1, p.ke1
+        L, b_k, ob, swaps = p.X_o, p.b_k1, p.ke1, p.w_x
         read = OuterPrepare.read_shape(p.X_o, p.b_k1, p.k1)
     else:
-        L, b_k, ob = p.B + 1, p.b_k2, p.ke2 + p.w_b
+        L, b_k, ob, swaps = p.B + 1, p.b_k2, p.ke2 + p.w_b, p.w_b
         read = InnerPrepare.read_shape(p.N, p.R, p.B, p.C, p.b_k2, p.k2)
     widths, live, width, k = read.values()
     fixup = costs.qroam_erase(QROAMErase.fixup_high_ranges(widths, live, k, ob), k, width, ob,
                               False)
     n = lg(odd_part(L))
-    return b_k + fixup.toffoli + (3 * (n - 1) + 2 * (p.s_u - 1) if n else 0)
+    return swaps + b_k + fixup.toffoli + (3 * (n - 1) + 2 * (p.s_u - 1) if n else 0)
 
 
 def closed_form(pr) -> costs.Cost:
@@ -463,6 +466,7 @@ def assert_counts(pr):
     assert resources.measurements == pr.measured // (pr.params.K1 if pr.prepare is OuterPrepare
                                                      else pr.params.K2)
     assert resources.measured_and_uncomputes == expected_and_uncomputes(pr)
+    assert resources.counts.get("Toffoli", 0) == 0
 
 
 @pytest.mark.compiled

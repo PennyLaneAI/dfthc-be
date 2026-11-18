@@ -1,11 +1,12 @@
 """Toffoli-level gates that carry one zeroed work wire.
 
 ``toffoli`` is a two-control ``MultiControlledX`` with one explicit ``work_wires`` wire of
-``work_wire_type="zeroed"``, and ``cswap`` is PennyLane's ``CSWAP`` identity around it. Under
-:data:`dfthc.compile.GATE_SET` the graph decomposes the ``MultiControlledX`` to one ``Toffoli``
-(rule ``mcx_to_cnot_or_toffoli``); without ``Toffoli`` in the gate set, to
-``TemporaryAND``, ``CNOT``, ``Adjoint(TemporaryAND)`` on the work wire (rule
-``decompose_mcx_two_controls_elbows``). The work wire must be in ``|0>``; it is returned there.
+``work_wire_type="zeroed"``, and ``cswap`` is PennyLane's ``CSWAP`` identity around it.
+:data:`dfthc.compile.GATE_SET` has no ``Toffoli``, so the graph decomposes the
+``MultiControlledX`` to ``TemporaryAND``, ``CNOT``, ``Adjoint(TemporaryAND)`` on the work wire
+(rule ``decompose_mcx_two_controls_elbows``): one Toffoli of ``T`` and one measured uncompute of
+``A``. A bare ``Toffoli`` or ``CSWAP`` has no decomposition path. The work wire must be in
+``|0>``; it is returned there.
 """
 
 from __future__ import annotations

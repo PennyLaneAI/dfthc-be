@@ -402,7 +402,9 @@ class OuterPrepare(Operator2):
     **Cost.** :func:`dfthc.costs.outer_prepare`: :math:`T = F(X_o) + T_{read,out} + b_{k1} +
     w_x` (uniform preparation, read, comparator, swaps), ``M = 0``; ``A`` is the uniform
     preparation's :math:`2(n - 1) + 2(s_u - 1)` (0 if ``l_x = 1``; ``n = lg(l_x)``) plus the
-    read's select ANDs ``N``. At FeMoco-54: :math:`30 + 155 + 15 + 9 = 209`. The ``CNOT`` and
+    read's :math:`T_{read,out}` and the swaps' :math:`w_x` (``T`` less the ANDs the unprepare
+    uncomputes). At FeMoco-54: :math:`30 + 155 + 15 + 9 = 209`, ``A = 24 + 155 + 9 = 188``. The
+    ``CNOT`` and
     ``PauliX`` counts are upper bounds: the read's ``QROM`` declares a load gate for every bit
     (spec 9.3).
 
@@ -536,8 +538,9 @@ class OuterUnprepare(Operator2):
     instead (spec 16, Q-1 variant (b)); this class serves callers that keep the junk.
 
     **Cost.** :func:`dfthc.costs.outer_unprepare`: :math:`T = w_x + T_{erase,out} +
-    F^\dagger(X_o)`, :math:`M = K_1 d_1` (every target and junk qubit); ``A`` is the comparator's
-    ``b_k1`` plus the erase's ``T`` plus the adjoint uniform preparation's
+    F^\dagger(X_o)`, :math:`M = K_1 d_1` (every target and junk qubit); ``A`` is the swaps'
+    ``w_x`` plus the comparator's ``b_k1`` plus the erase's ``T`` plus the adjoint uniform
+    preparation's
     :math:`3(n - 1) + 2(s_u - 1)` (0 if ``l_x = 1``). At FeMoco-54: :math:`9 + 36 + 24 = 69`,
     ``M = 96``. The ``PauliX`` count is an upper bound: each measurement's reset is counted at
     its maximum (spec 7.6).
@@ -675,8 +678,9 @@ class OuterUnprepareFromOutcomes(Operator2):
     **Cost.** :func:`dfthc.costs.outer_unprepare_from_outcomes`: the ``T`` of
     :func:`dfthc.costs.outer_unprepare`, :math:`w_x + T_{erase,out} + F^\dagger(X_o)`, and
     ``M = d1`` (the target qubits; the caller's :math:`(K_1 - 1) d_1` junk measurements make up
-    :class:`OuterUnprepare`'s :math:`K_1 d_1`); ``A`` as :class:`OuterUnprepare`'s, the
-    comparator's ``b_k1`` plus the fixup's ``T`` plus the adjoint uniform preparation's
+    :class:`OuterUnprepare`'s :math:`K_1 d_1`); ``A`` as :class:`OuterUnprepare`'s, the swaps'
+    ``w_x`` plus the comparator's ``b_k1`` plus the fixup's ``T`` plus the adjoint uniform
+    preparation's
     :math:`3(n - 1) + 2(s_u - 1)`. At FeMoco-54: :math:`9 + 36 + 24 = 69`, ``M = 24`` (and 72
     junk measurements in the block encoding). The ``PauliX`` count is an upper bound (spec 7.6).
 
@@ -894,7 +898,8 @@ class InnerPrepare(Operator2):
 
     **Cost.** :func:`dfthc.costs.inner_prepare`: :math:`T = F(B + 1) + T_{read,in} + b_{k2} +
     w_b`, ``M = 0``; ``A`` is the uniform preparation's :math:`2(n - 1) + 2(s_u - 1)` (0 if
-    ``l_b = 1``; ``n = lg(l_b)``) plus the read's select ANDs ``N``. At FeMoco-54:
+    ``l_b = 1``; ``n = lg(l_b)``) plus the read's :math:`T_{read,in}` and the swaps' ``w_b``.
+    At FeMoco-54:
     :math:`18 + 932 + 15 + 5 = 970`, where the read carries ``r`` through its swap network (+60
     against dfthcbe's flat ``r``, spec 9.3). The ``CNOT`` and ``PauliX`` counts are upper bounds:
     the read's ``QROM`` declares a load gate for every bit.
@@ -1048,8 +1053,9 @@ class InnerUnprepare(Operator2):
     instead (spec 16, Q-1 variant (b)); this class serves callers that keep the junk.
 
     **Cost.** :func:`dfthc.costs.inner_unprepare`: :math:`T = w_b + T_{erase,in} +
-    F^\dagger(B + 1)`, :math:`M = K_2 d_2` (every target and junk qubit); ``A`` is the
-    comparator's ``b_k2`` plus the erase's ``T`` plus the adjoint uniform preparation's
+    F^\dagger(B + 1)`, :math:`M = K_2 d_2` (every target and junk qubit); ``A`` is the swaps'
+    ``w_b`` plus the comparator's ``b_k2`` plus the erase's ``T`` plus the adjoint uniform
+    preparation's
     :math:`3(n - 1) + 2(s_u - 1)` (0 if ``l_b = 1``). At FeMoco-54: :math:`5 + 196 + 16 = 217`,
     ``M = 416``. The ``PauliX`` count is an upper bound: each measurement's reset is counted at
     its maximum (spec 7.6).

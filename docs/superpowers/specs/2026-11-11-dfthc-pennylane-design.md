@@ -45,7 +45,7 @@ Correctness is established in three ways:
 
 At FeMoco-54, the exact cost formulas (§9.24, built on probed PennyLane primitive costs) give, per walk:
 - 9,790 Toffolis (9,792 for the controlled walk), against the paper's 9,997 and dfthcbe's 9,641;
-- 2,418 explicit erase measurements, and 11,090 physical measurements in total once the 8,672 measured AND uncomputes are included;
+- 2,418 explicit erase measurements, and 12,208 physical measurements in total once the 9,790 measured AND uncomputes are included (every Toffoli is a `TemporaryAND`, so $A = T$);
 - 1,049 qubits, with each read's junk measured right after its prepare (Q-1 variant (b), §16; 1,511 if the junk is kept to the erase), against the paper's 1,131.
 
 Differences are explained in a generated report, not tuned away.
@@ -565,12 +565,12 @@ Facts the design relies on:
 GATE_SET = {
     "PauliX": 1, "PauliY": 1, "PauliZ": 1, "Hadamard": 1, "S": 1, "Adjoint(S)": 1,
     "CNOT": 1, "CZ": 1, "SWAP": 1, "GlobalPhase": 1, "MidMeasure": 1,
-    "Adjoint(TemporaryAND)": 1, "PhaseGradientStatePrep": 1,
-    "Toffoli": 1000, "TemporaryAND": 1000,
+    "Adjoint(TemporaryAND)": 1, "PhaseGradientStatePrep": 1, "TemporaryAND": 1000,
 }
 ```
 
 How the gate set behaves:
+- `TemporaryAND` is its only non-Clifford, non-measurement gate; `PhaseGradientStatePrep` is a resource-state preparation, not a gate. `Toffoli` is not in the set (changed 2026-11-18): every Toffoli a dfthc rule emits is a two-control `MultiControlledX` with a zeroed work wire (§9.0), which decomposes to a `TemporaryAND` and its measured uncompute, so every Toffoli is a `TemporaryAND`. A bare `Toffoli` or `CSWAP` has no decomposition path (L-1, L-18).
 - The weights give the solver a strong, but not lexicographic, preference for fewer Toffolis. A rule with 1,000 more Cliffords could still win.
 - Correctness therefore does not rest on the weights. Every rule of our operators is pinned (§7.5). The exact-resource tests (T4) compare counts with the closed forms of §9.24, which name the PennyLane primitive costs they assume, so an unexpected rule choice for a primitive fails a test. Rule selection is also asserted (T6).
 - `TemporaryAND` costs one Toffoli. `Adjoint(TemporaryAND)` is a measurement-based uncompute and costs no Toffoli.
@@ -649,7 +649,7 @@ Since Task 6.2 the reflections are helpers on PennyLane's `MultiControlledX` (§
 
 ### 7.6 Resource accounting
 
-- **Toffoli count** $T$: number of `Toffoli` plus number of `TemporaryAND`. `Adjoint(TemporaryAND)` is reported separately as "measured uncompute" and costs no Toffoli.
+- **Toffoli count** $T$: number of `Toffoli` plus number of `TemporaryAND`; under `GATE_SET` (§7.3) the `Toffoli` count is 0, so $T$ is the `TemporaryAND` count. `Adjoint(TemporaryAND)` is reported separately as "measured uncompute" and costs no Toffoli.
 - **Measurements:** $M$ is the number of `MidCircuitMeasure`, the explicit erase measurements. Each `qp.measure(..., reset=True)` also adds one conditional `PauliX`; it is PennyLane's and unhinted, so `qp.analyze` counts it at its maximum branch and the `PauliX` counts of erases are upper bounds (observed with the pinned toolchain (PennyLane `0.46.0.dev151`, Catalyst `0.16.0.dev140`) on 2026-11-12). The total number of physical measurements is $M + A$, where $A$ counts the measured uncomputes, `Adjoint(TemporaryAND)` (§9.24).
 - **Cliffords:** `PauliX`, `PauliY`, `PauliZ`, `Hadamard`, `S`, `Adjoint(S)`, `CNOT`, `CZ`, `SWAP`, `GlobalPhase`.
   - Without hints, `qp.analyze` counts a conditional at its maximum branch, so these counts are upper bounds.
@@ -802,7 +802,7 @@ Only the walk-frame offset is involved; the physical-frame offset never enters $
 - **Never controlled.** Unless stated otherwise, an operator is never placed under `qp.ctrl`.
 - **Adjoint and controlled classes** (§7.4 rule 6). `OuterUnprepare`, `InnerUnprepare`, `InnerSelectDagger`, `GivensLadderDagger` are full operators: all nine docstring sections, `required_wires`, constructor validation and T2–T6. Section 1 of the docstring names the operator they invert or control and the identity they satisfy, for example: `OuterUnprepare` after `OuterPrepare` is the identity on the prepare's input, for every measurement outcome. Their wires and compilable arguments are the base operator's. Section 6 states that they are never adjointed or controlled themselves. The `C(DFTHCWalk)` and `C(ToyWalk)` rules are documented in section 6 of `DFTHCWalk`'s and `ToyWalk`'s docstrings: $\lvert 0\rangle\langle 0\rvert \otimes I + \lvert 1\rangle\langle 1\rvert \otimes W$ on ancillas in $\lvert 0\rangle$.
 - **Wire passing.** A composite passes each child only the registers that child needs, never a whole group or the layout. Reason: an operator bind costs 2 captured equations per wire passed as a list and 4 per wire passed as an array register (PennyLane's `Operator2` takes one scalar operand per wire and unpacks an array register twice; Task 0.9d, Opus finding M-5). The K-1 stand-in passed its whole layout to every child and spent about 41 captured equations per layout wire in its block encoding; its composites held 32% of the projected FeMoco-54 memory with both levers.
-- **Toffolis with a zeroed work wire.** Every `Toffoli` and `CSWAP` that a dfthc rule emits is `toffoli` or `cswap` of `dfthc.ops._gates`: a two-control `MultiControlledX` with one explicit zeroed work wire (`CSWAP` as `CNOT(b, a)`, that gate, `CNOT(b, a)`). Under `GATE_SET` the graph decomposes it to one `Toffoli` (`mcx_to_cnot_or_toffoli`), so every count of §9.24 holds; without `Toffoli` in the gate set, to `TemporaryAND`, `CNOT`, `Adjoint(TemporaryAND)` on the work wire (`decompose_mcx_two_controls_elbows`), for which a bare `Toffoli` or `CSWAP` has no decomposition path under capture (L-1: `_toffoli_elbow` allocates). `qp.analyze` counts the rule's conditional control flips as taken: four `PauliX` per gate, an upper bound. The reflections' `MultiControlledX` gets one lent zeroed wire beyond its pool work, so its core is Toffoli-free in the same way (§9.6).
+- **Toffolis with a zeroed work wire.** Every `Toffoli` and `CSWAP` that a dfthc rule emits is `toffoli` or `cswap` of `dfthc.ops._gates`: a two-control `MultiControlledX` with one explicit zeroed work wire (`CSWAP` as `CNOT(b, a)`, that gate, `CNOT(b, a)`). `GATE_SET` has no `Toffoli` (§7.3), so the graph decomposes it to `TemporaryAND`, `CNOT`, `Adjoint(TemporaryAND)` on the work wire (`decompose_mcx_two_controls_elbows`): one Toffoli of $T$ and one measured uncompute of $A$, every $T$ of §9.24 unchanged. A bare `Toffoli` or `CSWAP` has no decomposition path under capture (L-1: `_toffoli_elbow` allocates). `qp.analyze` counts the rule's conditional control flips as taken: four `PauliX` per gate, an upper bound. The reflections' `MultiControlledX` gets one lent zeroed wire beyond its pool work, so its core is Toffoli-free in the same way (§9.6).
 - **Defaults for missing rows.** If an operator's table has no Pre or Post row, it acts unitarily on all inputs as stated under Action, and its `work` wires are $\lvert 0\rangle$ before and after. If it has no Compilable row, it takes no compilable arguments, and its sizes follow from its wire lengths.
 - **Costs.** Each "Cost" row gives the operator's Toffoli count $T$ and mid-circuit measurement count $M$ as an exact closed form or recurrence in its parameters (§9.24), followed by its value at FeMoco-54. `dfthc.costs` implements exactly these formulas, and T4 asserts them. §13.1 compares totals.
 
@@ -924,9 +924,9 @@ Since Task 6.2 the reflections are no dfthc operators: the helpers `ref_t2` and 
 | --- | --- |
 | Action | $2\Pi - I$ for the basis-state projector $\Pi = \lvert s\rangle\langle s\rvert$ of a pattern $s$ on $n_w$ wires, exact including the global sign; controlled, $\lvert 0\rangle\langle 0\rvert \otimes I + \lvert 1\rangle\langle 1\rvert \otimes (2\Pi - I)$ |
 | Construction | The last pattern wire is the target: `X` on it if its pattern value is 0, `H`, `MultiControlledX` with the other pattern wires as controls (their pattern values as static control values) and $\max(c - 2, 0)$ zeroed work wires for $c$ controls (L-14), plus, for $c \ge 2$, the caller's `extra_work` (the walk lends the last `angles` wire), `H`, the `X` again: $I - 2\Pi$; then `GlobalPhase(π)`. For $n_w = 1$ the multi-controlled Z is a `Z` (PennyLane rejects a one-wire `MultiControlledX`). Controlled: the control is one more control of value 1 ($I - 2\lvert 1\rangle\langle 1\rvert \otimes \Pi$), then `Z` on the control. Generic `qp.ctrl` of the reflection would need `C(GlobalPhase)`, which has no path (L-29); nothing adjoints a reflection (both forms are self-inverse). |
-| Cost | $T = \max(n_w - 2, 0)$, controlled $n_w - 1$: one `Toffoli` and a `TemporaryAND` ladder with measured uncomputes; $M = 0$ (`dfthc.costs.reflection`). |
+| Cost | $T = \max(n_w - 2, 0)$, controlled $n_w - 1$: all `TemporaryAND` with measured uncomputes ($A = T$; the core with the lent wire); $M = 0$ (`dfthc.costs.reflection`). |
 
-**The core `Toffoli` and the lent wire** (resolved 2026-11-18). PennyLane's `decompose_mcx_many_workers` rule uses $c - 2$ work wires for its `TemporaryAND` ladder and passes the rest to its middle two-control `MultiControlledX`; with $c - 2$ wires that core is a `Toffoli` with no Toffoli-free path, with one more zeroed wire it can use the elbow rule (§9.0). The walk's pool, $w_x + b_{k1} + w_b + b_{k2}$ (§10.1), is sized by the controlled `ref_ab`'s $c - 2$, so the extra wire is lent instead (`dfthc.ops.walk.LENT_TO_REFLECTIONS`): the last `angles` wire, which is $\lvert 0\rangle$ at both reflections in the walk, the controlled walk and `ControlledWalkPower` (`AngleErase` resets every angle wire at the end of each select, the unprepares from outcomes return the junk wires they borrow in $\lvert 0\rangle$, and the next load is in the next select). Under `GATE_SET` the counts are unchanged; without `Toffoli`, the H2 walk compiles to 0 `Toffoli`, 158 `TemporaryAND` (controlled 160), with no extra qubit.
+**The core `Toffoli` and the lent wire** (resolved 2026-11-18). PennyLane's `decompose_mcx_many_workers` rule uses $c - 2$ work wires for its `TemporaryAND` ladder and passes the rest to its middle two-control `MultiControlledX`; with $c - 2$ wires that core is a `Toffoli` with no Toffoli-free path, with one more zeroed wire it can use the elbow rule (§9.0). The walk's pool, $w_x + b_{k1} + w_b + b_{k2}$ (§10.1), is sized by the controlled `ref_ab`'s $c - 2$, so the extra wire is lent instead (`dfthc.ops.walk.LENT_TO_REFLECTIONS`): the last `angles` wire, which is $\lvert 0\rangle$ at both reflections in the walk, the controlled walk and `ControlledWalkPower` (`AngleErase` resets every angle wire at the end of each select, the unprepares from outcomes return the junk wires they borrow in $\lvert 0\rangle$, and the next load is in the next select). With `Toffoli` in the gate set the counts were unchanged; without it (§7.3, since 2026-11-18), the H2 walk compiles to 0 `Toffoli`, 158 `TemporaryAND` (controlled 160), with no extra qubit. A reflection with at least two controls requires the lent wire (`ValueError` otherwise).
 
 ### 9.7 `OuterPrepare` (steps 1–4) and `OuterUnprepare` (steps 24–27)
 
@@ -1072,7 +1072,7 @@ Plain functions of `dfthc.ops.reflections` on §9.6's construction, called in th
 | --- | --- |
 | Base rule | `DFTHCBlockEncoding`, then `ref_ab` |
 | Control | `qp.ctrl(DFTHCWalk(...), control)` with the pinned `C(DFTHCWalk)` rule (Task 6.3): the block encoding's sequence with `ref_t2` controlled, then `ref_ab` with the control; one control wire; a control value 0 adds `X` on the control before and after, conditioned on the value (§7.4 rule 6) |
-| Cost | $T = T_{\mathrm{BE}} + T_{\mathrm{ref\_ab}}$, $M = M_{\mathrm{BE}}$; controlled $T + 2$. At FeMoco-54: $T = 9{,}790$ (controlled 9,792) and $M = 2418$ explicit erase measurements. The walk also has $A = 8{,}672$ measured AND uncomputes (controlled 8,674), so it makes $M + A = 11{,}090$ physical measurements (controlled 11,092; §9.24). |
+| Cost | $T = T_{\mathrm{BE}} + T_{\mathrm{ref\_ab}}$, $M = M_{\mathrm{BE}}$; controlled $T + 2$. At FeMoco-54: $T = 9{,}790$ (controlled 9,792) and $M = 2418$ explicit erase measurements. The walk also has $A = T = 9{,}790$ measured AND uncomputes (controlled 9,792), so it makes $M + A = 12{,}208$ physical measurements (controlled 12,210; §9.24). |
 
 ### 9.23 `ControlledWalkPower`
 
@@ -1085,7 +1085,7 @@ Plain functions of `dfthc.ops.reflections` on §9.6's construction, called in th
 
 ### 9.24 Exact cost formulas
 
-Every formula below is implemented verbatim in `dfthc.costs` and asserted by T4. $T$ counts `Toffoli` plus `TemporaryAND`. $M$ counts `MidCircuitMeasure`, the explicit erase measurements. Measured AND uncomputes appear as `Adjoint(TemporaryAND)`, a gate-set primitive, and contribute to neither $T$ nor $M$. Their count $A$ is given at the end of this section. Each is one physical measurement on hardware, so a walk makes $M + A$ physical measurements.
+Every formula below is implemented verbatim in `dfthc.costs` and asserted by T4. $T$ counts `Toffoli` plus `TemporaryAND` (under `GATE_SET` only `TemporaryAND`, §7.3). $M$ counts `MidCircuitMeasure`, the explicit erase measurements. Measured AND uncomputes appear as `Adjoint(TemporaryAND)`, a gate-set primitive, and contribute to neither $T$ nor $M$. Their count $A$ is given at the end of this section. Each is one physical measurement on hardware, so a walk makes $M + A$ physical measurements.
 
 **PennyLane primitive costs.** Probed on 2026-11-11 with `qp.analyze` under the gate set of §7.3, at the sizes listed. A change in any of these breaks T4, which is intended: the formulas then need updating.
 
@@ -1096,8 +1096,8 @@ Every formula below is implemented verbatim in `dfthc.costs` and asserted by T4.
 | adjoint of `LeftQuantumComparator` | $0$ | measured uncompute ($n$ `Adjoint(TemporaryAND)`) |
 | `LeftClassicalComparator`, $n$ bits, `"<"` | $n - 1$ | all `TemporaryAND`; independent of the value; work $\ge n-1$, left dirty; $n = 3, 5, 7$ |
 | adjoint of `LeftClassicalComparator` | $0$ | measured uncompute ($n - 1$ `Adjoint(TemporaryAND)`) |
-| `MultiControlledX` with $k \ge 2$ controls and $k - 2$ zeroed work wires | $k - 1$ | one `Toffoli` plus $k - 2$ `TemporaryAND`s with measured uncompute; $k = 2, 3, 4, 5, 8, 12$ |
-| `CSWAP` | $1$ | one `Toffoli` |
+| `MultiControlledX` with $k \ge 2$ controls and $k - 1$ zeroed work wires | $k - 1$ | $k - 1$ `TemporaryAND`s with measured uncompute, no `Toffoli` (with $k - 2$ work wires the core is a `Toffoli`, which has no path under `GATE_SET`); $k = 2, 3, 4, 5, 8, 12$ |
+| `CSWAP` with one zeroed work wire (`dfthc.ops._gates.cswap`) | $1$ | one `TemporaryAND` with measured uncompute |
 | `TemporaryAND`; `Adjoint(TemporaryAND)` | $1$; $0$ | |
 
 **Exact unary iteration** (the `dfthc.ops.unary` construction of §9.3). Over the range $[lo, hi)$ of an $n$-bit register, with $c = 1$ if the root carries a control and $c = 0$ otherwise:
@@ -1153,11 +1153,11 @@ The read selects and erase ranges are instantiated as in §9.3–9.5:
 
 The QPE correction term counts every conditional at its maximum branch. With the branch hints of §7.6 its expected value is half of it.
 
-**Measured AND uncomputes.** Every `TemporaryAND` in a walk is uncomputed inside the same walk by one `Adjoint(TemporaryAND)`. Comparator work wires stay dirty only from a prepare to its unprepare. So $A$ is $T$ minus the plain `Toffoli`s: the alias and QROAM swap-network `CSWAP`s, the `SpinSwap`s, the `SpinMux` Toffolis, one per reflection `MultiControlledX`, and three per `MajoranaGate`.
+**Measured AND uncomputes.** Every `TemporaryAND` in a walk is uncomputed inside the same walk by one `Adjoint(TemporaryAND)`. Comparator work wires stay dirty only from a prepare to its unprepare. `GATE_SET` has no `Toffoli` (§7.3): the Toffolis that were plain `Toffoli` gates before 2026-11-18 (the alias and QROAM swap-network `CSWAP`s, the `SpinSwap`s, the `SpinMux` Toffolis, one per reflection `MultiControlledX`, and three per `MajoranaGate`, $2w_x + 4w_b + (K_1 - 1)d_1 + 2(K_2 - 1)d_2 + 4N + 12$ per walk) are each a `TemporaryAND` with its measured uncompute on a zeroed work wire (§9.0). So
 
-$$T_{\mathrm{Toffoli}} = 2w_x + 4w_b + (K_1 - 1)d_1 + 2(K_2 - 1)d_2 + 4N + 12, \qquad A = T - T_{\mathrm{Toffoli}} .$$
+$$A = T$$
 
-The controlled walk has the same $T_{\mathrm{Toffoli}}$, because each of its two extra controls adds a `TemporaryAND`. T4 asserts $A$ as the `Adjoint(TemporaryAND)` count.
+per walk and per controlled walk, and per block $A = T$ except where a prepare leaves comparator ANDs for its unprepare. T4 asserts $A$ as the `Adjoint(TemporaryAND)` count and that no `Toffoli` remains.
 
 **Evaluation at FeMoco-54** (`FEMOCO54`, $w_r = 4$):
 
@@ -1175,9 +1175,8 @@ The controlled walk has the same $T_{\mathrm{Toffoli}}$, because each of its two
 | `ref_t2`; `ref_ab` | 20; 44 |
 | Block encoding; walk; controlled walk | 9,746; 9,790; 9,792 |
 | $M$ per walk, explicit erase measurements ($96 + 2\cdot 416 + 2\cdot 745$) | 2,418 |
-| $T_{\mathrm{Toffoli}}$ per walk ($18 + 20 + 72 + 780 + 216 + 12$) | 1,118 |
-| $A$ per walk; controlled walk | 8,672; 8,674 |
-| Physical measurements $M + A$ per walk; controlled walk | 11,090; 11,092 |
+| $A$ per walk; controlled walk ($A = T$) | 9,790; 9,792 |
+| Physical measurements $M + A$ per walk; controlled walk | 12,208; 12,210 |
 
 ## 10. Register layout and qubit budget
 
@@ -1262,6 +1261,7 @@ The QPE program compiles at the `H2_STO3G_TEST` and `H2_631G_TEST` presets for $
 - SELECT is a zero-controlled `Z` plus a one-controlled `X`.
 - The walk is $W = \mathrm{REF}_{\mathrm{anc}}\,\mathrm{PREP}^\dagger\,\mathrm{SEL}\,\mathrm{PREP}$, with eigenphases $\pm\pi/4$ and $\pm 3\pi/4$.
 - Its controlled form is `qp.ctrl(ToyWalk(...), control)` with the pinned `C(ToyWalk)` rule (§7.4 rule 6), which `ToyControlledWalkPower` loops over. It controls only the toy's two reflections, $\mathrm{REF}_{\mathrm{anc}}$ and SELECT (itself a reflection: a Hermitian unitary): $C(W) = C(\mathrm{REF}_{\mathrm{anc}})\,\mathrm{PREP}^\dagger\,C(\mathrm{SEL})\,\mathrm{PREP}$, as the `C(DFTHCWalk)` rule controls `ref_ab` and `ref_t2`. Controlling $\mathrm{REF}_{\mathrm{anc}}$ alone would leave $\mathrm{PREP}^\dagger\,\mathrm{SEL}\,\mathrm{PREP} \ne I$ on the control's $\lvert 0\rangle$: the toy walk has one reflection outside $U = \mathrm{PREP}$, the DFTHC walk two.
+- One more wire, `work` (zeroed, returned zeroed), is the zeroed work wire of the controlled SELECT's two Toffolis (§9.0; `GATE_SET` has no `Toffoli`), as the DFTHC walk's `work` group serves `C(DFTHCWalk)`: $T = A = 2$ per controlled walk. It is not a scratch group, so the corrections still take $2t - 1$ spare wires and the toy QPE program has $3t + 3$ wires.
 
 With $t = 3$ and input $\lvert 0\rangle$, QPE returns $\varphi \in \{1/8, 7/8\}$ with total probability $\cos^2(\pi/8)$ and $\varphi \in \{3/8, 5/8\}$ with $\sin^2(\pi/8)$. Both tests below pass `earlier_bits` with shape $(t,)$ to every round, so they cover round $j = t-1$ with no bit set as well as rounds with set bits. Two tests check the distribution:
 - **Exact distribution:** the sparse simulator branches on the control measurements and forces erasure-type measurements (§12.3).
@@ -1487,7 +1487,7 @@ A row's reason codes are the causes with a nonzero contribution to its delta, ea
 "Canary" names the tests in `tests/canary/` that pin the current behaviour: one per claim. Canaries marked "(subprocess)" run in a separate Python process, because the behaviour they pin can abort the process or depends on import-time state. Sources were checked on 2026-11-11 against PennyLane `0.46.0.dev151` and Catalyst `0.16.0.dev140`.
 
 1. **L-1: Rules that allocate are excluded.** Rules with `work_wires=` in their resources are excluded, even when pinned ([catalyst#3243](https://github.com/PennyLaneAI/catalyst/pull/3243)). Built-in examples are `_toffoli_elbow`, the MCX `*_worker(s)` rules and the `_ppm` rules.
-   - *Mitigation:* explicit ancilla arguments (§7.4, rule 1). Every dfthc `Toffoli` and `CSWAP` is a two-control `MultiControlledX` with an explicit zeroed work wire (§9.0), whose elbow rule replaces `_toffoli_elbow` when `Toffoli` is left out of the gate set; the reflections get one lent zeroed wire for the same purpose (§9.6). A bare `Toffoli` or `CSWAP` has no decomposition path then (the solver failure reads "the rules file could not be parsed", L-18).
+   - *Mitigation:* explicit ancilla arguments (§7.4, rule 1). Every dfthc `Toffoli` and `CSWAP` is a two-control `MultiControlledX` with an explicit zeroed work wire (§9.0), whose elbow rule replaces `_toffoli_elbow` because `Toffoli` is not in the gate set (§7.3); the reflections get one lent zeroed wire for the same purpose (§9.6). A bare `Toffoli` or `CSWAP` has no decomposition path (the solver failure reads "the rules file could not be parsed", L-18).
    - *Canary:* `test_allocating_rule_is_excluded`.
 2. **L-2: Measurement rules are skipped inside adjoint or control regions.** Rules that declare measurements are skipped when they would be wrapped in such a region, on both the Catalyst side and the PennyLane side ([pennylane#9629](https://github.com/PennyLaneAI/pennylane/pull/9629)). Explicit `Adjoint(Op)` rules taking `base`, and plain explicit `C(Op)` rules, are kept. `C(Adjoint(Op))` skips the measuring adjoint rule; the solver then controls the unitary inverse of `Op`'s base rule if one exists, and has no path otherwise (observed 2026-11-11).
    - *Mitigation:* §7.4, rules 5 and 6. It is structural: the only modified composite a program requests is the pinned `C(DFTHCWalk)` (rule 6), whose rule controls only the reflections. Its generic controlled candidate requests `C(DFTHCBlockEncoding)`, whose measuring rule is skipped with the expected "Skipped ..." warning, so no measuring rule is used under control; elsewhere the warning appears only in tests that wrap an erase on purpose.

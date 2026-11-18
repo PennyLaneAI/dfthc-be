@@ -3,7 +3,8 @@ block encoding's, the walk's and the controlled walk's) gets exactly its require
 a prefix of the pool, and neither the pool nor the comparators' dirty work registers appear where
 they do not belong; the junk registers and the unprepares' extra_onehot wires are the start of the
 angle wires; WalkLayout.work_size is the largest need, the controlled ref_ab's. A reflection
-helper's call is the MultiControlledX it emits, whose work_wires are its work."""
+helper's call is the MultiControlledX it emits, whose work_wires are its work and then the one
+zeroed wire the walk lends it, the last angle wire (spec 9.6)."""
 
 import functools
 import inspect
@@ -96,6 +97,9 @@ def check_call(op, layout) -> int:
     pool = set(layout.work)
     registers = {"work" if name == "work_wires" else name: list(getattr(op, name))
                  for name in op.wire_argnames}
+    if op.name == "MultiControlledX":
+        assert registers["work"][-1:] == list(layout.angles)[-1:], op.name
+        registers["work"] = registers["work"][:-1]
     assert set(registers) == set(sizes), op.name
     for name, wires in registers.items():
         if name == "phase_grad" and op.name in AT_LEAST:

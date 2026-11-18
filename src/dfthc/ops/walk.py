@@ -364,15 +364,15 @@ class DFTHCBlockEncoding(Operator2):
 
     **Cost.** :func:`dfthc.costs.block_encoding` (uncontrolled):
     :math:`T = T_{out} + T_{out}^\dagger + 2(T_{in} + T_{sel} + T_{in}^\dagger) + T_{ref\_t2}`,
-    :math:`M = K_1 d_1 + 2(K_2 d_2 + (N - 1)(b_{rot} - 1) + 3)`; ``A = T - (T_Toffoli - 1)`` with
-    ``T_Toffoli`` = :func:`dfthc.costs.toffoli_only` (the walk's plain Toffolis less ``ref_ab``'s
-    one). Of ``M``, :math:`(K_1 - 1) d_1 + 2 (K_2 - 1) d_2` are this rule's own junk
+    :math:`M = K_1 d_1 + 2(K_2 d_2 + (N - 1)(b_{rot} - 1) + 3)`; ``A = T`` (every Toffoli is a
+    ``TemporaryAND`` uncomputed by measurement). Of ``M``,
+    :math:`(K_1 - 1) d_1 + 2 (K_2 - 1) d_2` are this rule's own junk
     measurements (:func:`dfthc.costs.junk_measurements`) and the unprepares from outcomes
     measure the targets, :math:`d_1 + 2 d_2`. At FeMoco-54:
-    :math:`278 + 2 \cdot 4724 + 20 = 9746`, ``M = 2418`` (852 of them junk), ``A = 8629``.
+    :math:`278 + 2 \cdot 4724 + 20 = 9746`, ``M = 2418`` (852 of them junk), ``A = 9746``.
     Controlled (the controlled walk's first 27 steps): ``T + 1`` (the controlled reflection's
-    extra ``TemporaryAND``), the same ``M``, ``A = T - (T_Toffoli - 1)``; at FeMoco-54
-    ``T = 9747``, ``A = 8630``. ``CNOT`` and ``PauliX`` counts are upper bounds (spec 7.6).
+    extra ``TemporaryAND``), the same ``M``, ``A = T``; at FeMoco-54 ``T = A = 9747``.
+    ``CNOT`` and ``PauliX`` counts are upper bounds (spec 7.6).
 
     **Paper and dfthcbe.** Steps 1 to 27 of spec 3.5: the sum-of-squares block encoding
     :math:`U^\dagger\,\mathrm{REF}_{T_2}\,U` (PRX 15, 041016; arXiv:2502.15882v1 Eq. (11) and
@@ -514,11 +514,11 @@ class DFTHCWalk(Operator2):
 
     **Cost.** :func:`dfthc.costs.walk` (uncontrolled): :math:`T = T_{BE} + T_{ref\_ab}`,
     :math:`M = M_{BE}`; ``A`` = :func:`dfthc.costs.measured_and_uncomputes` (uncontrolled),
-    ``T - T_Toffoli``. At FeMoco-54: :math:`9746 + 44 = 9790`, ``M = 2418``, ``A = 8672``, so
-    ``M + A = 11090`` physical measurements (spec 9.24). Controlled: :func:`dfthc.costs.walk`
+    ``A = T``. At FeMoco-54: :math:`9746 + 44 = 9790`, ``M = 2418``, ``A = 9790``, so
+    ``M + A = 12208`` physical measurements (spec 9.24). Controlled: :func:`dfthc.costs.walk`
     (controlled), ``T + 2`` (one extra ``TemporaryAND`` per controlled reflection), the same
     ``M``; ``A`` = :func:`dfthc.costs.measured_and_uncomputes` (controlled). At FeMoco-54:
-    ``T = 9792``, ``M = 2418``, ``A = 8674``, ``M + A = 11092``. ``CNOT`` and ``PauliX`` counts
+    ``T = 9792``, ``M = 2418``, ``A = 9792``, ``M + A = 12210``. ``CNOT`` and ``PauliX`` counts
     are upper bounds (spec 7.6).
 
     **Paper and dfthcbe.** Steps 1 to 28 of spec 3.5: the walk

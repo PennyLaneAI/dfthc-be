@@ -32,7 +32,7 @@ from dfthc.testing.toy_walk import (
 )
 
 T = 3
-NUM_WIRES = 3 * T + 2
+NUM_WIRES = 3 * T + 3
 COS2, SIN2 = np.cos(np.pi / 8) ** 2, np.sin(np.pi / 8) ** 2
 EXACT = {1 / 8: COS2 / 2, 3 / 8: SIN2 / 2, 5 / 8: SIN2 / 2, 7 / 8: COS2 / 2}
 """Spec 11.4: phi in {1/8, 7/8} with total probability cos^2(pi/8), {3/8, 5/8} with sin^2(pi/8);
@@ -74,9 +74,10 @@ def choi_matrix(build, n: int) -> np.ndarray:
 
 @pytest.mark.compiled
 def test_toy_walk_acts_as_the_reference():
-    """T3: the compiled ToyWalk's whole matrix, global phase included, is spec 11.4's W."""
-    matrix = choi_matrix(lambda w: ToyWalk(system=w[:1], ancilla=w[1:]), 2)
-    assert np.allclose(matrix, toy_walk_matrix(), rtol=0, atol=1e-12)
+    """T3: the compiled ToyWalk's whole matrix, global phase included, is spec 11.4's W on
+    (system, ancilla) and the identity on work."""
+    matrix = choi_matrix(lambda w: ToyWalk(system=w[:1], ancilla=w[1:2], work=w[2:]), 3)
+    assert np.allclose(matrix, np.kron(toy_walk_matrix(), np.eye(2)), rtol=0, atol=1e-12)
 
 
 @pytest.mark.compiled
@@ -86,15 +87,18 @@ def test_controlled_toy_walks_in_three_control_states(power, control_value):
     ToyControlledWalkPower(3) is |0><0| (x) I + |1><1| (x) W^p exactly, so control |0> keeps the
     input, control |1> applies W^p and control |+> gives their superposition with the right
     relative phase (spec 3.3: a wrong global phase of a controlled reflection shows only there);
-    with control value 0 the two control states swap roles."""
+    with control value 0 the two control states swap roles. The work wire starts and ends in
+    |0>."""
     def build(w):
         if power == 1:
-            qp.ctrl(ToyWalk(system=w[1:2], ancilla=w[2:]), control=w[:1],
+            qp.ctrl(ToyWalk(system=w[1:2], ancilla=w[2:3], work=w[3:]), control=w[:1],
                     control_values=[control_value])
         else:
-            ToyControlledWalkPower(power, control=w[:1], system=w[1:2], ancilla=w[2:])
+            ToyControlledWalkPower(power, control=w[:1], system=w[1:2], ancilla=w[2:3],
+                                   work=w[3:])
 
-    matrix = choi_matrix(build, 3)
+    matrix = choi_matrix(build, 4)
+    clean = np.array([1, 0])
     walked = np.linalg.matrix_power(toy_walk_matrix(), power)
     if power == 1:
         assert np.allclose(controlled_toy_walk_matrix(), np.kron(np.diag([1, 0]), np.eye(4))
@@ -106,17 +110,17 @@ def test_controlled_toy_walks_in_three_control_states(power, control_value):
     expected = {"0": np.kron([1, 0], zero), "1": np.kron([0, 1], one),
                 "+": (np.kron([1, 0], zero) + np.kron([0, 1], one)) / np.sqrt(2)}
     for label, control in (("0", [1, 0]), ("1", [0, 1]), ("+", PLUS)):
-        out = matrix @ np.kron(control, psi)
-        assert np.allclose(out, expected[label], rtol=0, atol=1e-12), label
+        out = matrix @ np.kron(np.kron(control, psi), clean)
+        assert np.allclose(out, np.kron(expected[label], clean), rtol=0, atol=1e-12), label
 
 
 def toy_program(name, power=1, control_value=1):
     if name == "ToyWalk":
-        return lambda: ToyWalk(system=[0], ancilla=[1])
+        return lambda: ToyWalk(system=[0], ancilla=[1], work=[2])
     if name == "C(ToyWalk)":
-        return lambda: qp.ctrl(ToyWalk(system=[1], ancilla=[2]), control=[0],
+        return lambda: qp.ctrl(ToyWalk(system=[1], ancilla=[2], work=[3]), control=[0],
                                control_values=[control_value])
-    return lambda: ToyControlledWalkPower(power, control=[0], system=[1], ancilla=[2])
+    return lambda: ToyControlledWalkPower(power, control=[0], system=[1], ancilla=[2], work=[3])
 
 
 @pytest.mark.compiled
@@ -124,15 +128,17 @@ def toy_program(name, power=1, control_value=1):
                                              ("ToyControlledWalkPower", 1),
                                              ("ToyControlledWalkPower", 4)])
 def test_counts(name, power):
-    """T4: ToyWalk T = M = A = 0; qp.ctrl(ToyWalk) two plain Toffolis (T = 2, A = 0, M = 0);
-    the power p of it T = 2 p, all against toy_walk_cost and toy_walk_power_cost."""
-    resources = compiled_resources(toy_program(name, power), 2 if name == "ToyWalk" else 3)
+    """T4: ToyWalk T = M = A = 0; qp.ctrl(ToyWalk) two TemporaryAND with measured uncomputes
+    and no Toffoli (T = A = 2, M = 0); the power p of it T = A = 2 p, all against toy_walk_cost
+    and toy_walk_power_cost."""
+    resources = compiled_resources(toy_program(name, power), 3 if name == "ToyWalk" else 4)
     expected = (toy_walk_cost(False) if name == "ToyWalk" else toy_walk_cost(True)
                 if name == "C(ToyWalk)" else toy_walk_power_cost(power))
     assert (resources.toffoli, resources.measurements) == (expected.toffoli,
                                                            expected.measurements)
-    assert resources.counts.get("Toffoli", 0) == expected.toffoli
-    assert resources.measured_and_uncomputes == 0
+    assert resources.counts.get("Toffoli", 0) == 0
+    assert resources.counts.get("TemporaryAND", 0) == expected.toffoli
+    assert resources.measured_and_uncomputes == expected.toffoli
 
 
 @pytest.mark.compiled
@@ -144,7 +150,7 @@ def test_pinned_rules_are_chosen_and_nothing_survives_at_device_level(capfd):
 
     def program():
         toy_qpe(T)
-        ToyWalk(system=wires["system"], ancilla=wires["ancilla"])
+        ToyWalk(system=wires["system"], ancilla=wires["ancilla"], work=wires["work"])
 
     qp.analyze(verbose_program(program, NUM_WIRES), level="user")()
     captured = capfd.readouterr()
@@ -169,8 +175,8 @@ def test_rules_are_valid():
 
 
 @pytest.mark.parametrize(("build", "match"), [
-    (lambda: ToyWalk(system=[0, 1], ancilla=[2]), "'system' has 2 wires; expected 1"),
-    (lambda: ToyControlledWalkPower(0, control=[0], system=[1], ancilla=[2]),
+    (lambda: ToyWalk(system=[0, 1], ancilla=[2], work=[3]), "'system' has 2 wires; expected 1"),
+    (lambda: ToyControlledWalkPower(0, control=[0], system=[1], ancilla=[2], work=[3]),
      r"power must lie in \[1, None\], got 0"),
 ], ids=["system", "power"])
 def test_constructors_validate(build, match):
@@ -181,7 +187,7 @@ def test_constructors_validate(build, match):
 def test_controlled_rule_takes_one_control_wire():
     """The C(ToyWalk) rule raises for two control wires."""
     with qp.queuing.AnnotatedQueue():
-        op = qp.ctrl(ToyWalk(system=[2], ancilla=[3]), control=[0, 1])
+        op = qp.ctrl(ToyWalk(system=[2], ancilla=[3], work=[4]), control=[0, 1])
     with pytest.raises(ValueError, match=r"C\(ToyWalk\) takes one control wire; got 2"):
         _controlled_toy_walk(**op.arguments)
 
@@ -200,7 +206,7 @@ def test_exact_distribution_at_t_3():
     """Spec 11.4 on the tape path (strict sparse simulator, BranchPolicy on the control; the toy
     has no erase measurements, so the policy has no `otherwise` and any other measurement would
     raise): phi in {1/8, 7/8} with cos^2(pi/8) and {3/8, 5/8} with sin^2(pi/8), half each, and
-    nothing else. Every branch leaves the control and the spare wires in |0>, qpe_grad in
+    nothing else. Every branch leaves the control, the spare wires and work in |0>, qpe_grad in
     the gradient state and the toy wires in an eigenvector of W with eigenvalue e^{2 pi i phi}:
     the bits read the eigenphase of W itself (spec 11.1's convention), not of W^dagger."""
     ops = decompose_for_simulation(toy_qpe, T).operations
@@ -212,7 +218,7 @@ def test_exact_distribution_at_t_3():
     for branch in simulator.run_branches(ops):
         phi = phase_from_bits([branch.record[op] for op in measures])
         found[phi] = found.get(phi, 0.0) + branch.probability
-        state = branch.state.to_dense().reshape(2, 2**T, 2 ** (2 * T - 1), 4)
+        state = branch.state.to_dense().reshape(2, 2**T, 2 ** (2 * T), 4)
         toy = gradient.conj() @ state[0, :, 0, :]
         assert np.allclose(state[0, :, 0, :], np.outer(gradient, toy), rtol=0, atol=1e-12)
         assert np.isclose(np.linalg.norm(toy), 1, rtol=0, atol=1e-12)
@@ -258,8 +264,8 @@ def test_compiled_feed_forward_leaves_an_eigenvector(bits, monkeypatch):
     """The compiled program's feed-forward, which the exact test runs only on the tape path: under
     capture the driver sets earlier_bits with .at[j].set and each correction is a qp.cond on a
     traced bit. With the control's outcomes postselected to ``bits`` = m_2, m_1, m_0 (analytic
-    lightning.qubit, spec 12.2), the control and the spare wires end in |0>, qpe_grad in the
-    gradient state and the toy wires in an eigenvector of W with eigenvalue e^{2 pi i phi}.
+    lightning.qubit, spec 12.2), the control, the spare wires and work end in |0>, qpe_grad in
+    the gradient state and the toy wires in an eigenvector of W with eigenvalue e^{2 pi i phi}.
     phi = 3/8 fires all three corrections; phi = 1/8 fires m_2's alone, at widths 2 and 3. A bit
     stored at the wrong entry or never stored, or a correction of the wrong sign or width, leaves
     no such eigenvector; without this test only the sampled smoke test above sees the first."""
@@ -275,7 +281,7 @@ def test_compiled_feed_forward_leaves_an_eigenvector(bits, monkeypatch):
         return qp.state()
 
     state = np.asarray(circuit())
-    state = (state / np.linalg.norm(state)).reshape(2, 2**T, 2 ** (2 * T - 1), 4)
+    state = (state / np.linalg.norm(state)).reshape(2, 2**T, 2 ** (2 * T), 4)
     gradient = SparseSimulator(T).run([qp.PhaseGradientStatePrep(range(T))]).to_dense()
     toy = gradient.conj() @ state[0, :, 0, :]
     assert np.allclose(state[0, :, 0, :], np.outer(gradient, toy), rtol=0, atol=1e-12)
@@ -315,13 +321,14 @@ def test_earlier_bits_have_shape_t_in_every_round(mode, monkeypatch):
 
 @pytest.mark.compiled
 @pytest.mark.parametrize(("t", "toffoli", "measurements", "uncomputes"),
-                         [(1, 2, 1, 0), (2, 3 * 2 + 1, 2, 1), (3, 7 * 2 + 4, 3, 4)])
+                         [(1, 2, 1, 2), (2, 3 * 2 + 1, 2, 7), (3, 7 * 2 + 4, 3, 18)])
 def test_toy_qpe_counts(t, toffoli, measurements, uncomputes):
     """T4 of the QPE program on the toy walk, worst case (spec 9.24 with T_C(W) = 2, M_W = 0):
-    T = (2^t - 1) 2 + (t^3 - t)/6, M = t, and A = (t^3 - t)/6, the corrections' measured AND
-    uncomputes, every unhinted correction counted at its maximum branch."""
-    assert toffoli == toy_walk_power_cost(2**t - 1).toffoli + (t**3 - t) // 6
-    resources = compiled_resources(lambda: toy_qpe(t), 3 * t + 2)
+    T = (2^t - 1) 2 + (t^3 - t)/6, M = t, and A = T: the controlled walks' and the corrections'
+    ANDs are all uncomputed by measurement, every unhinted correction counted at its maximum
+    branch."""
+    assert toffoli == uncomputes == toy_walk_power_cost(2**t - 1).toffoli + (t**3 - t) // 6
+    resources = compiled_resources(lambda: toy_qpe(t), 3 * t + 3)
     assert (resources.toffoli, resources.measurements,
             resources.measured_and_uncomputes) == (toffoli, measurements, uncomputes)
 

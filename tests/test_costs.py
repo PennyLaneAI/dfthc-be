@@ -171,22 +171,19 @@ def test_totals():
     assert costs.block_encoding(P, True) == Cost(9747, 2418)
     assert costs.walk(P, False) == Cost(9790, 2418)
     assert costs.walk(P, True) == Cost(9792, 2418)
-    assert costs.toffoli_only(P) == 18 + 20 + 72 + 780 + 216 + 12 == 1118
-    assert costs.measured_and_uncomputes(P, False) == 8672
-    assert costs.measured_and_uncomputes(P, True) == 8674
-    assert costs.walk(P, False).measurements + costs.measured_and_uncomputes(P, False) == 11090
-    assert costs.walk(P, True).measurements + costs.measured_and_uncomputes(P, True) == 11092
-    # H2: T_Toffoli = 4 + 8 + 4 + 14 + 8 + 12; ODD: 6 + 8 + 6 + 20 + 12 + 12 (report)
+    # every Toffoli is a TemporaryAND with a measured uncompute: A = T
+    assert costs.measured_and_uncomputes(P, False) == 9790
+    assert costs.measured_and_uncomputes(P, True) == 9792
+    assert costs.walk(P, False).measurements + costs.measured_and_uncomputes(P, False) == 12208
+    assert costs.walk(P, True).measurements + costs.measured_and_uncomputes(P, True) == 12210
     assert costs.block_encoding(H2, False) == Cost(150, 48)
     assert costs.block_encoding(H2, True) == Cost(151, 48)
     assert (costs.walk(H2, False), costs.walk(H2, True)) == (Cost(158, 48), Cost(160, 48))
-    assert costs.toffoli_only(H2) == 4 + 8 + 4 + 14 + 8 + 12 == 50
-    assert [costs.measured_and_uncomputes(H2, c) for c in (False, True)] == [108, 110]
+    assert [costs.measured_and_uncomputes(H2, c) for c in (False, True)] == [158, 160]
     assert costs.block_encoding(ODD, False) == Cost(239, 74)
     assert costs.block_encoding(ODD, True) == Cost(240, 74)
     assert (costs.walk(ODD, False), costs.walk(ODD, True)) == (Cost(251, 74), Cost(253, 74))
-    assert costs.toffoli_only(ODD) == 6 + 8 + 6 + 20 + 12 + 12 == 64
-    assert [costs.measured_and_uncomputes(ODD, c) for c in (False, True)] == [187, 189]
+    assert [costs.measured_and_uncomputes(ODD, c) for c in (False, True)] == [251, 253]
 
 
 def test_application_rows():
@@ -251,7 +248,8 @@ def test_cheapest_block_bits_fit_the_erases_and_keep_every_reported_default():
 
 
 def test_cost_values_are_python_ints():
-    for value in dataclasses.astuple(costs.walk(P, True)) + (costs.toffoli_only(P),):
+    for value in dataclasses.astuple(costs.walk(P, True)) + (
+            costs.measured_and_uncomputes(P, True),):
         assert type(value) is int
 
 

@@ -158,10 +158,11 @@ class InnerSelect(Operator2):
 
     **Cost.** :func:`dfthc.costs.inner_select` for ``fixup_bits = w_b``:
     :math:`T = T_{tail} + T_{SF} + 2 + 2N + 4(b_{rot} - 1)(N - 1) + 5 + T_{angle\,erase}`,
-    :math:`M = (N - 1)(b_{rot} - 1) + 3`; ``A = T - (2N + 5)``, the plain ``Toffoli`` gates
-    being the two ``SpinMux`` Toffolis, the ``2N`` ``SpinSwap`` CSWAPs and three in the Majorana
-    gate. At FeMoco-54: :math:`61 + 291 + 2 + 108 + 2968 + 5 + 102 = 3537`, ``M = 745``,
-    ``A = 3424``. For another ``fixup_bits`` the erase's SF term is ``costs.phase_fixup`` over
+    :math:`M = (N - 1)(b_{rot} - 1) + 3`; ``A = T``, the two ``SpinMux`` Toffolis, the ``2N``
+    ``SpinSwap`` CSWAPs and the Majorana gate's three Toffolis included (each a ``TemporaryAND``
+    with a measured uncompute on its zeroed work wire). At FeMoco-54:
+    :math:`61 + 291 + 2 + 108 + 2968 + 5 + 102 = 3537`, ``M = 745``, ``A = 3537``. For another
+    ``fixup_bits`` the erase's SF term is ``costs.phase_fixup`` over
     ``AngleErase.sf_fixup_high_ranges``. ``CNOT`` and ``PauliX`` counts are upper bounds (the
     loads' reads, the erase's resets).
 
@@ -348,7 +349,7 @@ class InnerSelectDagger(Operator2):
     never adjointed or controlled itself (its rule measures; spec 7.4 rules 5 and 6).
 
     **Cost.** :func:`dfthc.costs.inner_select`, as for :class:`InnerSelect`: ``T`` and ``M``
-    unchanged, ``A = T - (2N + 5)``. At FeMoco-54: ``T = 3537``, ``M = 745``, ``A = 3424``.
+    unchanged, ``A = T``. At FeMoco-54: ``T = 3537``, ``M = 745``, ``A = 3537``.
 
     **Paper and dfthcbe.** :math:`\mathrm{SEL}^\dagger` of the second round of steps 5 to 22
     (spec 3.5); dfthcbe: ``InnerSelect(..., is_adjoint=True)``, ``InnerSelect.adjoint()``, the

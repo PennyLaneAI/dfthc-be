@@ -4,6 +4,7 @@ import pennylane as qp
 import pytest
 
 from dfthc.compile import compiled_resources
+from dfthc.ops._gates import cswap
 
 pytestmark = pytest.mark.compiled
 
@@ -62,16 +63,21 @@ def test_left_classical_comparator(n, value, adjoint):
 
 @pytest.mark.parametrize("k", [2, 3, 4, 5, 8, 12])
 def test_multicontrolled_x_with_zeroed_work(k):
+    """k controls and k - 1 zeroed work wires: a TemporaryAND ladder whose two-control core gets
+    the last work wire, so k - 1 TemporaryAND, each uncomputed by measurement, and no Toffoli
+    (GATE_SET has none; with k - 2 work wires the core is a Toffoli, which has no path)."""
     def qfunc():
-        qp.MultiControlledX(wires=_wires(0, k + 1), work_wires=_wires(k + 1, k - 2) or None,
+        qp.MultiControlledX(wires=_wires(0, k + 1), work_wires=_wires(k + 1, k - 1),
                             work_wire_type="zeroed")
 
-    resources = compiled_resources(qfunc, num_wires=2 * k + 1)
-    assert resources.counts.get("Toffoli", 0) == 1
-    assert (resources.toffoli, resources.measured_and_uncomputes) == (k - 1, k - 2)
+    resources = compiled_resources(qfunc, num_wires=2 * k + 2)
+    assert resources.counts.get("Toffoli", 0) == 0
+    assert (resources.toffoli, resources.measured_and_uncomputes) == (k - 1, k - 1)
 
 
-def test_cswap():
-    resources = compiled_resources(lambda: qp.CSWAP(wires=[0, 1, 2]), num_wires=3)
-    assert resources.counts.get("Toffoli", 0) == 1
-    assert resources.toffoli == 1
+def test_cswap_with_a_zeroed_work_wire():
+    """dfthc.ops._gates.cswap: CSWAP's identity around a two-control MultiControlledX with one
+    zeroed work wire, one TemporaryAND with a measured uncompute and no Toffoli."""
+    resources = compiled_resources(lambda: cswap(0, 1, 2, 3), num_wires=4)
+    assert resources.counts.get("Toffoli", 0) == 0
+    assert (resources.toffoli, resources.measured_and_uncomputes) == (1, 1)

@@ -75,8 +75,9 @@ class MajoranaGate(Operator2):
     conditionals): it is the :math:`\mathrm{Maj}^\dagger` of ``InnerSelectDagger`` (spec 9.18),
     with ``a`` and ``a^dag`` exchanged on the D1 and Q1 branches. Never controlled.
 
-    **Cost.** :func:`dfthc.costs.majorana_gate`: :math:`T = 5`, two ``TemporaryAND`` and three
-    ``Toffoli`` (``A = 2``); ``M = 0``. The adjoint costs the same.
+    **Cost.** :func:`dfthc.costs.majorana_gate`: :math:`T = 5`, five ``TemporaryAND`` (two
+    explicit, one per ``Toffoli``), each with a measured uncompute (``A = 5``); ``M = 0``. The
+    adjoint costs the same.
 
     **Paper and dfthcbe.** Step 15; the Majorana gate of the paper's Fig. 4 (PRX;
     arXiv:2502.15882v1 App. B.6), which applies the generators of its Eqs. (29) and (30) (v1

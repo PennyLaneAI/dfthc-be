@@ -2,9 +2,11 @@
 simulator, at the shapes of the two test presets, each run under the watchdog with a 4 GB cap.
 
 The stand-in (``spikes/k1_whole_program.py``, Task 0.9) has the walk's structure and sizes, so it
-is the Phase 1 proxy; Task 3.5 measures again on the real walk. Every erase measurement is forced
-to 0 and strict mode checks the uniform outcomes. ``python tests/sim/test_benchmark.py SHAPE
-INPUT...`` runs one measurement and prints its JSON result on a line prefixed ``RESULT``.
+is the Phase 1 proxy; Task 3.5 measures again on the real walk. It predates the gate set without
+``Toffoli`` (bare ``Toffoli`` and ``CSWAP`` gates), so it decomposes to ``TOFFOLI_GATE_SET``.
+Every erase measurement is forced to 0 and strict mode checks the uniform outcomes.
+``python tests/sim/test_benchmark.py SHAPE INPUT...`` runs one measurement and prints its JSON
+result on a line prefixed ``RESULT``.
 """
 
 import json
@@ -40,8 +42,9 @@ def simulate(shape_name: str, inputs) -> dict:
     sys.path.insert(0, str(REPO / "spikes"))
     import k1_whole_program as k1
 
+    from dfthc.testing.canary import TOFFOLI_GATE_SET
     from dfthc.testing.sparse_sim import ForcedPolicy, SparseSimulator, SparseState
-    from dfthc.testing.tape import decompose_for_simulation
+    from dfthc.testing.tape import decompose_to
 
     shape = k1.Shape(**SHAPES[shape_name])
     layout, tables = k1.Layout(shape), k1.random_tables(shape)
@@ -52,7 +55,7 @@ def simulate(shape_name: str, inputs) -> dict:
         k1.ProtoWalk(fields, tables, list(range(layout.num_wires)))
 
     start = time.perf_counter()
-    operations = decompose_for_simulation(walk).operations
+    operations = decompose_to(TOFFOLI_GATE_SET, walk).operations
     decompose_s = time.perf_counter() - start
     measurements = sum(op.name == "MidMeasure" for op in operations)
     postselected = sum(op.name == "MidMeasure" and op.postselect is not None for op in operations)

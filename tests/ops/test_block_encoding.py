@@ -248,13 +248,15 @@ def test_junk_is_measured_right_after_each_prepare(name):
 
 
 def assert_counts(resources, p, controlled):
-    """T4 and the T6 signature: T and M from costs.block_encoding; the plain Toffolis are the
-    walk's T_Toffoli less ref_ab's one, so A = T - (T_Toffoli - 1) (spec 9.24)."""
+    """T4 and the T6 signature: T and M from costs.block_encoding; every Toffoli is a
+    TemporaryAND (no Toffoli) and every AND is uncomputed by measurement inside the block
+    encoding, so A = T (spec 9.24)."""
     expected = costs.block_encoding(p, controlled)
     assert (resources.toffoli, resources.measurements) == (expected.toffoli,
                                                            expected.measurements)
-    assert resources.counts["Toffoli"] == costs.toffoli_only(p) - 1
-    assert resources.measured_and_uncomputes == resources.toffoli - (costs.toffoli_only(p) - 1)
+    assert (resources.counts.get("Toffoli", 0), resources.counts["TemporaryAND"]) == (
+        0, expected.toffoli)
+    assert resources.measured_and_uncomputes == expected.toffoli
 
 
 def compile_class(c, kind):
@@ -282,7 +284,7 @@ def test_counts(name, kind):
 @pytest.mark.slow
 @pytest.mark.parametrize("kind", KINDS)
 def test_counts_at_mid_naphthalene(kind):
-    """T4 at MID_NAPHTHALENE (nightly tier): T = 1,871 / 1,872, M = 484, A = 1,637 / 1,638."""
+    """T4 at MID_NAPHTHALENE (nightly tier): T = A = 1,871 / 1,872, M = 484."""
     c = walk_sim.WalkCase.build(MID_NAPHTHALENE, load_factors("naphthalene"))
     assert_counts(compile_class(c, kind), c.params, kind == "controlled")
 
@@ -290,8 +292,8 @@ def test_counts_at_mid_naphthalene(kind):
 def test_femoco_counts_on_the_closed_forms():
     """FeMoco-54 (spec 9.24), without compiling: T = 278 + 2 * 4,724 + 20 = 9,746 (controlled
     9,747), M = 24 + 2 * (26 + 745) + 852 = 2,418, the 852 junk measurements (72 + 2 * 390) in the
-    rule itself (spec 16, Q-1 variant (b)), as spec 9.24's 96 + 2 * (416 + 745); A = T - (1,118 -
-    1) = 8,629 (8,630); the groups are 71, 65, 746, 108, 15 and 44 wires, 1,049 in all."""
+    rule itself (spec 16, Q-1 variant (b)), as spec 9.24's 96 + 2 * (416 + 745); A = T; the
+    groups are 71, 65, 746, 108, 15 and 44 wires, 1,049 in all."""
     p = FEMOCO54
     outer = costs.outer_prepare(p) + costs.outer_unprepare_from_outcomes(p)
     inner = (costs.inner_prepare(p) + costs.inner_select(p)
@@ -304,9 +306,6 @@ def test_femoco_counts_on_the_closed_forms():
             outer + 2 * inner + junk + costs.ref_t2(p, controlled))
     assert costs.block_encoding(p, False) == costs.Cost(9746, 2418)
     assert costs.block_encoding(p, True) == costs.Cost(9747, 2418)
-    assert costs.toffoli_only(p) == 1118
-    assert [costs.block_encoding(p, c).toffoli - (costs.toffoli_only(p) - 1)
-            for c in (False, True)] == [8629, 8630]
     sizes = DFTHCBlockEncoding.required_wires(p.as_compilable(), ())
     assert sizes == {"outer": 71, "inner": 65, "select": 746, "system": 108, "phase_grad": 15,
                      "work": 44}

@@ -10,7 +10,7 @@ _COUNT_RULE_WARNINGS = """
 from catalyst.decomposition.rule_lowering_warning import RuleLoweringWarning
 
 @qp.qjit(capture=True, enable_aot_compilation=False)
-@qp.decompose(gate_set=GATE_SET)
+@qp.decompose(gate_set=TOFFOLI_GATE_SET)
 @qp.qnode(qp.device("null.qubit", wires=3))
 def circuit():
     qp.Toffoli([0, 1, 2])
@@ -50,7 +50,7 @@ def test_unreachable_op_reports_missing_rule():
     result = run_snippet(
         """
         @qp.qjit(capture=True, enable_aot_compilation=False)
-        @qp.decompose(gate_set=GATE_SET)
+        @qp.decompose(gate_set=TOFFOLI_GATE_SET)
         @qp.qnode(qp.device("null.qubit", wires=4))
         def circuit():
             qp.ctrl(qp.adjoint(qp.TemporaryAND([0, 1, 2])), control=3)

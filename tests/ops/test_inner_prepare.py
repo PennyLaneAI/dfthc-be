@@ -231,9 +231,10 @@ def test_every_basis_input_gets_the_sign_of_its_selected_weight(name):
 
 
 def expected_and_uncomputes(p, unprepare):
-    """A: every TemporaryAND of the pair is uncomputed by measurement inside it (spec 9.24). The
-    prepare uncomputes the uniform preparation's 2(n - 1) + 2(s_u - 1) ANDs and the read's
-    select ANDs N; the unprepare the comparator's b_k2, the erase fix-up's T and the adjoint
+    """A: every TemporaryAND of the pair is uncomputed by measurement inside it (spec 9.24),
+    every Toffoli a TemporaryAND. The prepare uncomputes the uniform preparation's
+    2(n - 1) + 2(s_u - 1) ANDs, the read's T (its select ANDs and swaps) and the swaps' w_b; the
+    unprepare the swaps' w_b, the comparator's b_k2, the erase fix-up's T and the adjoint
     uniform preparation's 3(n - 1) + 2(s_u - 1) (n = lg(l_b); none of the uniform terms if
     l_b = 1)."""
     n, s = lg(odd_part(p.B + 1)), p.s_u
@@ -242,9 +243,9 @@ def expected_and_uncomputes(p, unprepare):
         ob = p.ke2 + p.w_b
         erase = costs.qroam_erase(QROAMErase.fixup_high_ranges(widths, live, k, ob), k, width,
                                   ob, False)
-        return p.b_k2 + erase.toffoli + (3 * (n - 1) + 2 * (s - 1) if n else 0)
+        return p.w_b + p.b_k2 + erase.toffoli + (3 * (n - 1) + 2 * (s - 1) if n else 0)
     read = costs.qroam_read(*QROAMRead.select_size(widths, live, k, None), k, width)
-    return (2 * (n - 1) + 2 * (s - 1) if n else 0) + read.toffoli - (2**k - 1) * width
+    return (2 * (n - 1) + 2 * (s - 1) if n else 0) + read.toffoli + p.w_b
 
 
 def _assert_counts(p, tables, unprepare):
@@ -257,6 +258,7 @@ def _assert_counts(p, tables, unprepare):
                                                            expected.measurements)
     assert resources.measurements == (p.K2 * p.d2 if unprepare else 0)
     assert resources.measured_and_uncomputes == expected_and_uncomputes(p, unprepare)
+    assert resources.counts.get("Toffoli", 0) == 0
 
 
 @pytest.mark.compiled
@@ -280,9 +282,9 @@ def test_counts_at_mid_naphthalene(unprepare):
 
 def test_femoco_counts_on_the_closed_forms():
     """FeMoco-54 on the closed forms, nothing compiled: prepare 18 + 932 + 15 + 5 = 970 with
-    A = 16 + 542 = 558, unprepare 5 + 196 + 16 = 217 with M = 416 and A = 15 + 196 + 18 = 229;
-    the pair's A is its T less its Toffoli-only part 2 w_b + (K2 - 1) d2, as
-    dfthc.costs.measured_and_uncomputes counts it. InnerSigns costs 0 (its A = 0 is the compiled
+    A = 16 + 932 + 5 = 953, unprepare 5 + 196 + 16 = 217 with M = 416 and
+    A = 5 + 15 + 196 + 18 = 234; the pair's A is its T, as dfthc.costs.measured_and_uncomputes
+    counts it. InnerSigns costs 0 (its A = 0 is the compiled
     count of test_inner_signs_counts_rules_and_device_level: it has three wires at every size).
     The operator's own read and erase shapes give the same pieces, and its registers but x_o are
     spec 10.3's 65-wire inner group and the 390 junk wires, which the walk's layout puts on the
@@ -292,8 +294,8 @@ def test_femoco_counts_on_the_closed_forms():
     assert costs.inner_unprepare(p) == costs.Cost(217, 416)
     assert costs.inner_signs() == costs.Cost(0)
     uncomputes = expected_and_uncomputes(p, False), expected_and_uncomputes(p, True)
-    assert uncomputes == (558, 229)
-    assert sum(uncomputes) == 970 + 217 - (2 * p.w_b + (p.K2 - 1) * p.d2)
+    assert uncomputes == (953, 234)
+    assert sum(uncomputes) == 970 + 217
     widths, live, width, k = InnerPrepare.read_shape(p.N, p.R, p.B, p.C, p.b_k2, p.k2).values()
     ob = p.ke2 + p.w_b
     read = costs.qroam_read(*QROAMRead.select_size(widths, live, k, None), k, width)

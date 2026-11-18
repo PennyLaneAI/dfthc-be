@@ -15,7 +15,15 @@ import textwrap
 from pathlib import Path
 from typing import Protocol
 
+from dfthc.compile import GATE_SET
+
 SRC = Path(__file__).resolve().parents[2]
+
+TOFFOLI_GATE_SET: dict[str, int] = GATE_SET | {"Toffoli": 1000}
+""":data:`dfthc.compile.GATE_SET` plus ``Toffoli``, for the canaries of PennyLane and Catalyst
+behaviour that involves a bare ``Toffoli`` (a controlled ``CNOT``, an ``X`` under two controls,
+a ``CSWAP``): without ``Toffoli`` in the gate set such a gate has no decomposition path, which
+would mask what the canary pins."""
 
 
 class _HasOutput(Protocol):
@@ -36,6 +44,7 @@ PRELUDE = textwrap.dedent(
     from pennylane.typing import Wire
 
     from dfthc.compile import GATE_SET
+    from dfthc.testing.canary import TOFFOLI_GATE_SET
 
 
     def counts(circuit, level="user"):

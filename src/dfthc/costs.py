@@ -1,6 +1,7 @@
 """Closed-form costs of our construction: spec section 9.24, implemented verbatim.
 
-``T`` counts ``Toffoli`` plus ``TemporaryAND``; ``M`` counts ``MidCircuitMeasure``, the explicit
+``T`` counts ``Toffoli`` plus ``TemporaryAND`` (under ``dfthc.compile.GATE_SET`` only
+``TemporaryAND``); ``M`` counts ``MidCircuitMeasure``, the explicit
 erase measurements. Measured AND uncomputes (``Adjoint(TemporaryAND)``) are in neither; their
 count ``A`` is :func:`measured_and_uncomputes`. Every T4 test asserts a compiled count against one
 of these functions; each docstring names its spec 9.24 row. ``p`` is a
@@ -327,15 +328,10 @@ def iterative_qpe(p: WalkParams, t: int) -> Cost:
     return controlled_walk_power(p, 2**t - 1) + Cost((t**3 - t) // 6, t)
 
 
-def toffoli_only(p: WalkParams) -> int:
-    """``T_Toffoli`` per walk and controlled walk (spec 9.24, "Measured AND uncomputes"):
-    ``2 w_x + 4 w_b + (K1 - 1) d1 + 2 (K2 - 1) d2 + 4 N + 12``."""
-    return (2 * p.w_x + 4 * p.w_b + (p.K1 - 1) * p.d1 + 2 * (p.K2 - 1) * p.d2 + 4 * p.N + 12)
-
-
 def measured_and_uncomputes(p: WalkParams, controlled: bool) -> int:
-    """``A = T - T_Toffoli`` per walk or controlled walk (spec 9.24, "Measured AND uncomputes")."""
-    return walk(p, controlled).toffoli - toffoli_only(p)
+    """``A = T`` per walk or controlled walk (spec 9.24, "Measured AND uncomputes"): every
+    Toffoli is a ``TemporaryAND``, and the walk uncomputes each by measurement."""
+    return walk(p, controlled).toffoli
 
 
 def cheapest_block_bits(p: WalkParams) -> tuple[int, int, int, int]:

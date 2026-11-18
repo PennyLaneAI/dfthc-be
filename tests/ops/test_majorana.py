@@ -138,12 +138,12 @@ def program(adjoint, wires=tuple(range(10))):
 @pytest.mark.compiled
 @pytest.mark.parametrize("adjoint", [False, True], ids=["gate", "adjoint"])
 def test_toffoli_count(adjoint):
-    """T4: T = 5 with three Toffoli and two TemporaryAND (A = 2), M = 0; the same for the
-    auto-derived adjoint."""
+    """T4: T = 5, five TemporaryAND (two explicit, one per Toffoli) and no Toffoli, each
+    uncomputed by measurement (A = 5), M = 0; the same for the auto-derived adjoint."""
     resources = compiled_resources(program(adjoint), num_wires=10)
     assert (resources.toffoli, resources.measurements) == (costs.majorana_gate().toffoli, 0)
-    assert (resources.counts["Toffoli"], resources.counts["TemporaryAND"]) == (3, 2)
-    assert resources.measured_and_uncomputes == 2
+    assert (resources.counts.get("Toffoli", 0), resources.counts["TemporaryAND"]) == (0, 5)
+    assert resources.measured_and_uncomputes == 5
 
 
 def test_femoco_count_on_the_closed_form():

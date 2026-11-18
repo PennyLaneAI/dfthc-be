@@ -19,10 +19,12 @@ from pennylane.templates.subroutines.qrom import _qrom_unary_iteration
 GATE_SET: dict[str, int] = {
     "PauliX": 1, "PauliY": 1, "PauliZ": 1, "Hadamard": 1, "S": 1, "Adjoint(S)": 1,
     "CNOT": 1, "CZ": 1, "SWAP": 1, "GlobalPhase": 1, "MidMeasure": 1,
-    "Adjoint(TemporaryAND)": 1, "PhaseGradientStatePrep": 1,
-    "Toffoli": 1000, "TemporaryAND": 1000,
+    "Adjoint(TemporaryAND)": 1, "PhaseGradientStatePrep": 1, "TemporaryAND": 1000,
 }
-"""Toffoli-level target gate set with solver weights (spec section 7.3)."""
+"""Toffoli-level target gate set with solver weights (spec section 7.3): ``TemporaryAND`` is its
+only non-Clifford gate. Without ``Toffoli`` every Toffoli is a two-control ``MultiControlledX``
+with a zeroed work wire (``dfthc.ops._gates``), which decomposes to a ``TemporaryAND`` and its
+measured uncompute; a bare ``Toffoli`` or ``CSWAP`` has no decomposition path."""
 
 ANALYZE_NAMES: frozenset[str] = frozenset(GATE_SET) - {"MidMeasure"} | {"MidCircuitMeasure"}
 """Names ``qp.analyze`` may report at ``level="user"`` (it names MidMeasure MidCircuitMeasure)."""

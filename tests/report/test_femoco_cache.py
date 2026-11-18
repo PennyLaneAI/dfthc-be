@@ -2,8 +2,8 @@
 plan Task 4.5).
 
 Nothing here compiles. The release-tier test reads ``docs/resources.json``: the entry of the
-current code hash for each program holds the counts of spec 9.24 (walk T = 9,790, M = 2,418,
-A = 8,672; controlled walk T = 9,792, M = 2,418, A = 8,674), the code hash, the environment, the
+current code hash for each program holds the counts of spec 9.24 (walk T = A = 9,790,
+M = 2,418; controlled walk T = A = 9,792, M = 2,418), the code hash, the environment, the
 wall time and the peak memory, and the partition rows of the report (tape mode, no compile) times
 their calls per walk, plus in M the block encodings' own junk measurements
 (:func:`dfthc.costs.junk_measurements`; spec 16, Q-1 variant (b)), give exactly the cached T, M
@@ -23,7 +23,7 @@ from dfthc.params import FEMOCO54
 from dfthc.testing.provenance import code_hash, environment
 
 REPO = Path(__file__).resolve().parents[2]
-EXPECTED = {"DFTHCWalk": (9790, 2418, 8672), "ControlledDFTHCWalk": (9792, 2418, 8674)}
+EXPECTED = {"DFTHCWalk": (9790, 2418, 9790), "ControlledDFTHCWalk": (9792, 2418, 9792)}
 EXPECTED_WIRES = {"DFTHCWalk": 1049, "ControlledDFTHCWalk": 1050}
 RECOMPILE = ("scripts/resource_report.py --large femoco54 (the orchestrator, alone, under the "
              "watchdog; master plan 12.9 and Task 4.5)")
@@ -88,7 +88,7 @@ def test_stale_femoco_entry_names_the_recompile():
     """An entry of another code hash is not a current measurement: the check fails and names
     the recompile (per commit; nothing is compiled)."""
     stale = {"code_hash": "0" * 64, "status": "compiled", "toffoli": 9790, "measurements": 2418,
-             "measured_and_uncomputes": 8672, "counts": {}, "environment": {"python": "3.12"},
+             "measured_and_uncomputes": 9790, "counts": {}, "environment": {"python": "3.12"},
              "seconds": 1.0, "watchdog": {"peak_mb": 1.0}}
     problems = femoco_cache_problems({"compiled": {"femoco54/DFTHCWalk": [stale]}}, "1" * 64)
     assert len(problems) == 2
@@ -103,23 +103,22 @@ def valid_entry(program: str) -> dict:
     toffoli, measurements, uncomputes = EXPECTED[program]
     return {"code_hash": "1" * 64, "status": "compiled", "toffoli": toffoli,
             "measurements": measurements, "measured_and_uncomputes": uncomputes,
-            "counts": {"Toffoli": toffoli - uncomputes, "TemporaryAND": uncomputes,
-                       "Adjoint(TemporaryAND)": uncomputes, "MidCircuitMeasure": measurements,
-                       "CNOT": 1},
+            "counts": {"TemporaryAND": toffoli, "Adjoint(TemporaryAND)": uncomputes,
+                       "MidCircuitMeasure": measurements, "CNOT": 1},
             "num_wires": EXPECTED_WIRES[program], "environment": environment(),
             "seconds": 36.5, "watchdog": {"peak_mb": 1692.1}}
 
 
 def _more_toffolis(entry):
     entry["toffoli"] += 1
-    entry["counts"]["Toffoli"] += 1
+    entry["counts"]["TemporaryAND"] += 1
 
 
 DEFECTS = {
-    "counts": (_more_toffolis, "cached T, M, A (9791, 2418, 8672) != (9790, 2418, 8672)"),
+    "counts": (_more_toffolis, "cached T, M, A (9791, 2418, 9790) != (9790, 2418, 9790)"),
     "gate-set": (lambda e: e["counts"].update(RX=1), "gates outside the gate set {'RX'}"),
     "dictionary": (lambda e: e["counts"].update(TemporaryAND=e["counts"]["TemporaryAND"] + 1),
-                   "gate dictionary gives T, M, A (9791, 2418, 8672) != (9790, 2418, 8672)"),
+                   "gate dictionary gives T, M, A (9791, 2418, 9790) != (9790, 2418, 9790)"),
     "wires": (lambda e: e.update(num_wires=1050), "cached wires 1050 != 1049"),
     "environment": (lambda e: e.pop("environment"), "no environment"),
     "toolchain": (lambda e: e["environment"].update(pennylane="0.0"),

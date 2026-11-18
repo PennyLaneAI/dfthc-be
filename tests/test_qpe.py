@@ -51,13 +51,14 @@ def compile_power(c, power, level="user"):
 
 
 def assert_power_counts(resources, p, power):
-    """T, M against costs.controlled_walk_power; A and the plain Toffolis power times the
-    controlled walk's (spec 9.23 and 9.24)."""
+    """T, M against costs.controlled_walk_power; A power times the controlled walk's, every
+    Toffoli a TemporaryAND (spec 9.23 and 9.24)."""
     expected = costs.controlled_walk_power(p, power)
     assert (resources.toffoli, resources.measurements) == (expected.toffoli,
                                                            expected.measurements)
     assert resources.measured_and_uncomputes == power * costs.measured_and_uncomputes(p, True)
-    assert resources.counts["Toffoli"] == power * costs.toffoli_only(p)
+    assert resources.measured_and_uncomputes == resources.toffoli
+    assert resources.counts.get("Toffoli", 0) == 0
 
 
 # --------------------------------------------------------------------------- ControlledWalkPower
@@ -67,7 +68,7 @@ def assert_power_counts(resources, p, power):
 @pytest.mark.parametrize("name", ["sto3g", "631g"])
 def test_controlled_walk_power_counts(name):
     """T4 at the test presets, power 2 (one loop body): T = 2 T_C(W) = 320 and 484, M = 2 M_W =
-    100 and 136, A = 2 A_C(W) = 220 and 362."""
+    100 and 136, A = 2 A_C(W) = T."""
     c = walk_sim.case(name)
     assert_power_counts(compile_power(c, 2), c.params, 2)
 
@@ -75,7 +76,7 @@ def test_controlled_walk_power_counts(name):
 @pytest.mark.compiled
 @pytest.mark.slow
 def test_controlled_walk_power_counts_at_mid_naphthalene():
-    """T4 at MID_NAPHTHALENE (nightly), power 2: T = 3,830, M = 1,004, A = 3,360."""
+    """T4 at MID_NAPHTHALENE (nightly), power 2: T = A = 3,830, M = 1,004."""
     c = walk_sim.WalkCase.build(MID_NAPHTHALENE, load_factors("naphthalene"))
     assert_power_counts(compile_power(c, 2), c.params, 2)
 
@@ -182,6 +183,7 @@ def test_qpe_round_counts():
                                                                expected.measurements)
     assert expected == costs.Cost(161, 48)
     assert resources.measured_and_uncomputes == costs.measured_and_uncomputes(p, True) + 1
+    assert resources.counts.get("Toffoli", 0) == 0
 
 
 def measured(count):
@@ -196,9 +198,9 @@ def test_qpe_round_rule_is_valid_on_the_toy(j):
     assert FIXED_DECOMPS["QPERound"] is _qpe_round
     assert list(qp.list_decomps(QPERound)) == [_qpe_round]
     bits = [False] * (j + 1) + measured(2 - j)
-    spec = toy_walk_power_spec(system=[9], ancilla=[10])
+    spec = toy_walk_power_spec(system=[9], ancilla=[10], work=[11])
     op = QPERound(j, 3, bits, spec.op_name, spec.compilable, spec.wire_sizes, control=[0],
-                  qpe_grad=[1, 2, 3], walk_wires=[9, 10, 4, 5, 6, 7, 8])
+                  qpe_grad=[1, 2, 3], walk_wires=[9, 10, 11, 4, 5, 6, 7, 8])
     qp.testing.assert_valid_decomp_rule(op, _qpe_round, check_matrix=False)
 
 
@@ -235,22 +237,23 @@ def test_nothing_survives_at_device_level():
     ({"j": 3}, r"j must lie in \[0, 2\], got 3"),
     ({"walk_op": "DFTHCWalk"}, "walk_op must be one of"),
     ({"walk_compilable": []}, "walk_compilable must be a tuple"),
-    ({"walk_wire_sizes": (2,), "walk_wires": [9, 10, 4, 5, 6, 7, 8]},
-     r"walk_wire_sizes must be ToyControlledWalkPower's required_wires after control, \(1, 1\)"),
+    ({"walk_wire_sizes": (3,), "walk_wires": [9, 10, 11, 4, 5, 6, 7, 8]},
+     r"walk_wire_sizes must be ToyControlledWalkPower's required_wires after control, "
+     r"\(1, 1, 1\)"),
     ({"earlier_bits": [False, False]}, r"earlier_bits must have shape \(3,\); got \(2,\)"),
     ({"qpe_grad": [1, 2]}, "'qpe_grad' has 2 wires; expected 3"),
-    ({"walk_wires": [9, 10, 4, 5, 6, 7]}, "'walk_wires' has 6 wires; expected 7"),
+    ({"walk_wires": [9, 10, 11, 4, 5, 6, 7]}, "'walk_wires' has 7 wires; expected 8"),
 ], ids=["j", "walk_op", "walk_compilable", "walk_wire_sizes", "earlier_bits", "qpe_grad",
         "spare"])
 def test_qpe_round_validates(change, match):
     """Spec 9.0: QPERound checks its compilable arguments, the shape (t,) of earlier_bits and
     every register size (``ValueError``); the toy walk lends no scratch group, so walk_wires
-    holds its two wires and the corrections' five spare wires."""
-    spec = toy_walk_power_spec(system=[9], ancilla=[10])
+    holds its three wires and the corrections' five spare wires."""
+    spec = toy_walk_power_spec(system=[9], ancilla=[10], work=[11])
     arguments = {"j": 0, "num_bits": 3, "earlier_bits": [False] * 3, "walk_op": spec.op_name,
                  "walk_compilable": spec.compilable, "walk_wire_sizes": spec.wire_sizes,
-                 "control": [0], "qpe_grad": [1, 2, 3], "walk_wires": [9, 10, 4, 5, 6, 7, 8]
-                 } | change
+                 "control": [0], "qpe_grad": [1, 2, 3],
+                 "walk_wires": [9, 10, 11, 4, 5, 6, 7, 8]} | change
     with pytest.raises(ValueError, match=match):
         QPERound(**arguments)
 
@@ -285,8 +288,8 @@ def test_qpe_round_validates_the_walk_powers_arguments(op_name, change, match):
         spec = walk_power_spec(H2_STO3G_TEST, walk_sim.case("sto3g").tables, layout)
         compilable, wires = malformed_walk_compilable(change), spec.wires
     else:
-        spec = toy_walk_power_spec(system=[60], ancilla=[61])
-        compilable, wires = (5,), [60, 61, 62, 63, 64]
+        spec = toy_walk_power_spec(system=[60], ancilla=[61], work=[62])
+        compilable, wires = (5,), [60, 61, 62, 63, 64, 65]
     with pytest.raises(ValueError, match=match):
         QPERound(0, 2, [False, False], op_name, compilable, spec.wire_sizes, layout.qpe_control,
                  layout.qpe_grad, wires)
@@ -316,7 +319,7 @@ def test_spare_wires_needed():
     (1, 3, 5 spare wires for t = 1, 2, 3); ControlledWalkPower lends its work pool, 8 wires at
     H2_STO3G_TEST (spare wires only from t = 5) and 44 at FeMoco-54 (only from t = 23).
     QPERound's walk_wires are the walk's groups plus these."""
-    toy = toy_walk_power_spec(system=[0], ancilla=[1])
+    toy = toy_walk_power_spec(system=[0], ancilla=[1], work=[2])
     assert [spare_wires_needed(toy.op_name, toy.wire_sizes, t) for t in (1, 2, 3)] == [1, 3, 5]
     sto3g = walk_power_spec(H2_STO3G_TEST, walk_sim.case("sto3g").tables,
                             WalkLayout.from_params(H2_STO3G_TEST))
@@ -347,7 +350,7 @@ def test_driver_validates(arguments, match):
     toy's system wire as a spare wire), before it queues anything."""
     num_bits, qpe_grad, spare = arguments
     with qp.queuing.AnnotatedQueue() as queue, pytest.raises(ValueError, match=match):
-        iterative_phase_estimation(lambda: toy_walk_power_spec([9], [10]), [0], num_bits,
+        iterative_phase_estimation(lambda: toy_walk_power_spec([9], [10], [11]), [0], num_bits,
                                    qpe_grad, spare)
     assert not queue.queue
 

@@ -158,7 +158,7 @@ class ControlledWalkPower(Operator2):
 
     **Cost.** :func:`dfthc.costs.controlled_walk_power`: :math:`T = p\,T_{C(W)}`,
     :math:`M = p\,M_W`; ``A`` = ``p`` times :func:`dfthc.costs.measured_and_uncomputes`
-    (controlled). At FeMoco-54 and ``p = 1``: 9,795, 2,418 and 8,677.
+    (controlled), so ``A = T``. At FeMoco-54 and ``p = 1``: 9,792, 2,418 and 9,792.
 
     **Paper and dfthcbe.** The walk powers :math:`W^{2^j}` of phase estimation on the
     controlled walk, whose query count the paper estimates (PRX 15, 041016; arXiv:2502.15882v1
@@ -343,14 +343,15 @@ class QPERound(Operator2):
         from dfthc.qpe import QPERound
         from dfthc.testing.toy_walk import toy_walk_power_spec
 
-        spec = toy_walk_power_spec(system=[3], ancilla=[4])
+        spec = toy_walk_power_spec(system=[3], ancilla=[4], work=[5])
 
         def program():
             qp.PhaseGradientStatePrep(wires=[1, 2])
             QPERound(0, 2, np.array([False, True]), spec.op_name, spec.compilable,
-                     spec.wire_sizes, control=[0], qpe_grad=[1, 2], walk_wires=[3, 4, 5, 6, 7])
+                     spec.wire_sizes, control=[0], qpe_grad=[1, 2],
+                     walk_wires=[3, 4, 5, 6, 7, 8])
 
-        compiled_resources(program, num_wires=8).toffoli  # 2 + 1 = 3
+        compiled_resources(program, num_wires=9).toffoli  # 2 + 1 = 3
     """
 
     dynamic_argnames = ("earlier_bits",)

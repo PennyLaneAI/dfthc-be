@@ -21,16 +21,17 @@ with one pattern wire the multi-controlled Z is a ``Z`` (PennyLane rejects a one
 :math:`I - 2|1\rangle\langle 1| \otimes \Pi`, and ``Z(control)`` multiplies the control's ``|1>``
 branch by -1. ``work`` and ``extra_work`` return to ``|0>``; ``MultiControlledX`` without work
 wires has no path (L-14). With :math:`c` controls PennyLane's rule uses :math:`c - 2` work wires
-for its ``TemporaryAND`` ladder and leaves a two-control ``MultiControlledX`` at its core, one
-``Toffoli`` under :data:`dfthc.compile.GATE_SET`; one more zeroed wire (the walk lends one, so
-the pool does not grow) lets that core decompose to a ``TemporaryAND`` without ``Toffoli`` in the
-gate set. ``qp.FlipSign`` is not used: its compile time grows exponentially with the pattern
+for its ``TemporaryAND`` ladder and leaves a two-control ``MultiControlledX`` at its core; one
+more zeroed wire, ``extra_work`` (the walk lends one, so the pool does not grow), lets that core
+decompose to a ``TemporaryAND`` and its measured uncompute. :data:`dfthc.compile.GATE_SET` has no
+``Toffoli``, so with :math:`c \ge 2` controls ``extra_work`` is required (``ValueError``
+otherwise). ``qp.FlipSign`` is not used: its compile time grows exponentially with the pattern
 width, and generic ``qp.ctrl`` of it with ``GlobalPhase`` has no path (L-29). Nothing adjoints
 a reflection: both forms are self-inverse.
 
 **Cost.** :func:`dfthc.costs.ref_t2` and :func:`dfthc.costs.ref_ab`, :func:`dfthc.costs.reflection`
-with :math:`n_w` pattern wires: :math:`T = \max(n_w - 2, 0)`, controlled :math:`n_w - 1`, one
-``Toffoli`` and a ``TemporaryAND`` ladder with measured uncomputes (``A = T - 1``), ``M = 0``. At
+with :math:`n_w` pattern wires: :math:`T = \max(n_w - 2, 0)`, controlled :math:`n_w - 1`, all
+``TemporaryAND`` with measured uncomputes (``A = T``), ``M = 0``. At
 FeMoco-54: ``ref_t2`` 20 (controlled 21), as dfthcbe's, against the paper's 21 (``ref-unif``);
 ``ref_ab`` 44 (controlled 45) against dfthcbe's 45 and the paper's 46 (``ref-target``).
 
@@ -62,6 +63,10 @@ def _reflect(pattern: list[int], wires: list, work, control, extra_work) -> None
     controls, values, target = list(wires[:-1]), list(pattern[:-1]), wires[-1]
     if control is not None:
         controls, values = [control, *controls], [1, *values]
+    if len(controls) >= 2 and not extra_work:
+        raise ValueError(f"a reflection with {len(controls)} controls needs one zeroed "
+                         "extra_work wire: its MultiControlledX core is a Toffoli otherwise, "
+                         "which GATE_SET lacks")
     if pattern[-1] == 0:
         qp.X(target)
     if controls:
@@ -100,8 +105,8 @@ def ref_t2(succ_x_o, b, m_b, sigma_0, work, control=None, extra_work=()) -> None
     ``b ‖ m_b ‖ sigma_0 ‖ succ_x_o`` with the pattern zeros and a one (target ``succ_x_o``), then
     ``GlobalPhase(pi)`` or ``Z(control)``. ``work``: :func:`reflection_work` of
     :math:`n_w = w_b + b_{k2} + 2` zeroed wires; ``extra_work``: at most one more zeroed wire,
-    disjoint from the others, which makes the decomposition Toffoli-free without ``Toffoli``
-    in the gate set."""
+    disjoint from the others, which makes the decomposition Toffoli-free; required with at
+    least two controls (``ValueError``), since ``GATE_SET`` has no ``Toffoli``."""
     wires = [*b, *m_b, *sigma_0, *succ_x_o]
     _reflect([0] * (len(wires) - len(succ_x_o)) + [1] * len(succ_x_o), wires, work, control,
              extra_work)

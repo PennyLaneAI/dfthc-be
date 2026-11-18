@@ -227,7 +227,7 @@ def preset_shapes(p):
 
 def _assert_compiled_counts(shape, control_value=None):
     """T, M and A exact against the closed form: QROM's ANDs over the select's columns plus one
-    Toffoli per CSWAP, every AND measured. Returns the analyzed resources."""
+    TemporaryAND per CSWAP (no Toffoli), every AND measured. Returns the analyzed resources."""
     widths, live, width, k = shape
     table = random_table(widths, live, width)
     wires, num_wires = layout(widths, live, width, k, control_value)
@@ -237,9 +237,9 @@ def _assert_compiled_counts(shape, control_value=None):
     num_columns, num_controls = QROAMRead.select_size(widths, live, k, control_value)
     expected = costs.qroam_read(num_columns, num_controls, k, width)
     assert (resources.toffoli, resources.measurements) == (expected.toffoli, 0)
-    swaps = (2**k - 1) * width
-    assert resources.measured_and_uncomputes == expected.toffoli - swaps
-    assert resources.counts.get("Toffoli", 0) == swaps
+    assert resources.measured_and_uncomputes == expected.toffoli
+    assert (resources.counts.get("Toffoli", 0), resources.counts.get("TemporaryAND", 0)) == (
+        0, expected.toffoli)
     return resources
 
 

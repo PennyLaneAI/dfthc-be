@@ -137,7 +137,8 @@ def test_spin_swap_rules_are_valid_with_matrices(num_modes):
 @pytest.mark.compiled
 @pytest.mark.parametrize("adjoint", [False, True], ids=["mux", "adjoint"])
 def test_spin_mux_toffoli_count(adjoint):
-    """T4: T = 1, one plain Toffoli (A = 0), M = 0, for the operator and its pinned adjoint."""
+    """T4: T = 1, one TemporaryAND with a measured uncompute and no Toffoli (A = 1), M = 0, for
+    the operator and its pinned adjoint."""
 
     def program():
         op = SpinMux([0], [1], [2], [3], [4])
@@ -146,7 +147,8 @@ def test_spin_mux_toffoli_count(adjoint):
 
     resources = compiled_resources(program, num_wires=5)
     assert (resources.toffoli, resources.measurements) == (costs.spin_mux().toffoli, 0)
-    assert (resources.counts["Toffoli"], resources.measured_and_uncomputes) == (1, 0)
+    assert (resources.counts.get("Toffoli", 0), resources.counts["TemporaryAND"],
+            resources.measured_and_uncomputes) == (0, 1, 1)
 
 
 @pytest.mark.compiled
@@ -156,7 +158,8 @@ def test_spin_mux_toffoli_count(adjoint):
                          ids=["sto3g", "631g", "mid", "femoco-width", "631g-adjoint"])
 def test_spin_swap_toffoli_count(p, adjoint):
     """T4 at both test presets, MID_NAPHTHALENE and FeMoco-54's width (table-free, so per
-    commit): T = N plain Toffolis from the CSWAPs (A = 0), M = 0; the pinned adjoint the same."""
+    commit): T = N, one TemporaryAND with a measured uncompute per CSWAP and no Toffoli
+    (A = N), M = 0; the pinned adjoint the same."""
     up, dn = list(range(1, 1 + p.N)), list(range(1 + p.N, 1 + 2 * p.N))
 
     def program():
@@ -166,7 +169,8 @@ def test_spin_swap_toffoli_count(p, adjoint):
 
     resources = compiled_resources(program, num_wires=2 + 2 * p.N)
     assert (resources.toffoli, resources.measurements) == (costs.spin_swap(p).toffoli, 0)
-    assert (resources.counts["Toffoli"], resources.measured_and_uncomputes) == (p.N, 0)
+    assert (resources.counts.get("Toffoli", 0), resources.counts["TemporaryAND"],
+            resources.measured_and_uncomputes) == (0, p.N, p.N)
 
 
 def test_femoco_counts_on_the_closed_form():
