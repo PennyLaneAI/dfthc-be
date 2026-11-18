@@ -14,6 +14,11 @@ entry and that every canary named here exists.
 - **L-1, rules that allocate are excluded** (catalyst#3243). A rule declaring `work_wires=` is
   excluded even when pinned; with the pin there is no path. Canary:
   `test_allocating_rule_is_excluded`. Mitigation: explicit ancilla arguments (spec 7.4 rule 1).
+  `Toffoli`'s `_toffoli_elbow` allocates, so every dfthc `Toffoli` and `CSWAP` is a two-control
+  `MultiControlledX` with an explicit zeroed work wire (spec 9.0), whose elbow rule applies when
+  `Toffoli` is left out of the gate set. A bare `Toffoli` or `CSWAP` then has no path, and the
+  compile fails while Catalyst loads its built-in rules ("the rules file could not be parsed",
+  2026-11-18), not with "Decomposition rule not found".
 - **L-2, measuring adjoint rules under control** (pennylane#9629), **changed**. Inside a control
   region the measuring `Adjoint(Op)` rule is skipped even when pinned, and the solver silently
   controls the unitary inverse of `Op`'s base rule instead (one Toffoli and four PauliX for a
