@@ -13,13 +13,18 @@ control turns the global -1 into a relative phase, so the sign matters (spec 3.3
 The last pattern wire is the target: ``succ_x_o`` (pattern value 1) for :func:`ref_t2`,
 ``sigma_0`` (pattern value 0) for :func:`ref_ab`. The multi-controlled Z is ``X`` on the target
 if its pattern value is 0, ``H``, ``MultiControlledX`` with the other pattern wires as controls
-(their pattern values as control values) and :func:`reflection_work` zeroed work wires, ``H``,
-the ``X`` again: :math:`I - 2\Pi`. Uncontrolled, ``GlobalPhase(pi)`` then multiplies by -1;
+(their pattern values as control values) and :func:`reflection_work` zeroed work wires plus
+the caller's ``extra_work`` (with at least two controls), ``H``, the ``X`` again:
+:math:`I - 2\Pi`. Uncontrolled, ``GlobalPhase(pi)`` then multiplies by -1;
 with one pattern wire the multi-controlled Z is a ``Z`` (PennyLane rejects a one-wire
 ``MultiControlledX``). Controlled, ``control`` is one more control of value 1, giving
 :math:`I - 2|1\rangle\langle 1| \otimes \Pi`, and ``Z(control)`` multiplies the control's ``|1>``
-branch by -1. ``work`` returns to ``|0>``; ``MultiControlledX`` without work wires has no path
-(L-14). ``qp.FlipSign`` is not used: its compile time grows exponentially with the pattern
+branch by -1. ``work`` and ``extra_work`` return to ``|0>``; ``MultiControlledX`` without work
+wires has no path (L-14). With :math:`c` controls PennyLane's rule uses :math:`c - 2` work wires
+for its ``TemporaryAND`` ladder and leaves a two-control ``MultiControlledX`` at its core, one
+``Toffoli`` under :data:`dfthc.compile.GATE_SET`; one more zeroed wire (the walk lends one, so
+the pool does not grow) lets that core decompose to a ``TemporaryAND`` without ``Toffoli`` in the
+gate set. ``qp.FlipSign`` is not used: its compile time grows exponentially with the pattern
 width, and generic ``qp.ctrl`` of it with ``GlobalPhase`` has no path (L-29). Nothing adjoints
 a reflection: both forms are self-inverse.
 
@@ -53,18 +58,18 @@ def reflection_work(n_w: int, controlled: bool) -> int:
     return max(n_w + int(controlled) - 3, 0)
 
 
-def _reflect(pattern: list[int], wires: list, work, control) -> None:
+def _reflect(pattern: list[int], wires: list, work, control, extra_work) -> None:
     controls, values, target = list(wires[:-1]), list(pattern[:-1]), wires[-1]
     if control is not None:
         controls, values = [control, *controls], [1, *values]
     if pattern[-1] == 0:
         qp.X(target)
     if controls:
-        num_work = max(len(controls) - 2, 0)
+        work_wires = [*work[:max(len(controls) - 2, 0)],
+                      *(extra_work if len(controls) >= 2 else ())]
         qp.H(target)
         qp.MultiControlledX(wires=[*controls, target], control_values=values,
-                            work_wires=list(work[:num_work]) if num_work else None,
-                            work_wire_type="zeroed")
+                            work_wires=work_wires or None, work_wire_type="zeroed")
         qp.H(target)
     else:
         qp.Z(target)
@@ -76,45 +81,54 @@ def _reflect(pattern: list[int], wires: list, work, control) -> None:
         qp.Z(control)
 
 
-def _reflection_resources(pattern: list[int], controlled: bool) -> dict:
+def _reflection_resources(pattern: list[int], controlled: bool, extra_work: int) -> dict:
     values = [1] * controlled + list(pattern[:-1])
     resources = {qp.X: 2 * (pattern[-1] == 0), qp.Z if controlled else qp.GlobalPhase: 1}
     if not values:
         resources[qp.Z] = resources.get(qp.Z, 0) + 1
         return resources
-    num_work = max(len(values) - 2, 0)
+    num_work = max(len(values) - 2, 0) + (extra_work if len(values) >= 2 else 0)
     mcx = resource_key(lambda: qp.MultiControlledX(
         Wire[len(values) + 1], control_values=values,
         work_wires=Wire[num_work] if num_work else None, work_wire_type="zeroed"))
     return resources | {mcx: 1, qp.H: 2}
 
 
-def ref_t2(succ_x_o, b, m_b, sigma_0, work, control=None) -> None:
+def ref_t2(succ_x_o, b, m_b, sigma_0, work, control=None, extra_work=()) -> None:
     r""":math:`\mathrm{REF}_{T_2}` on ``succ_x_o`` (1 wire), ``b``, ``m_b`` and ``sigma_0`` (1
     wire), controlled by the wire ``control`` if given: the multi-controlled Z on
     ``b ‖ m_b ‖ sigma_0 ‖ succ_x_o`` with the pattern zeros and a one (target ``succ_x_o``), then
     ``GlobalPhase(pi)`` or ``Z(control)``. ``work``: :func:`reflection_work` of
-    :math:`n_w = w_b + b_{k2} + 2` zeroed wires."""
+    :math:`n_w = w_b + b_{k2} + 2` zeroed wires; ``extra_work``: at most one more zeroed wire,
+    disjoint from the others, which makes the decomposition Toffoli-free without ``Toffoli``
+    in the gate set."""
     wires = [*b, *m_b, *sigma_0, *succ_x_o]
-    _reflect([0] * (len(wires) - len(succ_x_o)) + [1] * len(succ_x_o), wires, work, control)
+    _reflect([0] * (len(wires) - len(succ_x_o)) + [1] * len(succ_x_o), wires, work, control,
+             extra_work)
 
 
-def ref_t2_resources(succ_x_o: int, b: int, m_b: int, sigma_0: int, controlled: bool) -> dict:
-    """The gates :func:`ref_t2` emits on registers of these widths."""
-    return _reflection_resources([0] * (b + m_b + sigma_0) + [1] * succ_x_o, controlled)
+def ref_t2_resources(succ_x_o: int, b: int, m_b: int, sigma_0: int, controlled: bool,
+                     extra_work: int = 0) -> dict:
+    """The gates :func:`ref_t2` emits on registers of these widths with ``extra_work``
+    lent wires."""
+    return _reflection_resources([0] * (b + m_b + sigma_0) + [1] * succ_x_o, controlled,
+                                 extra_work)
 
 
-def ref_ab(x_o, m_x_o, sigma_1, b, m_b, sigma_0, work, control=None) -> None:
+def ref_ab(x_o, m_x_o, sigma_1, b, m_b, sigma_0, work, control=None, extra_work=()) -> None:
     r""":math:`\mathrm{REF}_{\mathcal{A}\cup\mathcal{B}}` on ``x_o``, ``m_x_o``, ``sigma_1``,
     ``b``, ``m_b`` and ``sigma_0``, controlled by the wire ``control`` if given: the
     multi-controlled Z on the six registers with the all-zero pattern (target the last wire of
     ``sigma_0``), then ``GlobalPhase(pi)`` or ``Z(control)``. ``work``: :func:`reflection_work`
-    of :math:`n_w = w_x + b_{k1} + w_b + b_{k2} + 2` zeroed wires."""
+    of :math:`n_w = w_x + b_{k1} + w_b + b_{k2} + 2` zeroed wires; ``extra_work`` as for
+    :func:`ref_t2`."""
     wires = [*x_o, *m_x_o, *sigma_1, *b, *m_b, *sigma_0]
-    _reflect([0] * len(wires), wires, work, control)
+    _reflect([0] * len(wires), wires, work, control, extra_work)
 
 
 def ref_ab_resources(x_o: int, m_x_o: int, sigma_1: int, b: int, m_b: int, sigma_0: int,
-                     controlled: bool) -> dict:
-    """The gates :func:`ref_ab` emits on registers of these widths."""
-    return _reflection_resources([0] * (x_o + m_x_o + sigma_1 + b + m_b + sigma_0), controlled)
+                     controlled: bool, extra_work: int = 0) -> dict:
+    """The gates :func:`ref_ab` emits on registers of these widths with ``extra_work``
+    lent wires."""
+    return _reflection_resources([0] * (x_o + m_x_o + sigma_1 + b + m_b + sigma_0), controlled,
+                                 extra_work)

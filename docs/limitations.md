@@ -16,9 +16,9 @@ entry and that every canary named here exists.
   `test_allocating_rule_is_excluded`. Mitigation: explicit ancilla arguments (spec 7.4 rule 1).
   `Toffoli`'s `_toffoli_elbow` allocates, so every dfthc `Toffoli` and `CSWAP` is a two-control
   `MultiControlledX` with an explicit zeroed work wire (spec 9.0), whose elbow rule applies when
-  `Toffoli` is left out of the gate set. A bare `Toffoli` or `CSWAP` then has no path, and the
-  compile fails while Catalyst loads its built-in rules ("the rules file could not be parsed",
-  2026-11-18), not with "Decomposition rule not found".
+  `Toffoli` is left out of the gate set; the reflections get one lent zeroed wire for the same
+  purpose (spec 9.6). A bare `Toffoli` or `CSWAP` has no decomposition path then (the solver
+  failure reads "the rules file could not be parsed", L-18).
 - **L-2, measuring adjoint rules under control** (pennylane#9629), **changed**. Inside a control
   region the measuring `Adjoint(Op)` rule is skipped even when pinned, and the solver silently
   controls the unitary inverse of `Op`'s base rule instead (one Toffoli and four PauliX for a
@@ -92,7 +92,7 @@ entry and that every canary named here exists.
 - **L-14, `MultiControlledX` without work wires has no path.** Canary:
   `test_mcx_without_work_wires_has_no_path`. Mitigation: explicit work wires; the reflections'
   `MultiControlledX` (`dfthc.ops.reflections`) gets `max(c - 2, 0)` zeroed work wires for `c`
-  controls.
+  controls and, in the walk, one lent zeroed wire (the last `angles` wire).
 - **L-19, `UniformPrep` and `AliasSampling` need arbitrary rotations**, **changed**. For a
   non-power-of-two size (L = 5) neither has a path to the gate set. For a power-of-two size
   `AliasSampling` compiles, because its uniform preparation is then Hadamards only. Canaries:

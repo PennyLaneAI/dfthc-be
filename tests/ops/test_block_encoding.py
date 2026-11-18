@@ -177,11 +177,12 @@ def test_children_order_and_registers(name):
     controlled_mcx, z = (controlled[i] for i in REFLECTION)
     pattern = [*layout.b, *layout.m_b, *layout.sigma_0, *layout.succ_x_o]
     assert (list(mcx.wires), list(mcx.control_values)) == (pattern, [False] * (len(pattern) - 1))
-    assert list(mcx.work_wires) == list(layout.work)[:len(pattern) - 3]
+    assert list(mcx.work_wires) == list(layout.work)[:len(pattern) - 3] + list(layout.angles)[-1:]
     assert np.isclose(phase.data[0], np.pi, rtol=0, atol=1e-12)
     assert (list(controlled_mcx.wires), list(controlled_mcx.control_values)) == (
         c.control + pattern, [True, *mcx.control_values])
-    assert list(controlled_mcx.work_wires) == list(layout.work)[:len(pattern) - 2]
+    assert list(controlled_mcx.work_wires) == (list(layout.work)[:len(pattern) - 2]
+                                             + list(layout.angles)[-1:])
     assert list(z.wires) == c.control
     plain = [op for i, op in enumerate(plain) if i not in REFLECTION]
     controlled = [op for i, op in enumerate(controlled) if i not in REFLECTION]

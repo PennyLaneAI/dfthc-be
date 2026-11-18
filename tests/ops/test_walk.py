@@ -152,7 +152,7 @@ def test_children(kind):
     assert all(list(op.wires) == ab[-1:] for op in reflection[:2] + reflection[3:5])
     assert list(mcx.wires) == control + ab
     assert list(mcx.control_values) == [True] * controlled + [False] * (len(ab) - 1)
-    assert list(mcx.work_wires) == list(layout.work)[:work]
+    assert list(mcx.work_wires) == list(layout.work)[:work] + list(layout.angles)[-1:]
     assert list(sign.wires) == control
 
 

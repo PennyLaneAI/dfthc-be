@@ -41,11 +41,15 @@ def split(sizes, controlled, wires) -> dict:
     return registers
 
 
-def layout(sizes, controlled) -> tuple[dict, int]:
-    """The helper's arguments on consecutive wires (the work last) and the number of wires."""
+def layout(sizes, controlled, lent=0) -> tuple[dict, int]:
+    """The helper's arguments on consecutive wires (the work, then ``lent`` extra_work wires,
+    last) and the number of wires."""
     n = sum(sizes.values()) + controlled
     work = reflection_work(sum(sizes.values()), controlled)
-    return split(sizes, controlled, list(range(n))) | {"work": list(range(n, n + work))}, n + work
+    wires = split(sizes, controlled, list(range(n))) | {"work": list(range(n, n + work))}
+    if lent:
+        wires["extra_work"] = list(range(n + work, n + work + lent))
+    return wires, n + work + lent
 
 
 def reflection_diagonal(sizes, ones):
@@ -81,20 +85,24 @@ def choi_matrix(num_system, apply, num_work):
 
 
 @pytest.mark.compiled
+@pytest.mark.parametrize("lent", [0, 1], ids=["pool", "lent"])
 @pytest.mark.parametrize("controlled", [False, True], ids=["plain", "controlled"])
 @pytest.mark.parametrize("kind", HELPERS)
-def test_exact_matrix_with_the_global_sign(kind, controlled):
+def test_exact_matrix_with_the_global_sign(kind, controlled, lent):
     """T3: at unit register widths the compiled matrix is exactly 2 Pi - I, global sign included,
     and controlled |0><0| (x) I + |1><1| (x) (2 Pi - I), where a wrong global sign of the
-    uncontrolled reflection would show as a relative phase; the work returns to |0>."""
+    uncontrolled reflection would show as a relative phase; the work, and a lent extra_work
+    wire, return to |0>."""
     helper, _, ones, _ = HELPERS[kind]
     sizes = pattern_sizes(kind)
     n_w = sum(sizes.values())
+    num_work = reflection_work(n_w, controlled)
 
     def apply(system, work):
-        helper(**split(sizes, controlled, system), work=work)
+        helper(**split(sizes, controlled, system), work=work[:num_work],
+               extra_work=work[num_work:])
 
-    matrix = choi_matrix(n_w + controlled, apply, reflection_work(n_w, controlled))
+    matrix = choi_matrix(n_w + controlled, apply, num_work + lent)
     diagonal = reflection_diagonal(sizes, ones)
     expected = np.concatenate([np.ones(2**n_w), diagonal]) if controlled else diagonal
     assert np.allclose(matrix, np.diag(expected), rtol=0, atol=1e-10)
@@ -183,6 +191,20 @@ def test_counts(kind, controlled, preset):
     assert resources.measured_and_uncomputes == resources.toffoli - 1
     assert (resources.counts.get("GlobalPhase", 0), resources.counts.get("PauliZ", 0)) == (
         (0, 1) if controlled else (1, 0))
+
+
+@pytest.mark.compiled
+@pytest.mark.parametrize("controlled", [False, True], ids=["plain", "controlled"])
+@pytest.mark.parametrize("kind", HELPERS)
+def test_counts_with_a_lent_wire(kind, controlled):
+    """T4 at FeMoco-54's widths with one lent extra_work wire, as the walk passes: the counts
+    are unchanged under GATE_SET (one plain Toffoli, the MultiControlledX's core)."""
+    helper, _, _, cost = HELPERS[kind]
+    wires, num_wires = layout(pattern_sizes(kind, FEMOCO54), controlled, lent=1)
+    resources = compiled_resources(lambda: helper(**wires), num_wires)
+    assert (resources.toffoli, resources.measurements) == (cost(FEMOCO54, controlled).toffoli, 0)
+    assert resources.counts["Toffoli"] == 1
+    assert resources.measured_and_uncomputes == resources.toffoli - 1
 
 
 def test_femoco_counts_and_work_on_the_closed_form():

@@ -94,6 +94,12 @@ REFLECTIONS = {ref_t2: (ref_t2_resources, ("succ_x_o", "b", "m_b", "sigma_0")),
                ref_ab: (ref_ab_resources, ("x_o", "m_x_o", "sigma_1", "b", "m_b", "sigma_0"))}
 """Each reflection helper, its resource helper and the registers it takes before ``work``."""
 
+LENT_TO_REFLECTIONS = "angles"
+"""Each reflection gets the last wire of this register as its ``extra_work``. Every ``angles``
+wire is ``|0>`` at both reflections: ``AngleErase`` resets them at the end of each select, the
+unprepares from outcomes return the junk wires they borrow in ``|0>``, and the next load is in the
+next select (after the junk measurement of the next prepare)."""
+
 
 class Step(NamedTuple):
     """One step of an assembly rule: a child with its compilable arguments, the prefix of the
@@ -236,7 +242,8 @@ def _emit(steps: list, registers: dict, work) -> None:
         if step.op in REFLECTIONS:
             (controlled,) = step.args
             step.op(*(registers[name] for name in REFLECTIONS[step.op][1]), work[:step.work],
-                    control=registers["control"][0] if controlled else None)
+                    control=registers["control"][0] if controlled else None,
+                    extra_work=registers[LENT_TO_REFLECTIONS][-1:])
             continue
         wires = {name: work[:step.work] if name == "work" else registers[name]
                  for name in step.op.wire_argnames if name != "extra_onehot"}
@@ -263,7 +270,8 @@ def _resources(steps: list, p: WalkParams) -> dict:
             continue
         if step.op in REFLECTIONS:
             gates, names = REFLECTIONS[step.op]
-            for gate, number in gates(*(sizes[name] for name in names), *step.args).items():
+            for gate, number in gates(*(sizes[name] for name in names), *step.args,
+                                      extra_work=1).items():
                 resources[gate] += count * number
             continue
         dynamic = ((abstract_junk_outcomes(sizes[FROM_OUTCOMES[step.op]]),)
@@ -333,7 +341,8 @@ class DFTHCBlockEncoding(Operator2):
     name and the prefix of ``work`` of its need: ``OuterPrepare``, the X measurement of
     ``junk_x_o``; ``InnerPrepare``, the X measurement of ``junk_b``, ``InnerSigns``,
     ``InnerSelect``, ``InnerUnprepareFromOutcomes``; ``ref_t2(succ_x_o, b, m_b, sigma_0,
-    work[:n_w - 3])`` (the multi-controlled Z and ``GlobalPhase(pi)``,
+    work[:n_w - 3], extra_work=angles[-1:])`` (the multi-controlled Z and ``GlobalPhase(pi)``,
+    with the last ``angles`` wire lent in ``|0>``, :data:`LENT_TO_REFLECTIONS`;
     :math:`n_w = w_b + b_{k2} + 2`); ``InnerPrepare``, the X measurement of ``junk_b``,
     ``InnerSelectDagger``, ``InnerSigns``, ``InnerUnprepareFromOutcomes``;
     ``OuterUnprepareFromOutcomes``. An X measurement is ``H`` and ``qp.measure(q, reset=True)``
@@ -484,8 +493,8 @@ class DFTHCWalk(Operator2):
 
     **Decomposition** (spec 9.22). ``DFTHCBlockEncoding(params, tables, outer, inner, select,
     system, phase_grad, work)`` on the whole groups, then ``ref_ab(x_o, m_x_o, sigma_1, b, m_b,
-    sigma_0, work[:n_w - 3])`` (the multi-controlled Z and ``GlobalPhase(pi)``) on the registers
-    ``WalkLayout.split_group`` names.
+    sigma_0, work[:n_w - 3], extra_work=angles[-1:])`` (the multi-controlled Z and
+    ``GlobalPhase(pi)``) on the registers ``WalkLayout.split_group`` names.
 
     **Adjoint and control.** Never adjointed: its rule measures. Controlled with
     ``qp.ctrl(DFTHCWalk(...), control, control_values=...)``, whose one pinned rule, registered for
