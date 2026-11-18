@@ -11,4 +11,8 @@ from dfthc.params import H2_631G_TEST, H2_STO3G_TEST, WalkParams
 from dfthc.qpe import ControlledWalkPower, QPERound
 from dfthc.registers import WalkLayout
 
+__all__ = ["GATE_SET", "H2_631G_TEST", "H2_STO3G_TEST", "ControlledWalkPower",
+           "DFTHCBlockEncoding", "DFTHCWalk", "QPERound", "WalkLayout", "WalkParams",
+           "WalkTables", "load_factors"]
+
 __version__ = "0.1.0"

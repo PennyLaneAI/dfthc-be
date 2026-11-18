@@ -917,7 +917,8 @@ def render(report: dict) -> str:
                          else f"{r['cliffords']:,} ({r['clifford_kind']})")
             lines.append(
                 f"| `{r['id']}` | {r['level']} | {r['steps']} | {calls} | "
-                f"{_toffolis(r['measured'])} | {_toffolis(r['closed'])} | {r['status']} | {_cell(r['dfthcbe'])} | {paper} | "
+                f"{_toffolis(r['measured'])} | {_toffolis(r['closed'])} | {r['status']} | "
+                f"{_cell(r['dfthcbe'])} | {paper} | "
                 f"{_cell(r['delta_dfthcbe'])} | {_cell(r['delta_paper'])} | {codes} | "
                 f"{cliffords} | {r['wires']:,} | {_cell(r['seconds'])} | "
                 f"{_cell(r['peak_mb'])} |")
