@@ -70,14 +70,15 @@ import dfthc
 
 params = dfthc.H2_STO3G_TEST  # a small H2 test preset
 tables = dfthc.WalkTables.from_factors(dfthc.load_factors("h2_sto3g_R2_B2_C1"), params)
-wires = dfthc.WalkLayout.from_params(params)
+wires = qp.registers(dfthc.DFTHCWalk.required_wires(params))
+num_wires = sum(len(w) for w in wires.values())
 
 @qp.qjit(capture=True)
 @qp.decompose(gate_set=dfthc.GATE_SET)
-@qp.qnode(qp.device("null.qubit", wires=wires.num_wires))
+@qp.qnode(qp.device("null.qubit", wires=num_wires))
 def walk():
-    qp.PhaseGradientStatePrep(wires.phase_grad)
-    dfthc.DFTHCWalk(params, tables, **wires.groups())
+    qp.PhaseGradientStatePrep(wires["phase_grad"])
+    dfthc.DFTHCWalk(params, tables, **wires)
     return qp.probs(wires=0)
 
 counts = qp.analyze(walk)().resources.counts

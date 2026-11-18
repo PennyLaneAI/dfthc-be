@@ -150,6 +150,10 @@ def _children(p: WalkParams, t: WalkTables, controlled: bool) -> list[Step]:
     ]
 
 
+def _as_params(params) -> WalkParams:
+    return params if isinstance(params, WalkParams) else WalkParams.from_compilable(params)
+
+
 def _group_sizes(p: WalkParams) -> dict[str, int]:
     """The width of every group: the layout's (spec 10.1)."""
     sizes = WalkLayout.register_sizes(p)
@@ -413,9 +417,10 @@ class DFTHCBlockEncoding(Operator2):
         super().__init__(*compilable, *wires)
 
     @staticmethod
-    def required_wires(params, tables) -> dict[str, int]:
-        """The layout's group sizes (spec 10.1); ``tables`` does not change them."""
-        return _group_sizes(WalkParams.from_compilable(params))
+    def required_wires(params, tables=None) -> dict[str, int]:
+        """The layout's group sizes (spec 10.1), for ``qp.registers``; ``tables`` does not change
+        them."""
+        return _group_sizes(_as_params(params))
 
 
 def _block_encoding_resources(params, tables, outer, inner, select, system, phase_grad, work):
@@ -567,9 +572,10 @@ class DFTHCWalk(Operator2):
         super().__init__(*compilable, *wires)
 
     @staticmethod
-    def required_wires(params, tables) -> dict[str, int]:
-        """The layout's group sizes (spec 10.1); ``tables`` does not change them."""
-        return _group_sizes(WalkParams.from_compilable(params))
+    def required_wires(params, tables=None) -> dict[str, int]:
+        """The layout's group sizes (spec 10.1), for ``qp.registers``; ``tables`` does not change
+        them."""
+        return _group_sizes(_as_params(params))
 
 
 def _walk_resources(params, tables, outer, inner, select, system, phase_grad, work):
