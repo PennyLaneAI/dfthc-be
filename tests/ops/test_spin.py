@@ -63,51 +63,53 @@ def permutation(images):
 @pytest.mark.compiled
 @pytest.mark.parametrize("adjoint", [False, True], ids=["mux", "adjoint"])
 def test_spin_mux_on_every_basis_input(adjoint):
-    """T3 on the compiled path: on each of the 16 basis inputs, sg ^= sigma_{G0} and nothing else
-    changes; the pinned adjoint is the same permutation."""
+    """T3 on the compiled path: on each of the 16 basis inputs (work wire in |0>), sg ^=
+    sigma_{G0} and nothing else changes; the pinned adjoint is the same permutation."""
 
     def apply():
-        op = SpinMux([0], [1], [2], [3])
+        op = SpinMux([0], [1], [2], [3], [4])
         if adjoint:
             qp.adjoint(op)
 
-    output = basis_outputs(4, apply)
-    assert [output(b) for b in range(16)] == [mux_image(b) for b in range(16)]
+    output = basis_outputs(5, apply)
+    assert [output(b << 1) for b in range(16)] == [mux_image(b) << 1 for b in range(16)]
 
 
 @pytest.mark.compiled
 @pytest.mark.parametrize(("num_modes", "adjoint"), [(2, False), (3, False), (2, True)],
                          ids=["N2", "N3", "N2-adjoint"])
 def test_spin_swap_on_every_basis_input(num_modes, adjoint):
-    """T3 on the compiled path: on every basis input, psi_up and psi_dn are swapped exactly
-    when sg is 1; the pinned adjoint is the same permutation."""
+    """T3 on the compiled path: on every basis input (work wire in |0>), psi_up and psi_dn are
+    swapped exactly when sg is 1; the pinned adjoint is the same permutation."""
     up = list(range(1, 1 + num_modes))
     dn = list(range(1 + num_modes, 1 + 2 * num_modes))
 
     def apply():
-        op = SpinSwap([0], up, dn)
+        op = SpinSwap([0], up, dn, [1 + 2 * num_modes])
         if adjoint:
             qp.adjoint(op)
 
-    output = basis_outputs(1 + 2 * num_modes, apply)
+    output = basis_outputs(2 + 2 * num_modes, apply)
     size = 2 ** (1 + 2 * num_modes)
-    assert [output(b) for b in range(size)] == [swap_image(b, num_modes) for b in range(size)]
+    assert [output(b << 1) for b in range(size)] == [
+        swap_image(b, num_modes) << 1 for b in range(size)]
 
 
 def test_matrices_are_the_spec_permutations():
     """compute_matrix, which T2 compares with the decompositions, is the action of spec 9.12
-    and 9.13."""
+    and 9.13, the identity on the work wire."""
     assert SpinMux.has_matrix and SpinSwap.has_matrix
-    assert np.array_equal(SpinMux.compute_matrix([0], [1], [2], [3]),
-                          permutation([mux_image(b) for b in range(16)]))
+    assert np.array_equal(SpinMux.compute_matrix([0], [1], [2], [3], [4]),
+                          np.kron(permutation([mux_image(b) for b in range(16)]), np.eye(2)))
     for num_modes in (1, 2, 3):
         size = 2 ** (1 + 2 * num_modes)
         assert np.array_equal(
-            SpinSwap.compute_matrix([0], list(range(num_modes)), list(range(num_modes))),
-            permutation([swap_image(b, num_modes) for b in range(size)]))
+            SpinSwap.compute_matrix([0], list(range(num_modes)), list(range(num_modes)), [9]),
+            np.kron(permutation([swap_image(b, num_modes) for b in range(size)]), np.eye(2)))
 
 
-@pytest.mark.parametrize("wires", [[0, 1, 2, 3], [3, 0, 2, 1]], ids=["ordered", "permuted"])
+@pytest.mark.parametrize("wires", [[0, 1, 2, 3, 4], [3, 0, 4, 2, 1]],
+                         ids=["ordered", "permuted"])
 def test_spin_mux_rules_are_valid_with_matrices(wires):
     """T2 with check_matrix=True for the base and the pinned adjoint rule (tape mode): the
     declared resources equal the emitted gates and the decomposition's matrix equals
@@ -127,7 +129,7 @@ def test_spin_swap_rules_are_valid_with_matrices(num_modes):
     assert list(qp.list_decomps(SpinSwap)) == [_spin_swap]
     assert list(qp.list_decomps("Adjoint(SpinSwap)")) == [_adjoint_spin_swap]
     op = SpinSwap([0], list(range(1, 1 + num_modes)),
-                  list(range(1 + num_modes, 1 + 2 * num_modes)))
+                  list(range(1 + num_modes, 1 + 2 * num_modes)), [1 + 2 * num_modes])
     qp.testing.assert_valid_decomp_rule(op, _spin_swap, check_matrix=True)
     qp.testing.assert_valid_decomp_rule(qp.adjoint(op), _adjoint_spin_swap, check_matrix=True)
 
@@ -138,11 +140,11 @@ def test_spin_mux_toffoli_count(adjoint):
     """T4: T = 1, one plain Toffoli (A = 0), M = 0, for the operator and its pinned adjoint."""
 
     def program():
-        op = SpinMux([0], [1], [2], [3])
+        op = SpinMux([0], [1], [2], [3], [4])
         if adjoint:
             qp.adjoint(op)
 
-    resources = compiled_resources(program, num_wires=4)
+    resources = compiled_resources(program, num_wires=5)
     assert (resources.toffoli, resources.measurements) == (costs.spin_mux().toffoli, 0)
     assert (resources.counts["Toffoli"], resources.measured_and_uncomputes) == (1, 0)
 
@@ -158,11 +160,11 @@ def test_spin_swap_toffoli_count(p, adjoint):
     up, dn = list(range(1, 1 + p.N)), list(range(1 + p.N, 1 + 2 * p.N))
 
     def program():
-        op = SpinSwap([0], up, dn)
+        op = SpinSwap([0], up, dn, [1 + 2 * p.N])
         if adjoint:
             qp.adjoint(op)
 
-    resources = compiled_resources(program, num_wires=1 + 2 * p.N)
+    resources = compiled_resources(program, num_wires=2 + 2 * p.N)
     assert (resources.toffoli, resources.measurements) == (costs.spin_swap(p).toffoli, 0)
     assert (resources.counts["Toffoli"], resources.measured_and_uncomputes) == (p.N, 0)
 
@@ -179,28 +181,29 @@ def test_pinned_rules_are_chosen_and_nothing_survives_at_device_level(capfd):
     """T6: the verbose listing names the four pinned rules; T5 at level="device" (L-20)."""
 
     def program():
-        SpinMux([0], [1], [2], [3])
-        qp.adjoint(SpinMux([0], [1], [2], [3]))
-        SpinSwap([3], [4, 5], [6, 7])
-        qp.adjoint(SpinSwap([3], [4, 5], [6, 7]))
+        SpinMux([0], [1], [2], [3], [8])
+        qp.adjoint(SpinMux([0], [1], [2], [3], [8]))
+        SpinSwap([3], [4, 5], [6, 7], [8])
+        qp.adjoint(SpinSwap([3], [4, 5], [6, 7], [8]))
 
-    qp.analyze(verbose_program(program, num_wires=8), level="user")()
+    qp.analyze(verbose_program(program, num_wires=9), level="user")()
     captured = capfd.readouterr()
     assert {"_spin_mux", "_adjoint_spin_mux", "_spin_swap", "_adjoint_spin_swap"} <= set(
         chosen_rules(captured.out + captured.err))
-    compiled_resources(program, num_wires=8, level="device")
+    compiled_resources(program, num_wires=9, level="device")
 
 
 def test_required_wires():
-    assert SpinMux.required_wires() == {"G0": 1, "sigma_0": 1, "sigma_1": 1, "sg": 1}
-    assert SpinSwap.required_wires(54) == {"sg": 1, "psi_up": 54, "psi_dn": 54}
+    assert SpinMux.required_wires() == {"G0": 1, "sigma_0": 1, "sigma_1": 1, "sg": 1, "work": 1}
+    assert SpinSwap.required_wires(54) == {"sg": 1, "psi_up": 54, "psi_dn": 54, "work": 1}
 
 
 @pytest.mark.parametrize(("build", "match"), [
-    (lambda: SpinMux([0, 4], [1], [2], [3]), "'G0' has 2 wires; expected 1"),
-    (lambda: SpinMux([0], [1], [2], []), "'sg' has 0 wires; expected 1"),
-    (lambda: SpinSwap([0], [1, 2], [3]), "'psi_dn' has 1 wires; expected 2"),
-    (lambda: SpinSwap([0], [], []), "N >= 1"),
+    (lambda: SpinMux([0, 4], [1], [2], [3], [5]), "'G0' has 2 wires; expected 1"),
+    (lambda: SpinMux([0], [1], [2], [], [5]), "'sg' has 0 wires; expected 1"),
+    (lambda: SpinMux([0], [1], [2], [3], []), "'work' has 0 wires; expected 1"),
+    (lambda: SpinSwap([0], [1, 2], [3], [5]), "'psi_dn' has 1 wires; expected 2"),
+    (lambda: SpinSwap([0], [], [], [5]), "N >= 1"),
 ])
 def test_constructors_validate(build, match):
     with pytest.raises(ValueError, match=match):

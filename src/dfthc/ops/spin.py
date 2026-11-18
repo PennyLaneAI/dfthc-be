@@ -13,6 +13,7 @@ from pennylane.core import Operator2
 from pennylane.typing import Wire
 
 from dfthc.compile import register_rule, resource_key
+from dfthc.ops._gates import cswap, cswap_resources, toffoli, toffoli_key
 from dfthc.ops._validate import check_wires
 
 
@@ -34,16 +35,18 @@ class SpinMux(Operator2):
     ``sigma_0`` 1     any     unchanged
     ``sigma_1`` 1     any     unchanged
     ``sg``      1     any     :math:`\mathrm{sg} \oplus \sigma_{G_0}`
+    ``work``    1     ``|0>`` ``|0>``
     =========== ===== ======= ======================================
 
     **Compilable arguments.** None.
 
     **Pre- and postconditions.** None beyond the action: it is a permutation of the basis. In
     the walk ``sg`` starts in ``|0>``, and the second application (step 17) returns it to
-    ``|0>``.
+    ``|0>``. ``work`` starts and ends in ``|0>``.
 
     **Decomposition** (spec 9.12). ``CNOT(sigma_0, sg)``, ``CNOT(sigma_0, sigma_1)``,
-    ``Toffoli(G0, sigma_1, sg)``, ``CNOT(sigma_0, sigma_1)``.
+    ``Toffoli(G0, sigma_1, sg)`` (a two-control ``MultiControlledX`` with the zeroed work wire,
+    :mod:`dfthc.ops._gates`), ``CNOT(sigma_0, sigma_1)``.
 
     **Adjoint and control.** Self-adjoint: ``Adjoint(SpinMux)`` is pinned to the operator
     itself (spec 7.5). Never controlled. The walk applies it twice instead of adjointing it.
@@ -62,51 +65,52 @@ class SpinMux(Operator2):
         from dfthc.compile import compiled_resources
         from dfthc.ops.spin import SpinMux
 
-        program = lambda: SpinMux(G0=[0], sigma_0=[1], sigma_1=[2], sg=[3])
-        compiled_resources(program, num_wires=4).toffoli  # 1
+        program = lambda: SpinMux(G0=[0], sigma_0=[1], sigma_1=[2], sg=[3], work=[4])
+        compiled_resources(program, num_wires=5).toffoli  # 1
     """
 
-    wire_argnames = ("G0", "sigma_0", "sigma_1", "sg")
+    wire_argnames = ("G0", "sigma_0", "sigma_1", "sg", "work")
 
-    def __init__(self, G0, sigma_0, sigma_1, sg):
-        check_wires("SpinMux", {"G0": G0, "sigma_0": sigma_0, "sigma_1": sigma_1, "sg": sg},
-                    self.required_wires())
-        super().__init__(G0, sigma_0, sigma_1, sg)
+    def __init__(self, G0, sigma_0, sigma_1, sg, work):
+        check_wires("SpinMux", {"G0": G0, "sigma_0": sigma_0, "sigma_1": sigma_1, "sg": sg,
+                                "work": work}, self.required_wires())
+        super().__init__(G0, sigma_0, sigma_1, sg, work)
 
     @staticmethod
     def required_wires() -> dict[str, int]:
         """Exact register sizes."""
-        return {"G0": 1, "sigma_0": 1, "sigma_1": 1, "sg": 1}
+        return {"G0": 1, "sigma_0": 1, "sigma_1": 1, "sg": 1, "work": 1}
 
     @staticmethod
-    def compute_matrix(G0, sigma_0, sigma_1, sg) -> np.ndarray:
-        """The 16 x 16 permutation matrix in the wire order ``G0, sigma_0, sigma_1, sg``."""
+    def compute_matrix(G0, sigma_0, sigma_1, sg, work) -> np.ndarray:
+        """The 32 x 32 permutation matrix in the wire order ``G0, sigma_0, sigma_1, sg, work``
+        (the identity on ``work``)."""
         matrix = np.zeros((16, 16))
         for index in range(16):
             g0, s0, s1 = ((index >> (3 - i)) & 1 for i in range(3))
             matrix[index ^ (s1 if g0 else s0), index] = 1
-        return matrix
+        return np.kron(matrix, np.eye(2))
 
 
-def _spin_mux_resources(G0, sigma_0, sigma_1, sg):
-    return {qp.CNOT: 3, qp.Toffoli: 1}
+def _spin_mux_resources(G0, sigma_0, sigma_1, sg, work):
+    return {qp.CNOT: 3, toffoli_key(): 1}
 
 
 @qp.register_resources(_spin_mux_resources)
-def _spin_mux(G0, sigma_0, sigma_1, sg):
+def _spin_mux(G0, sigma_0, sigma_1, sg, work):
     qp.CNOT([sigma_0[0], sg[0]])
     qp.CNOT([sigma_0[0], sigma_1[0]])
-    qp.Toffoli([G0[0], sigma_1[0], sg[0]])
+    toffoli(G0[0], sigma_1[0], sg[0], work[0])
     qp.CNOT([sigma_0[0], sigma_1[0]])
 
 
 def _adjoint_spin_mux_resources(base):
-    return {resource_key(lambda: SpinMux(Wire[1], Wire[1], Wire[1], Wire[1])): 1}
+    return {resource_key(lambda: SpinMux(Wire[1], Wire[1], Wire[1], Wire[1], Wire[1])): 1}
 
 
 @qp.register_resources(_adjoint_spin_mux_resources)
 def _adjoint_spin_mux(base):
-    SpinMux(base.G0, base.sigma_0, base.sigma_1, base.sg)
+    SpinMux(base.G0, base.sigma_0, base.sigma_1, base.sg, base.work)
 
 
 register_rule(SpinMux, _spin_mux)
@@ -129,13 +133,17 @@ class SpinSwap(Operator2):
     ``sg``     1     any     unchanged
     ``psi_up`` ``N`` any     ``psi_dn``'s content if ``sg``, else unchanged
     ``psi_dn`` ``N`` any     ``psi_up``'s content if ``sg``, else unchanged
+    ``work``   1     ``|0>`` ``|0>``
     ========== ===== ======= =============================================
 
     **Compilable arguments.** None; ``N >= 1`` follows from the wires.
 
-    **Pre- and postconditions.** None: it is a permutation of the basis.
+    **Pre- and postconditions.** None beyond the action: it is a permutation of the basis.
+    ``work`` starts and ends in ``|0>``.
 
-    **Decomposition** (spec 9.13). ``N`` exact ``CSWAP`` gates ``(sg, psi_up[k], psi_dn[k])``.
+    **Decomposition** (spec 9.13). ``N`` exact ``CSWAP`` gates ``(sg, psi_up[k], psi_dn[k])``,
+    each ``CNOT``, a two-control ``MultiControlledX`` with the zeroed work wire and ``CNOT``
+    (:func:`dfthc.ops._gates.cswap`).
 
     **Adjoint and control.** Self-adjoint: ``Adjoint(SpinSwap)`` is pinned to the operator
     itself (spec 7.5). Never controlled. The walk applies it twice instead of adjointing it.
@@ -153,28 +161,29 @@ class SpinSwap(Operator2):
         from dfthc.compile import compiled_resources
         from dfthc.ops.spin import SpinSwap
 
-        program = lambda: SpinSwap(sg=[0], psi_up=[1, 2], psi_dn=[3, 4])
-        compiled_resources(program, num_wires=5).toffoli  # 2
+        program = lambda: SpinSwap(sg=[0], psi_up=[1, 2], psi_dn=[3, 4], work=[5])
+        compiled_resources(program, num_wires=6).toffoli  # 2
     """
 
-    wire_argnames = ("sg", "psi_up", "psi_dn")
+    wire_argnames = ("sg", "psi_up", "psi_dn", "work")
 
-    def __init__(self, sg, psi_up, psi_dn):
+    def __init__(self, sg, psi_up, psi_dn, work):
         num_modes = len(psi_up)
         if num_modes < 1:
             raise ValueError("SpinSwap: psi_up needs N >= 1 wires, got 0")
-        check_wires("SpinSwap", {"sg": sg, "psi_up": psi_up, "psi_dn": psi_dn},
+        check_wires("SpinSwap", {"sg": sg, "psi_up": psi_up, "psi_dn": psi_dn, "work": work},
                     self.required_wires(num_modes))
-        super().__init__(sg, psi_up, psi_dn)
+        super().__init__(sg, psi_up, psi_dn, work)
 
     @staticmethod
     def required_wires(N: int) -> dict[str, int]:
         """Exact register sizes for ``N`` modes per spin register."""
-        return {"sg": 1, "psi_up": N, "psi_dn": N}
+        return {"sg": 1, "psi_up": N, "psi_dn": N, "work": 1}
 
     @staticmethod
-    def compute_matrix(sg, psi_up, psi_dn) -> np.ndarray:
-        """The permutation matrix in the wire order ``sg, psi_up, psi_dn``."""
+    def compute_matrix(sg, psi_up, psi_dn, work) -> np.ndarray:
+        """The permutation matrix in the wire order ``sg, psi_up, psi_dn, work`` (the identity on
+        ``work``)."""
         num_modes = len(psi_up)
         size, mask = 2 ** (2 * num_modes + 1), 2**num_modes - 1
         matrix = np.zeros((size, size))
@@ -182,27 +191,28 @@ class SpinSwap(Operator2):
             up, dn = (index >> num_modes) & mask, index & mask
             swapped = (index >> (2 * num_modes)) << (2 * num_modes) | (dn << num_modes) | up
             matrix[swapped if index >> (2 * num_modes) else index, index] = 1
-        return matrix
+        return np.kron(matrix, np.eye(2))
 
 
-def _spin_swap_resources(sg, psi_up, psi_dn):
-    return {qp.CSWAP: len(psi_up)}
+def _spin_swap_resources(sg, psi_up, psi_dn, work):
+    return cswap_resources(len(psi_up))
 
 
 @qp.register_resources(_spin_swap_resources)
-def _spin_swap(sg, psi_up, psi_dn):
+def _spin_swap(sg, psi_up, psi_dn, work):
     for up, dn in zip(list(psi_up), list(psi_dn), strict=True):
-        qp.CSWAP([sg[0], up, dn])
+        cswap(sg[0], up, dn, work[0])
 
 
 def _adjoint_spin_swap_resources(base):
     num_modes = len(base.psi_up)
-    return {resource_key(lambda: SpinSwap(Wire[1], Wire[num_modes], Wire[num_modes])): 1}
+    return {resource_key(lambda: SpinSwap(Wire[1], Wire[num_modes], Wire[num_modes],
+                                          Wire[1])): 1}
 
 
 @qp.register_resources(_adjoint_spin_swap_resources)
 def _adjoint_spin_swap(base):
-    SpinSwap(base.sg, base.psi_up, base.psi_dn)
+    SpinSwap(base.sg, base.psi_up, base.psi_dn, base.work)
 
 
 register_rule(SpinSwap, _spin_swap)

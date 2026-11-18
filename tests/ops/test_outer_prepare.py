@@ -360,10 +360,11 @@ def test_read_shape_and_table_by_hand():
     assert OuterPrepare.required_wires(4, 2, 1, 1, 3) == {
         "x_o": 2, "succ_x_o": 1, "succ_work_x_o": 0, "sigma_1": 1, "m_x_o": 2,
         "less_than_x_o": 1, "cmp_work_x_o": 1, "alt_x_o": 2, "keep_x_o": 2, "junk_x_o": 4,
-        "phase_grad": 3, "work": 0}
+        "phase_grad": 3, "work": 1}
     assert OuterUnprepare.required_wires(4, 2, 1, 1, 3) == OuterPrepare.required_wires(4, 2, 1, 1,
                                                                                        3)
-    # ke1 = 0: the erase's fix-up iterates both address bits, so its work need (1) is the largest
+    # work 1: the swaps' zeroed wire; at ke1 = 0 the erase's fix-up, which iterates both address
+    # bits, needs 1 as well
     assert OuterPrepare.required_wires(4, 2, 1, 0, 3)["work"] == 1
 
 

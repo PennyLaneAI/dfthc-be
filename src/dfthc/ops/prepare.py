@@ -9,7 +9,8 @@ probabilities ``alias_probabilities(alt, keep, b_k)`` of its alias tables, in fi
 3. ``QROAMRead`` of the alias entry at the address into ``alt ‖ keep ‖ ...`` (the target) and the
    block's other entries (the junk);
 4. ``LeftQuantumComparator(keep, m, less_than, cmp_work, "<=")``: ``less_than = [keep <= m]``;
-5. one ``CSWAP`` per index wire swaps ``alt`` and the index, controlled by ``less_than``.
+5. one ``CSWAP`` per index wire swaps ``alt`` and the index, controlled by ``less_than``, each
+   with the zeroed ``work[0]`` (:func:`dfthc.ops._gates.cswap`).
 
 The unprepare runs the swaps again, the comparator's adjoint (a measured uncompute, which also
 cleans ``cmp_work``), ``QROAMErase`` of the read, the Hadamards, and
@@ -72,6 +73,7 @@ from pennylane.ops import MeasurementValue
 from pennylane.typing import AbstractArray, Bool, Wire
 
 from dfthc.compile import register_rule, resource_key
+from dfthc.ops._gates import cswap, cswap_resources
 from dfthc.ops._validate import canonical_ints, check_int, check_wires
 from dfthc.ops.qroam import (
     WORD,
@@ -181,13 +183,14 @@ class _AliasSampling:
                                           onehot_bits=self.onehot_bits)["work"])
 
     def sizes(self) -> dict[str, int]:
-        """Sizes of the skeleton's registers; ``work`` is the largest of the three needs."""
+        """Sizes of the skeleton's registers; ``work`` is the largest of the three needs and at
+        least 1, the swaps' zeroed wire."""
         uniform = FlaggedUniformPrep.required_wires(self.L, self.s_u)
         return {"index": lg(self.L), "succ": 1, "succ_work": uniform["succ_work"],
                 "m": self.b_k, "less_than": 1, "cmp_work": self.b_k - 1, "alt": lg(self.L),
                 "keep": self.b_k,
                 "junk": (2 ** self.read["block_bits"] - 1) * self.read["width"],
-                "phase_grad": self.s_u, "work": max(self.work_sizes())}
+                "phase_grad": self.s_u, "work": max(*self.work_sizes(), 1)}
 
     def extra_onehot(self) -> int:
         """Wires of the erase's one-hot register beyond the reset target, when the junk was
@@ -207,14 +210,14 @@ class _AliasSampling:
                   work=work[:read], control=[])
         qp.LeftQuantumComparator(keep, m, less_than, cmp_work, COMPARATOR)
         for a, i in zip(alt, index, strict=True):
-            qp.CSWAP([less_than[0], a, i])
+            cswap(less_than[0], a, i, work[0])
 
     def unprepare(self, table, *, index, succ, succ_work, hadamards, m, less_than, cmp_work,
                   alt, keep, address, target, junk, phase_grad, work) -> None:
         """Steps 5 to 1 undone, with the measured comparator uncompute and the measured erase."""
         uniform, _, erase = self.work_sizes()
         for a, i in zip(alt, index, strict=True):
-            qp.CSWAP([less_than[0], a, i])
+            cswap(less_than[0], a, i, work[0])
         qp.adjoint(qp.LeftQuantumComparator(keep, m, less_than, cmp_work, COMPARATOR))
         QROAMErase(table, **self.read, control_value=None, onehot_bits=self.onehot_bits,
                    address=address, target=target, junk=junk, work=work[:erase], control=[],
@@ -231,7 +234,7 @@ class _AliasSampling:
         the junk; the target is measured here and the fixup reads both outcome vectors."""
         uniform, _, erase = self.work_sizes()
         for a, i in zip(alt, index, strict=True):
-            qp.CSWAP([less_than[0], a, i])
+            cswap(less_than[0], a, i, work[0])
         qp.adjoint(qp.LeftQuantumComparator(keep, m, less_than, cmp_work, COMPARATOR))
         emit_erase_from_outcomes(junk_outcomes, table=table, **self.read,
                                  onehot_bits=self.onehot_bits, address=address, target=target,
@@ -266,7 +269,7 @@ class _AliasSampling:
         read = resource_key(lambda: QROAMRead(columns, **self.read, control_value=None,
                                               **{name: Wire[n] for name, n in sizes.items()}))
         return {self._uniform_key(False): 1, qp.H: self.b_k + 1, read: 1,
-                self._comparator_key(False): 1, qp.CSWAP: lg(self.L)}
+                self._comparator_key(False): 1, **cswap_resources(lg(self.L))}
 
     def unprepare_resources(self, table) -> dict:
         sizes = QROAMErase.required_wires(table, **self.read, control_value=None,
@@ -274,7 +277,7 @@ class _AliasSampling:
         erase = resource_key(lambda: QROAMErase(table, **self.read, control_value=None,
                                                 onehot_bits=self.onehot_bits,
                                                 **{name: Wire[n] for name, n in sizes.items()}))
-        return {qp.CSWAP: lg(self.L), self._comparator_key(True): 1, erase: 1,
+        return {**cswap_resources(lg(self.L)), self._comparator_key(True): 1, erase: 1,
                 qp.H: self.b_k + 1, self._uniform_key(True): 1}
 
     def unprepare_from_outcomes_resources(self, table) -> dict:
@@ -287,8 +290,8 @@ class _AliasSampling:
             [None] * self.sizes()["junk"], table=table, **self.read, onehot_bits=self.onehot_bits,
             address=range(sum(self.read["address_widths"])), target=range(self.read["width"]),
             work=range(erase), extra_onehot=range(self.extra_onehot()), emit=counter)
-        counts = Counter({qp.CSWAP: lg(self.L), self._comparator_key(True): 1, qp.H: self.b_k + 1,
-                          self._uniform_key(True): 1})
+        counts = Counter({**cswap_resources(lg(self.L)), self._comparator_key(True): 1,
+                          qp.H: self.b_k + 1, self._uniform_key(True): 1})
         counts.update(as_resources(counter.counts))
         return dict(counts)
 
@@ -440,7 +443,8 @@ class OuterPrepare(Operator2):
     def required_wires(X_o, b_k1, k1, ke1, s_u) -> dict[str, int]:
         """Register sizes; ``phase_grad`` is a minimum, every other size is exact. ``work`` is
         the largest need of the uniform preparation, the read and :class:`OuterUnprepare`'s
-        erase, so that both classes take the same wires."""
+        erase, and at least 1 (the swaps' zeroed wire), so that both classes take the same
+        wires."""
         sizes = _outer(X_o, b_k1, k1, ke1, s_u).sizes()
         return {"x_o": sizes["index"], "succ_x_o": 1, "succ_work_x_o": sizes["succ_work"],
                 "sigma_1": 1, "m_x_o": b_k1, "less_than_x_o": 1, "cmp_work_x_o": b_k1 - 1,
@@ -935,7 +939,8 @@ class InnerPrepare(Operator2):
     def required_wires(N, R, B, C, b_k2, k2, ke2, s_u) -> dict[str, int]:
         """Register sizes; ``phase_grad`` is a minimum, every other size is exact. ``work`` is
         the largest need of the uniform preparation, the read and :class:`InnerUnprepare`'s
-        erase, so that both classes take the same wires."""
+        erase, and at least 1 (the swaps' zeroed wire), so that both classes take the same
+        wires."""
         sizes = _inner(N, R, B, C, b_k2, k2, ke2, s_u).sizes()
         return {"x_o": lg(N + R * C), "b": sizes["index"], "succ_b": 1,
                 "succ_work_b": sizes["succ_work"], "sigma_0": 1, "m_b": b_k2,

@@ -286,13 +286,14 @@ def test_children_order_and_wires(name):
     sf_work = SFAngleLoad.required_wires(sf, p.R, p.B, p.b_rot)["work"]
     erase_work = AngleErase.required_wires(tail, sf, p.n_plus, p.N, p.R, p.B, p.C, p.b_rot,
                                            p.w_b)["work"]
-    mux = {"G0": w["G0"], "sigma_0": w["sigma_0"], "sigma_1": w["sigma_1"], "sg": w["sg"]}
-    swap = {"sg": w["sg"], "psi_up": w["psi_up"], "psi_dn": w["psi_dn"]}
+    mux = {"G0": w["G0"], "sigma_0": w["sigma_0"], "sigma_1": w["sigma_1"], "sg": w["sg"],
+           "work": w["work"][:1]}
+    swap = {"sg": w["sg"], "psi_up": w["psi_up"], "psi_dn": w["psi_dn"], "work": w["work"][:1]}
     ladder = {"system": w["psi_dn"], "angles": w["angles"], "phase_grad": w["phase_grad"],
               "work": w["work"][:p.b_rot - 1]}
     majorana = {"succ_x_o": w["succ_x_o"], "succ_b": w["succ_b"], "G0": w["G0"], "G1": w["G1"],
                 "b_neq_B": w["b_neq_B"], "flavour": w["sigma_0"], "target": w["psi_dn"][:1],
-                "work": w["work"][:2]}
+                "work": w["work"][:3]}
     expected = [
         ("TailAngleLoad", {"x_o": w["x_o"], "angles": w["angles"], "G0": w["G0"], "G1": w["G1"],
                            "work": w["work"][:tail_work]}),

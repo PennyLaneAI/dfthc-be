@@ -32,6 +32,7 @@ from pennylane.ops import MeasurementValue
 from pennylane.typing import AbstractArray, Bool, Wire
 
 from dfthc.compile import mcm_parities, register_rule, resource_key
+from dfthc.ops._gates import cswap, cswap_resources
 from dfthc.ops._validate import canonical_ints, check_int, check_wires
 from dfthc.ops.unary import Emitter, as_resources, iterate_nested, work_required
 
@@ -304,12 +305,12 @@ class QROAMRead(Operator2):
     ``address`` ``sum(address_widths)``           any      unchanged
     ``target``  ``width``                         ``|0>``  the entry
     ``junk``    ``(K - 1) width``                 ``|0>``  the block's other entries
-    ``work``    ``c - 1`` (none for ``c <= 1``)   ``|0>``  ``|0>``
+    ``work``    ``max(c - 1, [k > 0])``           ``|0>``  ``|0>``
     ``control`` 0 wires, or 1 (the enable)        any      unchanged
     =========== ================================= ======== ===============================
 
     ``c`` is the select's control count (:meth:`select_size`): the address bits above the low
-    ``k``, plus the enable.
+    ``k``, plus the enable. The swap network needs one work wire.
 
     **Arguments.** Dynamic: ``columns``, a bool array of shape :meth:`columns_shape`,
     ``(num_columns, K width)``: row ``h`` is the block whose address bits above the low ``k``
@@ -335,14 +336,15 @@ class QROAMRead(Operator2):
     read loaded for the current address.
 
     **Decomposition.** (1) The select: ``qp.QROM(columns, control_wires=control ‖ high,
-    target_wires=target ‖ junk, work_wires=work, clean=True)``, ``high`` the address wires above
-    the low ``k``. With its ``c - 1`` work wires its depth is 1 and only its unary-iteration
-    rule applies, to which :data:`dfthc.compile.PENNYLANE_PINS` pins it. An address beyond the
-    last column loads nothing, and the enable, its most significant control wire, loads only on
-    0 (``X``-conjugated for ``control_value = 1``). (2) A swap-with-zero network on the low ``k``
-    address bits, most significant first: for bit ``b``, ``CSWAP`` register ``r`` with register
-    ``r + 2**b`` for ``r < 2**b``, which moves the selected entry into ``target`` with
-    ``(K - 1) width`` exact ``CSWAP``\s.
+    target_wires=target ‖ junk, work_wires=work[:c - 1], clean=True)``, ``high`` the address
+    wires above the low ``k``. With its ``c - 1`` work wires its depth is 1 and only its
+    unary-iteration rule applies, to which :data:`dfthc.compile.PENNYLANE_PINS` pins it. An
+    address beyond the last column loads nothing, and the enable, its most significant control
+    wire, loads only on 0 (``X``-conjugated for ``control_value = 1``). (2) A swap-with-zero
+    network on the low ``k`` address bits, most significant first: for bit ``b``, ``CSWAP``
+    register ``r`` with register ``r + 2**b`` for ``r < 2**b``, which moves the selected entry
+    into ``target`` with ``(K - 1) width`` exact ``CSWAP``\s, each with the zeroed ``work[0]``
+    (:func:`dfthc.ops._gates.cswap`).
 
     **Adjoint and control.** Never adjointed or controlled: its select has loops and data
     conditionals (spec 7.4 rule 4; L-6), and no program wraps a composite that contains it in an
@@ -408,7 +410,8 @@ class QROAMRead(Operator2):
         _, num_controls = QROAMRead.select_size(address_widths, live_ranges, block_bits,
                                                 control_value)
         return {"address": sum(address_widths), "target": width,
-                "junk": (2**block_bits - 1) * width, "work": max(num_controls - 1, 0),
+                "junk": (2**block_bits - 1) * width,
+                "work": max(num_controls - 1, int(block_bits > 0)),
                 "control": int(control_value is not None)}
 
     @staticmethod
@@ -489,8 +492,8 @@ def _qroam_read_resources(columns, address_widths, live_ranges, width, block_bit
     size = 2**block_bits * width
     select = resource_key(lambda: qp.QROM(Bool[num_columns, size], Wire[num_controls],
                                           Wire[size], Wire[max(num_controls - 1, 0)], True))
-    resources = {select: 1, qp.CSWAP: (2**block_bits - 1) * width,
-                 qp.X: 2 * int(control_value == 1)}
+    resources = {select: 1, qp.X: 2 * int(control_value == 1),
+                 **cswap_resources((2**block_bits - 1) * width)}
     return {key: count for key, count in resources.items() if count}
 
 
@@ -501,8 +504,8 @@ def _qroam_read(columns, address_widths, live_ranges, width, block_bits, control
     controls = _join(control, high) if control_value is not None else high
     if control_value == 1:
         qp.X(control[0])
-    qp.QROM(columns, control_wires=controls, target_wires=_join(target, junk), work_wires=work,
-            clean=True)
+    qp.QROM(columns, control_wires=controls, target_wires=_join(target, junk),
+            work_wires=work[:max(len(controls) - 1, 0)], clean=True)
     if control_value == 1:
         qp.X(control[0])
     registers = [target] + [junk[r * width:(r + 1) * width] for r in range(2**block_bits - 1)]
@@ -510,7 +513,8 @@ def _qroam_read(columns, address_widths, live_ranges, width, block_bits, control
     for b in reversed(range(block_bits)):
         for r in range(2**b):
             for i in range(width):
-                qp.CSWAP([low[block_bits - 1 - b], registers[r][i], registers[r + 2**b][i]])
+                cswap(low[block_bits - 1 - b], registers[r][i], registers[r + 2**b][i],
+                      work[0])
 
 
 register_rule(QROAMRead, _qroam_read)

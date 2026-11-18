@@ -237,8 +237,9 @@ def _select_body(dagger, tail_angles, sf_angles, N, R, B, C, n_plus, b_rot, fixu
     TailAngleLoad(tail_angles, n_plus, R * C, N + R * C, b_rot, x_o, angles, G0, G1,
                   work[:sizes["tail"]["work"]])
     SFAngleLoad(sf_angles, R, B, b_rot, r, b, G0, angles, b_neq_B, work[:sizes["sf"]["work"]])
-    SpinMux(G0, sigma_0, sigma_1, sg)
-    SpinSwap(sg, psi_up, psi_dn)
+    mux_work, swap_work = work[:sizes["mux"]["work"]], work[:sizes["swap"]["work"]]
+    SpinMux(G0, sigma_0, sigma_1, sg, mux_work)
+    SpinSwap(sg, psi_up, psi_dn, swap_work)
     ladder_work = work[:sizes["ladder"]["work"]]
     GivensLadder(b_rot, psi_dn, angles, phase_grad, ladder_work)
     majorana = (succ_x_o, succ_b, G0, G1, b_neq_B, sigma_0, psi_dn[:1],
@@ -248,8 +249,8 @@ def _select_body(dagger, tail_angles, sf_angles, N, R, B, C, n_plus, b_rot, fixu
     else:
         MajoranaGate(*majorana)
     GivensLadderDagger(b_rot, psi_dn, angles, phase_grad, ladder_work)
-    SpinSwap(sg, psi_up, psi_dn)
-    SpinMux(G0, sigma_0, sigma_1, sg)
+    SpinSwap(sg, psi_up, psi_dn, swap_work)
+    SpinMux(G0, sigma_0, sigma_1, sg, mux_work)
     AngleErase(tail_angles, sf_angles, n_plus, N, R, B, C, b_rot, fixup_bits, angles, b_neq_B, G0,
                G1, x_o, r, b, work[:sizes["erase"]["work"]])
 

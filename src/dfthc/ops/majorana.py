@@ -14,6 +14,7 @@ from pennylane.core import Operator2
 from pennylane.typing import Wire
 
 from dfthc.compile import register_rule, resource_key
+from dfthc.ops._gates import toffoli, toffoli_key
 from dfthc.ops._validate import check_wires
 
 _REGISTERS = ("succ_x_o", "succ_b", "G0", "G1", "b_neq_B", "flavour", "target", "work")
@@ -53,7 +54,7 @@ class MajoranaGate(Operator2):
     ``b_neq_B``  1       any (:math:`[b \ne B]` on SF)    unchanged
     ``flavour``  1       any (``sigma_0``)                ``Z`` applied by step 4
     ``target``   1       any (``psi_dn[0]``)              the Majorana action
-    ``work``     2       ``|0>``                          ``|0>``
+    ``work``     3       ``|0>``                          ``|0>``
     ============ ======= ================================ ==============================
 
     **Compilable arguments.** None; every register has a fixed width.
@@ -66,8 +67,9 @@ class MajoranaGate(Operator2):
     :math:`s`. Step 1 is ``CCZ(work[1], target, b_neq_B)`` with ``target`` as an open control
     (``X``-conjugated); step 2 ``CNOT(work[0], target)``; step 3 ``CCZ(work[0], flavour,
     target)``; step 4 ``CCZ(work[0], G1, flavour)``; each ``CCZ`` is a ``Toffoli`` conjugated by
-    ``H`` on its last wire. Then the measured uncompute of ``work[1]``, the ``CNOT`` again and
-    the measured uncompute of ``work[0]``.
+    ``H`` on its last wire, the ``Toffoli`` a two-control ``MultiControlledX`` with the zeroed
+    ``work[2]`` (:mod:`dfthc.ops._gates`). Then the measured uncompute of ``work[1]``, the
+    ``CNOT`` again and the measured uncompute of ``work[0]``.
 
     **Adjoint and control.** The adjoint is auto-derived (the body has no loops or
     conditionals): it is the :math:`\mathrm{Maj}^\dagger` of ``InnerSelectDagger`` (spec 9.18),
@@ -90,8 +92,8 @@ class MajoranaGate(Operator2):
         from dfthc.compile import compiled_resources
         from dfthc.ops.majorana import MajoranaGate
 
-        program = lambda: MajoranaGate([0], [1], [2], [3], [4], [5], [6], work=[7, 8])
-        compiled_resources(program, num_wires=9).toffoli  # 5
+        program = lambda: MajoranaGate([0], [1], [2], [3], [4], [5], [6], work=[7, 8, 9])
+        compiled_resources(program, num_wires=10).toffoli  # 5
     """
 
     wire_argnames = _REGISTERS
@@ -106,33 +108,33 @@ class MajoranaGate(Operator2):
     @staticmethod
     def required_wires() -> dict[str, int]:
         """Exact register sizes."""
-        return {name: 1 for name in _REGISTERS[:-1]} | {"work": 2}
+        return {name: 1 for name in _REGISTERS[:-1]} | {"work": 3}
 
 
-def _ccz(a, b, target) -> None:
+def _ccz(a, b, target, work) -> None:
     qp.H(target)
-    qp.Toffoli([a, b, target])
+    toffoli(a, b, target, work)
     qp.H(target)
 
 
 def _majorana_gate_resources(succ_x_o, succ_b, G0, G1, b_neq_B, flavour, target, work):
     return {resource_key(lambda: qp.TemporaryAND(Wire[3])): 2,
             resource_key(lambda: qp.adjoint(qp.TemporaryAND(Wire[3]))): 2,
-            qp.Toffoli: 3, qp.CNOT: 3, qp.H: 6, qp.X: 2}
+            toffoli_key(): 3, qp.CNOT: 3, qp.H: 6, qp.X: 2}
 
 
 @qp.register_resources(_majorana_gate_resources)
 def _majorana_gate(succ_x_o, succ_b, G0, G1, b_neq_B, flavour, target, work):
-    succ, a, s, t = succ_x_o[0], work[0], work[1], target[0]
+    succ, a, s, t, w = succ_x_o[0], work[0], work[1], target[0], work[2]
     qp.TemporaryAND([succ, G0[0], a])
     qp.CNOT([a, succ])
     qp.TemporaryAND([succ, succ_b[0], s])
     qp.X(t)
-    _ccz(s, t, b_neq_B[0])
+    _ccz(s, t, b_neq_B[0], w)
     qp.X(t)
     qp.CNOT([a, t])
-    _ccz(a, flavour[0], t)
-    _ccz(a, G1[0], flavour[0])
+    _ccz(a, flavour[0], t, w)
+    _ccz(a, G1[0], flavour[0], w)
     qp.adjoint(qp.TemporaryAND([succ, succ_b[0], s]))
     qp.CNOT([a, succ])
     qp.adjoint(qp.TemporaryAND([succ, G0[0], a]))

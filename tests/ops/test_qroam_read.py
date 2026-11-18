@@ -165,7 +165,8 @@ def test_compiled_read_on_lightning(k):
     """T3 on the compiled path: the exact output state, so the read adds no phase. At k = 3 the
     whole 3-bit address is low: the select has no control wire and loads its one column with
     conditional X gates; there T4 also holds, with the analyzed X count equal to QROM's declared
-    upper bound 2**k * width."""
+    upper bound 2**k * width plus four per swap (the conditional control flips of each swap's
+    MultiControlledX, which qp.analyze counts as taken)."""
     widths, live, width, _ = outer_shape(5, k, 2)
     table = random_table(widths, live, width)
     wires, num_wires = layout(widths, live, width, k)
@@ -179,7 +180,7 @@ def test_compiled_read_on_lightning(k):
     assert np.allclose(_lightning_state(num_wires, body), expected, rtol=0, atol=1e-10)
     if k == 3:
         resources = _assert_compiled_counts((widths, live, width, k))
-        assert resources.counts["PauliX"] == 2**k * width
+        assert resources.counts["PauliX"] == 2**k * width + 4 * (2**k - 1) * width
 
 
 # Runtime columns: three columns of K = 4 positions (dead positions 11, unvisited 12 to 15).

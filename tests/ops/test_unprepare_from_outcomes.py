@@ -554,7 +554,7 @@ def test_required_wires_and_junk_sizes_by_hand():
     assert OuterUnprepareFromOutcomes.required_wires(*outer_structure(p)) == {
         "x_o": 2, "succ_x_o": 1, "succ_work_x_o": 0, "sigma_1": 1, "m_x_o": 2,
         "less_than_x_o": 1, "cmp_work_x_o": 1, "alt_x_o": 2, "keep_x_o": 2, "phase_grad": 3,
-        "work": 0, "extra_onehot": 0}
+        "work": 1, "extra_onehot": 0}
     assert InnerUnprepareFromOutcomes.required_wires(*inner_structure(p)) == {
         "x_o": 2, "b": 2, "succ_b": 1, "succ_work_b": 1, "sigma_0": 1, "m_b": 2,
         "less_than_b": 1, "cmp_work_b": 1, "alt_b": 2, "keep_b": 2, "sgn": 1, "d_sgn": 1,

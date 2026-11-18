@@ -39,13 +39,13 @@ def reference_matrix():
 @functools.cache
 def compiled_matrix(adjoint: bool):
     """The compiled gate's 2**7 x 2**7 matrix from one lightning run: each of the seven wires is
-    entangled with a reference wire (H, CNOT), so the amplitude of |y>|x>|00>_work is
-    U[y, x] / sqrt(2**7); the work wires must return to |00>."""
-    system, reference, work = list(range(7)), list(range(7, 14)), [14, 15]
+    entangled with a reference wire (H, CNOT), so the amplitude of |y>|x>|000>_work is
+    U[y, x] / sqrt(2**7); the work wires must return to |000>."""
+    system, reference, work = list(range(7)), list(range(7, 14)), [14, 15, 16]
 
     @qp.qjit(capture=True)
     @qp.decompose(gate_set=GATE_SET, fixed_decomps=dict(FIXED_DECOMPS))
-    @qp.qnode(qp.device("lightning.qubit", wires=16))
+    @qp.qnode(qp.device("lightning.qubit", wires=17))
     def circuit():
         for s, r in zip(system, reference, strict=True):
             qp.H(r)
@@ -53,7 +53,7 @@ def compiled_matrix(adjoint: bool):
         program(adjoint, system + work)()
         return qp.state()
 
-    state = np.asarray(circuit()).reshape(2**7, 2**7, 4)
+    state = np.asarray(circuit()).reshape(2**7, 2**7, 8)
     assert np.allclose(state[:, :, 1:], 0, rtol=0, atol=1e-10)
     return state[:, :, 0] * np.sqrt(2**7)
 
@@ -75,7 +75,7 @@ def test_tape_path_keeps_the_and_contracts(adjoint):
     term that each TemporaryAND target is 0 and each Adjoint(TemporaryAND) target equals its AND;
     lightning runs both as a Toffoli, so T3 and T4 cannot tell a compute from a measured
     uncompute."""
-    system, reference, work = list(range(7)), list(range(7, 14)), [14, 15]
+    system, reference, work = list(range(7)), list(range(7, 14)), [14, 15, 16]
 
     def qfunc():
         for s, r in zip(system, reference, strict=True):
@@ -83,8 +83,8 @@ def test_tape_path_keeps_the_and_contracts(adjoint):
             qp.CNOT([r, s])
         program(adjoint, system + work)()
 
-    state = SparseSimulator(16).run(decompose_for_simulation(qfunc).operations)
-    amplitudes = state.to_dense().reshape(2**7, 2**7, 4)
+    state = SparseSimulator(17).run(decompose_for_simulation(qfunc).operations)
+    amplitudes = state.to_dense().reshape(2**7, 2**7, 8)
     expected = reference_matrix()
     assert np.allclose(amplitudes[:, :, 1:], 0, rtol=0, atol=1e-10)
     assert np.allclose(amplitudes[:, :, 0] * np.sqrt(2**7), expected.T if adjoint else expected,
@@ -123,8 +123,9 @@ def test_flavour_projected_action_is_the_generator(adjoint):
                            expected.conj().T if adjoint else expected, rtol=0, atol=1e-10), bits
 
 
-def program(adjoint, wires=tuple(range(9))):
-    """Queues the gate (or its adjoint) on the seven one-wire registers and two work wires."""
+def program(adjoint, wires=tuple(range(10))):
+    """Queues the gate (or its adjoint) on the seven one-wire registers and three work
+    wires."""
 
     def queue():
         op = MajoranaGate(*([w] for w in wires[:7]), work=list(wires[7:]))
@@ -139,7 +140,7 @@ def program(adjoint, wires=tuple(range(9))):
 def test_toffoli_count(adjoint):
     """T4: T = 5 with three Toffoli and two TemporaryAND (A = 2), M = 0; the same for the
     auto-derived adjoint."""
-    resources = compiled_resources(program(adjoint), num_wires=9)
+    resources = compiled_resources(program(adjoint), num_wires=10)
     assert (resources.toffoli, resources.measurements) == (costs.majorana_gate().toffoli, 0)
     assert (resources.counts["Toffoli"], resources.counts["TemporaryAND"]) == (3, 2)
     assert resources.measured_and_uncomputes == 2
@@ -159,13 +160,13 @@ def test_pinned_rule_is_chosen_and_nothing_survives_at_device_level(capfd):
         program(False)()
         program(True)()
 
-    qp.analyze(verbose_program(both, num_wires=9), level="user")()
+    qp.analyze(verbose_program(both, num_wires=10), level="user")()
     captured = capfd.readouterr()
     assert "_majorana_gate" in chosen_rules(captured.out + captured.err)
-    compiled_resources(both, num_wires=9, level="device")
+    compiled_resources(both, num_wires=10, level="device")
 
 
-@pytest.mark.parametrize("wires", [list(range(9)), [8, 3, 5, 0, 7, 1, 6, 2, 4]],
+@pytest.mark.parametrize("wires", [list(range(10)), [8, 3, 5, 0, 9, 7, 1, 6, 2, 4]],
                          ids=["ordered", "permuted"])
 def test_rule_is_valid(wires):
     """T2 (tape mode). The gate has one size; the second case relabels the wires. The rule is
@@ -177,15 +178,15 @@ def test_rule_is_valid(wires):
 
 
 def test_required_wires():
-    assert MajoranaGate.required_wires() == {name: 1 for name in NAMES} | {"work": 2}
+    assert MajoranaGate.required_wires() == {name: 1 for name in NAMES} | {"work": 3}
 
 
 @pytest.mark.parametrize(("change", "match"), [
-    ({"work": [7]}, "'work' has 1 wires; expected 2"),
-    ({"target": [6, 9]}, "'target' has 2 wires; expected 1"),
+    ({"work": [7]}, "'work' has 1 wires; expected 3"),
+    ({"target": [6, 10]}, "'target' has 2 wires; expected 1"),
     ({"G0": []}, "'G0' has 0 wires; expected 1"),
 ])
 def test_constructor_validates(change, match):
-    args = {name: [i] for i, name in enumerate(NAMES)} | {"work": [7, 8]}
+    args = {name: [i] for i, name in enumerate(NAMES)} | {"work": [7, 8, 9]}
     with pytest.raises(ValueError, match=match):
         MajoranaGate(**(args | change))
