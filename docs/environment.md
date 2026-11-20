@@ -97,6 +97,16 @@ and peaks near 1.2 GB. It is a heavy run: start it alone.
 PYTHONPATH=src .venv/bin/python scripts/scaling_sweep.py
 ```
 
+`scripts/qualtran_comparison.py` writes `docs/qualtran_comparison.json`, section 9.6 of the
+notebook. It times dfthcbe in `.venv-ref` on the same walks: the call-graph count, the flatten to
+leaf bloqs and, for H2, the tensor-contraction simulation. It merges results by system, and each
+process is killed above 8 GB or after 30 minutes. A full run takes about an hour, because the
+FeMoco-54 flatten alone takes 28 minutes. It is a heavy run: start it alone.
+
+```bash
+PYTHONPATH=src .venv/bin/python scripts/qualtran_comparison.py [--systems NAME ...] [--no-sim]
+```
+
 ## Bumping the nightlies
 
 1. Recreate `.venv` with the recipe (`rm -rf .venv && scripts/setup_env.sh`).

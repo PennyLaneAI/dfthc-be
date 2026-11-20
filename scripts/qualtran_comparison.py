@@ -89,8 +89,7 @@ else:
     cbloq = walk.as_composite_bloq().flatten()
     names = Counter(type(inst.bloq).__name__ for inst in cbloq.bloq_instances)
     out["leaf_bloqs"] = sum(names.values())
-    out["bookkeeping_bloqs"] = sum(names[n] for n in ("Split", "Join", "Partition", "Cast",
-                                                       "Allocate", "Free"))
+    out["top_leaves"] = dict(names.most_common(8))
 out["phase_s"] = round(time.perf_counter() - t2, 2)
 print("RESULT", json.dumps(out), flush=True)
 '''
@@ -107,7 +106,7 @@ from qualtran.bloqs.basic_gates import IntEffect, IntState
 from qualtran.bloqs.rotations.phase_gradient import PhaseGradientState
 t_imp = time.perf_counter()
 with np.load(sys.argv[1]) as d:
-    f = {k: np.array(d[k]) for k in d.files}
+    f = {k: np.array(d[k]) for k in ("U", "W", "w_B", "w_plus", "u_plus", "w_minus", "u_minus")}
 be = DFTHCBlockEncoding.from_factors(**f, b_rot=4, b_k1=2, b_k2=2, s=3, k_1=1, k_2=1, k_e1=1,
                                      k_e2=1, exact_erase=True)  # H2_STO3G_TEST
 bb = BloqBuilder()

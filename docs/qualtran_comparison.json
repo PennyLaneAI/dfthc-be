@@ -1,0 +1,215 @@
+{
+ "environment": {
+  "platform": "macOS-27.0.1-arm64-arm-64bit",
+  "python": "3.12.10",
+  "reference": {
+   "qualtran": "0.7.0",
+   "dfthcbe": "1.0",
+   "cirq-core": "1.7.0",
+   "sympy": "1.14.0"
+  },
+  "pennylane": "0.46.0.dev151"
+ },
+ "limits": {
+  "memory_mb": 8192,
+  "timeout_s": 1800
+ },
+ "records": [
+  {
+   "wall_s": 3.1,
+   "peak_mb": 202.6,
+   "status": "ok",
+   "import_s": 2.42,
+   "build_s": 0.0,
+   "toffoli": 392,
+   "clifford": 2839,
+   "phase_s": 0.01,
+   "system": "h2_sto3g_R2_B2_C1",
+   "mode": "count"
+  },
+  {
+   "wall_s": 3.1,
+   "peak_mb": 218.4,
+   "status": "ok",
+   "import_s": 1.12,
+   "build_s": 0.0,
+   "leaf_bloqs": 3868,
+   "top_leaves": {
+    "CNOT": 1823,
+    "And": 648,
+    "Split": 321,
+    "Join": 321,
+    "XGate": 308,
+    "Hadamard": 132,
+    "Allocate": 75,
+    "Partition": 64
+   },
+   "phase_s": 1.26,
+   "system": "h2_sto3g_R2_B2_C1",
+   "mode": "flatten"
+  },
+  {
+   "wall_s": 6.2,
+   "peak_mb": 1961.1,
+   "status": "ok",
+   "import_s": 1.5,
+   "phase_s": 4.21,
+   "shape": [
+    16,
+    16
+   ],
+   "system": "h2_sto3g_R2_B2_C1",
+   "mode": "simulate_block"
+  },
+  {
+   "wall_s": 7.7,
+   "peak_mb": 326.1,
+   "status": "ok",
+   "phase_s": 6.2,
+   "shape": [
+    16,
+    16
+   ],
+   "system": "h2_sto3g_R2_B2_C1",
+   "mode": "simulate_block_ours"
+  },
+  {
+   "wall_s": 1.6,
+   "peak_mb": 202.4,
+   "status": "ok",
+   "import_s": 1.2,
+   "build_s": 0.01,
+   "toffoli": 1937,
+   "clifford": 23454,
+   "phase_s": 0.02,
+   "system": "naphthalene",
+   "mode": "count"
+  },
+  {
+   "wall_s": 16.9,
+   "peak_mb": 349.9,
+   "status": "ok",
+   "import_s": 1.1,
+   "build_s": 0.01,
+   "leaf_bloqs": 34867,
+   "top_leaves": {
+    "CNOT": 20665,
+    "Split": 4667,
+    "Join": 4667,
+    "And": 3110,
+    "XGate": 442,
+    "Cast": 288,
+    "Hadamard": 236,
+    "TwoBitCSwap": 205
+   },
+   "phase_s": 14.98,
+   "system": "naphthalene",
+   "mode": "flatten"
+  },
+  {
+   "system": "fe2s2",
+   "mode": "count",
+   "import_s": 1.72,
+   "build_s": 0.01,
+   "toffoli": 4420,
+   "clifford": 119316,
+   "phase_s": 0.05,
+   "wall_s": 2.1,
+   "peak_mb": 204.1,
+   "status": "ok",
+   "note": "measured 2026-11-20 by the same child program on a laptop in use; the Fe4S4 flatten overlapped for about 40 s with a simulation run"
+  },
+  {
+   "system": "fe2s2",
+   "mode": "flatten",
+   "import_s": 1.24,
+   "build_s": 0.02,
+   "leaf_bloqs": 190615,
+   "top_leaves": {
+    "CNOT": 113990,
+    "Split": 33283,
+    "Join": 33283,
+    "And": 7156,
+    "Cast": 608,
+    "XGate": 570,
+    "TwoBitCSwap": 444,
+    "Hadamard": 338
+   },
+   "phase_s": 265.77,
+   "wall_s": 271.2,
+   "peak_mb": 1087.8,
+   "status": "ok",
+   "note": "measured 2026-11-20 by the same child program on a laptop in use; the Fe4S4 flatten overlapped for about 40 s with a simulation run"
+  },
+  {
+   "system": "fe4s4",
+   "mode": "count",
+   "import_s": 1.68,
+   "build_s": 0.02,
+   "toffoli": 6336,
+   "clifford": 248550,
+   "phase_s": 0.05,
+   "wall_s": 2.1,
+   "peak_mb": 204.8,
+   "status": "ok",
+   "note": "measured 2026-11-20 by the same child program on a laptop in use; the Fe4S4 flatten overlapped for about 40 s with a simulation run"
+  },
+  {
+   "system": "fe4s4",
+   "mode": "flatten",
+   "import_s": 1.32,
+   "build_s": 0.02,
+   "leaf_bloqs": 344756,
+   "top_leaves": {
+    "CNOT": 240828,
+    "Split": 44475,
+    "Join": 44475,
+    "And": 10912,
+    "Cast": 1120,
+    "XGate": 638,
+    "XPowGate": 560,
+    "TwoBitCSwap": 493
+   },
+   "phase_s": 380.59,
+   "wall_s": 391.9,
+   "peak_mb": 1782.8,
+   "status": "ok",
+   "note": "measured 2026-11-20 by the same child program on a laptop in use; the Fe4S4 flatten overlapped for about 40 s with a simulation run"
+  },
+  {
+   "system": "femoco54",
+   "mode": "count",
+   "import_s": 2.29,
+   "build_s": 0.05,
+   "toffoli": 9641,
+   "clifford": 453256,
+   "phase_s": 0.15,
+   "wall_s": 3.1,
+   "peak_mb": 209.4,
+   "status": "ok",
+   "note": "measured 2026-11-20 by the same child program on a laptop in use; the Fe4S4 flatten overlapped for about 40 s with a simulation run"
+  },
+  {
+   "system": "femoco54",
+   "mode": "flatten",
+   "import_s": 1.88,
+   "build_s": 0.05,
+   "leaf_bloqs": 682879,
+   "top_leaves": {
+    "CNOT": 442172,
+    "Split": 109271,
+    "Join": 109271,
+    "And": 16048,
+    "Cast": 1696,
+    "TwoBitCSwap": 986,
+    "XPowGate": 848,
+    "XGate": 794
+   },
+   "phase_s": 1706.65,
+   "wall_s": 1721.4,
+   "peak_mb": 3196.5,
+   "status": "ok",
+   "note": "measured 2026-11-20 by the same child program on a laptop in use; the Fe4S4 flatten overlapped for about 40 s with a simulation run"
+  }
+ ]
+}
