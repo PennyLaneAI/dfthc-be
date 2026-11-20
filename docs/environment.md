@@ -85,6 +85,18 @@ The large systems compile only with `--large fe2s2`, `--large fe4s4` or `--large
 (at FeMoco-54 only the walk and the controlled walk), with a 60-minute timeout per program.
 They are heavy runs: start them alone.
 
+## The scaling sweep
+
+`scripts/scaling_sweep.py` writes `docs/scaling.json`, which section 9 of
+`notebooks/paper_results.ipynb` plots. It compiles the walk on random FeMoco-shaped factors
+(`B = C = n_plus = N // 2`), with N from 4 to 54 at R = 10 and with R from 2 to 40 at N = 16.
+Each point runs in its own process under `run_measured`. The sweep takes about 5 to 10 minutes
+and peaks near 1.2 GB. It is a heavy run: start it alone.
+
+```bash
+PYTHONPATH=src .venv/bin/python scripts/scaling_sweep.py
+```
+
 ## Bumping the nightlies
 
 1. Recreate `.venv` with the recipe (`rm -rf .venv && scripts/setup_env.sh`).
